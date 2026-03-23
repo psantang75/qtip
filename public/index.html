@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QTIP - Quality Training Information Platform</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+  <script>
+    // Check if we have auth data and if it's for a trainer role
+    const authData = localStorage.getItem('auth');
+    if (authData) {
+      try {
+        // Parse the existing auth data
+        const auth = JSON.parse(authData);
+        
+        // If we have a valid trainer token, use it
+        // Replace with the token for the trainer user (ID 7)
+        if (auth.user && auth.user.role_id === 4) {
+          const newToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjcsInJvbGVJZCI6NCwiaWF0IjoxNzQ3OTk1ODE5LCJleHAiOjE3NDgwODIyMTl9.vOIEsQ5pmojxi78ybdmXmm4CQIEIIavF18yMDK87vXA';
+          
+          // Update the token
+          auth.token = newToken;
+          
+          // Save back to localStorage
+          localStorage.setItem('auth', JSON.stringify(auth));
+          console.log('Trainer auth token refreshed successfully!');
+        }
+      } catch (e) {
+        console.error('Error refreshing auth token:', e);
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="/static/js/bundle.js"></script>
+</body>
+</html> 

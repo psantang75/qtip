@@ -1,0 +1,84 @@
+{
+  "name": "qtip-system",
+  "version": "1.0.0",
+  "description": "QTIP Quality Training and Improvement Platform",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "start": "pm2 start ecosystem.config.cjs --env production",
+    "start:dev": "pm2 start ecosystem.config.cjs --env development",
+    "start:staging": "pm2 start ecosystem.config.cjs --env staging",
+    "stop": "pm2 stop all",
+    "restart": "pm2 restart all",
+    "status": "pm2 status",
+    "logs": "pm2 logs",
+    "deploy:dev": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy_application.ps1 -Environment development",
+    "deploy:staging": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy_application.ps1 -Environment staging",
+    "deploy:prod": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy_application.ps1 -Environment production",
+    "health-check": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy_application.ps1 -Environment production -HealthCheckOnly",
+    "db:deploy:dev": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy_database.ps1 -Environment development",
+    "db:deploy:staging": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy_database.ps1 -Environment staging",
+    "db:deploy:prod": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy_database.ps1 -Environment production -BackupFirst",
+    "clean": "rimraf backend/dist frontend/dist logs/*.log",
+    "clean:all": "npm run clean && rimraf node_modules backend/node_modules frontend/node_modules",
+    "install:all": "npm install && npm run install:backend && npm run install:frontend",
+    "install:backend": "cd backend && npm install",
+    "install:frontend": "cd frontend && npm install",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "lint:backend": "cd backend && npm run lint",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:fix": "npm run lint:fix:backend && npm run lint:fix:frontend",
+    "lint:fix:backend": "cd backend && npm run lint:fix",
+    "lint:fix:frontend": "cd frontend && npm run lint:fix"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/csurf": "^1.11.5",
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "cjs": "^0.0.11",
+    "cookie-parser": "^1.4.7",
+    "csurf": "^1.2.2",
+    "express-status-monitor": "1.2.3",
+    "pm2": "^6.0.8",
+    "serve": "^14.2.4"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/qtip.git"
+  },
+  "keywords": [
+    "quality",
+    "training",
+    "platform",
+    "nodejs",
+    "react",
+    "mysql"
+  ],
+  "author": "Your Organization",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/your-org/qtip/issues"
+  },
+  "homepage": "https://github.com/your-org/qtip#readme"
+}

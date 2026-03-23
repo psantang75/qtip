@@ -1,0 +1,15 @@
+:root {
+  /* Primary Brand */
+  --color-primary-blue: #00aeef;      /* Main accent */
+
+  /* Neutrals */
+  --color-neutral-900: #000000;       /* Headlines / Icons */
+  --color-neutral-700: #666666;       /* Body text */
+  --color-neutral-600: #777777;       /* Background shell */
+  --color-neutral-100: #f5f7f8;       /* Cards / surfaces */
+
+  /* States */
+  --color-success: #1abc9c;
+  --color-warning: #f39c12;
+  --color-danger:  #e74c3c;
+} 

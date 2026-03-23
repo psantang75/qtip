@@ -1,0 +1,1733 @@
+DROP DATABASE qtip;
+
+CREATE DATABASE qtip
+	CHARACTER SET utf8mb4
+	COLLATE utf8mb4_0900_ai_ci;
+
+
+--
+-- Set character set the client will use to send SQL statements to the server
+--
+SET NAMES 'utf8';
+
+--
+-- Set default database
+--
+USE qtip;
+
+--
+-- Drop table `auth_logs`
+--
+DROP TABLE IF EXISTS auth_logs;
+
+--
+-- Drop table `coaching_session_topics`
+--
+DROP TABLE IF EXISTS coaching_session_topics;
+
+--
+-- Drop table `topics`
+--
+DROP TABLE IF EXISTS topics;
+
+--
+-- Drop table `agent_activity`
+--
+DROP TABLE IF EXISTS agent_activity;
+
+--
+-- Drop table `audit_logs`
+--
+DROP TABLE IF EXISTS audit_logs;
+
+--
+-- Drop table `dispute_score_history`
+--
+DROP TABLE IF EXISTS dispute_score_history;
+
+--
+-- Drop table `disputes`
+--
+DROP TABLE IF EXISTS disputes;
+
+--
+-- Drop table `score_snapshots`
+--
+DROP TABLE IF EXISTS score_snapshots;
+
+--
+-- Drop table `free_text_answers`
+--
+DROP TABLE IF EXISTS free_text_answers;
+
+--
+-- Drop table `submission_answers`
+--
+DROP TABLE IF EXISTS submission_answers;
+
+--
+-- Drop table `submission_calls`
+--
+DROP TABLE IF EXISTS submission_calls;
+
+--
+-- Drop table `submission_metadata`
+--
+DROP TABLE IF EXISTS submission_metadata;
+
+--
+-- Drop table `submissions`
+--
+DROP TABLE IF EXISTS submissions;
+
+--
+-- Drop table `calls`
+--
+DROP TABLE IF EXISTS calls;
+
+--
+-- Drop table `coaching_sessions`
+--
+DROP TABLE IF EXISTS coaching_sessions;
+
+--
+-- Drop table `course_pages`
+--
+DROP TABLE IF EXISTS course_pages;
+
+--
+-- Drop table `certificates`
+--
+DROP TABLE IF EXISTS certificates;
+
+--
+-- Drop table `enrollments`
+--
+DROP TABLE IF EXISTS enrollments;
+
+--
+-- Drop table `quiz_questions`
+--
+DROP TABLE IF EXISTS quiz_questions;
+
+--
+-- Drop table `quizzes`
+--
+DROP TABLE IF EXISTS quizzes;
+
+--
+-- Drop table `training_logs`
+--
+DROP TABLE IF EXISTS training_logs;
+
+--
+-- Drop table `training_path_courses`
+--
+DROP TABLE IF EXISTS training_path_courses;
+
+--
+-- Drop table `courses`
+--
+DROP TABLE IF EXISTS courses;
+
+--
+-- Drop table `department_managers`
+--
+DROP TABLE IF EXISTS department_managers;
+
+--
+-- Drop table `audit_assignments`
+--
+DROP TABLE IF EXISTS audit_assignments;
+
+--
+-- Drop table `form_question_conditions`
+--
+DROP TABLE IF EXISTS form_question_conditions;
+
+--
+-- Drop table `performance_goal_departments`
+--
+DROP TABLE IF EXISTS performance_goal_departments;
+
+--
+-- Drop table `performance_goal_users`
+--
+DROP TABLE IF EXISTS performance_goal_users;
+
+--
+-- Drop table `performance_goals`
+--
+DROP TABLE IF EXISTS performance_goals;
+
+--
+-- Drop table `radio_options`
+--
+DROP TABLE IF EXISTS radio_options;
+
+--
+-- Drop table `form_questions`
+--
+DROP TABLE IF EXISTS form_questions;
+
+--
+-- Drop table `form_categories`
+--
+DROP TABLE IF EXISTS form_categories;
+
+--
+-- Drop table `form_metadata_fields`
+--
+DROP TABLE IF EXISTS form_metadata_fields;
+
+--
+-- Drop table `forms`
+--
+DROP TABLE IF EXISTS forms;
+
+--
+-- Drop table `training_paths`
+--
+DROP TABLE IF EXISTS training_paths;
+
+--
+-- Drop table `users`
+--
+DROP TABLE IF EXISTS users;
+
+--
+-- Drop table `departments`
+--
+DROP TABLE IF EXISTS departments;
+
+--
+-- Drop table `roles`
+--
+DROP TABLE IF EXISTS roles;
+
+--
+-- Create table `roles`
+--
+CREATE TABLE roles (
+  id INT NOT NULL AUTO_INCREMENT,
+  role_name VARCHAR(50) NOT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 56,
+AVG_ROW_LENGTH = 3276,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `role_name` on table `roles`
+--
+ALTER TABLE roles 
+  ADD UNIQUE INDEX role_name(role_name);
+
+--
+-- Create table `departments`
+--
+CREATE TABLE departments (
+  id INT NOT NULL AUTO_INCREMENT,
+  department_name VARCHAR(100) NOT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 6,
+AVG_ROW_LENGTH = 3276,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `department_name` on table `departments`
+--
+ALTER TABLE departments 
+  ADD UNIQUE INDEX department_name(department_name);
+
+--
+-- Create table `users`
+--
+CREATE TABLE users (
+  id INT NOT NULL AUTO_INCREMENT,
+  username VARCHAR(50) NOT NULL,
+  email VARCHAR(100) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  role_id INT NOT NULL,
+  department_id INT DEFAULT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  last_login DATETIME DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 29,
+AVG_ROW_LENGTH = 585,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `email` on table `users`
+--
+ALTER TABLE users 
+  ADD UNIQUE INDEX email(email);
+
+--
+-- Create index `idx_users_last_login` on table `users`
+--
+ALTER TABLE users 
+  ADD INDEX idx_users_last_login(last_login);
+
+--
+-- Create index `username` on table `users`
+--
+ALTER TABLE users 
+  ADD UNIQUE INDEX username(username);
+
+--
+-- Create foreign key
+--
+ALTER TABLE users 
+  ADD CONSTRAINT users_ibfk_1 FOREIGN KEY (role_id)
+    REFERENCES roles(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE users 
+  ADD CONSTRAINT users_ibfk_2 FOREIGN KEY (department_id)
+    REFERENCES departments(id) ON DELETE SET NULL;
+
+--
+-- Create table `training_paths`
+--
+CREATE TABLE training_paths (
+  id INT NOT NULL AUTO_INCREMENT,
+  path_name VARCHAR(100) NOT NULL,
+  created_by INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE training_paths 
+  ADD CONSTRAINT training_paths_ibfk_1 FOREIGN KEY (created_by)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create table `forms`
+--
+CREATE TABLE forms (
+  id INT NOT NULL AUTO_INCREMENT,
+  form_name VARCHAR(100) NOT NULL,
+  interaction_type ENUM('CALL','TICKET','EMAIL','CHAT','UNIVERSAL') DEFAULT 'UNIVERSAL',
+  version INT NOT NULL DEFAULT 1,
+  created_by INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  is_active TINYINT(1) DEFAULT 1,
+  parent_form_id INT DEFAULT NULL,
+  user_version INT DEFAULT NULL,
+  user_version_date DATE DEFAULT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 261,
+AVG_ROW_LENGTH = 455,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_forms_interaction_type` on table `forms`
+--
+ALTER TABLE forms 
+  ADD INDEX idx_forms_interaction_type(interaction_type);
+
+--
+-- Create foreign key
+--
+ALTER TABLE forms 
+  ADD CONSTRAINT fk_forms_parent FOREIGN KEY (parent_form_id)
+    REFERENCES forms(id) ON DELETE SET NULL;
+
+--
+-- Create foreign key
+--
+ALTER TABLE forms 
+  ADD CONSTRAINT forms_ibfk_1 FOREIGN KEY (created_by)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create table `form_metadata_fields`
+--
+CREATE TABLE form_metadata_fields (
+  id INT NOT NULL AUTO_INCREMENT,
+  form_id INT NOT NULL,
+  interaction_type ENUM('CALL','EMAIL','CHAT','OTHER') NOT NULL,
+  field_name VARCHAR(100) NOT NULL,
+  field_type ENUM('TEXT','DROPDOWN','DATE','AUTO','SPACER') NOT NULL,
+  is_required TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 1620,
+AVG_ROW_LENGTH = 58,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `unique_form_field` on table `form_metadata_fields`
+--
+ALTER TABLE form_metadata_fields 
+  ADD UNIQUE INDEX unique_form_field(form_id, interaction_type, field_name);
+
+--
+-- Create foreign key
+--
+ALTER TABLE form_metadata_fields 
+  ADD CONSTRAINT form_metadata_fields_ibfk_1 FOREIGN KEY (form_id)
+    REFERENCES forms(id) ON DELETE CASCADE;
+
+--
+-- Create table `form_categories`
+--
+CREATE TABLE form_categories (
+  id INT NOT NULL AUTO_INCREMENT,
+  form_id INT NOT NULL,
+  category_name VARCHAR(100) NOT NULL,
+  description TEXT DEFAULT NULL,
+  weight DECIMAL(5, 2) NOT NULL,
+  sort_order INT DEFAULT 0,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 660,
+AVG_ROW_LENGTH = 71,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_form_categories_sort` on table `form_categories`
+--
+ALTER TABLE form_categories 
+  ADD INDEX idx_form_categories_sort(form_id, sort_order);
+
+--
+-- Create foreign key
+--
+ALTER TABLE form_categories 
+  ADD CONSTRAINT form_categories_ibfk_1 FOREIGN KEY (form_id)
+    REFERENCES forms(id) ON DELETE CASCADE;
+
+--
+-- Create table `form_questions`
+--
+CREATE TABLE form_questions (
+  id INT NOT NULL AUTO_INCREMENT,
+  category_id INT NOT NULL,
+  question_text VARCHAR(255) NOT NULL,
+  question_type ENUM('YES_NO','SCALE','N_A','TEXT','INFO_BLOCK','RADIO','SUB_CATEGORY') NOT NULL,
+  weight DECIMAL(5, 2) NOT NULL,
+  sort_order INT DEFAULT 0,
+  scale_min INT DEFAULT NULL,
+  scale_max INT DEFAULT NULL,
+  is_na_allowed TINYINT(1) DEFAULT 0,
+  yes_value INT DEFAULT 1,
+  no_value INT DEFAULT 0,
+  na_value INT DEFAULT 0,
+  visible_to_csr TINYINT(1) DEFAULT 1 COMMENT 'Whether this question is visible to CSR users in the submission form',
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 6429,
+AVG_ROW_LENGTH = 109,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_form_questions_sort` on table `form_questions`
+--
+ALTER TABLE form_questions 
+  ADD INDEX idx_form_questions_sort(category_id, sort_order);
+
+--
+-- Create foreign key
+--
+ALTER TABLE form_questions 
+  ADD CONSTRAINT form_questions_ibfk_1 FOREIGN KEY (category_id)
+    REFERENCES form_categories(id) ON DELETE CASCADE;
+
+--
+-- Create table `radio_options`
+--
+CREATE TABLE radio_options (
+  id INT NOT NULL AUTO_INCREMENT,
+  question_id INT NOT NULL,
+  option_text VARCHAR(255) NOT NULL,
+  option_value VARCHAR(255) NOT NULL,
+  score INT NOT NULL DEFAULT 0,
+  has_free_text TINYINT(1) DEFAULT 0,
+  sort_order INT DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 243,
+AVG_ROW_LENGTH = 303,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE radio_options 
+  ADD CONSTRAINT radio_options_ibfk_1 FOREIGN KEY (question_id)
+    REFERENCES form_questions(id) ON DELETE CASCADE;
+
+--
+-- Create table `performance_goals`
+--
+CREATE TABLE performance_goals (
+  id INT NOT NULL AUTO_INCREMENT,
+  goal_type ENUM('QA_SCORE','AUDIT_RATE','DISPUTE_RATE') NOT NULL,
+  target_value DECIMAL(5, 2) NOT NULL,
+  scope ENUM('GLOBAL','DEPARTMENT','USER','MULTI_USER','MULTI_DEPARTMENT') NOT NULL,
+  department_id INT DEFAULT NULL,
+  description TEXT DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  is_active TINYINT(1) DEFAULT 1,
+  created_by INT DEFAULT NULL,
+  updated_by INT DEFAULT NULL,
+  updated_at DATETIME DEFAULT NULL,
+  start_date DATE NOT NULL DEFAULT (curdate()),
+  end_date DATE DEFAULT NULL,
+  target_form_id INT DEFAULT NULL,
+  target_category_id INT DEFAULT NULL,
+  target_question_id INT DEFAULT NULL,
+  target_scope ENUM('ALL_QA','FORM','CATEGORY','QUESTION') NOT NULL DEFAULT 'ALL_QA',
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_performance_goals_active_dates` on table `performance_goals`
+--
+ALTER TABLE performance_goals 
+  ADD INDEX idx_performance_goals_active_dates(is_active, start_date, end_date);
+
+--
+-- Create index `idx_performance_goals_dates` on table `performance_goals`
+--
+ALTER TABLE performance_goals 
+  ADD INDEX idx_performance_goals_dates(start_date, end_date);
+
+--
+-- Create index `idx_performance_goals_target` on table `performance_goals`
+--
+ALTER TABLE performance_goals 
+  ADD INDEX idx_performance_goals_target(target_scope, target_form_id, target_category_id, target_question_id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goals 
+  ADD CONSTRAINT fk_performance_goals_category FOREIGN KEY (target_category_id)
+    REFERENCES form_categories(id) ON DELETE SET NULL;
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goals 
+  ADD CONSTRAINT fk_performance_goals_created_by FOREIGN KEY (created_by)
+    REFERENCES users(id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goals 
+  ADD CONSTRAINT fk_performance_goals_form FOREIGN KEY (target_form_id)
+    REFERENCES forms(id) ON DELETE SET NULL;
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goals 
+  ADD CONSTRAINT fk_performance_goals_question FOREIGN KEY (target_question_id)
+    REFERENCES form_questions(id) ON DELETE SET NULL;
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goals 
+  ADD CONSTRAINT fk_performance_goals_updated_by FOREIGN KEY (updated_by)
+    REFERENCES users(id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goals 
+  ADD CONSTRAINT performance_goals_ibfk_1 FOREIGN KEY (department_id)
+    REFERENCES departments(id) ON DELETE SET NULL;
+
+--
+-- Create table `performance_goal_users`
+--
+CREATE TABLE performance_goal_users (
+  id INT NOT NULL AUTO_INCREMENT,
+  goal_id INT NOT NULL,
+  user_id INT NOT NULL,
+  assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  assigned_by INT NOT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_assigned_by` on table `performance_goal_users`
+--
+ALTER TABLE performance_goal_users 
+  ADD INDEX idx_assigned_by(assigned_by);
+
+--
+-- Create index `idx_goal_id` on table `performance_goal_users`
+--
+ALTER TABLE performance_goal_users 
+  ADD INDEX idx_goal_id(goal_id);
+
+--
+-- Create index `idx_user_id` on table `performance_goal_users`
+--
+ALTER TABLE performance_goal_users 
+  ADD INDEX idx_user_id(user_id);
+
+--
+-- Create index `unique_goal_user` on table `performance_goal_users`
+--
+ALTER TABLE performance_goal_users 
+  ADD UNIQUE INDEX unique_goal_user(goal_id, user_id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goal_users 
+  ADD CONSTRAINT fk_goal_users_assigned_by FOREIGN KEY (assigned_by)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goal_users 
+  ADD CONSTRAINT fk_goal_users_goal FOREIGN KEY (goal_id)
+    REFERENCES performance_goals(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goal_users 
+  ADD CONSTRAINT fk_goal_users_user FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create table `performance_goal_departments`
+--
+CREATE TABLE performance_goal_departments (
+  id INT NOT NULL AUTO_INCREMENT,
+  goal_id INT NOT NULL,
+  department_id INT NOT NULL,
+  assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  assigned_by INT NOT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 9,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_assigned_by` on table `performance_goal_departments`
+--
+ALTER TABLE performance_goal_departments 
+  ADD INDEX idx_assigned_by(assigned_by);
+
+--
+-- Create index `idx_department_id` on table `performance_goal_departments`
+--
+ALTER TABLE performance_goal_departments 
+  ADD INDEX idx_department_id(department_id);
+
+--
+-- Create index `idx_goal_id` on table `performance_goal_departments`
+--
+ALTER TABLE performance_goal_departments 
+  ADD INDEX idx_goal_id(goal_id);
+
+--
+-- Create index `unique_goal_department` on table `performance_goal_departments`
+--
+ALTER TABLE performance_goal_departments 
+  ADD UNIQUE INDEX unique_goal_department(goal_id, department_id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goal_departments 
+  ADD CONSTRAINT fk_goal_departments_assigned_by FOREIGN KEY (assigned_by)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goal_departments 
+  ADD CONSTRAINT fk_goal_departments_department FOREIGN KEY (department_id)
+    REFERENCES departments(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE performance_goal_departments 
+  ADD CONSTRAINT fk_goal_departments_goal FOREIGN KEY (goal_id)
+    REFERENCES performance_goals(id) ON DELETE CASCADE;
+
+--
+-- Create table `form_question_conditions`
+--
+CREATE TABLE form_question_conditions (
+  id INT NOT NULL AUTO_INCREMENT,
+  question_id INT NOT NULL,
+  target_question_id INT NOT NULL,
+  condition_type ENUM('EQUALS','NOT_EQUALS','EXISTS','NOT_EXISTS') NOT NULL,
+  target_value VARCHAR(255) DEFAULT NULL,
+  logical_operator ENUM('AND','OR') DEFAULT 'AND',
+  group_id INT DEFAULT 0,
+  sort_order INT DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 3380,
+AVG_ROW_LENGTH = 74,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE form_question_conditions 
+  ADD CONSTRAINT fk_condition_question FOREIGN KEY (question_id)
+    REFERENCES form_questions(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE form_question_conditions 
+  ADD CONSTRAINT fk_condition_target FOREIGN KEY (target_question_id)
+    REFERENCES form_questions(id) ON DELETE CASCADE;
+
+--
+-- Create table `audit_assignments`
+--
+CREATE TABLE audit_assignments (
+  id INT NOT NULL AUTO_INCREMENT,
+  form_id INT NOT NULL,
+  target_id INT DEFAULT NULL,
+  target_type ENUM('USER','DEPARTMENT') NOT NULL,
+  schedule VARCHAR(100) DEFAULT NULL,
+  created_by INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  qa_id INT DEFAULT NULL,
+  start_date DATETIME NOT NULL,
+  end_date DATETIME DEFAULT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE audit_assignments 
+  ADD CONSTRAINT audit_assignments_ibfk_1 FOREIGN KEY (form_id)
+    REFERENCES forms(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE audit_assignments 
+  ADD CONSTRAINT audit_assignments_ibfk_2 FOREIGN KEY (created_by)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE audit_assignments 
+  ADD CONSTRAINT fk_audit_assignments_qa FOREIGN KEY (qa_id)
+    REFERENCES users(id) ON DELETE SET NULL;
+
+--
+-- Create table `department_managers`
+--
+CREATE TABLE department_managers (
+  id INT NOT NULL AUTO_INCREMENT,
+  department_id INT NOT NULL,
+  manager_id INT NOT NULL,
+  assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  assigned_by INT NOT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 6,
+AVG_ROW_LENGTH = 3276,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_department_id` on table `department_managers`
+--
+ALTER TABLE department_managers 
+  ADD INDEX idx_department_id(department_id);
+
+--
+-- Create index `idx_manager_id` on table `department_managers`
+--
+ALTER TABLE department_managers 
+  ADD INDEX idx_manager_id(manager_id);
+
+--
+-- Create index `unique_dept_manager` on table `department_managers`
+--
+ALTER TABLE department_managers 
+  ADD UNIQUE INDEX unique_dept_manager(department_id, manager_id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE department_managers 
+  ADD CONSTRAINT department_managers_ibfk_1 FOREIGN KEY (department_id)
+    REFERENCES departments(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE department_managers 
+  ADD CONSTRAINT department_managers_ibfk_2 FOREIGN KEY (manager_id)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE department_managers 
+  ADD CONSTRAINT department_managers_ibfk_3 FOREIGN KEY (assigned_by)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create table `courses`
+--
+CREATE TABLE courses (
+  id INT NOT NULL AUTO_INCREMENT,
+  course_name VARCHAR(100) NOT NULL,
+  description TEXT DEFAULT NULL,
+  created_by INT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  is_draft TINYINT(1) DEFAULT 1,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE courses 
+  ADD CONSTRAINT courses_ibfk_1 FOREIGN KEY (created_by)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create table `training_path_courses`
+--
+CREATE TABLE training_path_courses (
+  id INT NOT NULL AUTO_INCREMENT,
+  path_id INT NOT NULL,
+  course_id INT NOT NULL,
+  course_order INT NOT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 3,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE training_path_courses 
+  ADD CONSTRAINT training_path_courses_ibfk_1 FOREIGN KEY (path_id)
+    REFERENCES training_paths(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE training_path_courses 
+  ADD CONSTRAINT training_path_courses_ibfk_2 FOREIGN KEY (course_id)
+    REFERENCES courses(id) ON DELETE CASCADE;
+
+--
+-- Create table `training_logs`
+--
+CREATE TABLE training_logs (
+  id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  course_id INT DEFAULT NULL,
+  action VARCHAR(100) NOT NULL,
+  details TEXT DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE training_logs 
+  ADD CONSTRAINT training_logs_ibfk_1 FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE training_logs 
+  ADD CONSTRAINT training_logs_ibfk_2 FOREIGN KEY (course_id)
+    REFERENCES courses(id) ON DELETE SET NULL;
+
+--
+-- Create table `quizzes`
+--
+CREATE TABLE quizzes (
+  id INT NOT NULL AUTO_INCREMENT,
+  course_id INT NOT NULL,
+  quiz_title VARCHAR(100) NOT NULL,
+  pass_score DECIMAL(5, 2) NOT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 3,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE quizzes 
+  ADD CONSTRAINT quizzes_ibfk_1 FOREIGN KEY (course_id)
+    REFERENCES courses(id) ON DELETE CASCADE;
+
+--
+-- Create table `quiz_questions`
+--
+CREATE TABLE quiz_questions (
+  id INT NOT NULL AUTO_INCREMENT,
+  quiz_id INT NOT NULL,
+  question_text VARCHAR(255) NOT NULL,
+  options TEXT NOT NULL,
+  correct_option INT NOT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 3,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE quiz_questions 
+  ADD CONSTRAINT quiz_questions_ibfk_1 FOREIGN KEY (quiz_id)
+    REFERENCES quizzes(id) ON DELETE CASCADE;
+
+--
+-- Create table `enrollments`
+--
+CREATE TABLE enrollments (
+  id INT NOT NULL AUTO_INCREMENT,
+  course_id INT DEFAULT NULL,
+  user_id INT DEFAULT NULL,
+  status ENUM('IN_PROGRESS','COMPLETED') DEFAULT 'IN_PROGRESS',
+  progress DECIMAL(5, 2) DEFAULT 0.00,
+  due_date DATETIME DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  path_id INT DEFAULT NULL,
+  department_id INT DEFAULT NULL,
+  assignment_type ENUM('COURSE','TRAINING_PATH') NOT NULL DEFAULT 'COURSE',
+  target_type ENUM('USER','DEPARTMENT') NOT NULL DEFAULT 'USER',
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create check constraint
+--
+ALTER TABLE enrollments 
+  ADD CONSTRAINT check_assignment_course_or_path CHECK ( ((`assignment_type` = _utf8mb4 'COURSE') AND (`course_id` IS NOT NULL) AND (`path_id` IS NULL)) OR ((`assignment_type` = _utf8mb4 'TRAINING_PATH') AND (`path_id` IS NOT NULL) AND (`course_id` IS NULL)));
+
+--
+-- Create check constraint
+--
+ALTER TABLE enrollments 
+  ADD CONSTRAINT check_target_user_or_department CHECK ( ((`target_type` = _utf8mb4 'USER') AND (`user_id` IS NOT NULL) AND (`department_id` IS NULL)) OR ((`target_type` = _utf8mb4 'DEPARTMENT') AND (`department_id` IS NOT NULL) AND (`user_id` IS NULL)));
+
+--
+-- Create foreign key
+--
+ALTER TABLE enrollments 
+  ADD CONSTRAINT enrollments_department_fk FOREIGN KEY (department_id)
+    REFERENCES departments(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE enrollments 
+  ADD CONSTRAINT enrollments_ibfk_1 FOREIGN KEY (course_id)
+    REFERENCES courses(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE enrollments 
+  ADD CONSTRAINT enrollments_ibfk_2 FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE enrollments 
+  ADD CONSTRAINT enrollments_path_fk FOREIGN KEY (path_id)
+    REFERENCES training_paths(id) ON DELETE CASCADE;
+
+--
+-- Create table `certificates`
+--
+CREATE TABLE certificates (
+  id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  course_id INT NOT NULL,
+  issue_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expiry_date DATETIME DEFAULT NULL,
+  enrollment_id INT DEFAULT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_certificates_enrollment` on table `certificates`
+--
+ALTER TABLE certificates 
+  ADD INDEX idx_certificates_enrollment(enrollment_id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE certificates 
+  ADD CONSTRAINT certificates_ibfk_1 FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE certificates 
+  ADD CONSTRAINT certificates_ibfk_2 FOREIGN KEY (course_id)
+    REFERENCES courses(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE certificates 
+  ADD CONSTRAINT fk_certificates_enrollment FOREIGN KEY (enrollment_id)
+    REFERENCES enrollments(id) ON DELETE CASCADE;
+
+--
+-- Create table `course_pages`
+--
+CREATE TABLE course_pages (
+  id INT NOT NULL AUTO_INCREMENT,
+  course_id INT NOT NULL,
+  page_title VARCHAR(100) NOT NULL,
+  content_type ENUM('TEXT','VIDEO','PDF') NOT NULL,
+  content_url VARCHAR(255) DEFAULT NULL,
+  content_text TEXT DEFAULT NULL,
+  page_order INT NOT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE course_pages 
+  ADD CONSTRAINT course_pages_ibfk_1 FOREIGN KEY (course_id)
+    REFERENCES courses(id) ON DELETE CASCADE;
+
+--
+-- Create table `coaching_sessions`
+--
+CREATE TABLE coaching_sessions (
+  id INT NOT NULL AUTO_INCREMENT,
+  csr_id INT NOT NULL,
+  session_date DATETIME NOT NULL,
+  coaching_type ENUM('Classroom','Side-by-Side','Team Session','1-on-1','PIP','Verbal Warning','Written Warning') NOT NULL DEFAULT '1-on-1',
+  notes TEXT DEFAULT NULL,
+  attachment_filename VARCHAR(255) DEFAULT NULL,
+  attachment_path VARCHAR(500) DEFAULT NULL,
+  attachment_size INT DEFAULT NULL,
+  attachment_mime_type VARCHAR(100) DEFAULT NULL,
+  status ENUM('SCHEDULED','COMPLETED') DEFAULT 'SCHEDULED',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_by INT DEFAULT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 109,
+AVG_ROW_LENGTH = 618,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_coaching_sessions_created_by` on table `coaching_sessions`
+--
+ALTER TABLE coaching_sessions 
+  ADD INDEX idx_coaching_sessions_created_by(created_by);
+
+--
+-- Create index `idx_coaching_sessions_csr_created` on table `coaching_sessions`
+--
+ALTER TABLE coaching_sessions 
+  ADD INDEX idx_coaching_sessions_csr_created(csr_id, created_by);
+
+--
+-- Create index `idx_coaching_sessions_csr_type` on table `coaching_sessions`
+--
+ALTER TABLE coaching_sessions 
+  ADD INDEX idx_coaching_sessions_csr_type(csr_id, coaching_type);
+
+--
+-- Create index `idx_coaching_sessions_date_type` on table `coaching_sessions`
+--
+ALTER TABLE coaching_sessions 
+  ADD INDEX idx_coaching_sessions_date_type(session_date, coaching_type);
+
+--
+-- Create index `idx_coaching_sessions_type` on table `coaching_sessions`
+--
+ALTER TABLE coaching_sessions 
+  ADD INDEX idx_coaching_sessions_type(coaching_type);
+
+--
+-- Create foreign key
+--
+ALTER TABLE coaching_sessions 
+  ADD CONSTRAINT coaching_sessions_ibfk_1 FOREIGN KEY (csr_id)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE coaching_sessions 
+  ADD CONSTRAINT fk_coaching_sessions_created_by FOREIGN KEY (created_by)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create table `calls`
+--
+CREATE TABLE calls (
+  id INT NOT NULL AUTO_INCREMENT,
+  call_id VARCHAR(100) NOT NULL,
+  csr_id INT NOT NULL,
+  department_id INT DEFAULT NULL,
+  customer_id VARCHAR(100) DEFAULT NULL,
+  call_date DATETIME NOT NULL,
+  duration INT NOT NULL,
+  recording_url TEXT DEFAULT NULL,
+  transcript LONGTEXT DEFAULT NULL,
+  metadata TEXT DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 1263,
+AVG_ROW_LENGTH = 9912,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `call_date` on table `calls`
+--
+ALTER TABLE calls 
+  ADD INDEX call_date(call_date);
+
+--
+-- Create index `call_id` on table `calls`
+--
+ALTER TABLE calls 
+  ADD UNIQUE INDEX call_id(call_id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE calls 
+  ADD CONSTRAINT calls_ibfk_1 FOREIGN KEY (csr_id)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE calls 
+  ADD CONSTRAINT calls_ibfk_2 FOREIGN KEY (department_id)
+    REFERENCES departments(id) ON DELETE SET NULL;
+
+--
+-- Create table `submissions`
+--
+CREATE TABLE submissions (
+  id INT NOT NULL AUTO_INCREMENT,
+  form_id INT NOT NULL,
+  call_id INT DEFAULT NULL,
+  submitted_by INT NOT NULL,
+  submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  total_score DECIMAL(5, 2) DEFAULT NULL,
+  status ENUM('DRAFT','SUBMITTED','DISPUTED','FINALIZED') DEFAULT 'DRAFT',
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 1319,
+AVG_ROW_LENGTH = 62,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE submissions 
+  ADD CONSTRAINT submissions_ibfk_1 FOREIGN KEY (form_id)
+    REFERENCES forms(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE submissions 
+  ADD CONSTRAINT submissions_ibfk_2 FOREIGN KEY (call_id)
+    REFERENCES calls(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE submissions 
+  ADD CONSTRAINT submissions_ibfk_3 FOREIGN KEY (submitted_by)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create table `submission_metadata`
+--
+CREATE TABLE submission_metadata (
+  id INT NOT NULL AUTO_INCREMENT,
+  submission_id INT NOT NULL,
+  field_id INT NOT NULL,
+  value TEXT DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  date_value DATE DEFAULT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 8317,
+AVG_ROW_LENGTH = 66,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_date_value` on table `submission_metadata`
+--
+ALTER TABLE submission_metadata 
+  ADD INDEX idx_date_value(date_value);
+
+--
+-- Create foreign key
+--
+ALTER TABLE submission_metadata 
+  ADD CONSTRAINT submission_metadata_ibfk_1 FOREIGN KEY (submission_id)
+    REFERENCES submissions(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE submission_metadata 
+  ADD CONSTRAINT submission_metadata_ibfk_2 FOREIGN KEY (field_id)
+    REFERENCES form_metadata_fields(id) ON DELETE CASCADE;
+
+--
+-- Create table `submission_calls`
+--
+CREATE TABLE submission_calls (
+  id INT NOT NULL AUTO_INCREMENT,
+  submission_id INT NOT NULL,
+  call_id INT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 1261,
+AVG_ROW_LENGTH = 65,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `unique_submission_call` on table `submission_calls`
+--
+ALTER TABLE submission_calls 
+  ADD UNIQUE INDEX unique_submission_call(submission_id, call_id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE submission_calls 
+  ADD CONSTRAINT submission_calls_ibfk_1 FOREIGN KEY (submission_id)
+    REFERENCES submissions(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE submission_calls 
+  ADD CONSTRAINT submission_calls_ibfk_2 FOREIGN KEY (call_id)
+    REFERENCES calls(id) ON DELETE CASCADE;
+
+--
+-- Create table `submission_answers`
+--
+CREATE TABLE submission_answers (
+  id INT NOT NULL AUTO_INCREMENT,
+  submission_id INT NOT NULL,
+  question_id INT NOT NULL,
+  answer TEXT DEFAULT NULL,
+  notes TEXT DEFAULT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 61716,
+AVG_ROW_LENGTH = 45,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE submission_answers 
+  ADD CONSTRAINT submission_answers_ibfk_1 FOREIGN KEY (submission_id)
+    REFERENCES submissions(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE submission_answers 
+  ADD CONSTRAINT submission_answers_ibfk_2 FOREIGN KEY (question_id)
+    REFERENCES form_questions(id) ON DELETE CASCADE;
+
+--
+-- Create table `free_text_answers`
+--
+CREATE TABLE free_text_answers (
+  id INT NOT NULL AUTO_INCREMENT,
+  answer_id INT NOT NULL,
+  option_id INT NOT NULL,
+  text_value TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE free_text_answers 
+  ADD CONSTRAINT free_text_answers_ibfk_1 FOREIGN KEY (answer_id)
+    REFERENCES submission_answers(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE free_text_answers 
+  ADD CONSTRAINT free_text_answers_ibfk_2 FOREIGN KEY (option_id)
+    REFERENCES radio_options(id) ON DELETE CASCADE;
+
+--
+-- Create table `score_snapshots`
+--
+CREATE TABLE score_snapshots (
+  id INT NOT NULL AUTO_INCREMENT,
+  csr_id INT NOT NULL,
+  score DECIMAL(5, 2) NOT NULL,
+  snapshot_date DATE NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  submission_id INT DEFAULT NULL,
+  snapshot_data TEXT DEFAULT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 1300,
+AVG_ROW_LENGTH = 2295,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE score_snapshots 
+  ADD CONSTRAINT score_snapshots_ibfk_1 FOREIGN KEY (csr_id)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE score_snapshots 
+  ADD CONSTRAINT score_snapshots_ibfk_2 FOREIGN KEY (submission_id)
+    REFERENCES submissions(id) ON DELETE CASCADE;
+
+--
+-- Create table `disputes`
+--
+CREATE TABLE disputes (
+  id INT NOT NULL AUTO_INCREMENT,
+  submission_id INT NOT NULL,
+  disputed_by INT NOT NULL,
+  resolved_by INT DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  resolved_at DATETIME DEFAULT NULL,
+  status ENUM('OPEN','UPHELD','REJECTED','ADJUSTED') DEFAULT 'OPEN',
+  reason TEXT NOT NULL,
+  resolution_notes TEXT DEFAULT NULL,
+  attachment_url VARCHAR(500) DEFAULT NULL,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 206,
+AVG_ROW_LENGTH = 1278,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE disputes 
+  ADD CONSTRAINT disputes_ibfk_1 FOREIGN KEY (submission_id)
+    REFERENCES submissions(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE disputes 
+  ADD CONSTRAINT disputes_ibfk_2 FOREIGN KEY (disputed_by)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE disputes 
+  ADD CONSTRAINT disputes_ibfk_3 FOREIGN KEY (resolved_by)
+    REFERENCES users(id) ON DELETE SET NULL;
+
+--
+-- Create table `dispute_score_history`
+--
+CREATE TABLE dispute_score_history (
+  id INT NOT NULL AUTO_INCREMENT,
+  dispute_id INT NOT NULL,
+  submission_id INT NOT NULL,
+  score_type ENUM('PREVIOUS','ADJUSTED') NOT NULL,
+  score DECIMAL(5, 2) NOT NULL,
+  recorded_by INT DEFAULT NULL,
+  notes VARCHAR(255) DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 32,
+AVG_ROW_LENGTH = 655,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_dispute_score_history_dispute_created` on table `dispute_score_history`
+--
+ALTER TABLE dispute_score_history 
+  ADD INDEX idx_dispute_score_history_dispute_created(dispute_id, created_at);
+
+--
+-- Create index `idx_dispute_score_history_recorded_by` on table `dispute_score_history`
+--
+ALTER TABLE dispute_score_history 
+  ADD INDEX idx_dispute_score_history_recorded_by(recorded_by);
+
+--
+-- Create index `idx_dispute_score_history_submission` on table `dispute_score_history`
+--
+ALTER TABLE dispute_score_history 
+  ADD INDEX idx_dispute_score_history_submission(submission_id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE dispute_score_history 
+  ADD CONSTRAINT fk_dispute_score_history_dispute FOREIGN KEY (dispute_id)
+    REFERENCES disputes(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE dispute_score_history 
+  ADD CONSTRAINT fk_dispute_score_history_recorded_by FOREIGN KEY (recorded_by)
+    REFERENCES users(id) ON DELETE SET NULL;
+
+--
+-- Create foreign key
+--
+ALTER TABLE dispute_score_history 
+  ADD CONSTRAINT fk_dispute_score_history_submission FOREIGN KEY (submission_id)
+    REFERENCES submissions(id) ON DELETE CASCADE;
+
+--
+-- Create table `audit_logs`
+--
+CREATE TABLE audit_logs (
+  id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  action VARCHAR(100) NOT NULL,
+  target_id INT DEFAULT NULL,
+  target_type VARCHAR(50) DEFAULT NULL,
+  details TEXT DEFAULT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 741,
+AVG_ROW_LENGTH = 442,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create foreign key
+--
+ALTER TABLE audit_logs 
+  ADD CONSTRAINT audit_logs_ibfk_1 FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create table `agent_activity`
+--
+CREATE TABLE agent_activity (
+  id INT NOT NULL AUTO_INCREMENT,
+  csr_id INT NOT NULL,
+  department_id INT DEFAULT NULL,
+  activity_date DATE NOT NULL,
+  status_switches INT NOT NULL DEFAULT 0,
+  start_time DATETIME NOT NULL,
+  end_time DATETIME NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create check constraint
+--
+ALTER TABLE agent_activity 
+  ADD CONSTRAINT agent_activity_chk_1 CHECK (`status_switches` >= 0);
+
+--
+-- Create index `activity_date` on table `agent_activity`
+--
+ALTER TABLE agent_activity 
+  ADD INDEX activity_date(activity_date);
+
+--
+-- Create foreign key
+--
+ALTER TABLE agent_activity 
+  ADD CONSTRAINT agent_activity_ibfk_1 FOREIGN KEY (csr_id)
+    REFERENCES users(id) ON DELETE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE agent_activity 
+  ADD CONSTRAINT agent_activity_ibfk_2 FOREIGN KEY (department_id)
+    REFERENCES departments(id) ON DELETE SET NULL;
+
+--
+-- Create table `topics`
+--
+CREATE TABLE topics (
+  id INT NOT NULL AUTO_INCREMENT,
+  topic_name VARCHAR(255) NOT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 43,
+AVG_ROW_LENGTH = 712,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_unicode_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_is_active` on table `topics`
+--
+ALTER TABLE topics 
+  ADD INDEX idx_is_active(is_active);
+
+--
+-- Create index `idx_sort_order` on table `topics`
+--
+ALTER TABLE topics 
+  ADD INDEX idx_sort_order(sort_order);
+
+--
+-- Create index `unique_topic_name` on table `topics`
+--
+ALTER TABLE topics 
+  ADD UNIQUE INDEX unique_topic_name(topic_name);
+
+--
+-- Create table `coaching_session_topics`
+--
+CREATE TABLE coaching_session_topics (
+  id INT NOT NULL AUTO_INCREMENT,
+  coaching_session_id INT NOT NULL,
+  topic_id INT NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 394,
+AVG_ROW_LENGTH = 65,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_unicode_ci,
+ROW_FORMAT = DYNAMIC;
+
+--
+-- Create index `idx_coaching_session_id` on table `coaching_session_topics`
+--
+ALTER TABLE coaching_session_topics 
+  ADD INDEX idx_coaching_session_id(coaching_session_id);
+
+--
+-- Create index `idx_topic_id` on table `coaching_session_topics`
+--
+ALTER TABLE coaching_session_topics 
+  ADD INDEX idx_topic_id(topic_id);
+
+--
+-- Create index `unique_session_topic` on table `coaching_session_topics`
+--
+ALTER TABLE coaching_session_topics 
+  ADD UNIQUE INDEX unique_session_topic(coaching_session_id, topic_id);
+
+--
+-- Create foreign key
+--
+ALTER TABLE coaching_session_topics 
+  ADD CONSTRAINT fk_cst_coaching_session FOREIGN KEY (coaching_session_id)
+    REFERENCES coaching_sessions(id) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Create foreign key
+--
+ALTER TABLE coaching_session_topics 
+  ADD CONSTRAINT fk_cst_topic FOREIGN KEY (topic_id)
+    REFERENCES topics(id) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Create table `auth_logs`
+--
+CREATE TABLE auth_logs (
+  id INT NOT NULL AUTO_INCREMENT,
+  email VARCHAR(255) NOT NULL,
+  success TINYINT(1) NOT NULL,
+  ip_address VARCHAR(45) DEFAULT NULL,
+  attempted_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+)
+ENGINE = INNODB,
+AUTO_INCREMENT = 1827,
+AVG_ROW_LENGTH = 71,
+CHARACTER SET utf8mb4,
+COLLATE utf8mb4_0900_ai_ci,
+ROW_FORMAT = DYNAMIC;
+

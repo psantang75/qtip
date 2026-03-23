@@ -1,0 +1,205 @@
+@import "./styles/tokens.css";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--color-neutral-700);
+    background-color: var(--color-neutral-600);
+  }
+  
+  h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--color-neutral-900);
+  }
+  
+  h2 {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--color-neutral-900);
+  }
+  
+  h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-neutral-900);
+  }
+  
+  body {
+    font-size: 16px;
+  }
+  
+  /* CSS Custom Properties */
+  :root {
+    --color-primary-blue: #00aeef;
+    --color-neutral-900: #000000;
+    --color-neutral-700: #666666;
+    --color-neutral-600: #777777;
+    --color-neutral-100: #f5f7f8;
+    --color-success: #1abc9c;
+    --color-warning: #f39c12;
+    --color-danger: #e74c3c;
+  }
+
+  /* Ensure radio buttons and checkboxes are always visible with minimum size */
+  input[type="radio"] {
+    min-width: 18px !important;
+    min-height: 18px !important;
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  input[type="checkbox"] {
+    min-width: 16px !important;
+    min-height: 16px !important;
+    width: 16px !important;
+    height: 16px !important;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    padding: 8px 16px;
+    border-radius: 6px;
+    background-color: var(--color-primary-blue);
+    color: white;
+    font-weight: 500;
+    transition-property: transform;
+    transition-duration: 120ms;
+  }
+  
+  .btn-primary:active {
+    transform: scale(0.98);
+  }
+  
+  .btn-primary:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-primary-blue);
+  }
+  
+  .btn-secondary {
+    padding: 8px 16px;
+    border-radius: 6px;
+    background-color: transparent;
+    color: var(--color-primary-blue);
+    font-weight: 500;
+    border: 1px solid var(--color-primary-blue);
+    transition-property: transform;
+    transition-duration: 120ms;
+  }
+  
+  .btn-secondary:active {
+    transform: scale(0.98);
+  }
+  
+  .btn-secondary:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-primary-blue);
+  }
+  
+  .btn-tertiary {
+    padding: 8px 16px;
+    border-radius: 6px;
+    background-color: transparent;
+    color: var(--color-neutral-700);
+    font-weight: 500;
+    transition-property: transform;
+    transition-duration: 120ms;
+  }
+  
+  .btn-tertiary:active {
+    transform: scale(0.98);
+  }
+  
+  .btn-tertiary:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-primary-blue);
+  }
+  
+  .btn-destructive {
+    padding: 8px 16px;
+    border-radius: 6px;
+    background-color: var(--color-danger);
+    color: white;
+    font-weight: 500;
+    transition-property: transform;
+    transition-duration: 120ms;
+  }
+  
+  .btn-destructive:active {
+    transform: scale(0.98);
+  }
+  
+  .btn-destructive:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-danger);
+  }
+  
+  .card {
+    background-color: var(--color-neutral-100);
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    padding: 16px;
+  }
+  
+  .form-input {
+    display: block;
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  
+  .form-input:focus {
+    border-color: var(--color-primary-blue);
+    box-shadow: 0 0 0 2px rgba(0, 174, 239, 0.2);
+    outline: none;
+  }
+  
+  .form-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-neutral-700);
+    margin-bottom: 4px;
+  }
+  
+  /* Custom utility classes */
+  .border-primary-blue {
+    border-color: var(--color-primary-blue);
+  }
+  
+  .text-primary-blue {
+    color: var(--color-primary-blue);
+  }
+  
+  .bg-primary-blue {
+    background-color: var(--color-primary-blue);
+  }
+  
+  /* Additional utility classes for primary blue with opacity */
+  .bg-primary-blue-10 {
+    background-color: rgba(0, 174, 239, 0.1);
+  }
+  
+  .bg-primary-blue-20 {
+    background-color: rgba(0, 174, 239, 0.2);
+  }
+
+  /* Hide scrollbars while maintaining scroll functionality */
+  .scrollbar-hide {
+    /* Hide scrollbar for IE, Edge and Firefox */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    /* Hide scrollbar for Chrome, Safari and Opera */
+    display: none;
+  }
+}

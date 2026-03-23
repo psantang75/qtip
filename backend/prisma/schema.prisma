@@ -1,0 +1,1196 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Role {
+  id        Int    @id @default(autoincrement())
+  role_name String @unique @db.VarChar(50)
+
+  users User[]
+
+  @@map("roles")
+}
+
+model Department {
+  id              Int     @id @default(autoincrement())
+  department_name String  @unique @db.VarChar(100)
+  is_active       Boolean @default(true) @db.TinyInt
+
+  users                         User[]
+  department_managers           DepartmentManager[]
+  calls                         Call[]
+  performance_goals             PerformanceGoal[]
+  performance_goal_departments  PerformanceGoalDepartment[]
+  enrollments                   Enrollment[]
+  agent_activity                AgentActivity[]
+  metric_departments            MetricDepartment[]
+  metric_thresholds             MetricThreshold[]
+  report_definition_departments ReportDefinitionDepartment[]
+
+  @@map("departments")
+}
+
+model User {
+  id            Int       @id @default(autoincrement())
+  username      String    @unique @db.VarChar(50)
+  email         String    @unique @db.VarChar(100)
+  password_hash String    @db.VarChar(255)
+  role_id       Int
+  department_id Int?
+  is_active     Boolean   @default(true) @db.TinyInt
+  last_login    DateTime? @db.DateTime(0)
+  created_at    DateTime  @default(now()) @db.DateTime(0)
+  updated_at    DateTime  @default(now()) @updatedAt @db.DateTime(0)
+  title         String?   @db.VarChar(150)
+  manager_id    Int?
+
+  role           Role        @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  department     Department? @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  manager        User?       @relation("UserManager", fields: [manager_id], references: [id], onDelete: SetNull)
+  direct_reports User[]      @relation("UserManager")
+
+  training_paths_created                TrainingPath[]
+  forms_created                         Form[]
+  performance_goals_created             PerformanceGoal[]           @relation("GoalCreatedBy")
+  performance_goals_updated             PerformanceGoal[]           @relation("GoalUpdatedBy")
+  performance_goal_users                PerformanceGoalUser[]       @relation("GoalUser")
+  performance_goal_users_assigned       PerformanceGoalUser[]       @relation("GoalAssignedBy")
+  performance_goal_departments_assigned PerformanceGoalDepartment[] @relation("DeptGoalAssignedBy")
+  department_managers_mgr               DepartmentManager[]         @relation("DeptManagerMgr")
+  department_managers_assigned          DepartmentManager[]         @relation("DeptManagerAssignedBy")
+  courses_created                       Course[]
+  training_logs                         TrainingLog[]
+  coaching_sessions_csr                 CoachingSession[]           @relation("CoachingCsr")
+  coaching_sessions_created             CoachingSession[]           @relation("CoachingCreatedBy")
+  calls                                 Call[]
+  submissions_submitted                 Submission[]
+  score_snapshots                       ScoreSnapshot[]
+  disputes_raised                       Dispute[]                   @relation("DisputeBy")
+  disputes_resolved                     Dispute[]                   @relation("DisputeResolvedBy")
+  dispute_score_history                 DisputeScoreHistory[]       @relation("ScoreHistoryRecordedBy")
+  audit_logs                            AuditLog[]
+  audit_assignments_created             AuditAssignment[]           @relation("AuditAssignmentCreatedBy")
+  audit_assignments_qa                  AuditAssignment[]           @relation("AuditAssignmentQA")
+  agent_activity                        AgentActivity[]
+  enrollments                           Enrollment[]
+  certificates                          Certificate[]
+  report_definitions_created            ReportDefinition[]
+  import_logs                           ImportLog[]
+  alert_rules_created                   AlertRule[]
+  user_alert_preferences                UserAlertPreferences?
+  alert_notifications                   AlertNotificationQueue[]
+  call_activity_raw                     CallActivityRaw[]
+  sales_margin_raw                      SalesMarginRaw[]
+  lead_sales_margin_raw                 LeadSalesMarginRaw[]
+  lead_source_raw                       LeadSourceRaw[]
+  ticket_task_raw                       TicketTaskRaw[]
+  email_stats_raw                       EmailStatsRaw[]
+
+  @@index([last_login])
+  @@map("users")
+}
+
+model TrainingPath {
+  id         Int      @id @default(autoincrement())
+  path_name  String   @db.VarChar(100)
+  created_by Int
+  created_at DateTime @default(now()) @db.DateTime(0)
+
+  creator               User                 @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  training_path_courses TrainingPathCourse[]
+  enrollments           Enrollment[]
+
+  @@map("training_paths")
+}
+
+model Form {
+  id                Int                 @id @default(autoincrement())
+  form_name         String              @db.VarChar(100)
+  interaction_type  FormInteractionType @default(UNIVERSAL)
+  version           Int                 @default(1)
+  created_by        Int
+  created_at        DateTime            @default(now()) @db.DateTime(0)
+  is_active         Boolean             @default(true) @db.TinyInt
+  parent_form_id    Int?
+  user_version      Int?
+  user_version_date DateTime?           @db.Date
+
+  creator     User   @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  parent_form Form?  @relation("FormVersions", fields: [parent_form_id], references: [id], onDelete: SetNull)
+  child_forms Form[] @relation("FormVersions")
+
+  form_metadata_fields   FormMetadataField[]
+  form_categories        FormCategory[]
+  audit_assignments      AuditAssignment[]
+  submissions            Submission[]
+  performance_goals_form PerformanceGoal[]   @relation("GoalTargetForm")
+
+  @@index([interaction_type])
+  @@map("forms")
+}
+
+model FormMetadataField {
+  id               Int                         @id @default(autoincrement())
+  form_id          Int
+  interaction_type FormMetadataInteractionType
+  field_name       String                      @db.VarChar(100)
+  field_type       FormMetadataFieldType
+  is_required      Boolean                     @default(true) @db.TinyInt
+  sort_order       Int                         @default(0)
+  created_at       DateTime                    @default(now()) @db.DateTime(0)
+
+  form                Form                 @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  submission_metadata SubmissionMetadata[]
+
+  @@unique([form_id, interaction_type, field_name], name: "unique_form_field")
+  @@map("form_metadata_fields")
+}
+
+model FormCategory {
+  id            Int     @id @default(autoincrement())
+  form_id       Int
+  category_name String  @db.VarChar(100)
+  description   String? @db.Text
+  weight        Decimal @db.Decimal(5, 2)
+  sort_order    Int     @default(0)
+
+  form                       Form              @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  form_questions             FormQuestion[]
+  performance_goals_category PerformanceGoal[] @relation("GoalTargetCategory")
+
+  @@index([form_id, sort_order])
+  @@map("form_categories")
+}
+
+model FormQuestion {
+  id             Int              @id @default(autoincrement())
+  category_id    Int
+  question_text  String           @db.VarChar(255)
+  question_type  FormQuestionType
+  weight         Decimal          @db.Decimal(5, 2)
+  sort_order     Int              @default(0)
+  scale_min      Int?
+  scale_max      Int?
+  is_na_allowed  Boolean          @default(false) @db.TinyInt
+  yes_value      Int              @default(1)
+  no_value       Int              @default(0)
+  na_value       Int              @default(0)
+  visible_to_csr Boolean          @default(true) @db.TinyInt
+
+  category                   FormCategory            @relation(fields: [category_id], references: [id], onDelete: Cascade)
+  radio_options              RadioOption[]
+  submission_answers         SubmissionAnswer[]
+  conditions_source          FormQuestionCondition[] @relation("ConditionQuestion")
+  conditions_target          FormQuestionCondition[] @relation("ConditionTarget")
+  performance_goals_question PerformanceGoal[]       @relation("GoalTargetQuestion")
+
+  @@index([category_id, sort_order])
+  @@map("form_questions")
+}
+
+model RadioOption {
+  id            Int      @id @default(autoincrement())
+  question_id   Int
+  option_text   String   @db.VarChar(255)
+  option_value  String   @db.VarChar(255)
+  score         Int      @default(0)
+  has_free_text Boolean  @default(false) @db.TinyInt
+  sort_order    Int      @default(0)
+  created_at    DateTime @default(now()) @db.DateTime(0)
+  updated_at    DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  question          FormQuestion     @relation(fields: [question_id], references: [id], onDelete: Cascade)
+  free_text_answers FreeTextAnswer[]
+
+  @@map("radio_options")
+}
+
+model PerformanceGoal {
+  id                 Int                        @id @default(autoincrement())
+  goal_type          PerformanceGoalType
+  target_value       Decimal                    @db.Decimal(5, 2)
+  scope              PerformanceGoalScope
+  department_id      Int?
+  description        String?                    @db.Text
+  created_at         DateTime                   @default(now()) @db.DateTime(0)
+  is_active          Boolean                    @default(true) @db.TinyInt
+  created_by         Int?
+  updated_by         Int?
+  updated_at         DateTime?                  @db.DateTime(0)
+  start_date         DateTime                   @default(dbgenerated("(curdate())")) @db.Date
+  end_date           DateTime?                  @db.Date
+  target_form_id     Int?
+  target_category_id Int?
+  target_question_id Int?
+  target_scope       PerformanceGoalTargetScope @default(ALL_QA)
+
+  department      Department?   @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  creator         User?         @relation("GoalCreatedBy", fields: [created_by], references: [id])
+  updater         User?         @relation("GoalUpdatedBy", fields: [updated_by], references: [id])
+  target_form     Form?         @relation("GoalTargetForm", fields: [target_form_id], references: [id], onDelete: SetNull)
+  target_category FormCategory? @relation("GoalTargetCategory", fields: [target_category_id], references: [id], onDelete: SetNull)
+  target_question FormQuestion? @relation("GoalTargetQuestion", fields: [target_question_id], references: [id], onDelete: SetNull)
+
+  performance_goal_users       PerformanceGoalUser[]
+  performance_goal_departments PerformanceGoalDepartment[]
+
+  @@index([is_active, start_date, end_date])
+  @@index([start_date, end_date])
+  @@index([target_scope, target_form_id, target_category_id, target_question_id])
+  @@map("performance_goals")
+}
+
+model PerformanceGoalUser {
+  id          Int      @id @default(autoincrement())
+  goal_id     Int
+  user_id     Int
+  assigned_at DateTime @default(now()) @db.DateTime(0)
+  assigned_by Int
+  is_active   Boolean  @default(true) @db.TinyInt
+
+  goal     PerformanceGoal @relation(fields: [goal_id], references: [id], onDelete: Cascade)
+  user     User            @relation("GoalUser", fields: [user_id], references: [id], onDelete: Cascade)
+  assigner User            @relation("GoalAssignedBy", fields: [assigned_by], references: [id], onDelete: Cascade)
+
+  @@unique([goal_id, user_id], name: "unique_goal_user")
+  @@index([goal_id])
+  @@index([user_id])
+  @@index([assigned_by])
+  @@map("performance_goal_users")
+}
+
+model PerformanceGoalDepartment {
+  id            Int      @id @default(autoincrement())
+  goal_id       Int
+  department_id Int
+  assigned_at   DateTime @default(now()) @db.DateTime(0)
+  assigned_by   Int
+  is_active     Boolean  @default(true) @db.TinyInt
+
+  goal       PerformanceGoal @relation(fields: [goal_id], references: [id], onDelete: Cascade)
+  department Department      @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  assigner   User            @relation("DeptGoalAssignedBy", fields: [assigned_by], references: [id], onDelete: Cascade)
+
+  @@unique([goal_id, department_id], name: "unique_goal_department")
+  @@index([goal_id])
+  @@index([department_id])
+  @@index([assigned_by])
+  @@map("performance_goal_departments")
+}
+
+model FormQuestionCondition {
+  id                 Int                         @id @default(autoincrement())
+  question_id        Int
+  target_question_id Int
+  condition_type     FormQuestionConditionType
+  target_value       String?                     @db.VarChar(255)
+  logical_operator   FormQuestionLogicalOperator @default(AND)
+  group_id           Int                         @default(0)
+  sort_order         Int                         @default(0)
+  created_at         DateTime                    @default(now()) @db.DateTime(0)
+
+  question        FormQuestion @relation("ConditionQuestion", fields: [question_id], references: [id], onDelete: Cascade)
+  target_question FormQuestion @relation("ConditionTarget", fields: [target_question_id], references: [id], onDelete: Cascade)
+
+  @@map("form_question_conditions")
+}
+
+model AuditAssignment {
+  id          Int                       @id @default(autoincrement())
+  form_id     Int
+  target_id   Int?
+  target_type AuditAssignmentTargetType
+  schedule    String?                   @db.VarChar(100)
+  created_by  Int
+  created_at  DateTime                  @default(now()) @db.DateTime(0)
+  qa_id       Int?
+  start_date  DateTime                  @db.DateTime(0)
+  end_date    DateTime?                 @db.DateTime(0)
+  is_active   Boolean                   @default(true) @db.TinyInt
+
+  form    Form  @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  creator User  @relation("AuditAssignmentCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
+  qa_user User? @relation("AuditAssignmentQA", fields: [qa_id], references: [id], onDelete: SetNull)
+
+  @@map("audit_assignments")
+}
+
+model DepartmentManager {
+  id            Int      @id @default(autoincrement())
+  department_id Int
+  manager_id    Int
+  assigned_at   DateTime @default(now()) @db.DateTime(0)
+  assigned_by   Int
+  is_active     Boolean  @default(true) @db.TinyInt
+
+  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  manager    User       @relation("DeptManagerMgr", fields: [manager_id], references: [id], onDelete: Cascade)
+  assigner   User       @relation("DeptManagerAssignedBy", fields: [assigned_by], references: [id], onDelete: Cascade)
+
+  @@unique([department_id, manager_id], name: "unique_dept_manager")
+  @@index([department_id])
+  @@index([manager_id])
+  @@map("department_managers")
+}
+
+model Course {
+  id          Int      @id @default(autoincrement())
+  course_name String   @db.VarChar(100)
+  description String?  @db.Text
+  created_by  Int
+  created_at  DateTime @default(now()) @db.DateTime(0)
+  is_draft    Boolean  @default(true) @db.TinyInt
+
+  creator               User                 @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  training_path_courses TrainingPathCourse[]
+  training_logs         TrainingLog[]
+  quizzes               Quiz[]
+  enrollments           Enrollment[]
+  certificates          Certificate[]
+  course_pages          CoursePage[]
+
+  @@map("courses")
+}
+
+model TrainingPathCourse {
+  id           Int @id @default(autoincrement())
+  path_id      Int
+  course_id    Int
+  course_order Int
+
+  path   TrainingPath @relation(fields: [path_id], references: [id], onDelete: Cascade)
+  course Course       @relation(fields: [course_id], references: [id], onDelete: Cascade)
+
+  @@map("training_path_courses")
+}
+
+model TrainingLog {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  course_id  Int?
+  action     String   @db.VarChar(100)
+  details    String?  @db.Text
+  created_at DateTime @default(now()) @db.DateTime(0)
+
+  user   User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  course Course? @relation(fields: [course_id], references: [id], onDelete: SetNull)
+
+  @@map("training_logs")
+}
+
+model Quiz {
+  id         Int     @id @default(autoincrement())
+  course_id  Int
+  quiz_title String  @db.VarChar(100)
+  pass_score Decimal @db.Decimal(5, 2)
+
+  course         Course         @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  quiz_questions QuizQuestion[]
+
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id             Int    @id @default(autoincrement())
+  quiz_id        Int
+  question_text  String @db.VarChar(255)
+  options        String @db.Text
+  correct_option Int
+
+  quiz Quiz @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
+
+  @@map("quiz_questions")
+}
+
+model Enrollment {
+  id              Int                      @id @default(autoincrement())
+  course_id       Int?
+  user_id         Int?
+  status          EnrollmentStatus         @default(IN_PROGRESS)
+  progress        Decimal                  @default(0.00) @db.Decimal(5, 2)
+  due_date        DateTime?                @db.DateTime(0)
+  created_at      DateTime                 @default(now()) @db.DateTime(0)
+  path_id         Int?
+  department_id   Int?
+  assignment_type EnrollmentAssignmentType @default(COURSE)
+  target_type     EnrollmentTargetType     @default(USER)
+
+  course       Course?       @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  path         TrainingPath? @relation(fields: [path_id], references: [id], onDelete: Cascade)
+  department   Department?   @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  certificates Certificate[]
+
+  @@map("enrollments")
+}
+
+model Certificate {
+  id            Int       @id @default(autoincrement())
+  user_id       Int
+  course_id     Int
+  issue_date    DateTime  @default(now()) @db.DateTime(0)
+  expiry_date   DateTime? @db.DateTime(0)
+  enrollment_id Int?
+
+  user       User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  course     Course      @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  enrollment Enrollment? @relation(fields: [enrollment_id], references: [id], onDelete: Cascade)
+
+  @@index([enrollment_id])
+  @@map("certificates")
+}
+
+model CoursePage {
+  id           Int                   @id @default(autoincrement())
+  course_id    Int
+  page_title   String                @db.VarChar(100)
+  content_type CoursePageContentType
+  content_url  String?               @db.VarChar(255)
+  content_text String?               @db.Text
+  page_order   Int
+
+  course Course @relation(fields: [course_id], references: [id], onDelete: Cascade)
+
+  @@map("course_pages")
+}
+
+model CoachingSession {
+  id                   Int                   @id @default(autoincrement())
+  csr_id               Int
+  session_date         DateTime              @db.DateTime(0)
+  coaching_type        CoachingSessionType   @default(ONE_ON_ONE)
+  notes                String?               @db.Text
+  attachment_filename  String?               @db.VarChar(255)
+  attachment_path      String?               @db.VarChar(500)
+  attachment_size      Int?
+  attachment_mime_type String?               @db.VarChar(100)
+  status               CoachingSessionStatus @default(SCHEDULED)
+  created_at           DateTime              @default(now()) @db.DateTime(0)
+  created_by           Int?
+
+  csr     User  @relation("CoachingCsr", fields: [csr_id], references: [id], onDelete: Cascade)
+  creator User? @relation("CoachingCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
+
+  coaching_session_topics CoachingSessionTopic[]
+
+  @@index([created_by])
+  @@index([csr_id, created_by])
+  @@index([csr_id, coaching_type])
+  @@index([session_date, coaching_type])
+  @@index([coaching_type])
+  @@map("coaching_sessions")
+}
+
+model Call {
+  id            Int      @id @default(autoincrement())
+  call_id       String   @unique @db.VarChar(100)
+  csr_id        Int
+  department_id Int?
+  customer_id   String?  @db.VarChar(100)
+  call_date     DateTime @db.DateTime(0)
+  duration      Int
+  recording_url String?  @db.Text
+  transcript    String?  @db.LongText
+  metadata      String?  @db.Text
+  created_at    DateTime @default(now()) @db.DateTime(0)
+  updated_at    DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  csr        User        @relation(fields: [csr_id], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [department_id], references: [id], onDelete: SetNull)
+
+  submissions      Submission[]
+  submission_calls SubmissionCall[]
+
+  @@index([call_date])
+  @@map("calls")
+}
+
+model Submission {
+  id           Int              @id @default(autoincrement())
+  form_id      Int
+  call_id      Int?
+  submitted_by Int
+  submitted_at DateTime         @default(now()) @db.DateTime(0)
+  total_score  Decimal?         @db.Decimal(5, 2)
+  status       SubmissionStatus @default(DRAFT)
+
+  form      Form  @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  call      Call? @relation(fields: [call_id], references: [id], onDelete: Cascade)
+  submitter User  @relation(fields: [submitted_by], references: [id], onDelete: Cascade)
+
+  submission_metadata   SubmissionMetadata[]
+  submission_calls      SubmissionCall[]
+  submission_answers    SubmissionAnswer[]
+  score_snapshots       ScoreSnapshot[]
+  disputes              Dispute[]
+  dispute_score_history DisputeScoreHistory[]
+
+  @@map("submissions")
+}
+
+model SubmissionMetadata {
+  id            Int       @id @default(autoincrement())
+  submission_id Int
+  field_id      Int
+  value         String?   @db.Text
+  created_at    DateTime  @default(now()) @db.DateTime(0)
+  date_value    DateTime? @db.Date
+
+  submission Submission        @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+  field      FormMetadataField @relation(fields: [field_id], references: [id], onDelete: Cascade)
+
+  @@index([date_value])
+  @@map("submission_metadata")
+}
+
+model SubmissionCall {
+  id            Int      @id @default(autoincrement())
+  submission_id Int
+  call_id       Int
+  sort_order    Int      @default(0)
+  created_at    DateTime @default(now()) @db.DateTime(0)
+
+  submission Submission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+  call       Call       @relation(fields: [call_id], references: [id], onDelete: Cascade)
+
+  @@unique([submission_id, call_id], name: "unique_submission_call")
+  @@map("submission_calls")
+}
+
+model SubmissionAnswer {
+  id            Int     @id @default(autoincrement())
+  submission_id Int
+  question_id   Int
+  answer        String? @db.Text
+  notes         String? @db.Text
+
+  submission        Submission       @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+  question          FormQuestion     @relation(fields: [question_id], references: [id], onDelete: Cascade)
+  free_text_answers FreeTextAnswer[]
+
+  @@map("submission_answers")
+}
+
+model FreeTextAnswer {
+  id         Int      @id @default(autoincrement())
+  answer_id  Int
+  option_id  Int
+  text_value String   @db.Text
+  created_at DateTime @default(now()) @db.DateTime(0)
+
+  answer SubmissionAnswer @relation(fields: [answer_id], references: [id], onDelete: Cascade)
+  option RadioOption      @relation(fields: [option_id], references: [id], onDelete: Cascade)
+
+  @@map("free_text_answers")
+}
+
+model ScoreSnapshot {
+  id            Int      @id @default(autoincrement())
+  csr_id        Int
+  score         Decimal  @db.Decimal(5, 2)
+  snapshot_date DateTime @db.Date
+  created_at    DateTime @default(now()) @db.DateTime(0)
+  submission_id Int?
+  snapshot_data String?  @db.Text
+
+  csr        User        @relation(fields: [csr_id], references: [id], onDelete: Cascade)
+  submission Submission? @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+
+  @@map("score_snapshots")
+}
+
+model Dispute {
+  id               Int           @id @default(autoincrement())
+  submission_id    Int
+  disputed_by      Int
+  resolved_by      Int?
+  created_at       DateTime      @default(now()) @db.DateTime(0)
+  resolved_at      DateTime?     @db.DateTime(0)
+  status           DisputeStatus @default(OPEN)
+  reason           String        @db.Text
+  resolution_notes String?       @db.Text
+  attachment_url   String?       @db.VarChar(500)
+
+  submission Submission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+  disputant  User       @relation("DisputeBy", fields: [disputed_by], references: [id], onDelete: Cascade)
+  resolver   User?      @relation("DisputeResolvedBy", fields: [resolved_by], references: [id], onDelete: SetNull)
+
+  dispute_score_history DisputeScoreHistory[]
+
+  @@map("disputes")
+}
+
+model DisputeScoreHistory {
+  id            Int                     @id @default(autoincrement())
+  dispute_id    Int
+  submission_id Int
+  score_type    DisputeScoreHistoryType
+  score         Decimal                 @db.Decimal(5, 2)
+  recorded_by   Int?
+  notes         String?                 @db.VarChar(255)
+  created_at    DateTime                @default(now()) @db.Timestamp(0)
+
+  dispute    Dispute    @relation(fields: [dispute_id], references: [id], onDelete: Cascade)
+  submission Submission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+  recorder   User?      @relation("ScoreHistoryRecordedBy", fields: [recorded_by], references: [id], onDelete: SetNull)
+
+  @@index([dispute_id, created_at])
+  @@index([recorded_by])
+  @@index([submission_id])
+  @@map("dispute_score_history")
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  action      String   @db.VarChar(100)
+  target_id   Int?
+  target_type String?  @db.VarChar(50)
+  details     String?  @db.Text
+  created_at  DateTime @default(now()) @db.DateTime(0)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+model AgentActivity {
+  id              Int      @id @default(autoincrement())
+  csr_id          Int
+  department_id   Int?
+  activity_date   DateTime @db.Date
+  status_switches Int      @default(0)
+  start_time      DateTime @db.DateTime(0)
+  end_time        DateTime @db.DateTime(0)
+  created_at      DateTime @default(now()) @db.DateTime(0)
+  updated_at      DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  csr        User        @relation(fields: [csr_id], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [department_id], references: [id], onDelete: SetNull)
+
+  @@index([activity_date])
+  @@map("agent_activity")
+}
+
+model Topic {
+  id         Int      @id @default(autoincrement())
+  topic_name String   @unique @db.VarChar(255)
+  is_active  Boolean  @default(true) @db.TinyInt
+  sort_order Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamp(0)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(0)
+
+  coaching_session_topics CoachingSessionTopic[]
+
+  @@index([is_active])
+  @@index([sort_order])
+  @@map("topics")
+}
+
+model CoachingSessionTopic {
+  id                  Int      @id @default(autoincrement())
+  coaching_session_id Int
+  topic_id            Int
+  created_at          DateTime @default(now()) @db.Timestamp(0)
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamp(0)
+
+  coaching_session CoachingSession @relation(fields: [coaching_session_id], references: [id], onDelete: Cascade)
+  topic            Topic           @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+
+  @@unique([coaching_session_id, topic_id], name: "unique_session_topic")
+  @@index([coaching_session_id])
+  @@index([topic_id])
+  @@map("coaching_session_topics")
+}
+
+model AuthLog {
+  id           Int      @id @default(autoincrement())
+  email        String   @db.VarChar(255)
+  success      Boolean  @db.TinyInt
+  ip_address   String?  @db.VarChar(45)
+  attempted_at DateTime @default(now()) @db.Timestamp(0)
+
+  @@map("auth_logs")
+}
+
+// ── Reporting Engine ────────────────────────────────────────────────────────
+
+model MetricDefinition {
+  id            Int             @id @default(autoincrement())
+  code          String          @unique @db.VarChar(50)
+  name          String          @db.VarChar(150)
+  aggregation   AggregationType
+  direction     MetricDirection
+  is_cumulative Boolean         @default(false)
+  is_active     Boolean         @default(true)
+  created_at    DateTime        @default(now()) @db.DateTime(0)
+
+  metric_departments MetricDepartment[]
+  metric_thresholds  MetricThreshold[]
+  alert_rules        AlertRule[]
+
+  @@map("metric_definitions")
+}
+
+model MetricDepartment {
+  id            Int @id @default(autoincrement())
+  metric_id     Int
+  department_id Int
+
+  metric     MetricDefinition @relation(fields: [metric_id], references: [id], onDelete: Cascade)
+  department Department       @relation(fields: [department_id], references: [id], onDelete: Cascade)
+
+  @@unique([metric_id, department_id])
+  @@map("metric_departments")
+}
+
+model MetricThreshold {
+  id            Int      @id @default(autoincrement())
+  metric_id     Int
+  department_id Int?
+  red_below     Decimal  @db.Decimal(10, 2)
+  yellow_below  Decimal  @db.Decimal(10, 2)
+  created_at    DateTime @default(now()) @db.DateTime(0)
+
+  metric     MetricDefinition @relation(fields: [metric_id], references: [id], onDelete: Cascade)
+  department Department?      @relation(fields: [department_id], references: [id], onDelete: SetNull)
+
+  @@map("metric_thresholds")
+}
+
+model ReportDefinition {
+  id             Int           @id @default(autoincrement())
+  name           String        @db.VarChar(150)
+  description    String?       @db.Text
+  layout_config  Json
+  audience_scope AudienceScope
+  show_in_nav    Boolean       @default(false)
+  nav_order      Int           @default(0)
+  is_active      Boolean       @default(true)
+  created_by     Int
+  created_at     DateTime      @default(now()) @db.DateTime(0)
+  updated_at     DateTime      @default(now()) @updatedAt @db.DateTime(0)
+
+  creator              User                         @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  report_departments   ReportDefinitionDepartment[]
+
+  @@map("report_definitions")
+}
+
+model ReportDefinitionDepartment {
+  id            Int @id @default(autoincrement())
+  report_id     Int
+  department_id Int
+
+  report     ReportDefinition @relation(fields: [report_id], references: [id], onDelete: Cascade)
+  department Department       @relation(fields: [department_id], references: [id], onDelete: Cascade)
+
+  @@unique([report_id, department_id])
+  @@map("report_definition_departments")
+}
+
+// ── Raw Data Tables ─────────────────────────────────────────────────────────
+
+model CallActivityRaw {
+  id            Int      @id @default(autoincrement())
+  user_id       Int
+  report_date   DateTime @db.Date
+  calls_offered Int      @default(0)
+  calls_handled Int      @default(0)
+  hold_minutes  Decimal  @default(0) @db.Decimal(10, 2)
+  line_minutes  Decimal  @default(0) @db.Decimal(10, 2)
+  wrap_minutes  Decimal  @default(0) @db.Decimal(10, 2)
+  import_id     Int?
+  created_at    DateTime @default(now()) @db.DateTime(0)
+
+  user   User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  import ImportLog? @relation(fields: [import_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, report_date])
+  @@map("call_activity_raw")
+}
+
+model SalesMarginRaw {
+  id               Int      @id @default(autoincrement())
+  user_id          Int
+  report_date      DateTime @db.Date
+  order_count      Int      @default(0)
+  revenue          Decimal  @default(0) @db.Decimal(12, 2)
+  cogs             Decimal  @default(0) @db.Decimal(12, 2)
+  gross_margin     Decimal  @default(0) @db.Decimal(12, 2)
+  product_category String?  @db.VarChar(100)
+  import_id        Int?
+  created_at       DateTime @default(now()) @db.DateTime(0)
+
+  user   User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  import ImportLog? @relation(fields: [import_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, report_date])
+  @@map("sales_margin_raw")
+}
+
+model LeadSalesMarginRaw {
+  id              Int      @id @default(autoincrement())
+  user_id         Int
+  report_date     DateTime @db.Date
+  leads_assigned  Int      @default(0)
+  leads_contacted Int      @default(0)
+  orders          Int      @default(0)
+  lead_revenue    Decimal  @default(0) @db.Decimal(12, 2)
+  lead_margin     Decimal  @default(0) @db.Decimal(12, 2)
+  import_id       Int?
+  created_at      DateTime @default(now()) @db.DateTime(0)
+
+  user   User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  import ImportLog? @relation(fields: [import_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, report_date])
+  @@map("lead_sales_margin_raw")
+}
+
+model LeadSourceRaw {
+  id              Int      @id @default(autoincrement())
+  user_id         Int
+  report_date     DateTime @db.Date
+  source_name     String   @db.VarChar(100)
+  leads_received  Int      @default(0)
+  converted       Int      @default(0)
+  conversion_rate Decimal  @default(0) @db.Decimal(6, 4)
+  import_id       Int?
+  created_at      DateTime @default(now()) @db.DateTime(0)
+
+  user   User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  import ImportLog? @relation(fields: [import_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, report_date])
+  @@map("lead_source_raw")
+}
+
+model TicketTaskRaw {
+  id                      Int      @id @default(autoincrement())
+  user_id                 Int
+  report_date             DateTime @db.Date
+  ticket_id               String?  @db.VarChar(100)
+  status                  String   @db.VarChar(50)
+  priority                String?  @db.VarChar(50)
+  category                String?  @db.VarChar(100)
+  resolution_time_minutes Int?
+  import_id               Int?
+  created_at              DateTime @default(now()) @db.DateTime(0)
+
+  user   User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  import ImportLog? @relation(fields: [import_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, report_date])
+  @@map("ticket_task_raw")
+}
+
+model EmailStatsRaw {
+  id                   Int      @id @default(autoincrement())
+  user_id              Int
+  report_date          DateTime @db.Date
+  emails_sent          Int      @default(0)
+  emails_received      Int      @default(0)
+  crm_contacts_updated Int      @default(0)
+  bounces              Int      @default(0)
+  import_id            Int?
+  created_at           DateTime @default(now()) @db.DateTime(0)
+
+  user   User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  import ImportLog? @relation(fields: [import_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, report_date])
+  @@map("email_stats_raw")
+}
+
+// ── Import Tracking ──────────────────────────────────────────────────────────
+
+model ImportLog {
+  id            Int          @id @default(autoincrement())
+  data_type     String       @db.VarChar(100)
+  file_name     String       @db.VarChar(255)
+  imported_by   Int
+  rows_imported Int          @default(0)
+  rows_skipped  Int          @default(0)
+  rows_errored  Int          @default(0)
+  status        ImportStatus @default(PENDING)
+  error_details Json?
+  created_at    DateTime     @default(now()) @db.DateTime(0)
+
+  importer          User                 @relation(fields: [imported_by], references: [id], onDelete: Cascade)
+  call_activity_raw CallActivityRaw[]
+  sales_margin_raw  SalesMarginRaw[]
+  lead_sales_raw    LeadSalesMarginRaw[]
+  lead_source_raw   LeadSourceRaw[]
+  ticket_task_raw   TicketTaskRaw[]
+  email_stats_raw   EmailStatsRaw[]
+
+  @@map("import_logs")
+}
+
+// ── Dynamic Data Source Registry ─────────────────────────────────────────────
+
+model RawTableConfig {
+  id                Int      @id @default(autoincrement())
+  table_name        String   @unique @db.VarChar(100)
+  display_name      String   @db.VarChar(150)
+  description       String?  @db.Text
+  is_user_centric   Boolean  @default(true)
+  primary_dimension String?  @db.VarChar(100)
+  is_active         Boolean  @default(true)
+  created_at        DateTime @default(now()) @db.DateTime(0)
+
+  entity_raw EntityRaw[]
+
+  @@map("raw_table_config")
+}
+
+model EntityRaw {
+  id              Int      @id @default(autoincrement())
+  table_config_id Int
+  report_date     DateTime @db.Date
+  dimension_value String   @db.VarChar(150)
+  data            Json
+  import_id       Int?
+  created_at      DateTime @default(now()) @db.DateTime(0)
+
+  table_config RawTableConfig @relation(fields: [table_config_id], references: [id], onDelete: Cascade)
+
+  @@index([table_config_id, report_date])
+  @@map("entity_raw")
+}
+
+// ── Alert System ─────────────────────────────────────────────────────────────
+
+model AlertRule {
+  id                 Int           @id @default(autoincrement())
+  name               String        @db.VarChar(150)
+  metric_id          Int
+  condition_operator String        @db.VarChar(20)
+  threshold_value    Decimal       @db.Decimal(10, 2)
+  scope              AudienceScope
+  is_active          Boolean       @default(true)
+  created_by         Int
+  created_at         DateTime      @default(now()) @db.DateTime(0)
+
+  metric              MetricDefinition         @relation(fields: [metric_id], references: [id], onDelete: Cascade)
+  creator             User                     @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  alert_notifications AlertNotificationQueue[]
+
+  @@map("alert_rules")
+}
+
+model UserAlertPreferences {
+  id           Int      @id @default(autoincrement())
+  user_id      Int      @unique
+  frequency    String   @db.VarChar(50)
+  batch_alerts Boolean  @default(true)
+  timezone     String   @db.VarChar(100)
+  updated_at   DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("user_alert_preferences")
+}
+
+model AlertNotificationQueue {
+  id         Int           @id @default(autoincrement())
+  rule_id    Int
+  user_id    Int
+  message    String        @db.Text
+  priority   AlertPriority @default(NORMAL)
+  is_sent    Boolean       @default(false)
+  created_at DateTime      @default(now()) @db.DateTime(0)
+  sent_at    DateTime?     @db.DateTime(0)
+
+  rule AlertRule @relation(fields: [rule_id], references: [id], onDelete: Cascade)
+  user User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([is_sent, created_at])
+  @@map("alert_notification_queue")
+}
+
+// ── Business Calendar ────────────────────────────────────────────────────────
+
+model BusinessCalendarDay {
+  id            Int             @id @default(autoincrement())
+  calendar_date DateTime        @unique @db.Date
+  day_type      BusinessDayType
+  note          String?         @db.VarChar(255)
+
+  @@map("business_calendar_days")
+}
+
+// ── Enums ──────────────────────────────────────────────────────────────────
+
+enum FormInteractionType {
+  CALL
+  TICKET
+  EMAIL
+  CHAT
+  UNIVERSAL
+}
+
+enum FormMetadataInteractionType {
+  CALL
+  EMAIL
+  CHAT
+  OTHER
+}
+
+enum FormMetadataFieldType {
+  TEXT
+  DROPDOWN
+  DATE
+  AUTO
+  SPACER
+}
+
+enum FormQuestionType {
+  YES_NO
+  SCALE
+  N_A
+  TEXT
+  INFO_BLOCK
+  RADIO
+  SUB_CATEGORY
+}
+
+enum PerformanceGoalType {
+  QA_SCORE
+  AUDIT_RATE
+  DISPUTE_RATE
+}
+
+enum PerformanceGoalScope {
+  GLOBAL
+  DEPARTMENT
+  USER
+  MULTI_USER
+  MULTI_DEPARTMENT
+}
+
+enum PerformanceGoalTargetScope {
+  ALL_QA
+  FORM
+  CATEGORY
+  QUESTION
+}
+
+enum FormQuestionConditionType {
+  EQUALS
+  NOT_EQUALS
+  EXISTS
+  NOT_EXISTS
+}
+
+enum FormQuestionLogicalOperator {
+  AND
+  OR
+}
+
+enum AuditAssignmentTargetType {
+  USER
+  DEPARTMENT
+}
+
+enum EnrollmentStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum EnrollmentAssignmentType {
+  COURSE
+  TRAINING_PATH
+}
+
+enum EnrollmentTargetType {
+  USER
+  DEPARTMENT
+}
+
+enum CoursePageContentType {
+  TEXT
+  VIDEO
+  PDF
+}
+
+enum CoachingSessionType {
+  Classroom
+  Side_by_Side    @map("Side-by-Side")
+  Team_Session    @map("Team Session")
+  ONE_ON_ONE      @map("1-on-1")
+  PIP
+  Verbal_Warning  @map("Verbal Warning")
+  Written_Warning @map("Written Warning")
+}
+
+enum CoachingSessionStatus {
+  SCHEDULED
+  COMPLETED
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  DISPUTED
+  FINALIZED
+}
+
+enum DisputeStatus {
+  OPEN
+  UPHELD
+  REJECTED
+  ADJUSTED
+}
+
+enum DisputeScoreHistoryType {
+  PREVIOUS
+  ADJUSTED
+}
+
+enum AggregationType {
+  COUNT
+  SUM
+  AVG
+  MAX
+  MIN
+}
+
+enum MetricDirection {
+  HIGH_IS_GOOD
+  LOW_IS_GOOD
+}
+
+enum AudienceScope {
+  USER
+  TEAM
+  DEPARTMENT
+  ORG
+}
+
+enum AlertPriority {
+  CRITICAL
+  HIGH
+  NORMAL
+}
+
+enum BusinessDayType {
+  WORKDAY
+  WEEKEND
+  HOLIDAY
+  CLOSURE
+  ADJUSTMENT
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETE
+  FAILED
+}

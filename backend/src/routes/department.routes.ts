@@ -1,0 +1,67 @@
+import { Router, RequestHandler } from 'express';
+import { authenticate } from '../middleware/auth';
+import { authorizeAdmin } from '../middleware/auth';
+import { 
+  createDepartment,
+  getDepartments,
+  getDepartmentById,
+  updateDepartment,
+  toggleDepartmentStatus,
+  deleteDepartment,
+  assignUsers,
+  getAssignableUsers
+} from '../controllers/department.controller';
+
+const router = Router();
+
+// Routes using the controller
+
+// Get all departments
+router.get('/', getDepartments as unknown as RequestHandler);
+
+// Get users eligible for assignment to departments
+router.get('/users/assignable', 
+  authenticate as unknown as RequestHandler,
+  authorizeAdmin as unknown as RequestHandler,
+  getAssignableUsers as unknown as RequestHandler
+);
+
+// Get a single department
+router.get('/:id', getDepartmentById as unknown as RequestHandler);
+
+// Create a new department - admin only
+router.post('/', 
+  authenticate as unknown as RequestHandler,
+  authorizeAdmin as unknown as RequestHandler,
+  createDepartment as unknown as RequestHandler
+);
+
+// Update a department - admin only
+router.put('/:id', 
+  authenticate as unknown as RequestHandler,
+  authorizeAdmin as unknown as RequestHandler,
+  updateDepartment as unknown as RequestHandler
+);
+
+// Toggle department status - admin only
+router.put('/:id/status', 
+  authenticate as unknown as RequestHandler,
+  authorizeAdmin as unknown as RequestHandler,
+  toggleDepartmentStatus as unknown as RequestHandler
+);
+
+// Delete a department - admin only
+router.delete('/:id', 
+  authenticate as unknown as RequestHandler,
+  authorizeAdmin as unknown as RequestHandler,
+  deleteDepartment as unknown as RequestHandler
+);
+
+// Assign users to a department - admin only
+router.post('/:id/users', 
+  authenticate as unknown as RequestHandler,
+  authorizeAdmin as unknown as RequestHandler,
+  assignUsers as unknown as RequestHandler
+);
+
+export default router; 
