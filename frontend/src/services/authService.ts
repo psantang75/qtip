@@ -6,7 +6,13 @@ export interface User {
   username: string;
   email: string;
   role_id: number;
+  role_name?: string;
   department_id: number | null;
+  department_name?: string | null;
+  manager_id?: number | null;
+  title?: string | null;
+  is_active: boolean;
+  last_login?: string | null;
   created_at: string;
 }
 

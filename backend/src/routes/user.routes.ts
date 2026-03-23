@@ -9,7 +9,8 @@ import {
   toggleUserStatus, 
   changePassword,
   getManagers, 
-  getDirectors 
+  getDirectors,
+  getMyDepartments,
 } from '../controllers/user.controller';
 
 const router = express.Router();
@@ -21,6 +22,7 @@ router.use(authenticate as unknown as RequestHandler);
 router.get('/', getUsers as unknown as RequestHandler);
 router.get('/managers', getManagers as unknown as RequestHandler);
 router.get('/directors', getDirectors as unknown as RequestHandler);
+router.get('/my-departments', getMyDepartments as unknown as RequestHandler);
 router.get('/:id', getUserById as unknown as RequestHandler);
 router.post('/', createUser as unknown as RequestHandler);
 router.put('/change-password', changePassword as unknown as RequestHandler);

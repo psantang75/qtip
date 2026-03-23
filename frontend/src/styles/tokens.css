@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   /* Primary Brand */
   --color-primary-blue: #00aeef;      /* Main accent */
 
@@ -9,7 +9,19 @@
   --color-neutral-100: #f5f7f8;       /* Cards / surfaces */
 
   /* States */
-  --color-success: #1abc9c;
+  --color-success: #00aeef;
   --color-warning: #f39c12;
   --color-danger:  #e74c3c;
+
+  /* ── Tremor brand tokens (maps to QTIP primary blue) ────────────────────── */
+  --tremor-brand:                #00aeef;
+  --tremor-brand-emphasis:       #0095cc;
+  --tremor-brand-muted:          #e0f6fd;
+  --tremor-brand-subtle:         #b3ebfc;
+  --tremor-background-default:   #ffffff;
+  --tremor-background-muted:     #f5f7f8;
+  --tremor-content-subtle:       #999999;
+  --tremor-content-default:      #666666;
+  --tremor-content-emphasis:     #000000;
+  --tremor-border-default:       #e5e7eb;
 } 

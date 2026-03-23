@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -63,7 +63,7 @@ interface ReportData {
   [key: string]: any;
 }
 
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16', '#F97316'];
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#00aeef', '#06B6D4', '#84CC16', '#F97316'];
 
 const ComprehensiveAnalytics: React.FC = () => {
   const { user } = useAuth();

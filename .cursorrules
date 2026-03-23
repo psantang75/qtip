@@ -54,8 +54,8 @@ Express + Prisma + MySQL backend.
   emoji or other icon libraries.
 - Use Tailwind utility classes for layout and 
   spacing. Do not write custom CSS files.
-- All colors should use Tailwind slate/blue palette 
-  to stay consistent with shadcn/ui defaults.
+- All colors must use the QTIP brand palette defined 
+  in the Brand Colors section below.
 
 ## Navigation Structure
 The app has three top-level sections:
@@ -92,3 +92,22 @@ Use TanStack Query for all data fetching.
 - frontend/src/hooks/ — custom React hooks
 - frontend/src/services/ — Axios API service functions
 - frontend/src/types/ — TypeScript interfaces
+
+## Brand Colors
+Always use these exact color values. 
+Never introduce new colors.
+
+Primary blue:   #00aeef  (Tailwind: bg-primary, 
+                          CSS: var(--color-primary-blue))
+Success green:  #1abc9c  (Tailwind: bg-success)
+Warning orange: #f39c12  (Tailwind: bg-warning)
+Danger red:     #e74c3c  (Tailwind: bg-danger / bg-destructive)
+Surface gray:   #f5f7f8  (Tailwind: bg-surface)
+Body text:      #666666  (Tailwind: text-neutral-700)
+Dark text:      #000000  (Tailwind: text-neutral-900)
+
+shadcn/ui components will automatically use 
+--primary (#00aeef) for their primary variant.
+Tremor components will use --tremor-brand (#00aeef).
+Always prefer semantic class names (bg-primary, 
+text-primary) over hardcoded hex values in components.

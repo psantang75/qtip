@@ -9,14 +9,18 @@ export default {
     extend: {
       // ── QTIP design tokens ───────────────────────────────────────────────
       colors: {
-        primary: 'var(--color-primary-blue)',
+        primary: {
+          DEFAULT: '#00aeef',
+          foreground: '#ffffff',
+        },
+        success:  '#1abc9c',
+        warning:  '#f39c12',
+        danger:   '#e74c3c',
+        surface:  '#f5f7f8',
         'neutral-900': 'var(--color-neutral-900)',
         'neutral-700': 'var(--color-neutral-700)',
         'neutral-600': 'var(--color-neutral-600)',
         'neutral-100': 'var(--color-neutral-100)',
-        success: 'var(--color-success)',
-        warning: 'var(--color-warning)',
-        danger: 'var(--color-danger)',
         // ── shadcn/ui semantic tokens ───────────────────────────────────────
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
@@ -27,10 +31,6 @@ export default {
         popover: {
           DEFAULT: 'hsl(var(--popover))',
           foreground: 'hsl(var(--popover-foreground))',
-        },
-        'shadcn-primary': {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
         },
         secondary: {
           DEFAULT: 'hsl(var(--secondary))',
@@ -45,8 +45,8 @@ export default {
           foreground: 'hsl(var(--accent-foreground))',
         },
         destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))',
+          DEFAULT: '#e74c3c',
+          foreground: '#ffffff',
         },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
@@ -68,26 +68,6 @@ export default {
       },
       boxShadow: {
         'sm': '0 2px 6px rgba(0,0,0,0.06)',
-      },
-      spacing: {
-        '2': '2px',
-        '4': '4px',
-        '8': '8px',
-        '12': '12px',
-        '16': '16px',
-        '24': '24px',
-        '32': '32px',
-        '40': '40px',
-        '48': '48px',
-        '64': '64px',
-      },
-      fontSize: {
-        'xs': '12px',
-        'sm': '14px',
-        'base': '16px',
-        'xl': '20px',
-        '2xl': '24px',
-        '3xl': '32px',
       },
       fontWeight: {
         normal: '400',

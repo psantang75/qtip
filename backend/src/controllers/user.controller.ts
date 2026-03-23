@@ -1,6 +1,7 @@
-﻿import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { UserService, UserServiceError } from '../services/UserService';
 import { MySQLUserRepository } from '../repositories/UserRepository';
+import prisma from '../config/prisma';
 
 // Initialize user service with repository
 const userRepository = new MySQLUserRepository();
@@ -227,6 +228,34 @@ export const getDirectors = async (req: Request, res: Response, next: NextFuncti
     return res.status(200).json(directors);
   } catch (error) {
     console.error('[USER CONTROLLER] Error in getDirectors:', error);
-    next(error); // Let the global error handler handle it
+    next(error);
+  }
+};
+
+/**
+ * Get all departments managed by the requesting user
+ * @route GET /api/users/my-departments
+ */
+export const getMyDepartments = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user_id = (req as any).user?.user_id;
+    if (!user_id) return res.status(401).json({ message: 'Authentication required' });
+
+    const departments = await prisma.departmentManager.findMany({
+      where: { manager_id: user_id, is_active: true },
+      include: {
+        department: {
+          select: { id: true, department_name: true, is_active: true },
+        },
+      },
+      orderBy: { department: { department_name: 'asc' } },
+    });
+
+    return res.status(200).json(
+      departments.map(dm => dm.department)
+    );
+  } catch (error) {
+    console.error('[USER CONTROLLER] Error in getMyDepartments:', error);
+    next(error);
   }
 }; 

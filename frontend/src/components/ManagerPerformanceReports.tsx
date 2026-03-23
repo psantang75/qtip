@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -210,7 +210,7 @@ const ManagerPerformanceReports: React.FC = () => {
   const renderTrainingCompletionChart = () => {
     if (!reportData?.trainingCompletion.length) return null;
 
-    const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+    const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#00aeef', '#06b6d4'];
 
     return (
       <div className="bg-white rounded-lg shadow-sm border p-6">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -338,7 +338,7 @@ const ManagerTeamGoals: React.FC = () => {
 
     if (chartData.length === 0) return null;
 
-    const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+    const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#00aeef', '#06b6d4'];
 
     return (
       <div className="bg-white rounded-lg shadow-sm border p-6">
