@@ -1,0 +1,94 @@
+# QTIP + Insights Platform — Cursor Rules
+
+## Project Overview
+This is a unified QA + Training + Reporting platform 
+built with React 19 + TypeScript frontend and 
+Express + Prisma + MySQL backend.
+
+## Tech Stack
+
+### Frontend
+- React 19 with TypeScript
+- Vite
+- React Router v7
+- TanStack Query v5 for all server state
+- TanStack Table v8 for all data grids
+- Tailwind CSS 3 for styling
+- shadcn/ui for ALL UI components 
+  (buttons, inputs, dialogs, dropdowns, tables, forms)
+- Tremor for dashboard components 
+  (KPI cards, metric tiles, charts, progress bars)
+- Recharts for all chart rendering (via Tremor)
+- react-querybuilder for filter/query builder UI
+- React Hook Form for all forms
+- dnd-kit for drag and drop
+- TipTap for rich text / course slide editor
+- lucide-react for all icons
+- Axios for API calls
+
+### Backend
+- Node.js with TypeScript
+- Express 5
+- Prisma ORM for ALL database operations
+- MySQL 8
+- JWT authentication (access + refresh tokens)
+- Zod for validation
+- Winston for logging
+- Multer for file uploads
+- xlsx for Excel import/export
+
+## Design Rules
+- ALWAYS use shadcn/ui components first. 
+  Never create raw HTML buttons, inputs, or 
+  form elements.
+- ALWAYS use Tremor for any dashboard metric 
+  cards, KPI tiles, or chart wrappers.
+- ALWAYS use TanStack Table for any data table 
+  or grid — never build custom table HTML.
+- ALWAYS use TanStack Query for API calls — 
+  never use useEffect + fetch or axios directly 
+  in components.
+- ALWAYS use React Hook Form for any form with 
+  more than 2 fields.
+- ALWAYS use lucide-react for icons — never use 
+  emoji or other icon libraries.
+- Use Tailwind utility classes for layout and 
+  spacing. Do not write custom CSS files.
+- All colors should use Tailwind slate/blue palette 
+  to stay consistent with shadcn/ui defaults.
+
+## Navigation Structure
+The app has three top-level sections:
+1. Quality — QA forms, submissions, disputes, 
+   scoring, QA analytics
+2. Training — courses, training paths, coaching 
+   sessions, enrollments, certificates, quizzes
+3. Insights — dashboards, report builder, data 
+   explorer, raw data export, import center
+
+## Role System
+Roles in order of access level:
+- admin (full access)
+- director (org-wide reporting, no system config)
+- manager (team/department level)
+- qa (quality management)
+- trainer (training content and coaching)
+- csr (own data only)
+
+## API Base URL
+All API calls use: /api/ prefix
+Auth token stored in httpOnly cookie.
+Use TanStack Query for all data fetching.
+
+## File Structure
+- frontend/src/components/ui/ — shadcn components 
+  (auto-generated, do not edit)
+- frontend/src/components/common/ — shared reusable 
+  components built by us
+- frontend/src/components/quality/ — Quality section
+- frontend/src/components/training/ — Training section  
+- frontend/src/components/insights/ — Insights section
+- frontend/src/components/admin/ — Admin screens
+- frontend/src/hooks/ — custom React hooks
+- frontend/src/services/ — Axios API service functions
+- frontend/src/types/ — TypeScript interfaces

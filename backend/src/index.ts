@@ -40,6 +40,10 @@ import adminRoutes from './routes/admin.routes';
 import phoneSystemRoutes from './routes/phoneSystem.routes';
 import callRoutes from './routes/calls.routes';
 import topicRoutes from './routes/topic.routes';
+import importRoutes from './routes/import.routes';
+import metricRoutes from './routes/metric.routes';
+import reportRoutes from './routes/report.routes';
+import rawDataRoutes from './routes/rawData.routes';
 
 
 function normalizePort(val: string | number): string | number | false {
@@ -180,6 +184,10 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/phone-system', phoneSystemRoutes);
 app.use('/api/calls', callRoutes);
 app.use('/api/topics', topicRoutes);
+app.use('/api/imports', importRoutes);
+app.use('/api/metrics', metricRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/raw-data', rawDataRoutes);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);
