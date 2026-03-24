@@ -141,6 +141,7 @@ model FormMetadataField {
   field_name       String                      @db.VarChar(100)
   field_type       FormMetadataFieldType
   is_required      Boolean                     @default(true) @db.TinyInt
+  dropdown_source  String?                     @db.VarChar(1000)
   sort_order       Int                         @default(0)
   created_at       DateTime                    @default(now()) @db.DateTime(0)
 
@@ -1059,6 +1060,7 @@ enum FormQuestionType {
   INFO_BLOCK
   RADIO
   SUB_CATEGORY
+  MULTI_SELECT
 }
 
 enum PerformanceGoalType {

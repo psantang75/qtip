@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { HiOutlineArrowLeft } from 'react-icons/hi';
+import { ArrowLeft } from 'lucide-react';
 import NavigationPrompt from './NavigationPrompt';
 import submissionService from '../services/submissionService';
 import { getFormById } from '../services/formService';
@@ -187,7 +187,7 @@ const QAManualAuditForm: React.FC = () => {
   // Initialize form data and setup
   useEffect(() => {
     if (!formId) {
-      navigate('/qa/manual-reviews');
+      navigate('/app/quality/assigned-audits');
       return;
     }
     
@@ -391,7 +391,7 @@ const QAManualAuditForm: React.FC = () => {
 
   // Navigation handlers
   const handleBackToManualReview = () => {
-    navigate('/qa/manual-reviews');
+    navigate('/app/quality/assigned-audits');
   };
 
   // Submit completed review
@@ -511,7 +511,7 @@ const QAManualAuditForm: React.FC = () => {
     submissionService.submitAudit(submissionData)
       .then((response) => {
         setHasChanges(false);
-        navigate('/qa/manual-reviews', { 
+        navigate('/app/quality/assigned-audits', { 
           state: { message: 'Manual review submitted successfully!' }
         });
       })
@@ -565,7 +565,7 @@ const QAManualAuditForm: React.FC = () => {
     submissionService.saveDraft(draftData)
       .then((response) => {
         setHasChanges(false);
-        navigate('/qa/manual-reviews', { 
+        navigate('/app/quality/assigned-audits', { 
           state: { message: 'Manual review draft saved successfully!' }
         });
       })
@@ -588,7 +588,7 @@ const QAManualAuditForm: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-neutral-100">
-        <div className="animate-spin h-12 w-12 text-primary-blue">
+        <div className="animate-spin h-12 w-12 text-[#00aeef]">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -613,9 +613,9 @@ const QAManualAuditForm: React.FC = () => {
         <div className="flex items-center">
           <button 
             onClick={handleBackToManualReview}
-            className="flex items-center text-primary-blue hover:text-primary-blue-dark transition-colors"
+            className="flex items-center text-[#00aeef] hover:text-[#00aeef]-dark transition-colors"
           >
-            <HiOutlineArrowLeft className="h-5 w-5 mr-1" />
+            <ArrowLeft className="h-5 w-5 mr-1" />
             Back to Manual Review
           </button>
         </div>
@@ -731,7 +731,7 @@ const QAManualAuditForm: React.FC = () => {
             <div className="flex-shrink-0 mt-6 pt-4 border-t border-gray-200">
               <div className="flex justify-end items-center mb-4">
                 <button 
-                  className="bg-primary-blue text-white py-2 px-4 rounded hover:bg-primary-blue-dark transition-colors"
+                  className="bg-[#00aeef] text-white py-2 px-4 rounded hover:bg-[#00aeef]-dark transition-colors"
                   onClick={handleSubmit}
                   disabled={loading}
                 >

@@ -7,6 +7,7 @@
  */
 
 import React from 'react';
+import { cn } from '../../lib/utils';
 import type { Form, Question, Answer, Category, FormSubmission } from '../../types';
 import type { FormQuestion } from '../../types/form.types';
 import { processConditionalLogic } from './formConditions';
@@ -150,7 +151,7 @@ export const generateFormPreview = (form: Form, withSampleAnswers: boolean = fal
 export interface QuestionRenderData {
   id: number;
   text: string;
-  type: 'yes_no' | 'scale' | 'text' | 'info' | 'info_block' | 'radio' | 'sub_category' | 'n_a';
+  type: 'yes_no' | 'scale' | 'text' | 'info' | 'info_block' | 'radio' | 'sub_category' | 'n_a' | 'multi_select';
   isConditional: boolean;
   isVisible: boolean;
   isNaAllowed?: boolean;
@@ -239,7 +240,7 @@ export const prepareQuestionForRender = (
   isVisible: boolean = true
 ): QuestionRenderData => {
   // Normalize question type to lowercase for consistent comparison
-  const questionType = (question.question_type || '').toLowerCase() as 'yes_no' | 'scale' | 'text' | 'info' | 'radio' | 'info_block' | 'sub_category';
+  const questionType = (question.question_type || '').toLowerCase() as 'yes_no' | 'scale' | 'text' | 'info' | 'radio' | 'info_block' | 'sub_category' | 'multi_select' | 'n_a';
   
   // Log visibility for conditional questions
   if (question.is_conditional) {
@@ -323,13 +324,14 @@ export const prepareQuestionForRender = (
       };
       
     case 'radio':
+    case 'multi_select':
       // Check for radio options in different capitalization patterns
       const extractedOptions = question.radio_options || 
                               (question as any).RADIO_OPTIONS || 
                               (question as any).RadioOptions || [];
       
       if (extractedOptions.length === 0) {
-        console.warn(`Radio question (id: ${question.id}) has no options:`, question);
+        console.warn(`${question.question_type} question (id: ${question.id}) has no options:`, question);
       }
       
       return {
@@ -366,8 +368,9 @@ export const prepareCategoryForRender = (
       !!visibilityMap[question.id]
     );
     
-    // Special handling for radio questions to ensure options are passed through
-    if (question.question_type?.toLowerCase() === 'radio' && (question as any).radio_options) {
+    // Special handling for radio/multi-select questions to ensure options are passed through
+    const qtype = question.question_type?.toLowerCase()
+    if ((qtype === 'radio' || qtype === 'multi_select') && (question as any).radio_options) {
       questionData.radio_options = (question as any).radio_options;
     }
     
@@ -503,7 +506,12 @@ export const prepareFormForRender = (
   };
 };
 
-// Question Rendering Components
+// ─── Question Rendering Components ──────────────────────────────────────────
+// Design principles:
+//   • Questions are rows in a list, not individual cards — dividers only
+//   • Yes/No and Scale controls sit inline to the RIGHT of the question text
+//   • Notes are collapsed behind an icon; expand on demand
+//   • Category header uses a left-accent bar — lightweight, not a full banner
 
 interface QuestionProps {
   question: QuestionRenderData;
@@ -512,157 +520,74 @@ interface QuestionProps {
   onNotesChange: (id: number, notes: string) => void;
 }
 
-export const YesNoQuestion: React.FC<QuestionProps> = ({ 
-  question, 
-  isDisabled = false,
-  onAnswerChange,
-  onNotesChange
+// ── Yes / No ─────────────────────────────────────────────────────────────────
+export const YesNoQuestion: React.FC<QuestionProps> = ({
+  question, isDisabled = false, onAnswerChange
 }) => {
   if (!question.isVisible) return null;
-  
-  const { id, text, currentValue } = question;
-  
-  // Determine options based on whether NA is allowed
+  const { id, text, currentValue, isNaAllowed } = question;
+
   const options = [
     { value: 'yes', label: 'Yes' },
-    { value: 'no', label: 'No' }
+    { value: 'no',  label: 'No'  },
+    ...(isNaAllowed ? [{ value: 'na', label: 'N/A' }] : []),
   ];
-  
-  // Only add N/A option if it's allowed for this question
-  if (question.isNaAllowed) {
-    options.push({ value: 'na', label: 'N/A' });
-  }
-  
-  return (
-    <div className="mb-4 p-3">
-      <label className="block font-medium mb-2">{text}</label>
-      <div className="flex gap-4">
-        {options.map((option) => (
-          <label key={option.value} className="inline-flex items-center">
-            <input
-              type="radio"
-              name={`question_${id}`}
-              value={option.value}
-              checked={currentValue === option.value}
-              onChange={() => onAnswerChange(id, option.value, 'yes_no')}
-              className="mr-2"
-              disabled={isDisabled}
-            />
-            {option.label}
-          </label>
-        ))}
-      </div>
-    </div>
-  );
-};
 
-export const ScaleQuestion: React.FC<QuestionProps> = ({ 
-  question, 
-  isDisabled = false,
-  onAnswerChange,
-  onNotesChange
-}) => {
-  if (!question.isVisible) return null;
-  
-  const { id, text, min, max, currentValue } = question;
-  
-  return (
-    <div className="mb-4 p-3">
-      <label className="block font-medium mb-2">{text}</label>
-      <div className="flex flex-wrap gap-3">
-        {Array.from({length: (max || 5) + 1}, (_, i) => (
-          <label key={i} className="inline-flex flex-col items-center">
-            <input
-              type="radio"
-              name={`question_${id}`}
-              value={i.toString()}
-              checked={currentValue === i.toString()}
-              onChange={() => onAnswerChange(id, i.toString(), 'scale')}
-              className="mb-1"
-              disabled={isDisabled}
-            />
-            {i}
-          </label>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-export const TextQuestion: React.FC<QuestionProps> = ({ 
-  question, 
-  isDisabled = false,
-  onAnswerChange,
-  onNotesChange
-}) => {
-  if (!question.isVisible) return null;
-  
-  const { id, text, currentValue } = question;
-  
-  return (
-    <div className="mb-4 p-3">
-      <label className="block font-medium mb-2">{text}</label>
-      <textarea
-        className="w-full border rounded-md p-2"
-        value={currentValue || ''}
-        onChange={(e) => onAnswerChange(id, e.target.value, 'text')}
-        disabled={isDisabled}
-      />
-    </div>
-  );
-};
-
-export const RadioQuestion: React.FC<QuestionProps> = ({ 
-  question, 
-  isDisabled = false,
-  onAnswerChange,
-  onNotesChange
-}) => {
-  if (!question.isVisible) return null;
-  
-  const { id, text, currentValue } = question;
-  
-  // Get radio options with fallbacks for different property naming conventions
-  const radioOptions = question.radio_options || 
-                       (question as any).RADIO_OPTIONS || 
-                       (question as any).RadioOptions || 
-                       [];
-  
-  if (radioOptions.length === 0) {
-    console.warn(`Radio question ${id} has no options`);
-    return <div className="mb-4 p-3 text-red-500">Error: No options available for this question.</div>;
-  }
-  
-  const handleOptionSelect = (optionValue: string) => {
-    onAnswerChange(id, optionValue, 'radio');
+  const colorFor = (val: string, selected: boolean) => {
+    if (!selected) return 'bg-white text-slate-600 border-slate-200 hover:border-slate-400';
+    if (val === 'yes') return 'bg-emerald-500 text-white border-emerald-500';
+    if (val === 'no')  return 'bg-red-500 text-white border-red-500';
+    return 'bg-slate-400 text-white border-slate-400';
   };
-  
+
   return (
-    <div className="mb-4 p-3">
-      <label className="block font-medium mb-2">{text}</label>
-      <div className="space-y-2">
-        {radioOptions.map((option: any) => {
-          const optionValue = option.option_value || option.value || '';
-          // Using String() to normalize comparison
-          const normalizedCurrentValue = String(currentValue || '');
-          const normalizedOptionValue = String(optionValue || '');
-          const isSelected = normalizedCurrentValue === normalizedOptionValue;
-          
+    <div className="flex items-start gap-3">
+      <p className="flex-1 text-[13px] text-slate-800 leading-snug pt-0.5">{text}</p>
+      <div className="flex items-center gap-1 shrink-0">
+        {options.map(opt => (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={isDisabled}
+            onClick={() => onAnswerChange(id, opt.value, 'yes_no')}
+            className={cn(
+              'h-7 px-3 text-[12px] rounded border font-medium transition-all',
+              colorFor(opt.value, currentValue === opt.value)
+            )}
+          >{opt.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ── Scale ─────────────────────────────────────────────────────────────────────
+export const ScaleQuestion: React.FC<QuestionProps> = ({
+  question, isDisabled = false, onAnswerChange
+}) => {
+  if (!question.isVisible) return null;
+  const { id, text, min = 0, max = 5, currentValue } = question;
+
+  return (
+    <div className="flex items-start gap-3">
+      <p className="flex-1 text-[13px] text-slate-800 leading-snug pt-0.5">{text}</p>
+      <div className="flex items-center gap-0.5 flex-wrap shrink-0">
+        {Array.from({ length: (max - min) + 1 }, (_, i) => {
+          const val = (min + i).toString();
+          const selected = currentValue === val;
           return (
-            <label key={optionValue} className="block">
-              <div className="flex items-center">
-                <input
-                  type="radio"
-                  name={`question_${id}`}
-                  value={optionValue}
-                  checked={isSelected}
-                  onChange={() => handleOptionSelect(optionValue)}
-                  className="mr-2"
-                  disabled={isDisabled}
-                />
-                {option.option_text || option.label}
-              </div>
-            </label>
+            <button
+              key={val}
+              type="button"
+              disabled={isDisabled}
+              onClick={() => onAnswerChange(id, val, 'scale')}
+              className={cn(
+                'w-7 h-7 text-[12px] rounded border font-medium transition-all',
+                selected
+                  ? 'bg-[#00aeef] text-white border-[#00aeef]'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-[#00aeef] hover:text-[#00aeef]'
+              )}
+            >{val}</button>
           );
         })}
       </div>
@@ -670,55 +595,169 @@ export const RadioQuestion: React.FC<QuestionProps> = ({
   );
 };
 
-export const InfoQuestion: React.FC<QuestionProps> = ({ 
-  question
+// ── Text ──────────────────────────────────────────────────────────────────────
+export const TextQuestion: React.FC<QuestionProps> = ({
+  question, isDisabled = false, onAnswerChange
 }) => {
   if (!question.isVisible) return null;
-  
-  const { text } = question;
-  
+  const { id, text, currentValue } = question;
+
   return (
-    <div className="mb-4 p-3">
-      <div className="text-gray-800">{text}</div>
+    <div>
+      <p className="text-[13px] text-slate-800 leading-snug mb-1.5">{text}</p>
+      <textarea
+        rows={2}
+        value={currentValue || ''}
+        onChange={e => onAnswerChange(id, e.target.value, 'text')}
+        disabled={isDisabled}
+        className="w-full text-[13px] border border-slate-200 rounded-md px-2.5 py-1.5 resize-none text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#00aeef]"
+      />
     </div>
   );
 };
 
-export const SubCategoryQuestion: React.FC<QuestionProps> = ({ 
-  question
+// ── Radio ─────────────────────────────────────────────────────────────────────
+export const RadioQuestion: React.FC<QuestionProps> = ({
+  question, isDisabled = false, onAnswerChange
 }) => {
   if (!question.isVisible) return null;
-  
-  const { text } = question;
-  
-  return (
-    <div className="mb-4 mt-6">
-      <h4 className="font-bold text-lg">{text}</h4>
-      <hr className="mt-1 border-2 border-gray-400" />
-    </div>
-  );
-};
+  const { id, text, currentValue } = question;
 
-// Question renderer that selects the appropriate component based on question type
-export const QuestionRenderer: React.FC<QuestionProps> = (props) => {
-  if (!props.question.isVisible) {
-    return null;
+  const radioOptions = question.radio_options ||
+    (question as any).RADIO_OPTIONS ||
+    (question as any).RadioOptions || [];
+
+  if (radioOptions.length === 0) {
+    console.warn(`Radio question ${id} has no options`);
+    return <p className="text-[12px] text-red-500">Error: No options for this question.</p>;
   }
-  
-  // Add a div wrapper with an id for scrolling to specific questions
+
   return (
-    <div id={`question-${props.question.id}`} className="mb-4 p-3 border border-gray-200 rounded transition-all">
-      {props.question.type === 'yes_no' && <YesNoQuestion {...props} />}
-      {props.question.type === 'scale' && <ScaleQuestion {...props} />}
-      {props.question.type === 'text' && <TextQuestion {...props} />}
-      {props.question.type === 'radio' && <RadioQuestion {...props} />}
-      {(props.question.type === 'info' || props.question.type === 'info_block') && <InfoQuestion {...props} />}
-      {props.question.type === 'sub_category' && <SubCategoryQuestion {...props} />}
+    <div>
+      <p className="text-[13px] text-slate-800 leading-snug mb-2">{text}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {radioOptions.map((option: any) => {
+          const val = String(option.option_value || option.value || '');
+          const selected = String(currentValue || '') === val;
+          return (
+            <button
+              key={val}
+              type="button"
+              disabled={isDisabled}
+              onClick={() => onAnswerChange(id, val, 'radio')}
+              className={cn(
+                'h-7 px-3 text-[12px] rounded border font-medium transition-all',
+                selected
+                  ? 'bg-[#00aeef] text-white border-[#00aeef]'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-[#00aeef] hover:text-[#00aeef]'
+              )}
+            >{option.option_text || option.label}</button>
+          );
+        })}
+      </div>
     </div>
   );
 };
 
-// Category renderer
+// ── Multi-Select ──────────────────────────────────────────────────────────────
+export const MultiSelectQuestion: React.FC<QuestionProps> = ({
+  question, isDisabled = false, onAnswerChange
+}) => {
+  if (!question.isVisible) return null;
+  const { id, text, currentValue } = question;
+
+  const options = question.radio_options ||
+    (question as any).RADIO_OPTIONS ||
+    (question as any).RadioOptions || [];
+
+  if (options.length === 0) {
+    return <p className="text-[12px] text-red-500">Error: No options for this question.</p>;
+  }
+
+  const selectedValues = new Set(
+    (currentValue || '').split(',').map((v: string) => v.trim()).filter(Boolean)
+  );
+
+  const handleToggle = (optionValue: string) => {
+    const next = new Set(selectedValues);
+    if (next.has(optionValue)) next.delete(optionValue);
+    else next.add(optionValue);
+    onAnswerChange(id, Array.from(next).join(','), 'multi_select');
+  };
+
+  return (
+    <div>
+      <p className="text-[13px] text-slate-800 leading-snug mb-2">{text}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((option: any) => {
+          const val = String(option.option_value || option.value || '');
+          const selected = selectedValues.has(val);
+          return (
+            <button
+              key={val}
+              type="button"
+              disabled={isDisabled}
+              onClick={() => handleToggle(val)}
+              className={cn(
+                'h-7 px-3 text-[12px] rounded border font-medium transition-all',
+                selected
+                  ? 'bg-[#00aeef] text-white border-[#00aeef]'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-[#00aeef] hover:text-[#00aeef]'
+              )}
+            >{option.option_text || option.label}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ── Info Block ────────────────────────────────────────────────────────────────
+export const InfoQuestion: React.FC<QuestionProps> = ({ question }) => {
+  if (!question.isVisible) return null;
+  return (
+    <p className="text-[13px] text-slate-500 italic">{question.text}</p>
+  );
+};
+
+// ── Sub-category Divider ──────────────────────────────────────────────────────
+export const SubCategoryQuestion: React.FC<QuestionProps> = ({ question }) => {
+  if (!question.isVisible) return null;
+  return (
+    <div className="pt-1 pb-0">
+      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{question.text}</p>
+    </div>
+  );
+};
+
+// ── Question Row Wrapper ──────────────────────────────────────────────────────
+export const QuestionRenderer: React.FC<QuestionProps> = (props) => {
+  if (!props.question.isVisible) return null;
+
+  const isSubCat  = props.question.type === 'sub_category';
+  const isInfo    = props.question.type === 'info' || props.question.type === 'info_block';
+
+  return (
+    <div
+      id={`question-${props.question.id}`}
+      className={cn(
+        'px-4 py-2.5 transition-colors',
+        isSubCat ? 'bg-slate-50 border-b border-slate-100' : 'border-b border-slate-100 last:border-0',
+        isInfo    ? 'py-2' : ''
+      )}
+    >
+      {props.question.type === 'yes_no'      && <YesNoQuestion      {...props} />}
+      {props.question.type === 'scale'       && <ScaleQuestion       {...props} />}
+      {props.question.type === 'text'        && <TextQuestion        {...props} />}
+      {props.question.type === 'radio'       && <RadioQuestion       {...props} />}
+      {props.question.type === 'multi_select'&& <MultiSelectQuestion {...props} />}
+      {isInfo                                && <InfoQuestion        {...props} />}
+      {isSubCat                              && <SubCategoryQuestion {...props} />}
+    </div>
+  );
+};
+
+// ── Category ──────────────────────────────────────────────────────────────────
 interface CategoryProps {
   category: CategoryRenderData;
   isDisabled?: boolean;
@@ -727,34 +766,36 @@ interface CategoryProps {
 }
 
 export const CategoryRenderer: React.FC<CategoryProps> = ({
-  category,
-  isDisabled = false,
-  onAnswerChange,
-  onNotesChange
+  category, isDisabled = false, onAnswerChange, onNotesChange
 }) => {
   return (
-    <div className="mb-6">
-      <h3 className="text-lg font-medium mb-2 bg-primary-blue text-white p-4 rounded-md">
-        {category.name}
-      </h3>
-      {category.description && (
-        <p className="text-sm text-gray-600 mb-3">{category.description}</p>
-      )}
-      {/* Fix the key prop issue by ensuring each QuestionRenderer has a unique key */}
-      {category.questions.map((question, index) => (
-        <QuestionRenderer 
-          key={question.id || `question-${index}`}
-          question={question} 
-          isDisabled={isDisabled}
-          onAnswerChange={onAnswerChange}
-          onNotesChange={onNotesChange}
-        />
-      ))}
+    <div className="mb-4">
+      {/* Lightweight left-accent header */}
+      <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-t-lg px-4 py-2.5">
+        <span className="w-[3px] h-4 rounded-full bg-[#00aeef] shrink-0" />
+        <h3 className="text-[12px] font-semibold text-slate-600 uppercase tracking-wider">{category.name}</h3>
+      </div>
+
+      {/* Questions list */}
+      <div className="border border-t-0 border-slate-200 rounded-b-lg overflow-hidden bg-white">
+        {category.description && (
+          <p className="px-4 py-2 text-[12px] text-slate-500 border-b border-slate-100">{category.description}</p>
+        )}
+        {category.questions.map((question, index) => (
+          <QuestionRenderer
+            key={question.id || `question-${index}`}
+            question={question}
+            isDisabled={isDisabled}
+            onAnswerChange={onAnswerChange}
+            onNotesChange={onNotesChange}
+          />
+        ))}
+      </div>
     </div>
   );
 };
 
-// Form renderer 
+// ── Form Renderer ─────────────────────────────────────────────────────────────
 interface FormRendererProps {
   formRenderData: FormRenderData;
   isDisabled?: boolean;
@@ -763,15 +804,12 @@ interface FormRendererProps {
 }
 
 export const FormRenderer: React.FC<FormRendererProps> = ({
-  formRenderData,
-  isDisabled = false,
-  onAnswerChange,
-  onNotesChange
+  formRenderData, isDisabled = false, onAnswerChange, onNotesChange
 }) => {
   return (
-    <div className="mb-6 border-b pb-4">
+    <div className="space-y-1">
       {formRenderData.categories.map((category, categoryIndex) => (
-        <CategoryRenderer 
+        <CategoryRenderer
           key={category.id || `category-${categoryIndex}`}
           category={category}
           isDisabled={isDisabled}

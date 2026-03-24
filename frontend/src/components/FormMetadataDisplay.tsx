@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { cn } from '../lib/utils';
 import type { FormMetadataField } from '../types/form.types';
 import { getAuthorizedAxios } from '../utils/axiosUtils';
 
@@ -163,111 +164,115 @@ const FormMetadataDisplay: React.FC<FormMetadataDisplayProps> = ({
   // Use the fetched CSRs if available, otherwise use the provided options
   const displayCSRs = csrs.length > 0 ? csrs : csrOptions;
 
+  const inputBase = 'w-full text-[13px] border border-slate-200 rounded-md px-2.5 py-1.5 text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00aeef] transition-colors';
+  const inputReadonly = 'bg-slate-50 text-slate-400 cursor-not-allowed';
+
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Form Details</h3>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {displayFields.map((field, index) => {
-          // For spacer fields, just render an empty div to maintain the grid layout
-          if (field.field_type === 'SPACER') {
-            return <div key={`spacer-${index}`} className="mb-3"></div>;
-          }
-          
-          // Use field.field_name if field.id is 0 or falsy to avoid "0" keys
-          const fieldKey = (field.id && field.id !== 0) ? field.id.toString() : field.field_name;
-          let defaultValue = values[fieldKey] || '';
-          
-          // Set auto-filled values for AUTO fields
-          if (field.field_type === 'AUTO') {
-            if ((field.field_name === 'Reviewer Name' || field.field_name === 'Auditor Name') && currentUser) {
-              defaultValue = currentUser.username;
-            } else if (field.field_name === 'Review Date' || field.field_name === 'Audit Date') {
-              defaultValue = values[fieldKey] || today;
+      {/* Panel header — distinct from category headers inside the form */}
+      <div className="px-4 py-3 bg-white border border-slate-200 rounded-t-lg border-b-0">
+        <h3 className="text-[15px] font-semibold text-slate-800">Form Details</h3>
+      </div>
+
+      {/* Fields grid */}
+      <div className="border border-t-0 border-slate-200 rounded-b-lg overflow-hidden bg-white px-4 py-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5">
+          {displayFields.map((field, index) => {
+            if (field.field_type === 'SPACER') {
+              return <div key={`spacer-${index}`} />;
             }
-          }
-          
-          const fieldError = errors[`metadata_${field.id}`] || errors[fieldKey];
-          
-          return (
-            <div key={fieldKey} className="mb-3">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {(() => {
-                  // Build the display name properly based on is_required logic
-                  // Get the base field name (remove any trailing numbers that might be is_required values)
-                  let baseFieldName = field.field_name;
-                  
-                  // If field name ends with 0 or 1, it might be corrupted with is_required value
-                  // Remove the last character if it's 0 or 1 and the field name is longer than 1 char
-                  if (baseFieldName.length > 1 && (baseFieldName.endsWith('0') || baseFieldName.endsWith('1'))) {
-                    // Check if removing the last character gives us a valid field name
-                    const withoutLastChar = baseFieldName.slice(0, -1);
-                    // Only remove if it results in a reasonable field name (not just numbers)
-                    if (withoutLastChar.match(/[a-zA-Z]/)) {
-                      baseFieldName = withoutLastChar;
+
+            const fieldKey = (field.id && field.id !== 0) ? field.id.toString() : field.field_name;
+            let defaultValue = values[fieldKey] || '';
+
+            if (field.field_type === 'AUTO') {
+              if ((field.field_name === 'Reviewer Name' || field.field_name === 'Auditor Name') && currentUser) {
+                defaultValue = currentUser.username;
+              } else if (field.field_name === 'Review Date' || field.field_name === 'Audit Date') {
+                defaultValue = values[fieldKey] || today;
+              }
+            }
+
+            const fieldError = errors[`metadata_${field.id}`] || errors[fieldKey];
+
+            // Clean field name (guard against trailing 0/1 from is_required corruption)
+            let displayName = field.field_name;
+            if (displayName.length > 1 && (displayName.endsWith('0') || displayName.endsWith('1'))) {
+              const trimmed = displayName.slice(0, -1);
+              if (trimmed.match(/[a-zA-Z]/)) displayName = trimmed;
+            }
+            const label = field.is_required ? `${displayName}*` : displayName;
+
+            return (
+              <div key={fieldKey}>
+                <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1">
+                  {label}
+                </label>
+
+                {field.field_type === 'AUTO' ? (
+                  <input
+                    type="text"
+                    value={defaultValue}
+                    readOnly
+                    className={cn(inputBase, inputReadonly)}
+                  />
+                ) : field.field_type === 'DROPDOWN' && field.field_name === 'CSR' ? (
+                  <select
+                    value={values[fieldKey] || ''}
+                    onChange={e => handleChange(fieldKey, e.target.value)}
+                    disabled={readonly || loading}
+                    className={cn(inputBase, (readonly || loading) && inputReadonly)}
+                    required={field.is_required}
+                  >
+                    <option value="">Select CSR…</option>
+                    {loading
+                      ? <option disabled>Loading…</option>
+                      : displayCSRs.map(csr => (
+                          <option key={csr.id} value={csr.id.toString()}>{csr.username}</option>
+                        ))
                     }
-                  }
-                  
-                  // Now build the proper display with asterisk for required fields
-                  return field.is_required ? `${baseFieldName}*` : baseFieldName;
-                })()}
-              </label>
-              
-              {field.field_type === 'AUTO' ? (
-                <input
-                  type="text"
-                  value={defaultValue}
-                  readOnly
-                  className="w-full py-2 px-3 border border-gray-300 bg-gray-50 rounded-md text-gray-500"
-                />
-              ) : field.field_type === 'DROPDOWN' && field.field_name === 'CSR' ? (
-                <select
-                  value={values[fieldKey] || ''}
-                  onChange={(e) => handleChange(fieldKey, e.target.value)}
-                  disabled={readonly || loading}
-                  className={`w-full py-2 px-3 border border-gray-300 rounded-md ${
-                    readonly || loading ? 'bg-gray-50 cursor-not-allowed' : ''
-                  }`}
-                  required={field.is_required}
-                >
-                  <option value="">-- Select CSR --</option>
-                  {loading ? (
-                    <option value="" disabled>Loading CSRs...</option>
-                  ) : (
-                    displayCSRs.map((csr) => (
-                      <option key={csr.id} value={csr.id.toString()}>
-                        {csr.username}
-                      </option>
-                    ))
-                  )}
-                </select>
-              ) : field.field_type === 'DATE' ? (
-                <input
-                  type="date"
-                  value={values[fieldKey] || ''}
-                  onChange={(e) => handleChange(fieldKey, e.target.value)}
-                  readOnly={readonly}
-                  className={`w-full py-2 px-3 border border-gray-300 rounded-md ${
-                    readonly ? 'bg-gray-50 cursor-not-allowed' : ''
-                  }`}
-                  required={field.is_required}
-                />
-              ) : (
-                <input
-                  type="text"
-                  value={values[fieldKey] || ''}
-                  onChange={(e) => handleChange(fieldKey, e.target.value)}
-                  readOnly={readonly}
-                  className={`w-full py-2 px-3 border border-gray-300 rounded-md ${
-                    readonly ? 'bg-gray-50 cursor-not-allowed' : ''
-                  }`}
-                  placeholder={`Enter ${field.field_name.toLowerCase()}`}
-                  required={field.is_required}
-                />
-              )}
-            </div>
-          );
-        })}
+                  </select>
+                ) : field.field_type === 'DROPDOWN' && field.dropdown_source ? (
+                  <select
+                    value={values[fieldKey] || ''}
+                    onChange={e => handleChange(fieldKey, e.target.value)}
+                    disabled={readonly}
+                    className={cn(inputBase, readonly && inputReadonly)}
+                    required={field.is_required}
+                  >
+                    <option value="">Select {displayName}…</option>
+                    {field.dropdown_source.split(',').map(opt => opt.trim()).filter(Boolean).map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                ) : field.field_type === 'DATE' ? (
+                  <input
+                    type="date"
+                    value={values[fieldKey] || ''}
+                    onChange={e => handleChange(fieldKey, e.target.value)}
+                    readOnly={readonly}
+                    className={cn(inputBase, readonly && inputReadonly)}
+                    required={field.is_required}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={values[fieldKey] || ''}
+                    onChange={e => handleChange(fieldKey, e.target.value)}
+                    readOnly={readonly}
+                    placeholder={`Enter ${displayName.toLowerCase()}…`}
+                    className={cn(inputBase, readonly && inputReadonly)}
+                    required={field.is_required}
+                  />
+                )}
+
+                {fieldError && (
+                  <p className="mt-0.5 text-[11px] text-red-500">{fieldError}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

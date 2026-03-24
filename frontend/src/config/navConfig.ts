@@ -1,4 +1,4 @@
-export type NavSection = 'quality' | 'training' | 'insights'
+export type NavSection = 'quality' | 'training' | 'insights' | 'analytics'
 
 export interface NavItem {
   label: string
@@ -25,12 +25,15 @@ export const NAV_CONFIG: SectionConfig[] = [
     color: '#00aeef',
     defaultPath: '/app/quality/overview',
     items: [
-      { label: 'Overview',       path: '/app/quality/overview',    icon: 'LayoutDashboard', roles: [1,2,3,4,5] },
-      { label: 'Form Builder',   path: '/app/quality/forms',       icon: 'ClipboardList',   roles: [1,2] },
-      { label: 'Submissions',    path: '/app/quality/submissions', icon: 'FileCheck',       roles: [1,2,5] },
-      { label: 'Disputes',       path: '/app/quality/disputes',    icon: 'AlertTriangle',   roles: [1,2,5] },
-      { label: 'Scoring Rules',  path: '/app/quality/scoring',     icon: 'Settings2',       roles: [1,2] },
-      { label: 'QA Analytics',   path: '/app/quality/analytics',   icon: 'BarChart3',       roles: [1,2,5] },
+      { label: 'Overview',         path: '/app/quality/overview',          icon: 'LayoutDashboard', roles: [1,2,3,4,5] },
+      { label: 'Review Forms',     path: '/app/quality/review-forms',      icon: 'ClipboardCheck',  roles: [1,2] },
+      { label: 'Form Builder',     path: '/app/quality/forms',             icon: 'ClipboardList',   roles: [1,2] },
+      { label: 'Submissions',        path: '/app/quality/submissions',       icon: 'FileCheck',       roles: [1,2] },
+      { label: 'Team Reviews',      path: '/app/quality/submissions',       icon: 'FileCheck',       roles: [5] },
+      { label: 'My Reviews',        path: '/app/quality/submissions',       icon: 'FileCheck',       roles: [3] },
+      { label: 'Disputes',          path: '/app/quality/disputes',          icon: 'AlertTriangle',   roles: [1,2] },
+      { label: 'Dispute Resolution',path: '/app/quality/disputes',          icon: 'AlertTriangle',   roles: [5] },
+      { label: 'Dispute History',   path: '/app/quality/dispute-history',   icon: 'History',         roles: [3] },
     ],
   },
   {
@@ -66,6 +69,16 @@ export const NAV_CONFIG: SectionConfig[] = [
       { label: 'Import History',path: '/app/insights/history',   icon: 'History',         roles: [1] },
     ],
   },
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    icon: 'BarChart3',
+    color: '#00aeef',
+    defaultPath: '/app/analytics/quality',
+    items: [
+      { label: 'QA Analytics', path: '/app/analytics/quality', icon: 'BarChart3', roles: [1,2,5] },
+    ],
+  },
 ]
 
 export function getSectionConfig(id: NavSection): SectionConfig {
@@ -81,6 +94,7 @@ export function getSectionFromPath(pathname: string): NavSection | null {
   if (pathname.startsWith('/app/quality')) return 'quality'
   if (pathname.startsWith('/app/training')) return 'training'
   if (pathname.startsWith('/app/insights')) return 'insights'
+  if (pathname.startsWith('/app/analytics')) return 'analytics'
   return null
 }
 

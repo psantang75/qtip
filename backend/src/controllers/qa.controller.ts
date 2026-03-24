@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { Parser } from 'json2csv';
@@ -244,11 +244,19 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
             d.reason,
             d.status,
             d.resolution_notes,
-            d.attachment_url
+            d.resolution_action,
+            d.attachment_url,
+            d.resolved_by,
+            d.created_at,
+            d.resolved_at,
+            dsh.score AS new_score
           FROM 
             disputes d
+            LEFT JOIN dispute_score_history dsh ON dsh.dispute_id = d.id AND dsh.score_type = 'ADJUSTED'
           WHERE 
             d.submission_id = ${submission_id}
+          ORDER BY dsh.created_at DESC
+          LIMIT 1
         `
       );
       

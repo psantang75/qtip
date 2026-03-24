@@ -8,6 +8,7 @@ const adapter = new PrismaMariaDb({
   password: process.env.DB_PASSWORD ?? '',
   database: process.env.DB_NAME ?? 'qtip',
   connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT ?? '10', 10),
+  allowPublicKeyRetrieval: true,
 });
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };

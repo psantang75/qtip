@@ -1,11 +1,346 @@
-﻿import PlaceholderPage from '@/pages/PlaceholderPage'
+import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import {
+  CalendarCheck, AlertTriangle, TrendingUp, BarChart3,
+  Users, ClipboardList, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown,
+} from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import qaService, { scoreColor } from '@/services/qaService'
+import { Button } from '@/components/ui/button'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
+import { cn } from '@/lib/utils'
+
+// ── Shared sort head ──────────────────────────────────────────────────────────
+type SortDir = 'asc' | 'desc' | null
+function SortHead({ field, sort, dir, onSort, children, right = false }: {
+  field: string; sort: string | null; dir: SortDir
+  onSort: (f: string) => void; children: React.ReactNode; right?: boolean
+}) {
+  const active = sort === field
+  const Icon = active ? (dir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown
+  return (
+    <TableHead
+      className={cn(
+        'py-4 cursor-pointer select-none hover:bg-slate-100 transition-colors whitespace-nowrap',
+        right && 'text-right'
+      )}
+      onClick={() => onSort(field)}
+    >
+      <span className={cn('flex items-center gap-1', right && 'justify-end')}>
+        {children}
+        <Icon size={12} className={active ? 'text-[#00aeef]' : 'text-slate-400'} />
+      </span>
+    </TableHead>
+  )
+}
+
+function useSort<T>(data: T[], defaultField: string) {
+  const [sort, setSort] = useState<string | null>(null)
+  const [dir, setDir]   = useState<SortDir>(null)
+  const toggle = (field: string) => {
+    if (sort !== field) { setSort(field); setDir('asc') }
+    else if (dir === 'asc') setDir('desc')
+    else { setSort(null); setDir(null) }
+  }
+  const sorted = useMemo(() => {
+    if (!sort || !dir) return data
+    return [...data].sort((a: any, b: any) => {
+      const av = a[sort] ?? '', bv = b[sort] ?? ''
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv))
+      return dir === 'asc' ? cmp : -cmp
+    })
+  }, [data, sort, dir])
+  return { sort, dir, toggle, sorted }
+}
+
+function StatCard({
+  icon: Icon, label, value, valueClass = '',
+}: { icon: React.ElementType; label: string; value: string | number; valueClass?: string }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className="h-4 w-4 text-slate-400" />
+        <span className="text-[13px] text-muted-foreground">{label}</span>
+      </div>
+      <div className={cn('text-3xl font-bold text-slate-900', valueClass)}>{value}</div>
+    </div>
+  )
+}
 
 export default function QualityOverviewPage() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const [period, setPeriod] = useState<'week' | 'month'>('week')
+
+  const isAdminOrQA = user?.role_id === 1 || user?.role_id === 2
+  const isManager = user?.role_id === 5
+  const isCSR = user?.role_id === 3
+
+  const { data: stats, isLoading: statsLoading, isError: statsError, refetch } = useQuery({
+    queryKey: ['qa-overview-stats', user?.role_id],
+    queryFn: () =>
+      isAdminOrQA ? qaService.getQAStats()
+      : isManager  ? qaService.getManagerStats()
+      : qaService.getCSRStats(),
+    enabled: !!user,
+  })
+
+  const { data: activity, isLoading: activityLoading } = useQuery({
+    queryKey: ['qa-csr-activity', period, user?.role_id],
+    queryFn: () =>
+      isAdminOrQA ? qaService.getQACsrActivity(period)
+      : qaService.getManagerCsrActivity(period),
+    enabled: !!user && (isAdminOrQA || isManager),
+  })
+
+  const { data: recentAudits, isLoading: auditsLoading } = useQuery({
+    queryKey: ['csr-recent-audits'],
+    queryFn: () => qaService.getCSRAudits({ limit: 5 }),
+    enabled: !!user && isCSR,
+  })
+
+  // All hooks must be called before any conditional returns
+  const csrSort = useSort(recentAudits?.items ?? [], 'created_at')
+  const actSort = useSort(activity ?? [], 'csr_name')
+
+  if (statsLoading) {
+    return (
+      <div className="p-6 space-y-5">
+        <div className="h-8 w-48 bg-slate-100 animate-pulse rounded" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-28 rounded-xl bg-slate-100 animate-pulse" />
+          ))}
+        </div>
+        <div className="h-64 rounded-xl bg-slate-100 animate-pulse" />
+      </div>
+    )
+  }
+
+  if (statsError) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 flex items-center justify-between">
+          <p className="text-red-700 font-medium">Failed to load overview stats.</p>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4 mr-2" /> Retry
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── CSR view ──────────────────────────────────────────────────────────────
+  if (isCSR) {
+    return (
+      <div className="p-6 space-y-5">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Quality Overview</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Your personal QA performance</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard
+            icon={BarChart3} label="My Avg Score"
+            value={stats?.avgScore != null ? `${stats.avgScore.toFixed(1)}%` : '—'}
+            valueClass={scoreColor(stats?.avgScore ?? 0)}
+          />
+          <StatCard icon={CalendarCheck} label="Total Audits" value={stats?.totalAudits ?? 0} />
+          <StatCard
+            icon={AlertTriangle} label="Open Disputes"
+            value={stats?.openDisputes ?? 0}
+            valueClass={stats?.openDisputes ? 'text-red-600' : ''}
+          />
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="flex items-center justify-between p-4 border-b border-slate-100">
+            <h2 className="font-semibold text-slate-800">Recent Audits</h2>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
+              onClick={() => navigate('/app/quality/submissions')}>
+              View All
+            </Button>
+          </div>
+          {auditsLoading ? (
+            <div className="p-4 space-y-2">
+              {[...Array(5)].map((_, i) => <div key={i} className="h-8 bg-slate-100 animate-pulse rounded" />)}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50 border-b border-slate-200">
+                  <SortHead field="created_at" sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle}>Date</SortHead>
+                  <SortHead field="form_name"  sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle}>Form</SortHead>
+                  <SortHead field="score" sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle} right>Score</SortHead>
+                  <SortHead field="status" sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle}>Status</SortHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {csrSort.sorted.length ? (
+                  csrSort.sorted.map((row: any) => (
+                    <TableRow key={row.id} className="cursor-pointer hover:bg-slate-50/50"
+                      onClick={() => navigate(`/app/quality/submissions/${row.id}`)}>
+                      <TableCell className="text-[13px] text-slate-600">
+                        {new Date(row.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </TableCell>
+                      <TableCell className="text-[13px] font-medium text-slate-900">{row.form_name}</TableCell>
+                      <TableCell className="text-right text-[13px] font-medium">
+                        <span className={scoreColor(row.score ?? 0)}>{(row.score ?? 0).toFixed(1)}%</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1.5 text-[13px]">
+                          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0',
+                            row.status === 'COMPLETED' ? 'bg-emerald-500' :
+                            row.status === 'DISPUTED'  ? 'bg-amber-500'  :
+                            row.status === 'RESOLVED'  ? 'bg-blue-500'   : 'bg-slate-400'
+                          )} />
+                          <span className="text-slate-600">{row.status.charAt(0) + row.status.slice(1).toLowerCase()}</span>
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-slate-400">
+                      No recent audits found.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Admin / QA / Manager view ─────────────────────────────────────────────
   return (
-    <PlaceholderPage
-      title="Quality Overview"
-      subtitle="Monitor QA scores, audit rates, and team performance."
-      colorClass="text-[#00aeef]"
-    />
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Quality Overview</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isAdminOrQA ? 'Department-wide QA performance' : "Your team's QA performance"}
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => refetch()}>
+          <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard icon={CalendarCheck} label="Total Audits" value={stats?.totalAudits ?? 0} />
+        <StatCard
+          icon={BarChart3} label="Avg Score"
+          value={stats?.avgScore != null ? `${stats.avgScore.toFixed(1)}%` : '—'}
+          valueClass={scoreColor(stats?.avgScore ?? 0)}
+        />
+        <StatCard
+          icon={AlertTriangle} label="Open Disputes"
+          value={stats?.openDisputes ?? 0}
+          valueClass={stats?.openDisputes ? 'text-red-600' : ''}
+        />
+        <StatCard icon={TrendingUp} label="Audits This Week" value={stats?.auditsThisWeek ?? 0} />
+      </div>
+
+      {isAdminOrQA && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            { label: 'View Submissions', icon: ClipboardList, path: '/app/quality/submissions' },
+            { label: 'View Disputes',    icon: AlertTriangle, path: '/app/quality/disputes' },
+            { label: 'Analytics',        icon: BarChart3,     path: '/app/quality/analytics' },
+          ].map(({ label, icon: Icon, path }) => (
+            <button
+              key={path}
+              onClick={() => navigate(path)}
+              className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-4 hover:border-[#00aeef] hover:bg-[#00aeef]/5 transition-colors text-left"
+            >
+              <div className="h-9 w-9 rounded-lg bg-[#00aeef]/10 flex items-center justify-center shrink-0">
+                <Icon className="h-5 w-5 text-[#00aeef]" />
+              </div>
+              <span className="font-medium text-slate-800">{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+          <h2 className="font-semibold text-slate-800">CSR Activity</h2>
+          <div className="flex gap-1">
+            {(['week', 'month'] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={cn(
+                  'px-3 py-1 text-sm rounded-md transition-colors',
+                  period === p ? 'bg-[#00aeef] text-white' : 'text-slate-600 hover:bg-slate-100',
+                )}
+              >
+                {p === 'week' ? 'This Week' : 'This Month'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {activityLoading ? (
+          <div className="p-4 space-y-2">
+            {[...Array(6)].map((_, i) => <div key={i} className="h-8 bg-slate-100 animate-pulse rounded" />)}
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50 border-b border-slate-200">
+                <SortHead field="csr_name"       sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle}>CSR Name</SortHead>
+                <SortHead field="department_name" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle}>Department</SortHead>
+                <SortHead field="total_reviews"  sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle} right>Reviews</SortHead>
+                {isAdminOrQA && <SortHead field="avg_score" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle} right>Avg Score</SortHead>}
+                <SortHead field="disputes" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle} right>Disputes</SortHead>
+                {isAdminOrQA && <SortHead field="last_audit_date" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle}>Last Audit</SortHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {actSort.sorted.length ? (
+                actSort.sorted.map((row: any) => (
+                  <TableRow key={row.csr_id} className="hover:bg-slate-50/50">
+                    <TableCell className="font-medium text-[13px] text-slate-900">{row.csr_name}</TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{row.department_name || '—'}</TableCell>
+                    <TableCell className="text-right text-[13px]">{row.total_reviews}</TableCell>
+                    {isAdminOrQA && (
+                      <TableCell className="text-right">
+                        <span className={cn('font-semibold text-[13px]', scoreColor(row.avg_score ?? 0))}>
+                          {(row.avg_score ?? 0).toFixed(1)}%
+                        </span>
+                      </TableCell>
+                    )}
+                    <TableCell className="text-right text-[13px]">{row.disputes}</TableCell>
+                    {isAdminOrQA && (
+                      <TableCell className="text-[13px] text-slate-500">
+                        {row.last_audit_date
+                          ? new Date(row.last_audit_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : '—'}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={isAdminOrQA ? 6 : 4} className="text-center py-8 text-slate-400">
+                    <Users className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                    No activity data for this period.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+    </div>
   )
 }

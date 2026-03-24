@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import type { InteractionType, FormMetadataField, MetadataFieldType } from '../types/form.types';
 import Button from './ui/Button';

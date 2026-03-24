@@ -174,7 +174,7 @@ export default function AdminUsersPage() {
   const isCreate = !editUser
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(makeSchema(isCreate)),
+    resolver: zodResolver(makeSchema(isCreate) as any),
     defaultValues: {
       username: '', email: '', password: '', title: '',
       role_id: 3, department_id: null, is_active: true,

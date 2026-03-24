@@ -86,11 +86,11 @@ const FormBuilder: React.FC = () => {
       errors: {},
       isSubmitting: false,
     });
-    navigate('/admin/forms/new');
+    navigate('/app/quality/forms');
   };
   
   const handleEdit = (formId: number) => {
-    navigate(`/admin/forms/${formId}`);
+    navigate('/app/quality/forms');
   };
   
   const handleDuplicate = async (formId: number) => {
@@ -126,7 +126,7 @@ const FormBuilder: React.FC = () => {
         isSubmitting: false,
       });
       
-      navigate('/admin/forms/new');
+      navigate('/app/quality/forms');
       setHasChanges(true);
     } catch (error) {
       console.error('Error duplicating form:', error);
@@ -134,7 +134,7 @@ const FormBuilder: React.FC = () => {
   };
   
   const handlePreview = (formId: number) => {
-    navigate(`/admin/forms/${formId}/preview`);
+    navigate('/app/quality/forms');
   };
   
   const validateStep = (): boolean => {
@@ -183,7 +183,7 @@ const FormBuilder: React.FC = () => {
   const goToPreviousStep = () => {
     if (state.currentStep === FormStep.METADATA) {
       // Cancel button - go back to forms list
-      navigate('/admin/forms');
+      navigate('/app/quality/forms');
     } else {
       setState(prev => ({
         ...prev,
@@ -318,7 +318,7 @@ const FormBuilder: React.FC = () => {
       // Show success message and redirect to list view after a delay
       setTimeout(() => {
         setSuccessMessage(null);
-        navigate('/admin/forms');
+        navigate('/app/quality/forms');
         setState(prev => ({ ...prev, currentStep: FormStep.LIST }));
       }, 3000);
       
@@ -467,10 +467,7 @@ const FormBuilder: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  const path = currentForm.id 
-                    ? `/admin/forms/${currentForm.id}/preview`
-                    : '/admin/forms/preview';
-                  navigate(path, { state: { formData: state.form } });
+                  navigate('/app/quality/forms', { state: { formData: state.form } });
                 }}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 disabled={state.isSubmitting}

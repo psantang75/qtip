@@ -57,7 +57,7 @@ const FormList: React.FC<FormListProps> = ({ onCreateNew, onEdit, onDuplicate, o
         <h2 className="text-2xl font-semibold text-gray-800">Review Forms</h2>
         <button
           onClick={onCreateNew}
-          className="bg-primary-blue hover:bg-blue-600 text-white font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="bg-[#00aeef] hover:bg-blue-600 text-white font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           Create New Form
         </button>

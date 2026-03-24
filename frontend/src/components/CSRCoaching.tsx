@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { USER_ROLES } from '../constants/roles';

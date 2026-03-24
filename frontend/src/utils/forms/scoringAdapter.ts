@@ -223,6 +223,18 @@ export const getQuestionScore = (question: Question, answer: string): number => 
         return selectedOption?.score || 0;
       }
       return 0;
+
+    case 'multi_select':
+      // Answer is comma-separated option values; sum the scores of all selected options
+      const multiOptions = (question as any).radio_options || [];
+      if (multiOptions.length > 0 && answer) {
+        const selected = answer.split(',').map((v: string) => v.trim()).filter(Boolean)
+        return selected.reduce((sum: number, val: string) => {
+          const opt = multiOptions.find((o: any) => o.option_value === val || o.option_text === val)
+          return sum + (opt?.score || 0)
+        }, 0)
+      }
+      return 0;
     
     default:
       return 0;
@@ -262,6 +274,11 @@ export const getMaxPossibleScore = (question: Question): number => {
         return highestScore;
       }
       return 0;
+
+    case 'multi_select':
+      // Max possible = sum of all positive option scores (user could select all)
+      const multiOpts = (question as any).radio_options || [];
+      return multiOpts.reduce((sum: number, opt: any) => sum + Math.max(0, opt.score || 0), 0);
       
     default:
       return 0;

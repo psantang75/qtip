@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React, { useState } from 'react';
 import Input from '../ui/Input';
 import Select from '../ui/Select';

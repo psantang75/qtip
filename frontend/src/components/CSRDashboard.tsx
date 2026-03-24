@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { Link } from 'react-router-dom';

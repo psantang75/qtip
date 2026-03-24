@@ -66,7 +66,7 @@ export default function ProfilePage() {
 
   // ── Profile form ─────────────────────────────────────────────────────────
   const profileForm = useForm<ProfileValues>({
-    resolver: zodResolver(profileSchema),
+    resolver: zodResolver(profileSchema as any),
     defaultValues: {
       username: user?.username ?? '',
       email:    user?.email ?? '',
@@ -91,7 +91,7 @@ export default function ProfilePage() {
 
   // ── Password form ─────────────────────────────────────────────────────────
   const passwordForm = useForm<PasswordValues>({
-    resolver: zodResolver(passwordSchema),
+    resolver: zodResolver(passwordSchema as any),
     defaultValues: { currentPassword: '', newPassword: '', confirmPassword: '' },
   })
 

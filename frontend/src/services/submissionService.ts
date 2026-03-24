@@ -1,5 +1,4 @@
-import { api } from './authService'; // Use shared axios instance with interceptors
-import authService from './authService';
+import { api } from './authService';
 
 // Types for submissions and audits
 export interface AssignedAudit {
@@ -82,7 +81,7 @@ const submissionService = {
   ): Promise<PaginatedResponse<AssignedAudit>> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.get(`/api/submissions/assigned?page=${page}&limit=${limit}`);
+      const response = await api.get(`/submissions/assigned?page=${page}&limit=${limit}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching assigned audits:', error);
@@ -94,7 +93,7 @@ const submissionService = {
   getCallWithForm: async (callId: number, formId: number): Promise<AuditDetailsResponse> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.get(`/api/submissions/review/${callId}?formId=${formId}`);
+      const response = await api.get(`/submissions/review/${callId}?formId=${formId}`);
       return response.data;
     } catch (error) {
       console.error(`Error fetching call details for callId ${callId}:`, error);
@@ -144,7 +143,7 @@ const submissionService = {
   updateSubmission: async (submissionId: number, updateData: any): Promise<any> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.put(`/api/submissions/${submissionId}`, updateData);
+      const response = await api.put(`/submissions/${submissionId}`, updateData);
       return response.data;
     } catch (error) {
       console.error('Error updating submission:', error);
@@ -156,7 +155,7 @@ const submissionService = {
   createScoreSnapshot: async (submissionId: number, snapshotData: any): Promise<any> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.post(`/api/submissions/${submissionId}/snapshots`, snapshotData);
+      const response = await api.post(`/submissions/${submissionId}/snapshots`, snapshotData);
       return response.data;
     } catch (error) {
       console.error('Error creating score snapshot:', error);
@@ -168,7 +167,7 @@ const submissionService = {
   finalizeSubmission: async (submissionId: number, finalData: any): Promise<any> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.put(`/api/submissions/${submissionId}/finalize`, finalData);
+      const response = await api.put(`/submissions/${submissionId}/finalize`, finalData);
       return response.data;
     } catch (error) {
       console.error('Error finalizing submission:', error);
@@ -180,7 +179,7 @@ const submissionService = {
   flagSubmission: async (submissionId: number, reason: string): Promise<any> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.post(`/api/submissions/${submissionId}/flag`, { reason });
+      const response = await api.post(`/submissions/${submissionId}/flag`, { reason });
       return response.data;
     } catch (error) {
       console.error('Error flagging submission:', error);

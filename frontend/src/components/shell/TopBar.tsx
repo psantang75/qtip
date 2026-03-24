@@ -40,7 +40,7 @@ export default function TopBar() {
           Insights
         </span>
         <span className="text-[10px] text-slate-500 tracking-widest leading-tight mt-0.5">
-          Quality · Training · Insights
+          Quality · Training · Insights · Analytics
         </span>
       </div>
 

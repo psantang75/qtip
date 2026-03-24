@@ -178,7 +178,7 @@ export const useValidation = () => {
     } catch (error) {
       if (error instanceof z.ZodError) {
         const fieldErrors: Record<string, string> = {};
-        error.errors.forEach(err => {
+        error.issues.forEach(err => {
           const field = err.path.join('.');
           fieldErrors[field] = err.message;
         });
@@ -209,7 +209,7 @@ export const useValidation = () => {
     } catch (error) {
       if (error instanceof z.ZodError) {
         const fieldErrors: Record<string, string> = {};
-        error.errors.forEach(err => {
+        error.issues.forEach(err => {
           const field = err.path.join('.');
           fieldErrors[field] = err.message;
         });

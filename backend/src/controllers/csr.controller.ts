@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { authenticate } from '../middleware/auth';
@@ -922,13 +922,18 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
             d.reason,
             d.status,
             d.resolution_notes,
+            d.resolution_action,
+            d.attachment_url,
+            d.resolved_by,
             d.created_at,
-            d.resolved_at
+            d.resolved_at,
+            dsh.score AS new_score
           FROM 
             disputes d
+            LEFT JOIN dispute_score_history dsh ON dsh.dispute_id = d.id AND dsh.score_type = 'ADJUSTED'
           WHERE 
             d.submission_id = ${submissionId}
-          ORDER BY d.created_at DESC
+          ORDER BY dsh.created_at DESC
           LIMIT 1
         `
       );

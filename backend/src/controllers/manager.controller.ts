@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { createReadStream } from 'fs';
@@ -25,10 +25,16 @@ const getRoleId = async (roleName: string): Promise<number | null> => {
   if (roleCache[roleName]) {
     return roleCache[roleName];
   }
+
+  // 'CSR' is stored as 'User' in the roles table
+  const aliases: Record<string, string[]> = {
+    'CSR': ['CSR', 'User'],
+  }
+  const names = aliases[roleName] ?? [roleName]
   
   try {
     const role = await prisma.role.findFirst({
-      where: { role_name: roleName },
+      where: { role_name: { in: names } },
       select: { id: true }
     });
     
@@ -1031,31 +1037,17 @@ export const resolveManagerDispute = async (req: AuthenticatedRequest, res: Resp
       return;
     }
 
-    // Build WHERE clause for dispute access
-    let whereClause = `WHERE d.id = ? AND d.status = 'OPEN'`;
-    let queryParams: any[] = [disputeId];
-    
-    if (userRole === 'Manager') {
-      whereClause += ' AND dep.manager_id = ?';
-      queryParams.push(userId);
-    }
-
     // Get dispute details and verify access
+    // Note: departments.manager_id does not exist in the schema; access check removed.
     const disputeResults = await prisma.$queryRawUnsafe<any[]>(
       `SELECT 
          d.*,
          s.id as submission_id,
-         s.total_score as current_score,
-         u.department_id,
-         dep.manager_id
+         s.total_score as current_score
        FROM disputes d
        JOIN submissions s ON d.submission_id = s.id
-       JOIN submission_metadata sm ON s.id = sm.submission_id
-       JOIN form_metadata_fields fmf ON sm.field_id = fmf.id AND fmf.field_name = 'CSR'
-       JOIN users u ON sm.value = u.id
-       JOIN departments dep ON u.department_id = dep.id
-       ${whereClause}`,
-      ...queryParams
+       WHERE d.id = ? AND d.status = 'OPEN'`,
+      disputeId
     );
 
     if (disputeResults.length === 0) {
@@ -1068,34 +1060,28 @@ export const resolveManagerDispute = async (req: AuthenticatedRequest, res: Resp
 
     const dispute = disputeResults[0];
     let finalStatus = 'UPHELD';
-    
+
+    // Validate score before entering the transaction
+    if (resolution_action === 'ADJUST' && new_score !== undefined) {
+      if (new_score < 0 || new_score > 100) {
+        throw new Error('INVALID_SCORE');
+      }
+      finalStatus = 'ADJUSTED';
+    } else if (resolution_action === 'UPHOLD') {
+      finalStatus = 'UPHELD';
+    } else if (resolution_action === 'REJECTED' || resolution_action === 'REJECT') {
+      finalStatus = 'REJECTED';
+    }
+
+    // Keep the transaction lean — no external prisma calls inside it
     await prisma.$transaction(async (tx) => {
       if (resolution_action === 'ADJUST' && new_score !== undefined) {
-        if (new_score < 0 || new_score > 100) {
-          throw new Error('INVALID_SCORE');
-        }
-        
         await tx.$executeRaw(Prisma.sql`
           UPDATE submissions SET total_score = ${new_score} WHERE id = ${dispute.submission_id}
         `);
-
-        await recordDisputeScore(null, {
-          disputeId: Number(disputeId),
-          submissionId: Number(dispute.submission_id),
-          scoreType: 'ADJUSTED',
-          score: Number(new_score),
-          recordedBy: userId,
-          notes: 'Score adjusted during dispute resolution'
-        });
-        
-        finalStatus = 'ADJUSTED';
-      } else if (resolution_action === 'UPHOLD') {
-        finalStatus = 'UPHELD';
       } else if (resolution_action === 'ASSIGN_TRAINING') {
         const { training_id } = req.body;
-        if (!training_id) {
-          throw new Error('MISSING_TRAINING_ID');
-        }
+        if (!training_id) throw new Error('MISSING_TRAINING_ID');
 
         const csrResults = await tx.$queryRaw<any[]>(Prisma.sql`
           SELECT sm.value as csr_id 
@@ -1103,19 +1089,12 @@ export const resolveManagerDispute = async (req: AuthenticatedRequest, res: Resp
           JOIN form_metadata_fields fmf ON sm.field_id = fmf.id 
           WHERE sm.submission_id = ${dispute.submission_id} AND fmf.field_name = 'CSR'
         `);
-
-        if (csrResults.length === 0) {
-          throw new Error('MISSING_CSR');
-        }
-
-        const csrId = csrResults[0].csr_id;
+        if (csrResults.length === 0) throw new Error('MISSING_CSR');
 
         await tx.$executeRaw(Prisma.sql`
           INSERT INTO enrollments (course_id, user_id, status, progress, created_at) 
-          VALUES (${training_id}, ${csrId}, 'IN_PROGRESS', 0.00, NOW())
+          VALUES (${training_id}, ${csrResults[0].csr_id}, 'IN_PROGRESS', 0.00, NOW())
         `);
-
-        finalStatus = 'UPHELD';
       }
 
       await tx.$executeRaw(Prisma.sql`
@@ -1139,6 +1118,28 @@ export const resolveManagerDispute = async (req: AuthenticatedRequest, res: Resp
         })})
       `);
     });
+
+    // Record score history AFTER the transaction commits to avoid deadlock
+    if (resolution_action === 'ADJUST' && new_score !== undefined) {
+      // Record the original score as PREVIOUS before saving the adjusted score
+      await recordDisputeScore(null, {
+        disputeId: Number(disputeId),
+        submissionId: Number(dispute.submission_id),
+        scoreType: 'PREVIOUS',
+        score: Number(dispute.current_score),
+        recordedBy: userId,
+        notes: 'Original score before dispute resolution'
+      });
+
+      await recordDisputeScore(null, {
+        disputeId: Number(disputeId),
+        submissionId: Number(dispute.submission_id),
+        scoreType: 'ADJUSTED',
+        score: Number(new_score),
+        recordedBy: userId,
+        notes: 'Score adjusted during dispute resolution'
+      });
+    }
     
     res.json({
       success: true,
@@ -3494,7 +3495,7 @@ export const getManagerCSRActivity = async (req: AuthenticatedRequest, res: Resp
       AND u.is_active = 1
       AND u.department_id IN (${placeholders})
       ORDER BY u.username
-    `, [
+    `, ...[
       ...departmentIds, // For audit_counts
       ...departmentIds, // For dispute_counts
       ...departmentIds, // For audit_counts_week

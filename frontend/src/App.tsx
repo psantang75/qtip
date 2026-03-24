@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Toaster } from './components/ui/toaster'
+import DevRoleSwitcher from './components/dev/DevRoleSwitcher'
 
 // Shell components — NOT lazy (load immediately)
 import AppShell from './components/shell/AppShell'
@@ -24,8 +25,11 @@ const QualityOverviewPage   = React.lazy(() => import('./pages/quality/QualityOv
 const FormsPage             = React.lazy(() => import('./pages/quality/FormsPage'))
 const SubmissionsPage       = React.lazy(() => import('./pages/quality/SubmissionsPage'))
 const DisputesPage          = React.lazy(() => import('./pages/quality/DisputesPage'))
-const ScoringPage           = React.lazy(() => import('./pages/quality/ScoringPage'))
 const QualityAnalyticsPage  = React.lazy(() => import('./pages/quality/QualityAnalyticsPage'))
+const ReviewFormsPage         = React.lazy(() => import('./pages/quality/ReviewFormsPage'))
+const AuditFormPage           = React.lazy(() => import('./pages/quality/AuditFormPage'))
+const SubmissionDetailPage    = React.lazy(() => import('./pages/quality/SubmissionDetailPage'))
+const DisputeHistoryPage      = React.lazy(() => import('./pages/quality/DisputeHistoryPage'))
 
 const TrainingOverviewPage  = React.lazy(() => import('./pages/training/TrainingOverviewPage'))
 const CoursesPage           = React.lazy(() => import('./pages/training/CoursesPage'))
@@ -127,12 +131,15 @@ export default function App() {
                 {/* Quality */}
                 <Route path="/app/quality">
                   <Route index element={<Navigate to="overview" replace />} />
-                  <Route path="overview"    element={<PageLoader><QualityOverviewPage /></PageLoader>} />
-                  <Route path="forms"       element={<PageLoader><FormsPage /></PageLoader>} />
-                  <Route path="submissions" element={<PageLoader><SubmissionsPage /></PageLoader>} />
-                  <Route path="disputes"    element={<PageLoader><DisputesPage /></PageLoader>} />
-                  <Route path="scoring"     element={<PageLoader><ScoringPage /></PageLoader>} />
-                  <Route path="analytics"   element={<PageLoader><QualityAnalyticsPage /></PageLoader>} />
+                  <Route path="overview"        element={<PageLoader><QualityOverviewPage /></PageLoader>} />
+                  <Route path="forms"           element={<PageLoader><FormsPage /></PageLoader>} />
+                  <Route path="submissions"     element={<PageLoader><SubmissionsPage /></PageLoader>} />
+                  <Route path="submissions/:id"   element={<PageLoader><SubmissionDetailPage /></PageLoader>} />
+                  <Route path="disputes"          element={<PageLoader><DisputesPage /></PageLoader>} />
+                  <Route path="dispute-history"   element={<PageLoader><DisputeHistoryPage /></PageLoader>} />
+                  <Route path="analytics"       element={<Navigate to="/app/analytics/quality" replace />} />
+                  <Route path="review-forms"    element={<PageLoader><ReviewFormsPage /></PageLoader>} />
+                  <Route path="audit"           element={<PageLoader><AuditFormPage /></PageLoader>} />
                 </Route>
 
                 {/* Training */}
@@ -160,6 +167,12 @@ export default function App() {
                   <Route path="history"   element={<PageLoader><ImportHistoryPage /></PageLoader>} />
                 </Route>
 
+                {/* Analytics */}
+                <Route path="/app/analytics">
+                  <Route index element={<Navigate to="quality" replace />} />
+                  <Route path="quality" element={<PageLoader><QualityAnalyticsPage /></PageLoader>} />
+                </Route>
+
                 {/* Profile — all authenticated users */}
                 <Route path="/app/profile" element={<ProfilePage />} />
 
@@ -175,6 +188,7 @@ export default function App() {
           </Routes>
           <Toaster />
         </BrowserRouter>
+        {import.meta.env.DEV && <DevRoleSwitcher />}
       </AuthProvider>
     </QueryClientProvider>
   )

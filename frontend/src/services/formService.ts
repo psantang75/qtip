@@ -21,7 +21,11 @@ export const getAllForms = async (isActive?: boolean): Promise<FormListItem[]> =
     }
     
     const response = await apiClient.get(url);
-    return response.data;
+    const d = response.data;
+    if (Array.isArray(d)) return d;
+    if (Array.isArray(d?.forms)) return d.forms;
+    if (Array.isArray(d?.items)) return d.items;
+    return [];
   } catch (error) {
     console.error('Error fetching forms:', error);
     throw error;

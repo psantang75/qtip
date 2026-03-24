@@ -103,7 +103,7 @@ export const validateForm = (form: Form): { valid: boolean; errors: string[] } =
     FormValidationSchemas.form.parse(form);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      errors.push(...error.errors.map(err => `${err.path.join('.')}: ${err.message}`));
+      errors.push(...error.issues.map(err => `${err.path.join('.')}: ${err.message}`));
     }
   }
   

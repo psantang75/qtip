@@ -9,6 +9,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (data: LoginFormData) => Promise<void>;
   logout: () => Promise<void>;
+  setDevRole: (roleId: number) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -160,13 +161,19 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, [clearSessionTimeout]);
 
+  // Dev-only: override role_id in memory without touching auth state
+  const setDevRole = (roleId: number) => {
+    setUser(prev => prev ? { ...prev, role_id: roleId } : null);
+  };
+
   // Context value
   const value = {
     user,
     isAuthenticated,
     isLoading,
     login,
-    logout
+    logout,
+    setDevRole,
   };
 
   return (

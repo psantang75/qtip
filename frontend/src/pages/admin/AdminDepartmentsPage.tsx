@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -120,7 +120,7 @@ export default function AdminDepartmentsPage() {
 
   // ── Form ─────────────────────────────────────────────────────────────────
   const form = useForm<FormValues>({
-    resolver: zodResolver(deptSchema),
+    resolver: zodResolver(deptSchema as any),
     defaultValues: { department_name: '', manager_ids: [] },
   })
 

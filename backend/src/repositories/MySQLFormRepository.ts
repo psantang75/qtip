@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MySQLFormRepository - Data access layer for QA form operations using Prisma
  */
 
@@ -128,6 +128,7 @@ export class MySQLFormRepository {
               field_type: safeParam(field.field_type) as any,
               is_required: safeParam(field.is_required) === true,
               interaction_type: safeParam(field.interaction_type || formData.interaction_type) as any,
+              dropdown_source: field.dropdown_source ?? null,
               sort_order: field.sort_order ?? 0,
             },
           });
@@ -300,6 +301,7 @@ export class MySQLFormRepository {
         field_type: f.field_type as any,
         is_required: f.is_required,
         interaction_type: f.interaction_type as any,
+        dropdown_source: f.dropdown_source ?? undefined,
         sort_order: f.sort_order,
         created_at: f.created_at,
       })),
@@ -426,6 +428,7 @@ export class MySQLFormRepository {
               field_type: safeParam(field.field_type) as any,
               is_required: safeParam(field.is_required) === true,
               interaction_type: safeParam(field.interaction_type || formData.interaction_type) as any,
+              dropdown_source: field.dropdown_source ?? null,
               sort_order: field.sort_order ?? 0,
             },
           });

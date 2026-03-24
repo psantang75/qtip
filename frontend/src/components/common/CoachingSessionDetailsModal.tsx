@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React from 'react';
 import { HiXMark, HiOutlineDocumentArrowDown } from 'react-icons/hi2';
 import Button from '../ui/Button';

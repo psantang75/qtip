@@ -195,7 +195,7 @@ export const useUsers = (options: UseUsersOptions = {}) => {
       if (cachedDirectors) {
         setDirectors(cachedDirectors);
       } else {
-        const directorsData = await userService.getDirectors();
+        const directorsData = await userService.getUsers(1, 100, { role_id: 6 }).then(r => r.items);
         setDirectors(Array.isArray(directorsData) ? directorsData : []);
         setCache('directors', directorsData);
       }

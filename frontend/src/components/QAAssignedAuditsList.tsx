@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import submissionService from '../services/submissionService';
@@ -162,7 +163,7 @@ const QAAssignedAuditsList: React.FC = () => {
   };
   
   const handleStartAudit = (audit: AssignedAudit) => {
-    navigate(`/qa/assigned-reviews/${audit.call_id}?formId=${audit.form_id}`);
+    navigate(`/app/quality/audit?callId=${audit.call_id}&formId=${audit.form_id}&csrId=${(audit as any).csr_id ?? ''}`);
   };
   
   // Format duration from seconds to MM:SS

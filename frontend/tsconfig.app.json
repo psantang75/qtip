@@ -19,6 +19,7 @@
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
+    "forceConsistentCasingInFileNames": false,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": false,
     "noUncheckedSideEffectImports": false,

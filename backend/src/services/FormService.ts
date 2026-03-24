@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FormService
  * 
  * Business logic layer for QA form management operations.
@@ -344,7 +344,7 @@ export class FormService implements IFormService {
     }
 
     // Validate question type
-    const validQuestionTypes = ['YES_NO', 'SCALE', 'TEXT', 'INFO_BLOCK', 'RADIO', 'SUB_CATEGORY', 'N_A'];
+    const validQuestionTypes = ['YES_NO', 'SCALE', 'TEXT', 'INFO_BLOCK', 'RADIO', 'SUB_CATEGORY', 'N_A', 'MULTI_SELECT'];
     if (!question.question_type || !validQuestionTypes.includes(question.question_type)) {
       throw new FormServiceError(
         'Invalid question type. Must be one of: ' + validQuestionTypes.join(', '),

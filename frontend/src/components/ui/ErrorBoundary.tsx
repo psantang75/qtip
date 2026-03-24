@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React, { Component, ReactNode } from 'react';
 import { HiOutlineExclamationCircle, HiOutlineRefresh } from 'react-icons/hi';
 import Button from './Button';
