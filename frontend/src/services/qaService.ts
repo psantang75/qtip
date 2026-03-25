@@ -62,10 +62,11 @@ export interface DisputeRecord {
   id: number
   submission_id: number
   reason: string
-  status: 'OPEN' | 'RESOLVED'
-  resolution_action?: 'UPHOLD' | 'ADJUST' | 'REJECTED' | 'ASSIGN_TRAINING'
+  status: 'OPEN' | 'UPHELD' | 'ADJUSTED'
+  resolution_action?: 'UPHOLD' | 'ADJUST' | 'ASSIGN_TRAINING'
   resolution_notes?: string
   new_score?: number
+  previous_score?: number | null
   created_at: string
   resolved_at?: string
   resolved_by?: number | null
@@ -198,6 +199,7 @@ const qaService = {
   getSubmissions: (params: {
     page?: number; limit?: number; search?: string
     status?: string; form_id?: number; department_id?: number
+    date_start?: string; date_end?: string
   }) => {
     const q = new URLSearchParams()
     if (params.page)          q.set('page', String(params.page))
@@ -206,6 +208,8 @@ const qaService = {
     if (params.status)        q.set('status', params.status)
     if (params.form_id)       q.set('form_id', String(params.form_id))
     if (params.department_id) q.set('department_id', String(params.department_id))
+    if (params.date_start)    q.set('date_start', params.date_start)
+    if (params.date_end)      q.set('date_end', params.date_end)
     return api.get(`/qa/completed?${q}`).then(r => {
       const d = r.data
       const raw = d?.items ?? d?.data ?? []
@@ -224,14 +228,17 @@ const qaService = {
   getTeamAudits: (params: {
     page?: number; limit?: number; search?: string
     status?: string; form_id?: number; csr_id?: number
+    start_date?: string; end_date?: string
   }) => {
     const q = new URLSearchParams()
-    if (params.page)    q.set('page', String(params.page))
-    if (params.limit)   q.set('limit', String(params.limit))
-    if (params.search)  q.set('search', params.search)
-    if (params.status)  q.set('status', params.status)
-    if (params.form_id) q.set('form_id', String(params.form_id))
-    if (params.csr_id)  q.set('csr_id', String(params.csr_id))
+    if (params.page)       q.set('page', String(params.page))
+    if (params.limit)      q.set('limit', String(params.limit))
+    if (params.search)     q.set('search', params.search)
+    if (params.status)     q.set('status', params.status)
+    if (params.form_id)    q.set('form_id', String(params.form_id))
+    if (params.csr_id)     q.set('csr_id', String(params.csr_id))
+    if (params.start_date) q.set('start_date', params.start_date)
+    if (params.end_date)   q.set('end_date', params.end_date)
     return api.get(`/manager/team-audits?${q}`).then(r => {
       const d = r.data
       // Manager team-audits endpoint returns { audits: [...], totalCount: N }
@@ -250,11 +257,14 @@ const qaService = {
   getTeamAuditDetail: (id: number) =>
     api.get(`/manager/team-audits/${id}`).then(r => normalizeSubmission(r.data) as SubmissionDetail),
 
-  getCSRAudits: (params: { page?: number; limit?: number; status?: string }) => {
+  getCSRAudits: (params: { page?: number; limit?: number; status?: string; start_date?: string; end_date?: string; search?: string }) => {
     const q = new URLSearchParams()
-    if (params.page)   q.set('page', String(params.page))
-    if (params.limit)  q.set('limit', String(params.limit))
-    if (params.status) q.set('status', params.status)
+    if (params.page)       q.set('page', String(params.page))
+    if (params.limit)      q.set('limit', String(params.limit))
+    if (params.status)     q.set('status', params.status)
+    if (params.search)     q.set('search', params.search)
+    if (params.start_date) q.set('start_date', params.start_date)
+    if (params.end_date)   q.set('end_date', params.end_date)
     return api.get(`/csr/audits?${q}`).then(r => {
       const d = r.data
       // CSR endpoint returns { audits: [...], totalCount: N }

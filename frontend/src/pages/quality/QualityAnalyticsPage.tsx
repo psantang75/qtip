@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -50,7 +50,7 @@ function TrendsChart({ data }: { data: any }) {
         <XAxis dataKey="name" tick={{ fontSize: 11 }} />
         <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
         <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`, 'Avg Score']} />
-        <Line type="monotone" dataKey="score" stroke="#00aeef" strokeWidth={2} dot={{ r: 3 }} />
+        <Line type="monotone" dataKey="score" stroke="var(--color-primary)" strokeWidth={2} dot={{ r: 3 }} />
       </LineChart>
     </ResponsiveContainer>
   )
@@ -65,7 +65,7 @@ function AveragesChart({ data }: { data: any }) {
         <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
         <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
         <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`, 'Avg Score']} />
-        <Bar dataKey="score" radius={[0, 4, 4, 0]} fill="#00aeef"
+        <Bar dataKey="score" radius={[0, 4, 4, 0]} fill="var(--color-primary)"
           label={{ position: 'right' as const, formatter: (v: number) => `${v.toFixed(1)}%`, fontSize: 11 }} />
       </BarChart>
     </ResponsiveContainer>
@@ -210,12 +210,12 @@ export default function QualityAnalyticsPage() {
               <div className="space-y-1.5">
                 <Label className="text-xs">Start Date</Label>
                 <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00aeef]" />
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">End Date</Label>
                 <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00aeef]" />
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
               </div>
             </>
           )}
@@ -306,7 +306,7 @@ export default function QualityAnalyticsPage() {
         </div>
 
         <div className="pt-2">
-          <Button onClick={runReport} disabled={reportLoading} className="bg-[#00aeef] hover:bg-[#0095cc] text-white">
+          <Button onClick={runReport} disabled={reportLoading} className="bg-primary hover:bg-primary/90 text-white">
             {reportLoading ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Running...</> : <><BarChart3 className="h-4 w-4 mr-2" />Run Report</>}
           </Button>
         </div>
@@ -322,7 +322,7 @@ export default function QualityAnalyticsPage() {
 
       {reportLoading && (
         <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-          <RefreshCw className="h-8 w-8 mx-auto mb-3 text-[#00aeef] animate-spin" />
+          <RefreshCw className="h-8 w-8 mx-auto mb-3 text-primary animate-spin" />
           <p className="text-slate-500 text-sm">Generating report...</p>
         </div>
       )}
@@ -337,7 +337,7 @@ export default function QualityAnalyticsPage() {
       {report && !reportLoading && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3.5 border-b border-slate-100">
-            <FileBarChart className="h-4 w-4 text-[#00aeef]" />
+            <FileBarChart className="h-4 w-4 text-primary" />
             <span className="font-semibold text-slate-800 text-sm">
               {reportType === 'trends' && 'Score Trends'}
               {reportType === 'averages' && 'Average Scores'}

@@ -249,145 +249,139 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     : 0;
   
   
+  const scoreClass = (s: number) =>
+    s >= 85 ? 'text-emerald-600' : s >= 70 ? 'text-amber-600' : 'text-red-600';
+
   return (
-    <div className="score-summary mt-8 space-y-8">
-      {/* Category Breakdown */}
+    <div className="space-y-6 p-5">
+
+      {/* ── Category summary table ── */}
       {showCategoryBreakdown && (
         <div>
-          <h3 className="text-xl font-semibold mb-4 text-gray-800">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-3">
             Category Breakdown
-          </h3>
-          
-          <table className="w-full border-collapse mb-6 rounded-lg overflow-hidden shadow-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left p-3 border border-gray-200">Category</th>
-                <th className="text-center p-3 border border-gray-200">Weight</th>
-                <th className="text-center p-3 border border-gray-200">Normalized Weight</th>
-                <th className="text-right p-3 border border-gray-200">Weighted Points</th>
-                <th className="text-right p-3 border border-gray-200">Weighted Possible</th>
-                <th className="text-right p-3 border border-gray-200">Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* Category rows */}
-              {categoryScores.map((category: CategoryScore) => (
-                <tr key={category.id} className="hover:bg-gray-50">
-                  <td className="p-3 border border-gray-200 font-medium">{category.name}</td>
-                  <td className="p-3 border border-gray-200 text-center">{((category as any).originalWeight * 100).toFixed(0)}%</td>
-                  <td className="p-3 border border-gray-200 text-center">{(category.weight * 100).toFixed(0)}%</td>
-                  <td className="p-3 border border-gray-200 text-right">
-                    {category.pointsPossible === 0 ? 'N/A' : category.weightedPointsEarned.toFixed(2)}
-                  </td>
-                  <td className="p-3 border border-gray-200 text-right">
-                    {category.pointsPossible === 0 ? 'N/A' : category.weightedPointsPossible.toFixed(2)}
-                  </td>
-                  <td className="p-3 border border-gray-200 text-right">
-                    {category.pointsPossible === 0 ? 'N/A' : `${category.score.toFixed(1)}%`}
+          </p>
+          <div className="rounded-xl border border-slate-200 overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Category</th>
+                  <th className="text-center px-3 py-2.5 font-semibold text-slate-600">Weight</th>
+                  <th className="text-right px-3 py-2.5 font-semibold text-slate-600">Earned</th>
+                  <th className="text-right px-3 py-2.5 font-semibold text-slate-600">Possible</th>
+                  <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {categoryScores.map((category: CategoryScore) => (
+                  <tr key={category.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="px-4 py-2.5 font-medium text-slate-800">{category.name}</td>
+                    <td className="px-3 py-2.5 text-center text-slate-500">
+                      {(category.weight * 100).toFixed(0)}%
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-slate-600">
+                      {category.pointsPossible === 0 ? <span className="text-slate-300">—</span> : category.weightedPointsEarned.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-slate-600">
+                      {category.pointsPossible === 0 ? <span className="text-slate-300">—</span> : category.weightedPointsPossible.toFixed(2)}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right font-semibold ${category.pointsPossible === 0 ? 'text-slate-300' : scoreClass(category.score)}`}>
+                      {category.pointsPossible === 0 ? '—' : `${category.score.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-100 border-t-2 border-slate-300">
+                  <td className="px-4 py-2.5 font-bold text-slate-800 text-[13px]">Total</td>
+                  <td className="px-3 py-2.5 text-center font-semibold text-slate-600">100%</td>
+                  <td className="px-3 py-2.5 text-right font-semibold text-slate-700">{totalWeightedPointsEarned.toFixed(2)}</td>
+                  <td className="px-3 py-2.5 text-right font-semibold text-slate-700">{totalWeightedPointsPossible.toFixed(2)}</td>
+                  <td className={`px-4 py-2.5 text-right font-bold text-[15px] ${scoreClass(formScore)}`}>
+                    {formScore.toFixed(1)}%
                   </td>
                 </tr>
-              ))}
-              
-              {/* Total row */}
-              <tr className="bg-blue-50 font-semibold">
-                <td className="p-3 border border-gray-200">FORM TOTAL</td>
-                <td className="p-3 border border-gray-200 text-center">100%</td>
-                <td className="p-3 border border-gray-200 text-center">100%</td>
-                <td className="p-3 border border-gray-200 text-right">{totalWeightedPointsEarned.toFixed(2)}</td>
-                <td className="p-3 border border-gray-200 text-right">{totalWeightedPointsPossible.toFixed(2)}</td>
-                <td className="p-3 border border-gray-200 text-right">
-                  <span className={`font-bold ${
-                    formScore >= 90 ? 'text-green-600' : 
-                    formScore >= 70 ? 'text-blue-600' : 
-                    formScore >= 50 ? 'text-yellow-600' : 'text-red-600'
-                  }`}>
-                    {formScore.toFixed(2)}%
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
-      
-      {/* Detailed Category Score Tables */}
+
+      {/* ── Per-category detailed question scores ── */}
       {showDetailedScores && (
-        <div className="mt-6">
-          <h3 className="text-xl font-semibold mb-4 text-gray-800">
+        <div className="space-y-5">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
             Detailed Scores
-          </h3>
-          
+          </p>
           {categoryScores.map((category: CategoryScore) => (
-            <div key={category.id} className="mb-8">
-              <table className="w-full border-collapse mb-4 rounded-lg overflow-hidden shadow-sm">
-                <thead className="bg-blue-50">
-                  <tr>
-                    <th colSpan={4} className="text-left p-3 border border-gray-200 text-lg font-semibold text-primary-blue">
-                      <div className="flex justify-between items-center">
-                        <span>{category.name}</span>
-                        <span className="text-sm text-gray-500">Category Weight: {(category.weight * 100).toFixed(0)}%</span>
-                      </div>
-                    </th>
-                  </tr>
-                  <tr className="bg-gray-50">
-                    <th className="text-left p-3 border border-gray-200 w-1/2">Question</th>
-                    <th className="text-left p-3 border border-gray-200 w-1/4">Answer</th>
-                    <th className="text-right p-3 border border-gray-200">Points</th>
-                    <th className="text-right p-3 border border-gray-200">Possible</th>
+            <div key={category.id} className="rounded-xl border border-slate-200 overflow-hidden">
+              {/* Category header row */}
+              <div className="flex items-center justify-between px-4 py-2.5 bg-primary/8 border-b border-primary/20">
+                <div className="flex items-center gap-2">
+                  <span className="w-[3px] h-4 rounded-full bg-primary shrink-0" />
+                  <span className="text-[13px] font-bold text-slate-800">{category.name}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-slate-500">Weight: {(category.weight * 100).toFixed(0)}%</span>
+                  <span className={`text-[13px] font-bold ${category.pointsPossible === 0 ? 'text-slate-400' : scoreClass(category.score)}`}>
+                    {category.pointsPossible === 0 ? 'N/A' : `${category.score.toFixed(1)}%`}
+                  </span>
+                </div>
+              </div>
+
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="text-left px-4 py-2 font-semibold text-slate-500 w-1/2">Question</th>
+                    <th className="text-left px-3 py-2 font-semibold text-slate-500">Answer</th>
+                    <th className="text-right px-3 py-2 font-semibold text-slate-500">Points</th>
+                    <th className="text-right px-4 py-2 font-semibold text-slate-500">Possible</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                   {Object.entries(category.subCategories).map(([subCatName, questions]) => {
-                    // Skip empty subcategories
-                    if (questions.length === 0) return null;
-                    
+                    if ((questions as QuestionWithScore[]).length === 0) return null;
                     return (
                       <React.Fragment key={subCatName}>
-                        {/* Show subcategory header if it's not the default category */}
                         {subCatName !== 'default' && (
-                          <tr className="bg-gray-100">
-                            <td colSpan={4} className="p-3 border border-gray-200 font-bold text-center">
+                          <tr className="bg-slate-50">
+                            <td colSpan={4} className="px-4 py-2 text-[12px] font-semibold text-slate-600 uppercase tracking-wide">
                               {subCatName}
                             </td>
                           </tr>
                         )}
-                        
-                        {/* Show questions under this subcategory */}
-                        {questions.map((question: QuestionWithScore) => (
-                          <tr key={question.id} className="hover:bg-gray-50">
-                            <td className="p-3 border border-gray-200">{question.text}</td>
-                            <td className="p-3 border border-gray-200">{question.answer === 'No answer' ? '' : question.answer}</td>
-                            <td className="p-3 border border-gray-200 text-right">
-                              {question.pointsEarned === 0 && question.pointsPossible === 0 ? '' : question.pointsEarned.toFixed(1)}
-                            </td>
-                            <td className="p-3 border border-gray-200 text-right">
-                              {question.pointsEarned === 0 && question.pointsPossible === 0 ? '' : question.pointsPossible.toFixed(1)}
-                            </td>
-                          </tr>
-                        ))}
+                        {(questions as QuestionWithScore[]).map((q: QuestionWithScore) => {
+                          const hasScore = !(q.pointsEarned === 0 && q.pointsPossible === 0);
+                          const answerLower = q.answer?.toLowerCase();
+                          const answerClass = answerLower === 'yes' ? 'text-emerald-600 font-medium' :
+                                              answerLower === 'no'  ? 'text-red-600 font-medium' :
+                                              'text-slate-600';
+                          return (
+                            <tr key={q.id} className="hover:bg-slate-50/60 transition-colors">
+                              <td className="px-4 py-2.5 text-slate-700 leading-snug">{q.text}</td>
+                              <td className={`px-3 py-2.5 ${answerClass}`}>
+                                {q.answer === 'No answer' ? <span className="text-slate-300">—</span> : q.answer}
+                              </td>
+                              <td className="px-3 py-2.5 text-right text-slate-700 font-medium">
+                                {hasScore ? q.pointsEarned.toFixed(1) : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-slate-500">
+                                {hasScore ? q.pointsPossible.toFixed(1) : <span className="text-slate-300">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </React.Fragment>
                     );
                   })}
-                  
-                  {/* Category totals row */}
-                  <tr className="bg-gray-100 font-medium">
-                    <td colSpan={2} className="p-3 border border-gray-200">
-                      Category Total
-                    </td>
-                    <td className="p-3 border border-gray-200 text-right">{category.pointsEarned.toFixed(1)}</td>
-                    <td className="p-3 border border-gray-200 text-right">{category.pointsPossible.toFixed(1)}</td>
-                  </tr>
-                  
-                  {/* Category score percentage */}
-                  <tr className="bg-blue-50 font-semibold">
-                    <td colSpan={3} className="p-3 border border-gray-200">
-                      Category Score
-                    </td>
-                    <td className="p-3 border border-gray-200 text-right">
-                      {category.score.toFixed(1)}%
-                    </td>
-                  </tr>
                 </tbody>
+                <tfoot>
+                  <tr className="bg-slate-100 border-t border-slate-200">
+                    <td colSpan={2} className="px-4 py-2 text-[12px] font-semibold text-slate-600">Category Total</td>
+                    <td className="px-3 py-2 text-right text-[13px] font-bold text-slate-700">{category.pointsEarned.toFixed(1)}</td>
+                    <td className="px-4 py-2 text-right text-[13px] font-semibold text-slate-500">{category.pointsPossible.toFixed(1)}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           ))}

@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   CalendarCheck, AlertTriangle, TrendingUp, BarChart3,
-  Users, ClipboardList, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown,
+  Users, ClipboardList, RefreshCw,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import qaService, { scoreColor } from '@/services/qaService'
@@ -12,51 +12,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-
-// ── Shared sort head ──────────────────────────────────────────────────────────
-type SortDir = 'asc' | 'desc' | null
-function SortHead({ field, sort, dir, onSort, children, right = false }: {
-  field: string; sort: string | null; dir: SortDir
-  onSort: (f: string) => void; children: React.ReactNode; right?: boolean
-}) {
-  const active = sort === field
-  const Icon = active ? (dir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown
-  return (
-    <TableHead
-      className={cn(
-        'py-4 cursor-pointer select-none hover:bg-slate-100 transition-colors whitespace-nowrap',
-        right && 'text-right'
-      )}
-      onClick={() => onSort(field)}
-    >
-      <span className={cn('flex items-center gap-1', right && 'justify-end')}>
-        {children}
-        <Icon size={12} className={active ? 'text-[#00aeef]' : 'text-slate-400'} />
-      </span>
-    </TableHead>
-  )
-}
-
-function useSort<T>(data: T[], defaultField: string) {
-  const [sort, setSort] = useState<string | null>(null)
-  const [dir, setDir]   = useState<SortDir>(null)
-  const toggle = (field: string) => {
-    if (sort !== field) { setSort(field); setDir('asc') }
-    else if (dir === 'asc') setDir('desc')
-    else { setSort(null); setDir(null) }
-  }
-  const sorted = useMemo(() => {
-    if (!sort || !dir) return data
-    return [...data].sort((a: any, b: any) => {
-      const av = a[sort] ?? '', bv = b[sort] ?? ''
-      const cmp = typeof av === 'number' && typeof bv === 'number'
-        ? av - bv
-        : String(av).localeCompare(String(bv))
-      return dir === 'asc' ? cmp : -cmp
-    })
-  }, [data, sort, dir])
-  return { sort, dir, toggle, sorted }
-}
+import { SortableTableHead } from '@/components/common/SortableTableHead'
+import { StatusBadge } from '@/components/common/StatusBadge'
+import { TableEmptyState } from '@/components/common/TableEmptyState'
+import { useListSort } from '@/hooks/useListSort'
 
 function StatCard({
   icon: Icon, label, value, valueClass = '',
@@ -105,8 +64,8 @@ export default function QualityOverviewPage() {
   })
 
   // All hooks must be called before any conditional returns
-  const csrSort = useSort(recentAudits?.items ?? [], 'created_at')
-  const actSort = useSort(activity ?? [], 'csr_name')
+  const csrSort = useListSort(recentAudits?.items ?? [])
+  const actSort = useListSort(activity ?? [])
 
   if (statsLoading) {
     return (
@@ -174,10 +133,10 @@ export default function QualityOverviewPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50 border-b border-slate-200">
-                  <SortHead field="created_at" sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle}>Date</SortHead>
-                  <SortHead field="form_name"  sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle}>Form</SortHead>
-                  <SortHead field="score" sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle} right>Score</SortHead>
-                  <SortHead field="status" sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle}>Status</SortHead>
+                  <SortableTableHead field="created_at" sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle}>Date</SortableTableHead>
+                  <SortableTableHead field="form_name"  sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle}>Form</SortableTableHead>
+                  <SortableTableHead field="score"      sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle} right>Score</SortableTableHead>
+                  <SortableTableHead field="status"     sort={csrSort.sort} dir={csrSort.dir} onSort={csrSort.toggle}>Status</SortableTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -192,24 +151,11 @@ export default function QualityOverviewPage() {
                       <TableCell className="text-right text-[13px] font-medium">
                         <span className={scoreColor(row.score ?? 0)}>{(row.score ?? 0).toFixed(1)}%</span>
                       </TableCell>
-                      <TableCell>
-                        <span className="flex items-center gap-1.5 text-[13px]">
-                          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0',
-                            row.status === 'COMPLETED' ? 'bg-emerald-500' :
-                            row.status === 'DISPUTED'  ? 'bg-amber-500'  :
-                            row.status === 'RESOLVED'  ? 'bg-blue-500'   : 'bg-slate-400'
-                          )} />
-                          <span className="text-slate-600">{row.status.charAt(0) + row.status.slice(1).toLowerCase()}</span>
-                        </span>
-                      </TableCell>
+                      <TableCell><StatusBadge status={row.status} /></TableCell>
                     </TableRow>
                   ))
                 ) : (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-slate-400">
-                      No recent audits found.
-                    </TableCell>
-                  </TableRow>
+                  <TableEmptyState colSpan={4} title="No recent audits found." />
                 )}
               </TableBody>
             </Table>
@@ -254,15 +200,15 @@ export default function QualityOverviewPage() {
           {[
             { label: 'View Submissions', icon: ClipboardList, path: '/app/quality/submissions' },
             { label: 'View Disputes',    icon: AlertTriangle, path: '/app/quality/disputes' },
-            { label: 'Analytics',        icon: BarChart3,     path: '/app/quality/analytics' },
+            { label: 'Analytics',        icon: BarChart3,     path: '/app/analytics/quality' },
           ].map(({ label, icon: Icon, path }) => (
             <button
               key={path}
               onClick={() => navigate(path)}
-              className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-4 hover:border-[#00aeef] hover:bg-[#00aeef]/5 transition-colors text-left"
+              className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-4 hover:border-primary hover:bg-primary/5 transition-colors text-left"
             >
-              <div className="h-9 w-9 rounded-lg bg-[#00aeef]/10 flex items-center justify-center shrink-0">
-                <Icon className="h-5 w-5 text-[#00aeef]" />
+              <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Icon className="h-5 w-5 text-primary" />
               </div>
               <span className="font-medium text-slate-800">{label}</span>
             </button>
@@ -280,7 +226,7 @@ export default function QualityOverviewPage() {
                 onClick={() => setPeriod(p)}
                 className={cn(
                   'px-3 py-1 text-sm rounded-md transition-colors',
-                  period === p ? 'bg-[#00aeef] text-white' : 'text-slate-600 hover:bg-slate-100',
+                  period === p ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100',
                 )}
               >
                 {p === 'week' ? 'This Week' : 'This Month'}
@@ -297,12 +243,12 @@ export default function QualityOverviewPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50 border-b border-slate-200">
-                <SortHead field="csr_name"       sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle}>CSR Name</SortHead>
-                <SortHead field="department_name" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle}>Department</SortHead>
-                <SortHead field="total_reviews"  sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle} right>Reviews</SortHead>
-                {isAdminOrQA && <SortHead field="avg_score" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle} right>Avg Score</SortHead>}
-                <SortHead field="disputes" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle} right>Disputes</SortHead>
-                {isAdminOrQA && <SortHead field="last_audit_date" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle}>Last Audit</SortHead>}
+                <SortableTableHead field="csr_name"        sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle}>CSR Name</SortableTableHead>
+                <SortableTableHead field="department_name" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle}>Department</SortableTableHead>
+                <SortableTableHead field="total_reviews"   sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle} right>Reviews</SortableTableHead>
+                {isAdminOrQA && <SortableTableHead field="avg_score" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle} right>Avg Score</SortableTableHead>}
+                <SortableTableHead field="disputes"        sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle} right>Disputes</SortableTableHead>
+                {isAdminOrQA && <SortableTableHead field="last_audit_date" sort={actSort.sort} dir={actSort.dir} onSort={actSort.toggle}>Last Audit</SortableTableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -330,12 +276,11 @@ export default function QualityOverviewPage() {
                   </TableRow>
                 ))
               ) : (
-                <TableRow>
-                  <TableCell colSpan={isAdminOrQA ? 6 : 4} className="text-center py-8 text-slate-400">
-                    <Users className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                    No activity data for this period.
-                  </TableCell>
-                </TableRow>
+                <TableEmptyState
+                  colSpan={isAdminOrQA ? 6 : 4}
+                  icon={Users}
+                  title="No activity data for this period."
+                />
               )}
             </TableBody>
           </Table>

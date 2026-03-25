@@ -37,7 +37,7 @@ export class FormServiceError extends Error {
  */
 export interface IFormService {
   createForm(formData: CreateFormDTO, created_by: number): Promise<{ form_id: number; message: string }>;
-  getForms(activeOnly?: boolean, page?: number, limit?: number): Promise<{
+  getForms(isActive?: boolean, page?: number, limit?: number): Promise<{
     forms: FormWithCategories[];
     pagination?: {
       total: number;
@@ -91,7 +91,7 @@ export class FormService implements IFormService {
   /**
    * Get all forms with optional filtering and pagination
    */
-  async getForms(activeOnly?: boolean, page?: number, limit?: number): Promise<{
+  async getForms(isActive?: boolean, page?: number, limit?: number): Promise<{
     forms: FormWithCategories[];
     pagination?: {
       total: number;
@@ -101,7 +101,7 @@ export class FormService implements IFormService {
     };
   }> {
     try {
-      const result = await this.formRepository.getForms(activeOnly, page, limit);
+      const result = await this.formRepository.getForms(isActive, page, limit);
       
       return {
         forms: result.forms,

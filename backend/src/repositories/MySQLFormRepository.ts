@@ -177,8 +177,11 @@ export class MySQLFormRepository {
     return target_question_id;
   }
 
-  async getForms(activeOnly?: boolean, page?: number, limit?: number): Promise<{ forms: FormWithCategories[]; pagination?: any }> {
-    const where: any = activeOnly ? { is_active: true } : {};
+  async getForms(isActive?: boolean, page?: number, limit?: number): Promise<{ forms: FormWithCategories[]; pagination?: any }> {
+    // isActive === true  → only active forms
+    // isActive === false → only inactive forms
+    // isActive === undefined → all forms
+    const where: any = isActive === true ? { is_active: true } : isActive === false ? { is_active: false } : {};
 
     const take = limit ? Math.min(Math.max(parseInt(String(limit)) || 50, 1), 1000) : undefined;
     const skip = page && take ? (Math.max(parseInt(String(page)) || 1, 1) - 1) * take : undefined;

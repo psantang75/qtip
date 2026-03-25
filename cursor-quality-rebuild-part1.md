@@ -1,4 +1,4 @@
-# CURSOR PROMPT — Quality Section Rebuild (Part 1 of 3)
+I'm trying to use our dev role preview.# CURSOR PROMPT — Quality Section Rebuild (Part 1 of 3)
 ## QualityOverviewPage + SubmissionsPage
 
 You are rebuilding the Quality section of the QTIP+ Insights app. The existing screens in `frontend/src/pages/quality/` are incomplete — data doesn't load, scoring logic is misplaced, and functionality is missing. Replace every file listed below with the exact implementations that follow. **Do not add extra features, do not remove anything specified.**

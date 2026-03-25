@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Toaster } from './components/ui/toaster'
-import DevRoleSwitcher from './components/dev/DevRoleSwitcher'
 
 // Shell components — NOT lazy (load immediately)
 import AppShell from './components/shell/AppShell'
@@ -188,7 +187,6 @@ export default function App() {
           </Routes>
           <Toaster />
         </BrowserRouter>
-        {import.meta.env.DEV && <DevRoleSwitcher />}
       </AuthProvider>
     </QueryClientProvider>
   )

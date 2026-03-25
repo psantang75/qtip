@@ -1,5 +1,5 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Users, Building2, ShieldCheck, ArrowLeft } from 'lucide-react'
+import { Outlet, NavLink } from 'react-router-dom'
+import { Users, Building2, ShieldCheck } from 'lucide-react'
 import TopBar from './TopBar'
 import { cn } from '@/lib/utils'
 
@@ -13,8 +13,6 @@ const ACTIVE   = 'border-l-[3px] border-l-[#00aeef] bg-[#00aeef]/8 text-[#00aeef
 const INACTIVE = 'border-l-[3px] border-l-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'
 
 export default function AdminLayout() {
-  const navigate = useNavigate()
-
   return (
     <div className="flex flex-col h-screen bg-[#f5f7f8]">
       <TopBar />
@@ -47,17 +45,6 @@ export default function AdminLayout() {
             ))}
           </nav>
 
-          {/* Back to main app */}
-          <div className="border-t border-slate-100 p-3">
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-[13px] text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors"
-            >
-              <ArrowLeft size={15} />
-              <span>Back to App</span>
-            </button>
-          </div>
         </aside>
 
         <main className="flex-1 overflow-y-auto ml-56 p-6">

@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Plus, Pencil, Trash2, ChevronRight, ChevronLeft,
   ClipboardList, CheckCircle2, AlertCircle, GripVertical,
-  RefreshCw, Eye, Copy, Search, ChevronUp, ChevronDown, ChevronsUpDown,
 } from 'lucide-react'
+import { FormBuilderList } from './FormBuilderList'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -13,9 +13,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useAuth } from '@/contexts/AuthContext'
-import {
-  getAllForms, getFormById, createForm, updateForm,
-} from '@/services/formService'
+import { getFormById, createForm, updateForm } from '@/services/formService'
 import type { Form, FormCategory, FormQuestion, FormMetadataField, FormQuestionCondition, MetadataFieldType, RadioOption, QuestionType, ConditionType, LogicalOperator } from '@/types/form.types'
 import {
   processConditionalLogic,
@@ -1555,189 +1553,7 @@ function PreviewStep({ form }: { form: Form }) {
   )
 }
 
-// ── Forms list ─────────────────────────────────────────────────────────────────
-type SortField = 'form_name' | 'interaction_type' | 'version' | 'created_at' | 'is_active'
-type SortDir   = 'asc' | 'desc'
-
-function FormsList({ onEdit, onCreate, onPreview, onDuplicate }: {
-  onEdit: (id: number) => void; onCreate: () => void; onPreview: (id: number) => void; onDuplicate: (id: number) => void
-}) {
-  const { toast } = useToast()
-  const [forms, setForms] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('active')
-  const [sortField, setSortField] = useState<SortField | null>(null)
-  const [sortDir, setSortDir]     = useState<SortDir>('asc')
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const isActive = statusFilter === 'all' ? undefined : statusFilter === 'active'
-      const data = await getAllForms(isActive)
-      setForms(Array.isArray(data) ? data : [])
-    } catch { toast({ title: 'Error', description: 'Failed to load forms.', variant: 'destructive' }) }
-    finally { setLoading(false) }
-  }
-
-  useEffect(() => { load() }, [statusFilter]) // eslint-disable-line react-hooks/exhaustive-deps
-
-
-  function toggleSort(field: SortField) {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortField(field); setSortDir('asc') }
-  }
-
-  function SortIcon({ field }: { field: SortField }) {
-    if (sortField !== field) return <ChevronsUpDown size={12} className="ml-1 text-slate-400 shrink-0" />
-    return sortDir === 'asc'
-      ? <ChevronUp   size={12} className="ml-1 text-[#00aeef] shrink-0" />
-      : <ChevronDown size={12} className="ml-1 text-[#00aeef] shrink-0" />
-  }
-
-  function SortHead({ field, children, className }: { field: SortField; children: React.ReactNode; className?: string }) {
-    return (
-      <TableHead
-        className={`py-4 cursor-pointer select-none hover:bg-slate-100 transition-colors whitespace-nowrap ${className ?? ''}`}
-        onClick={() => toggleSort(field)}
-      >
-        <div className="flex items-center">{children}<SortIcon field={field} /></div>
-      </TableHead>
-    )
-  }
-
-  const displayed = useMemo(() => {
-    let list = forms.filter(f => !search || f.form_name?.toLowerCase().includes(search.toLowerCase()))
-    if (sortField) {
-      list = [...list].sort((a, b) => {
-        const av = a[sortField] ?? ''
-        const bv = b[sortField] ?? ''
-        const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
-        return sortDir === 'asc' ? cmp : -cmp
-      })
-    }
-    return list
-  }, [forms, search, sortField, sortDir])
-
-  const hasFilters = search !== '' || statusFilter !== 'active'
-
-  return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Form Builder</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Manage QA review forms</p>
-        </div>
-        <Button onClick={onCreate} className="gap-1.5">
-          <Plus size={15} /> New Form
-        </Button>
-      </div>
-
-      {/* Filter toolbar — matches admin Users page */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[280px] max-w-[400px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Search form name…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-
-        <Select value={statusFilter} onValueChange={v => setStatusFilter(v)}>
-          <SelectTrigger className="w-[145px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <button
-          onClick={() => { setSearch(''); setStatusFilter('active') }}
-          disabled={!hasFilters}
-          className="ml-auto text-[12px] font-medium text-[#00aeef] hover:underline disabled:opacity-30 disabled:cursor-not-allowed disabled:no-underline"
-        >
-          Reset Filters
-        </button>
-      </div>
-
-      {/* Count */}
-      <p className="text-[13px] text-muted-foreground">
-        Showing {displayed.length} of {forms.length} forms
-      </p>
-
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        {loading ? (
-          <div className="p-4 space-y-2">
-            {[...Array(5)].map((_, i) => <div key={i} className="h-10 bg-slate-100 animate-pulse rounded" />)}
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50 border-b border-slate-200">
-                <SortHead field="form_name">Form Name</SortHead>
-                <SortHead field="interaction_type">Type</SortHead>
-                <SortHead field="version">Version</SortHead>
-                <SortHead field="created_at">Created</SortHead>
-                <SortHead field="is_active">Status</SortHead>
-                <TableHead className="py-4 w-[140px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {displayed.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-slate-400">
-                    <ClipboardList className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                    {search ? 'No matching forms.' : 'No forms yet. Create your first QA form.'}
-                  </TableCell>
-                </TableRow>
-              ) : displayed.map((f: any) => (
-                <TableRow key={f.id} className="hover:bg-slate-50/50">
-                  <TableCell className="text-[13px] font-medium text-slate-900">{f.form_name}</TableCell>
-                  <TableCell className="text-[13px] text-slate-600">{f.interaction_type ?? '—'}</TableCell>
-                  <TableCell className="text-[13px] text-slate-600">v{f.version ?? 1}</TableCell>
-                  <TableCell className="text-[13px] text-slate-500">
-                    {f.created_at ? new Date(f.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <button className="flex items-center gap-1.5 text-[12px]">
-                      <span className={`w-1.5 h-1.5 rounded-full ${f.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                      <span className={f.is_active ? 'text-emerald-700' : 'text-slate-500'}>
-                        {f.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </button>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => onEdit(f.id)}>
-                        <Pencil size={12} className="mr-1" /> Edit
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => onPreview(f.id)}>
-                        <Eye size={12} className="mr-1" /> Preview
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => onDuplicate(f.id)}>
-                        <Copy size={12} className="mr-1" /> Duplicate
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
-
-    </div>
-  )
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
+// Main page ─────────────────────────────────────────────────────────────────
 export default function FormsPage() {
   const { user } = useAuth()
   const { toast } = useToast()
@@ -1837,7 +1653,7 @@ export default function FormsPage() {
   }
 
   if (view === 'list') {
-    return <FormsList onEdit={openEdit} onCreate={() => { setForm(freshForm()); setStep('metadata'); setHasChanges(false); setView('builder') }} onPreview={openPreview} onDuplicate={openDuplicate} />
+    return <FormBuilderList onEdit={openEdit} onCreate={() => { setForm(freshForm()); setStep('metadata'); setHasChanges(false); setView('builder') }} onPreview={openPreview} onDuplicate={openDuplicate} />
   }
 
   return (
@@ -1864,7 +1680,7 @@ export default function FormsPage() {
           <ChevronLeft className="h-4 w-4 mr-1" />{step === 'metadata' ? 'Cancel' : 'Back'}
         </Button>
         {step !== 'preview' ? (
-          <Button onClick={nextStep} className="bg-[#00aeef] hover:bg-[#0095cc] text-white">
+          <Button onClick={nextStep} className="bg-primary hover:bg-primary/90 text-white">
             Next <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         ) : (

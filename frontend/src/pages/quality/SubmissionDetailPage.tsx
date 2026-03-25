@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, AlertTriangle, CheckCircle, Edit3, Pencil, FileText, X } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, CheckCircle, Edit3, Pencil, FileText, X, ChevronDown, ChevronUp, TrendingUp, TrendingDown } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import qaService, { scoreColor, type SubmissionDetail } from '@/services/qaService'
 import { api } from '@/services/authService'
@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { formatTranscriptText } from '@/utils/transcriptUtils'
+import { StatusBadge } from '@/components/common/StatusBadge'
 
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -58,7 +59,7 @@ function CategoryBreakdown({ detail }: { detail: SubmissionDetail }) {
       {Object.entries(categories).map(([cat, answers]) => (
         <div key={cat} className="border border-slate-200 rounded-lg overflow-hidden">
           <div className="flex items-center gap-2.5 bg-slate-50 border-b border-slate-200 px-4 py-2.5">
-            <span className="w-[3px] h-4 rounded-full bg-[#00aeef] shrink-0" />
+            <span className="w-[3px] h-4 rounded-full bg-primary shrink-0" />
             <span className="text-[12px] font-semibold text-slate-600 uppercase tracking-wider">{cat}</span>
           </div>
           <div className="divide-y divide-slate-100">
@@ -158,7 +159,7 @@ function EditDisputeForm({
   }
 
   return (
-    <div className="space-y-3 border border-[#00aeef]/30 bg-[#00aeef]/5 rounded-lg p-4">
+    <div className="space-y-3 border border-primary/30 bg-primary/5 rounded-lg p-4">
       <div className="flex items-center justify-between">
         <h4 className="text-[13px] font-semibold text-slate-800">Edit Dispute</h4>
         <button onClick={onCancel} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
@@ -178,7 +179,7 @@ function EditDisputeForm({
         {dispute.attachment_url && !file && (
           <p className="text-[11px] text-slate-500 mt-1">Current: {dispute.attachment_url.split('/').pop()}</p>
         )}
-        {file && <p className="text-[11px] text-[#00aeef] mt-1">New file: {file.name}</p>}
+        {file && <p className="text-[11px] text-primary mt-1">New file: {file.name}</p>}
         {fileError && <p className="text-[11px] text-red-600 mt-1">{fileError}</p>}
       </div>
       {error && (
@@ -189,7 +190,7 @@ function EditDisputeForm({
       <div className="flex gap-2 justify-end pt-1">
         <Button variant="outline" size="sm" onClick={onCancel} disabled={isPending}>Cancel</Button>
         <Button size="sm" onClick={() => mutate()} disabled={isPending || !reason.trim()}
-          className="bg-[#00aeef] hover:bg-[#0095cc] text-white">
+          className="bg-primary hover:bg-primary/90 text-white">
           {isPending ? 'Saving…' : 'Save Changes'}
         </Button>
       </div>
@@ -205,14 +206,20 @@ export default function SubmissionDetailPage() {
   const qc        = useQueryClient()
   const { toast } = useToast()
 
-  const roleId    = user?.role_id ?? 0
-  const isCSR     = roleId === 3
-  const isManager = roleId === 5
+  const roleId          = user?.role_id ?? 0
+  const isCSR           = roleId === 3
+  const isManager       = roleId === 5
+  const canResolveDispute = roleId === 1 || roleId === 5
 
   // ── CSR finalize / dispute state
   const [showDisputeForm,  setShowDisputeForm]  = useState(false)
   const [finalizeSuccess,  setFinalizeSuccess]  = useState(false)
   const [editingDispute,   setEditingDispute]   = useState(false)
+  const [transcriptOpen,   setTranscriptOpen]   = useState(false)
+
+  // Pass threshold — suggested industry baseline of 85%.
+  // TODO: make this configurable per-form once form settings are extended.
+  const PASS_THRESHOLD = 85
 
   // ── Manager resolution state
   const [resolutionMode,   setResolutionMode]   = useState(false)
@@ -362,7 +369,7 @@ export default function SubmissionDetailPage() {
   // Always uses POST /manager/disputes/:id/resolve — the PUT endpoint has a
   // nested-transaction bug in the backend. The frontend-calculated liveScore
   // is passed as new_score for adjustments, which is correct and sufficient.
-  const submitResolution = async (action: 'UPHOLD' | 'REJECTED' | 'ADJUST') => {
+  const submitResolution = async (action: 'UPHOLD' | 'ADJUST') => {
     if (!detail.dispute?.id) return
     if (!resNotes.trim()) { setResError('Resolution notes are required.'); return }
     setResError(null)
@@ -387,165 +394,207 @@ export default function SubmissionDetailPage() {
     }
   }
 
+  const isPassing      = score >= PASS_THRESHOLD
+  const disputeAdjusted = detail.dispute?.resolution_action === 'ADJUST' &&
+    detail.dispute.previous_score != null && detail.dispute.new_score != null
+  const scoreDelta = disputeAdjusted
+    ? (detail.dispute!.new_score! - detail.dispute!.previous_score!)
+    : 0
+
+  // Score accent colours for the left panel header
+  const scoreAccent = score >= 85
+    ? 'bg-emerald-50 border-emerald-200'
+    : score >= 70
+    ? 'bg-amber-50 border-amber-200'
+    : 'bg-red-50 border-red-200'
+
   return (
-    <div className="p-6 space-y-5">
+    // Break out of main's p-6 padding and take full available height
+    // This gives us true independent-scroll two-pane layout
+    <div className="-m-6 h-full flex flex-col overflow-hidden">
 
-      {/* ── Header ── */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="text-slate-500 hover:text-slate-700 transition-colors">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-slate-900">Completed Review Form Detail</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{detail.form_name}{!isCSR ? ` · ${detail.csr_name}` : ''}</p>
+      {/* ── Fixed header bar ───────────────────────────────────────────────── */}
+      <div className="shrink-0 bg-white border-b border-slate-200 px-5 py-3 z-10">
+        <div className="flex items-start gap-4">
+
+          {/* Back to Submissions */}
+          <button onClick={() => navigate(-1)}
+            className="shrink-0 flex items-center gap-1.5 text-[12px] font-medium text-slate-500 hover:text-primary transition-colors mt-1.5 whitespace-nowrap">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Submissions
+          </button>
+
+          <div className="w-px self-stretch bg-slate-200 shrink-0" />
+
+          {/* Form name + key metadata */}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[20px] font-bold text-slate-900 leading-tight truncate">
+              {detail.form_name}
+            </h1>
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              {!isCSR && detail.csr_name && (
+                <span className="text-[13px] text-slate-600 font-medium">{detail.csr_name}</span>
+              )}
+              {detail.created_at && (
+                <span className="text-[12px] text-slate-400">· {fmtDate(detail.created_at)}</span>
+              )}
+              {(detail as any).reviewer_name && (
+                <span className="text-[12px] text-slate-400">· Reviewed by {(detail as any).reviewer_name}</span>
+              )}
+              {!isCSR && (
+                <span className="text-[12px] text-slate-400">· #{detail.id}</span>
+              )}
+            </div>
+          </div>
+
+          {/* Status + actions */}
+          <div className="flex items-center gap-2.5 shrink-0 mt-0.5">
+            <StatusBadge status={detail.status} className="text-[13px] px-3 py-1 rounded-full" />
+            {resolutionMode && (
+              <span className="flex items-center gap-1 text-[12px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
+                <Edit3 className="h-3.5 w-3.5" /> Resolving
+              </span>
+            )}
+            {canAcceptReview && !finalizeSuccess && (
+              <Button size="sm" disabled={finalizing} onClick={() => finalize()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                <CheckCircle className="h-4 w-4 mr-1.5" />
+                {finalizing ? 'Accepting…' : 'Accept Review'}
+              </Button>
+            )}
+            {canDispute && !showDisputeForm && !finalizeSuccess && (
+              <Button size="sm" variant="outline"
+                className="border-amber-400 text-amber-700 hover:bg-amber-50"
+                onClick={() => setShowDisputeForm(true)}>
+                <AlertTriangle className="h-4 w-4 mr-1.5" /> Dispute Score
+              </Button>
+            )}
+            {finalizeSuccess && (
+              <span className="flex items-center gap-1.5 text-[13px] text-emerald-600 font-semibold">
+                <CheckCircle className="h-4 w-4" /> Accepted
+              </span>
+            )}
+          </div>
+
         </div>
-        {resolutionMode && (
-          <span className="flex items-center gap-1.5 text-[12px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg">
-            <Edit3 className="h-3.5 w-3.5" /> Resolution Mode
-          </span>
-        )}
       </div>
 
-      {/* ── Form Title Card ── */}
-      <div className="bg-white border border-slate-200 rounded-xl px-5 py-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <h2 className="text-xl font-bold text-slate-800 truncate">{detail.form_name}</h2>
-          {formData?.version && (
-            <span className="text-[12px] text-slate-500 bg-slate-100 px-3 py-1 rounded-full shrink-0">
-              Version {formData.version}
-            </span>
-          )}
+      {/* ── Resolution mode banner ─────────────────────────────────────────── */}
+      {resolutionMode && (
+        <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-5 py-2.5 flex items-center gap-3">
+          <Edit3 className="h-4 w-4 text-amber-600 shrink-0" />
+          <p className="flex-1 text-[12px] font-medium text-amber-800">
+            <span className="font-bold">Resolution Mode</span> — edit answers in the right panel to adjust the score,
+            then submit your decision in the left panel.
+          </p>
+          <button onClick={() => { setResolutionMode(false); setResNotes(''); setResError(null) }}
+            className="shrink-0 text-amber-500 hover:text-amber-700 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {canAcceptReview && !finalizeSuccess && (
-            <Button size="sm" variant="outline"
-              className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-              disabled={finalizing} onClick={() => finalize()}>
-              <CheckCircle className="h-4 w-4 mr-1.5" />
-              {finalizing ? 'Accepting…' : 'Accept Review'}
-            </Button>
-          )}
-          {canDispute && !showDisputeForm && !finalizeSuccess && (
-            <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"
-              onClick={() => setShowDisputeForm(true)}>
-              <AlertTriangle className="h-4 w-4 mr-1.5" /> Dispute Score
-            </Button>
-          )}
-          {!canAcceptReview && !canDispute && !resolutionMode && (
-            <span className="text-[13px] text-slate-500">
-              Status: {detail.status.charAt(0) + detail.status.slice(1).toLowerCase()}
-            </span>
-          )}
-          {finalizeSuccess && (
-            <span className="flex items-center gap-1.5 text-[13px] text-emerald-600 font-medium">
-              <CheckCircle className="h-4 w-4" /> Review Accepted
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Inline dispute form for CSR */}
-      {showDisputeForm && (
-        <DisputeForm submissionId={detail.id} onSuccess={() => setShowDisputeForm(false)} />
       )}
 
-      {/* ── 4 / 8 grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {/* ── Two-pane split (each pane scrolls independently) ──────────────── */}
+      <div className="flex flex-1 overflow-hidden">
 
-        {/* ── Left column (4) ── */}
-        <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-4 lg:self-start">
+        {/* ════ LEFT PANE ═══════════════════════════════════════════════════ */}
+        <div className="w-1/2 shrink-0 border-r border-slate-200 bg-slate-50 overflow-y-auto">
+          <div className="p-4 space-y-4">
 
-          {/* Form Details */}
-          <Panel title="Form Details">
-            <div className="space-y-2.5">
-              <Row label="Submission ID" value={detail.id} />
-              <Row label="Form ID"       value={detail.form_id} />
-              <Row label="Interaction Type" value={formData?.interaction_type ?? (detail as any).interaction_type} />
-              {metaRows.length > 0 && (
-                <>
-                  <div className="border-t border-slate-100 my-1" />
-                  {metaRows.map((m, i) => <Row key={i} label={m.field_name} value={m.value} />)}
-                </>
-              )}
-              {metaRows.length === 0 && <Row label="Metadata" value="No metadata available" />}
-            </div>
-          </Panel>
+            {/* ── Score card ──────────────────────────────────────────────── */}
+            <div className={cn('rounded-xl border overflow-hidden', scoreAccent)}>
+              {/* Coloured score header */}
+              <div className="px-5 pt-5 pb-4 text-center">
+                <div className={cn('text-6xl font-bold tracking-tight', scoreColor(score))}>
+                  {score.toFixed(1)}
+                  <span className="text-3xl font-semibold ml-0.5 opacity-70">%</span>
+                </div>
+                <div className="flex items-center justify-center gap-2 mt-2">
+                  <span className={cn(
+                    'text-[11px] font-bold px-2.5 py-0.5 rounded-full',
+                    isPassing ? 'bg-emerald-600 text-white' : 'bg-red-500 text-white'
+                  )}>
+                    {isPassing ? '✓ PASS' : '✗ BELOW THRESHOLD'}
+                  </span>
+                </div>
+                {/* Score bar */}
+                <div className="mt-3 h-1.5 bg-white/60 rounded-full overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full transition-all', scoreColor(score).replace('text-', 'bg-'))}
+                    style={{ width: `${Math.min(100, score)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-current opacity-50 mt-1">
+                  Pass threshold: {PASS_THRESHOLD}% · configurable per form
+                </p>
+              </div>
 
-          {/* Call Details */}
-          <Panel title="Call Details">
-            {calls && calls.length > 0 ? (
-              <div className="space-y-5">
-                {calls.map((call: any, i: number) => (
-                  <div key={call.call_id || i} className="border border-slate-200 rounded-lg overflow-hidden">
-                    <div className="flex items-center gap-2.5 bg-slate-50 border-b border-slate-200 px-3 py-2">
-                      <span className="w-[3px] h-4 rounded-full bg-[#00aeef] shrink-0" />
-                      <span className="text-[12px] font-semibold text-slate-600 uppercase tracking-wider">Call {i + 1}</span>
+              {/* Before/After comparison */}
+              {disputeAdjusted && (
+                <div className="bg-white/70 border-t border-current/10 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Score After Dispute</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 text-center">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">Before</p>
+                      <p className={cn('text-[18px] font-bold line-through opacity-60', scoreColor(detail.dispute!.previous_score!))}>
+                        {detail.dispute!.previous_score!.toFixed(1)}%
+                      </p>
                     </div>
-                    <div className="px-3 py-3 space-y-3">
-                      {call.call_id   && <Row label="Conversation ID" value={call.call_id} />}
-                      {call.call_date && <Row label="Call Date" value={fmtDate(call.call_date)} />}
-                      {call.recording_url ? (
-                        <div>
-                          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">Audio</p>
-                          <audio controls className="w-full h-8">
-                            <source src={call.recording_url} type="audio/mpeg" />
-                          </audio>
-                        </div>
-                      ) : <p className="text-[12px] text-slate-400">No audio available</p>}
-                      {call.transcript ? (
-                        <div>
-                          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">Transcript</p>
-                          <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-md p-2.5 bg-slate-50">
-                            <div className="text-[12px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed"
-                              dangerouslySetInnerHTML={{ __html: formatTranscriptText(call.transcript) }} />
-                          </div>
-                        </div>
-                      ) : <p className="text-[12px] text-slate-400">No transcript available</p>}
+                    <div className={cn('flex items-center gap-0.5 font-bold text-[13px]', scoreDelta > 0 ? 'text-emerald-600' : 'text-red-600')}>
+                      {scoreDelta > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                      {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}%
+                    </div>
+                    <div className="flex-1 text-center">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">After</p>
+                      <p className={cn('text-[18px] font-bold', scoreColor(detail.dispute!.new_score!))}>
+                        {detail.dispute!.new_score!.toFixed(1)}%
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[13px] text-slate-400">No call records attached to this submission</p>
+                </div>
+              )}
+
+              {/* Live score in resolution mode */}
+              {resolutionMode && (
+                <div className="bg-amber-50 border-t border-amber-200 px-4 py-3 flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-amber-800">Live adjusted score</span>
+                  <span className={cn('text-[20px] font-bold', scoreColor(liveScore))}>{liveScore.toFixed(1)}%</span>
+                </div>
+              )}
+            </div>
+
+            {/* ── CSR dispute submission form ─────────────────────────────── */}
+            {showDisputeForm && (
+              <DisputeForm submissionId={detail.id} onSuccess={() => setShowDisputeForm(false)} />
             )}
-          </Panel>
 
-          {/* Dispute Information */}
-          {detail.dispute && (
-            <Panel title="Dispute Information">
-              <div className="space-y-3">
-
-                {/* Status + dates */}
-                <div className="flex items-center justify-between">
-                  <span className={cn(
-                    'inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full',
-                    detail.dispute.status === 'OPEN'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-emerald-100 text-emerald-800'
-                  )}>
-                    <span className={cn('w-1.5 h-1.5 rounded-full', detail.dispute.status === 'OPEN' ? 'bg-amber-500' : 'bg-emerald-500')} />
-                    {detail.dispute.status === 'OPEN' ? 'Open — Under Review' : 'Resolved'}
-                  </span>
-                  {/* CSR can edit while OPEN and not yet resolved by manager */}
-                  {isCSR && detail.dispute.status === 'OPEN' && !detail.dispute.resolved_by && !editingDispute && (
-                    <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-500 hover:text-slate-700"
-                      onClick={() => setEditingDispute(true)}>
-                      <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
-                    </Button>
-                  )}
+            {/* ── Dispute information ──────────────────────────────────────── */}
+            {detail.dispute && (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                    <span className="text-[13px] font-semibold text-slate-800">Dispute</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge
+                      status={detail.dispute.status}
+                      label={detail.dispute.status === 'OPEN' ? 'Open' : undefined}
+                    />
+                    {isCSR && detail.dispute.status === 'OPEN' && !detail.dispute.resolved_by && !editingDispute && (
+                      <button className="text-[11px] text-slate-400 hover:text-primary flex items-center gap-1"
+                        onClick={() => setEditingDispute(true)}>
+                        <Pencil className="h-3 w-3" /> Edit
+                      </button>
+                    )}
+                  </div>
                 </div>
+                <div className="px-4 py-3 space-y-3">
+                  <div className="flex gap-4 text-[11px] text-slate-500">
+                    {detail.dispute.created_at && <span>Filed {fmtDate(detail.dispute.created_at)}</span>}
+                    {detail.dispute.resolved_at && <span>· Resolved {fmtDate(detail.dispute.resolved_at)}</span>}
+                  </div>
 
-                <div className="space-y-1.5 text-[13px]">
-                  {detail.dispute.created_at && (
-                    <Row label="Submitted" value={fmtDate(detail.dispute.created_at)} />
-                  )}
-                  {detail.dispute.resolved_at && (
-                    <Row label="Resolved" value={fmtDate(detail.dispute.resolved_at)} />
-                  )}
-                </div>
-
-                <div className="border-t border-slate-100 pt-2.5">
-                  <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">Dispute Reason</p>
                   {editingDispute ? (
                     <EditDisputeForm
                       dispute={detail.dispute}
@@ -553,206 +602,216 @@ export default function SubmissionDetailPage() {
                       onCancel={() => setEditingDispute(false)}
                     />
                   ) : (
-                    <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-[13px] text-amber-800 whitespace-pre-wrap">
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-[13px] text-amber-900 leading-relaxed">
                       {detail.dispute.reason}
                     </div>
                   )}
-                </div>
 
-                {/* Attachment */}
-                {detail.dispute.attachment_url && !editingDispute && (
-                  <div>
-                    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">Supporting Evidence</p>
+                  {detail.dispute.attachment_url && !editingDispute && (
                     <button
                       onClick={() => qaService.downloadDisputeAttachment(
                         detail.dispute!.id,
                         detail.dispute!.attachment_url!.split('/').pop() || 'attachment'
                       )}
-                      className="flex items-center gap-2 text-[13px] text-[#00aeef] hover:underline"
+                      className="flex items-center gap-1.5 text-[12px] text-primary hover:underline"
                     >
-                      <FileText className="h-4 w-4 shrink-0" />
+                      <FileText className="h-3.5 w-3.5" />
                       {detail.dispute.attachment_url.split('/').pop()}
                     </button>
-                  </div>
-                )}
+                  )}
 
-                {/* Resolution section */}
-                <div className="border-t border-slate-100 pt-2.5">
-                  <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">Resolution</p>
-                  {detail.dispute.status === 'OPEN' ? (
-                    <p className="text-[13px] text-slate-400 italic">Awaiting manager review.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {detail.dispute.resolution_action && (
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            'text-[12px] font-semibold px-2.5 py-1 rounded-full',
-                            detail.dispute.resolution_action === 'UPHOLD'   ? 'bg-emerald-100 text-emerald-800' :
-                            detail.dispute.resolution_action === 'REJECTED' ? 'bg-red-100 text-red-800' :
-                            detail.dispute.resolution_action === 'ADJUST'   ? 'bg-blue-100 text-blue-800' :
-                            'bg-slate-100 text-slate-700'
-                          )}>
-                            {detail.dispute.resolution_action === 'UPHOLD'   ? 'Score Upheld' :
-                             detail.dispute.resolution_action === 'REJECTED' ? 'Dispute Rejected' :
-                             detail.dispute.resolution_action === 'ADJUST'   ? 'Score Adjusted' :
-                             detail.dispute.resolution_action}
-                          </span>
-                          {detail.dispute.new_score != null && (
-                            <span className={cn('text-[14px] font-bold', scoreColor(detail.dispute.new_score))}>
-                              → {detail.dispute.new_score.toFixed(1)}%
-                            </span>
-                          )}
-                        </div>
-                      )}
+                  {detail.dispute.status !== 'OPEN' && detail.dispute.resolution_action && (
+                    <div className="border-t border-slate-100 pt-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          'text-[11px] font-bold px-2.5 py-0.5 rounded-full',
+                          detail.dispute.resolution_action === 'UPHOLD' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                        )}>
+                          {detail.dispute.resolution_action === 'UPHOLD' ? 'Score Upheld' : 'Score Adjusted'}
+                        </span>
+                      </div>
                       {detail.dispute.resolution_notes && (
-                        <div className="bg-slate-50 rounded-md p-3 text-[13px] text-slate-700 whitespace-pre-wrap">
+                        <p className="text-[12px] text-slate-600 bg-slate-50 rounded-lg p-3 leading-relaxed">
                           {detail.dispute.resolution_notes}
-                        </div>
-                      )}
-                      {!detail.dispute.resolution_notes && !detail.dispute.resolution_action && (
-                        <p className="text-[13px] text-slate-400 italic">No resolution notes provided.</p>
+                        </p>
                       )}
                     </div>
                   )}
-                </div>
-
-              </div>
-            </Panel>
-          )}
-
-          {/* Manager — dispute resolution controls */}
-          {isManager && detail.dispute?.status === 'OPEN' && (
-            <Panel title="Resolve Dispute">
-              {!resolutionMode ? (
-                <div className="space-y-3">
-                  <p className="text-[13px] text-slate-600">
-                    Review the score breakdown on the right, then choose how to resolve this dispute.
-                  </p>
-                  <Button size="sm" className="w-full bg-[#00aeef] hover:bg-[#0095cc] text-white"
-                    onClick={enterResolutionMode} disabled={!formData}>
-                    <Edit3 className="h-4 w-4 mr-1.5" />
-                    Start Resolution
-                  </Button>
-                  {!formData && (
-                    <p className="text-[12px] text-amber-600">Form data is loading…</p>
+                  {detail.dispute.status === 'OPEN' && !editingDispute && (
+                    <p className="text-[12px] text-slate-400 italic">Awaiting manager review.</p>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-[13px] text-slate-600">
-                    Edit answers on the right to adjust the score, or uphold/reject below.
-                  </p>
+              </div>
+            )}
 
-                  <div>
-                    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1">Resolution Notes <span className="text-red-400 normal-case tracking-normal">*</span></p>
-                    <textarea
-                      rows={3}
-                      value={resNotes}
-                      onChange={e => setResNotes(e.target.value)}
-                      placeholder="Explain your decision…"
-                      className="w-full text-[13px] border border-slate-200 rounded-md px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-[#00aeef]"
+            {/* ── Resolve dispute (manager / admin) ───────────────────────── */}
+            {canResolveDispute && detail.dispute?.status === 'OPEN' && (
+              <div className={cn('rounded-xl border overflow-hidden',
+                resolutionMode ? 'border-amber-300' : 'border-slate-200 bg-white')}>
+                <div className={cn('px-4 py-3 border-b',
+                  resolutionMode ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100')}>
+                  <span className="text-[13px] font-semibold text-slate-800">Resolve Dispute</span>
+                </div>
+                <div className={cn('px-4 py-3 space-y-3', resolutionMode ? 'bg-amber-50/50' : 'bg-white')}>
+                  {!resolutionMode ? (
+                    <>
+                      <p className="text-[12px] text-slate-500">
+                        Review the dispute reason and score breakdown, then choose how to resolve.
+                      </p>
+                      <Button size="sm" className="w-full bg-primary hover:bg-primary/90 text-white"
+                        onClick={enterResolutionMode} disabled={!formData}>
+                        <Edit3 className="h-3.5 w-3.5 mr-1.5" /> Start Resolution
+                      </Button>
+                      {!formData && <p className="text-[11px] text-amber-600">Loading form data…</p>}
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                          Resolution Notes <span className="text-red-400 normal-case font-normal">required</span>
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={resNotes}
+                          onChange={e => setResNotes(e.target.value)}
+                          placeholder="Explain your decision…"
+                          className="mt-1.5 w-full text-[13px] border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+                        />
+                      </div>
+                      {resError && (
+                        <p className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-lg p-2.5">{resError}</p>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button size="sm" variant="outline"
+                          className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                          disabled={resSubmitting} onClick={() => submitResolution('UPHOLD')}>
+                          Uphold Score
+                        </Button>
+                        <Button size="sm"
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                          disabled={resSubmitting} onClick={() => submitResolution('ADJUST')}>
+                          {resSubmitting ? 'Saving…' : 'Adjust Score'}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Review metadata ──────────────────────────────────────────── */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100">
+                <span className="text-[13px] font-semibold text-slate-700">Review Details</span>
+              </div>
+              <div className="px-4 py-3 space-y-2">
+                {!isCSR && <Row label="CSR"      value={detail.csr_name} />}
+                {(detail as any).reviewer_name && <Row label="Reviewer" value={(detail as any).reviewer_name} />}
+                <Row label="Form"        value={detail.form_name} />
+                <Row label="Interaction" value={formData?.interaction_type ?? (detail as any).interaction_type} />
+                <Row label="Submission"  value={`#${detail.id}`} />
+                {detail.created_at && <Row label="Date" value={fmtDate(detail.created_at)} />}
+                {metaRows.length > 0 && (
+                  <>
+                    <div className="border-t border-slate-100 my-2" />
+                    {metaRows.map((m, i) => <Row key={i} label={m.field_name} value={m.value} />)}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* ── Call details (transcript collapsible) ───────────────────── */}
+            {calls && calls.length > 0 && (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100">
+                  <span className="text-[13px] font-semibold text-slate-700">Call Details</span>
+                </div>
+                <div className="px-4 py-3 space-y-4">
+                  {calls.map((call: any, i: number) => (
+                    <div key={call.call_id || i} className="space-y-2.5">
+                      {calls.length > 1 && (
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Call {i + 1}</p>
+                      )}
+                      {call.call_id   && <Row label="Conversation ID" value={call.call_id} />}
+                      {call.call_date && <Row label="Call Date"       value={fmtDate(call.call_date)} />}
+                      {call.recording_url ? (
+                        <audio controls className="w-full h-8 mt-1">
+                          <source src={call.recording_url} type="audio/mpeg" />
+                        </audio>
+                      ) : <p className="text-[12px] text-slate-400">No audio available</p>}
+                      {call.transcript && (
+                        <div>
+                          <button
+                            onClick={() => setTranscriptOpen(v => !v)}
+                            className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                          >
+                            {transcriptOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            {transcriptOpen ? 'Hide' : 'Show'} Transcript
+                          </button>
+                          {transcriptOpen && (
+                            <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-slate-200 p-2.5 bg-slate-50">
+                              <div className="text-[12px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed"
+                                dangerouslySetInnerHTML={{ __html: formatTranscriptText(call.transcript) }} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          </div>{/* end left pane inner padding */}
+        </div>{/* end left pane */}
+
+        {/* ════ RIGHT PANE ══════════════════════════════════════════════════ */}
+        <div className="flex-1 bg-white overflow-y-auto">
+          <div className="p-6">
+            {resolutionMode && editRenderData ? (
+              <div className="rounded-xl overflow-hidden border border-amber-300">
+                <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">
+                  <h3 className="text-[14px] font-semibold text-amber-900">Adjusting Answers</h3>
+                  <p className="text-[12px] text-amber-700 mt-0.5">
+                    Change any answers below — the adjusted score updates in real time on the left.
+                  </p>
+                </div>
+                <div className="bg-white">
+                  <FormRenderer
+                    formRenderData={editRenderData}
+                    isDisabled={false}
+                    onAnswerChange={handleEditAnswer}
+                    onNotesChange={() => {}}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl overflow-hidden border border-slate-200">
+                <div className="px-4 py-3 bg-white border-b border-slate-100">
+                  <h3 className="text-[14px] font-semibold text-slate-800">Score Breakdown</h3>
+                </div>
+                <div className="bg-white">
+                  {formData ? (
+                    <ScoreRenderer
+                      formData={formData}
+                      answers={answersMap}
+                      backendScore={score}
+                      userRole={roleId}
+                      showCategoryBreakdown={true}
+                      showDetailedScores={true}
                     />
-                  </div>
-
-                  {resError && (
-                    <p className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded p-2">{resError}</p>
+                  ) : (
+                    <div className="p-4">
+                      <CategoryBreakdown detail={detail} />
+                    </div>
                   )}
-
-                  {/* Live updated score display */}
-                  <div className="flex items-center justify-between p-3 bg-[#00aeef]/5 border border-[#00aeef]/20 rounded-lg">
-                    <span className="text-[13px] font-medium text-slate-700">Updated Score:</span>
-                    <span className={cn('text-xl font-bold', scoreColor(liveScore))}>{liveScore.toFixed(1)}%</span>
-                  </div>
-
-                  <div className="flex flex-col gap-2 pt-1">
-                    <Button size="sm" variant="outline"
-                      className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                      disabled={resSubmitting}
-                      onClick={() => submitResolution('UPHOLD')}>
-                      Uphold — Keep Original Score
-                    </Button>
-                    <Button size="sm" variant="outline"
-                      className="border-red-300 text-red-700 hover:bg-red-50"
-                      disabled={resSubmitting}
-                      onClick={() => submitResolution('REJECTED')}>
-                      Reject Dispute
-                    </Button>
-                    <Button size="sm"
-                      className="bg-blue-600 hover:bg-blue-700 text-white"
-                      disabled={resSubmitting}
-                      onClick={() => submitResolution('ADJUST')}>
-                      {resSubmitting ? 'Saving…' : `Save Adjustment (${liveScore.toFixed(1)}%)`}
-                    </Button>
-                  </div>
-
-                  <button
-                    onClick={() => { setResolutionMode(false); setResNotes(''); setResError(null) }}
-                    className="text-[12px] text-slate-400 hover:text-slate-600 w-full text-center pt-1"
-                  >
-                    Cancel
-                  </button>
                 </div>
-              )}
-            </Panel>
-          )}
-        </div>
-
-        {/* ── Right column (8) ── */}
-        <div className="lg:col-span-8 space-y-6">
-
-          {/* Overall Score Summary */}
-          <div className="bg-white border border-slate-200 rounded-xl px-5 py-5">
-            <div className="flex items-center mb-4 border-b border-slate-200 pb-3">
-              <h2 className="text-[15px] font-semibold text-slate-800">Overall Score Summary</h2>
-              {resolutionMode && (
-                <span className="ml-auto text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
-                  Original Score
-                </span>
-              )}
-            </div>
-            <div className="flex flex-col items-center justify-center py-4">
-              <div className={cn('text-6xl font-bold mb-2', scoreColor(score))}>
-                {score.toFixed(2)}%
               </div>
-              <div className="text-[13px] text-slate-500">Final Score</div>
-            </div>
+            )}
           </div>
+        </div>{/* end right pane */}
 
-          {/* Score breakdown OR editable form in resolution mode */}
-          {resolutionMode && editRenderData ? (
-            <Panel title="Edit Review Form — Adjusting Answers">
-              <p className="text-[13px] text-slate-500 mb-4">
-                Change any answers below. The score will update live in the left panel.
-              </p>
-              <FormRenderer
-                formRenderData={editRenderData}
-                isDisabled={false}
-                onAnswerChange={handleEditAnswer}
-                onNotesChange={() => {}}
-              />
-              <div className="mt-5 p-4 bg-[#00aeef]/5 border border-[#00aeef]/20 rounded-xl flex items-center justify-between">
-                <span className="text-[14px] font-semibold text-slate-700">Updated Total Score:</span>
-                <span className={cn('text-3xl font-bold', scoreColor(liveScore))}>{liveScore.toFixed(1)}%</span>
-              </div>
-            </Panel>
-          ) : (
-            <Panel title="Score Breakdown">
-              {formData ? (
-                <ScoreRenderer
-                  formData={formData}
-                  answers={answersMap}
-                  backendScore={score}
-                  userRole={roleId}
-                  showCategoryBreakdown={true}
-                  showDetailedScores={true}
-                />
-              ) : (
-                <CategoryBreakdown detail={detail} />
-              )}
-            </Panel>
-          )}
-        </div>
-      </div>
+      </div>{/* end split pane */}
     </div>
   )
 }

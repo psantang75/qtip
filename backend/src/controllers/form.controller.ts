@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { FormService, FormServiceError } from '../services/FormService';
 import { MySQLFormRepository } from '../repositories/MySQLFormRepository';
 
@@ -14,11 +14,17 @@ export const getForms = async (req: Request, res: Response) => {
   try {
     // Get forms with optional filtering
     
-    const activeOnly = req.query.is_active === 'true';
+    // Tri-state: 'true' = active only, 'false' = inactive only, absent = all
+    const isActiveParam = req.query.is_active as string | undefined;
+    const isActive: boolean | undefined =
+      isActiveParam === 'true'  ? true  :
+      isActiveParam === 'false' ? false :
+      undefined;
+
     const page = req.query.page ? parseInt(req.query.page as string) : undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
 
-    const result = await formService.getForms(activeOnly, page, limit);
+    const result = await formService.getForms(isActive, page, limit);
     
     console.log('[FORM CONTROLLER] Service returned:', {
       formCount: result.forms.length,

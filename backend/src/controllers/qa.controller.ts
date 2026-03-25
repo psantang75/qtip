@@ -249,13 +249,15 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
             d.resolved_by,
             d.created_at,
             d.resolved_at,
-            dsh.score AS new_score
+            dsh_adj.score  AS new_score,
+            dsh_prev.score AS previous_score
           FROM 
             disputes d
-            LEFT JOIN dispute_score_history dsh ON dsh.dispute_id = d.id AND dsh.score_type = 'ADJUSTED'
+            LEFT JOIN dispute_score_history dsh_adj  ON dsh_adj.dispute_id  = d.id AND dsh_adj.score_type  = 'ADJUSTED'
+            LEFT JOIN dispute_score_history dsh_prev ON dsh_prev.dispute_id = d.id AND dsh_prev.score_type = 'PREVIOUS'
           WHERE 
             d.submission_id = ${submission_id}
-          ORDER BY dsh.created_at DESC
+          ORDER BY dsh_adj.created_at DESC
           LIMIT 1
         `
       );

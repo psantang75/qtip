@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Send, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Save, Send, AlertCircle, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getFormById } from '@/services/formService'
 import submissionService from '@/services/submissionService'
@@ -250,119 +250,179 @@ export default function AuditFormPage() {
       .finally(() => setSubmitting(false))
   }
 
+  const scoreColor = score >= 85 ? 'text-emerald-600' : score >= 70 ? 'text-amber-600' : 'text-red-600'
+  const scoreBg    = score >= 85 ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                   : score >= 70 ? 'bg-amber-50 border-amber-200 text-amber-700'
+                   : 'bg-red-50 border-red-200 text-red-700'
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin h-8 w-8 rounded-full border-4 border-[#00aeef] border-t-transparent" />
+      <div className="-m-6 h-full flex items-center justify-center bg-slate-50">
+        <div className="animate-spin h-8 w-8 rounded-full border-4 border-primary border-t-transparent" />
       </div>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(-1)} className="text-slate-500 hover:text-slate-700 transition-colors">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">QA Review</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{form?.form_name}</p>
+    // Same two-pane split-screen pattern as SubmissionDetailPage
+    <div className="-m-6 h-full flex flex-col overflow-hidden">
+
+      {/* ── Fixed header bar ───────────────────────────────────────────────── */}
+      <div className="shrink-0 bg-white border-b border-slate-200 px-5 py-3 z-10">
+        <div className="flex items-start gap-4">
+
+          {/* Back to Review Forms */}
+          <button onClick={() => navigate(-1)}
+            className="shrink-0 flex items-center gap-1.5 text-[12px] font-medium text-slate-500 hover:text-primary transition-colors mt-1.5 whitespace-nowrap">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Review Forms
+          </button>
+
+          <div className="w-px self-stretch bg-slate-200 shrink-0" />
+
+          {/* Form name */}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[20px] font-bold text-slate-900 leading-tight truncate">
+              {form?.form_name ?? 'QA Review'}
+            </h1>
+            <div className="flex items-center gap-2 mt-1">
+              <ClipboardList className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-[12px] text-slate-500">
+                {form?.interaction_type ?? 'Review Form'} · Reviewer: {user?.username}
+              </span>
+            </div>
+          </div>
+
+          {/* Live score + actions */}
+          <div className="flex items-center gap-3 shrink-0 mt-0.5">
+            {/* Live score badge */}
+            <div className={`flex flex-col items-center px-4 py-1.5 rounded-xl border ${scoreBg}`}>
+              <span className={`text-[22px] font-bold leading-tight ${scoreColor}`}>
+                {score.toFixed(1)}%
+              </span>
+              <span className="text-[10px] font-medium uppercase tracking-wide opacity-70">Live Score</span>
+            </div>
+
+            <div className="w-px h-8 bg-slate-200" />
+
+            <Button variant="outline" onClick={handleSaveDraft} disabled={submitting}>
+              <Save className="h-4 w-4 mr-1.5" />
+              {submitting ? 'Saving…' : 'Save Draft'}
+            </Button>
+            <Button onClick={handleSubmit} disabled={submitting}
+              className="bg-primary hover:bg-primary/90 text-white">
+              <Send className="h-4 w-4 mr-1.5" />
+              {submitting ? 'Submitting…' : 'Submit Review'}
+            </Button>
+          </div>
+
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* LEFT: Metadata + Call Details + Score breakdown */}
-        <div className="lg:w-1/2 space-y-5">
-          {form?.metadata_fields && form.metadata_fields.length > 0 && (
-            <div className="rounded-xl overflow-hidden">
-              <FormMetadataDisplay
-                metadataFields={form.metadata_fields}
-                values={Object.fromEntries(
-                  form.metadata_fields.map((field: any) => {
-                    const key = (field.id && field.id !== 0) ? field.id.toString() : field.field_name
-                    return [key, metadataValues[key] || '']
-                  })
-                )}
-                onChange={async (fieldId: string, value: string) => {
-                  setMetadataValues(prev => ({ ...prev, [fieldId]: value }))
-                  const field = form.metadata_fields.find((f: any) => {
-                    const k = (f.id && f.id !== 0) ? f.id.toString() : f.field_name
-                    return k === fieldId
-                  })
-                  if (field && (field.field_name?.toLowerCase().includes('conversation') || field.field_name?.toLowerCase().includes('recording id'))) {
-                    if (value.trim()) await fetchAudioUrl(value)
-                    else setCallDetails((prev: any) => ({ ...prev, audio_url: null }))
-                  }
-                }}
-                readonly={false}
-                currentUser={user ? { id: user.id, username: user.username } : undefined}
-              />
-            </div>
-          )}
-
-          <div className="rounded-xl overflow-hidden">
-            <div className="px-4 py-3 bg-white border border-slate-200 rounded-t-lg border-b-0">
-              <h3 className="text-[15px] font-semibold text-slate-800">Call Details</h3>
-            </div>
-            <div className="border border-t-0 border-slate-200 rounded-b-lg bg-white px-4 py-3">
-            <MultipleCallSelector
-              selectedCalls={selectedCalls}
-              onCallsChange={(calls: Call[]) => { setSelectedCalls(calls); setHasChanges(true) }}
-              disabled={submitting}
-            />
-            </div>
+      {/* ── Error banner ───────────────────────────────────────────────────── */}
+      {errorMessage && (
+        <div className="shrink-0 bg-red-50 border-b border-red-200 px-5 py-3 flex items-start gap-3">
+          <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+          <div className="flex-1 text-[13px] text-red-700 space-y-0.5">
+            {errorMessage.split('\n').map((line, i) => {
+              if (line.startsWith('- ') && missingQuestions[i - 1]) {
+                return (
+                  <p key={i} className="cursor-pointer hover:underline"
+                    onClick={() => scrollToQuestion(missingQuestions[i - 1])}>
+                    {line} <span className="text-xs opacity-70">(click to scroll)</span>
+                  </p>
+                )
+              }
+              return <p key={i}>{line}</p>
+            })}
           </div>
-
+          <button onClick={() => setErrorMessage(null)}
+            className="shrink-0 text-red-400 hover:text-red-600 text-lg leading-none">×</button>
         </div>
+      )}
 
-        {/* RIGHT: QA Form Questions */}
-        <div className="lg:w-1/2">
-          <div className="rounded-xl overflow-hidden">
-            {/* Panel header */}
-            <div className="px-4 py-3 bg-white border border-slate-200 rounded-t-lg border-b-0">
-              <h3 className="text-[15px] font-semibold text-slate-800">{form?.form_name}</h3>
-            </div>
+      {/* ── Two-pane split ─────────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
 
-            <div className="border border-t-0 border-slate-200 rounded-b-lg bg-white">
-              {formRenderData ? (
-                <FormRenderer formRenderData={formRenderData} isDisabled={false} onAnswerChange={handleAnswerChange} onNotesChange={handleNotesChange} />
-              ) : (
-                <div className="p-4 bg-red-50 border-b border-red-200 text-[13px] text-red-700">No form data available.</div>
-              )}
+        {/* ════ LEFT PANE — Form details + Call details ═════════════════════ */}
+        <div className="w-1/2 shrink-0 border-r border-slate-200 bg-slate-50 overflow-y-auto">
+          <div className="p-4 space-y-4">
 
-              {errorMessage && (
-                <div className="mx-4 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
-                    <div className="text-[13px] text-red-700">
-                      {errorMessage.split('\n').map((line, i) => {
-                        if (line.startsWith('- ') && missingQuestions[i - 1]) {
-                          return (
-                            <p key={i} className="cursor-pointer hover:underline" onClick={() => scrollToQuestion(missingQuestions[i - 1])}>
-                              {line} <span className="text-xs">(click to scroll)</span>
-                            </p>
-                          )
-                        }
-                        return <p key={i}>{line}</p>
-                      })}
-                    </div>
-                  </div>
+            {/* Form metadata fields */}
+            {form?.metadata_fields && form.metadata_fields.length > 0 && (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100">
+                  <span className="text-[13px] font-semibold text-slate-800">Review Details</span>
                 </div>
-              )}
+                <div className="px-4 py-3">
+                  <FormMetadataDisplay
+                    metadataFields={form.metadata_fields}
+                    values={Object.fromEntries(
+                      form.metadata_fields.map((field: any) => {
+                        const key = (field.id && field.id !== 0) ? field.id.toString() : field.field_name
+                        return [key, metadataValues[key] || '']
+                      })
+                    )}
+                    onChange={async (fieldId: string, value: string) => {
+                      setMetadataValues(prev => ({ ...prev, [fieldId]: value }))
+                      const field = form.metadata_fields.find((f: any) => {
+                        const k = (f.id && f.id !== 0) ? f.id.toString() : f.field_name
+                        return k === fieldId
+                      })
+                      if (field && (field.field_name?.toLowerCase().includes('conversation') || field.field_name?.toLowerCase().includes('recording id'))) {
+                        if (value.trim()) await fetchAudioUrl(value)
+                        else setCallDetails((prev: any) => ({ ...prev, audio_url: null }))
+                      }
+                    }}
+                    readonly={false}
+                    currentUser={user ? { id: user.id, username: user.username } : undefined}
+                  />
+                </div>
+              </div>
+            )}
 
-              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
-                <Button variant="outline" onClick={handleSaveDraft} disabled={submitting}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {submitting ? 'Saving...' : 'Save Draft'}
-                </Button>
-                <Button onClick={handleSubmit} disabled={submitting} className="bg-[#00aeef] hover:bg-[#0095cc] text-white">
-                  <Send className="h-4 w-4 mr-2" />
-                  {submitting ? 'Submitting...' : 'Submit Review'}
-                </Button>
+            {/* Call selector */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100">
+                <span className="text-[13px] font-semibold text-slate-800">Call Details</span>
+              </div>
+              <div className="px-4 py-3">
+                <MultipleCallSelector
+                  selectedCalls={selectedCalls}
+                  onCallsChange={(calls: Call[]) => { setSelectedCalls(calls); setHasChanges(true) }}
+                  disabled={submitting}
+                />
               </div>
             </div>
+
           </div>
         </div>
+
+        {/* ════ RIGHT PANE — QA form questions ══════════════════════════════ */}
+        <div className="w-1/2 bg-white overflow-y-auto">
+          <div className="p-4">
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                <div className="flex items-center gap-2">
+                  <span className="w-[3px] h-4 rounded-full bg-primary shrink-0" />
+                  <span className="text-[13px] font-semibold text-slate-800">{form?.form_name}</span>
+                </div>
+                <span className={`text-[12px] font-semibold ${scoreColor}`}>{score.toFixed(1)}%</span>
+              </div>
+              {formRenderData ? (
+                <FormRenderer
+                  formRenderData={formRenderData}
+                  isDisabled={false}
+                  onAnswerChange={handleAnswerChange}
+                  onNotesChange={handleNotesChange}
+                />
+              ) : (
+                <div className="p-4 text-[13px] text-slate-400 text-center py-8">No form data available.</div>
+              )}
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   )

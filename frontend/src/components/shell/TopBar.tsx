@@ -1,5 +1,5 @@
-import { useNavigate } from 'react-router-dom'
-import { ChevronDown, LogOut, User, Settings, HelpCircle } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { ChevronDown, LogOut, User, Settings, HelpCircle, ArrowLeft } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +20,8 @@ function getInitials(username: string): string {
 export default function TopBar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const isInAdmin = location.pathname.startsWith('/app/admin')
 
   const handleLogout = async () => {
     await logout()
@@ -47,16 +49,27 @@ export default function TopBar() {
       {/* ── Center spacer ───────────────────────────────────────────────── */}
       <div className="flex-1" />
 
-      {/* ── Admin shortcut (role_id 1 only) ─────────────────────────────── */}
+      {/* ── Admin shortcut / back-to-app (role_id 1 only) ───────────────── */}
       {user?.role_id === 1 && (
-        <button
-          type="button"
-          onClick={() => navigate('/app/admin/users')}
-          className="flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 text-[13px] transition-colors mr-2"
-        >
-          <Settings size={15} />
-          <span className="hidden sm:inline">Settings</span>
-        </button>
+        isInAdmin ? (
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 text-[13px] transition-colors mr-2"
+          >
+            <ArrowLeft size={15} />
+            <span className="hidden sm:inline">Back to App</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => navigate('/app/admin/users')}
+            className="flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 text-[13px] transition-colors mr-2"
+          >
+            <Settings size={15} />
+            <span className="hidden sm:inline">Settings</span>
+          </button>
+        )
       )}
 
       {/* ── User panel (right) ──────────────────────────────────────────── */}
