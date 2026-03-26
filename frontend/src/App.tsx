@@ -70,13 +70,13 @@ function RoleRedirect() {
   React.useEffect(() => {
     if (!user) return
     const destinations: Record<number, string> = {
-      1: '/app/insights/dashboard', // admin
-      2: '/app/quality/overview',   // qa
-      3: '/app/quality/overview',   // user
-      4: '/app/training/overview',  // trainer
-      5: '/app/quality/overview',   // manager
+      1: '/app/insights/dashboard',      // admin
+      2: '/app/quality/submissions',     // qa
+      3: '/app/quality/submissions',     // user/csr
+      4: '/app/training/courses',        // trainer
+      5: '/app/quality/submissions',     // manager
     }
-    const dest = destinations[user.role_id] ?? '/app/quality/overview'
+    const dest = destinations[user.role_id] ?? '/app/quality/submissions'
     navigate(dest, { replace: true })
   }, [user, navigate])
 
@@ -129,8 +129,8 @@ export default function App() {
 
                 {/* Quality */}
                 <Route path="/app/quality">
-                  <Route index element={<Navigate to="overview" replace />} />
-                  <Route path="overview"        element={<PageLoader><QualityOverviewPage /></PageLoader>} />
+                  <Route index element={<Navigate to="submissions" replace />} />
+                  <Route path="overview"        element={<Navigate to="/app/quality/submissions" replace />} />
                   <Route path="forms"           element={<PageLoader><FormsPage /></PageLoader>} />
                   <Route path="submissions"     element={<PageLoader><SubmissionsPage /></PageLoader>} />
                   <Route path="submissions/:id"   element={<PageLoader><SubmissionDetailPage /></PageLoader>} />
@@ -143,8 +143,8 @@ export default function App() {
 
                 {/* Training */}
                 <Route path="/app/training">
-                  <Route index element={<Navigate to="overview" replace />} />
-                  <Route path="overview"     element={<PageLoader><TrainingOverviewPage /></PageLoader>} />
+                  <Route index element={<Navigate to="courses" replace />} />
+                  <Route path="overview"     element={<Navigate to="/app/training/courses" replace />} />
                   <Route path="courses"      element={<PageLoader><CoursesPage /></PageLoader>} />
                   <Route path="paths"        element={<PageLoader><TrainingPathsPage /></PageLoader>} />
                   <Route path="enrollments"  element={<PageLoader><EnrollmentsPage /></PageLoader>} />

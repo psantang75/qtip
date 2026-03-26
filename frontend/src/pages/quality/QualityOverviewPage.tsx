@@ -143,7 +143,7 @@ export default function QualityOverviewPage() {
                 {csrSort.sorted.length ? (
                   csrSort.sorted.map((row: any) => (
                     <TableRow key={row.id} className="cursor-pointer hover:bg-slate-50/50"
-                      onClick={() => navigate(`/app/quality/submissions/${row.id}`)}>
+                      onClick={() => navigate(`/app/quality/submissions/${row.id}`, { state: { from: 'Quality Overview', fromPath: '/app/quality/overview' } })}>
                       <TableCell className="text-[13px] text-slate-600">
                         {new Date(row.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </TableCell>

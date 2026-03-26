@@ -1022,7 +1022,7 @@ export const resolveManagerDispute = async (req: AuthenticatedRequest, res: Resp
     const userId = req.user?.user_id;
     const userRole = req.user?.role;
     const { disputeId } = req.params;
-    const { resolution_action, new_score, resolution_notes } = req.body;
+    const { resolution_action, new_score, resolution_notes, answers } = req.body;
     
     if (!userId) {
       res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -1076,9 +1076,22 @@ export const resolveManagerDispute = async (req: AuthenticatedRequest, res: Resp
     // Keep the transaction lean — no external prisma calls inside it
     await prisma.$transaction(async (tx) => {
       if (resolution_action === 'ADJUST' && new_score !== undefined) {
+        // Update total score on submission
         await tx.$executeRaw(Prisma.sql`
           UPDATE submissions SET total_score = ${new_score} WHERE id = ${dispute.submission_id}
         `);
+        // Update individual answers if provided by the manager
+        if (answers && Array.isArray(answers)) {
+          for (const ans of answers) {
+            if (ans.question_id) {
+              await tx.$executeRaw(Prisma.sql`
+                UPDATE submission_answers
+                SET answer = ${ans.answer ?? ''}, notes = ${ans.notes ?? ''}
+                WHERE submission_id = ${dispute.submission_id} AND question_id = ${ans.question_id}
+              `);
+            }
+          }
+        }
       } else if (resolution_action === 'ASSIGN_TRAINING') {
         const { training_id } = req.body;
         if (!training_id) throw new Error('MISSING_TRAINING_ID');
@@ -1103,8 +1116,9 @@ export const resolveManagerDispute = async (req: AuthenticatedRequest, res: Resp
         WHERE id = ${disputeId}
       `);
 
+      // After any dispute resolution the review is complete — set to FINALIZED
       await tx.$executeRaw(Prisma.sql`
-        UPDATE submissions SET status = 'SUBMITTED' WHERE id = ${dispute.submission_id}
+        UPDATE submissions SET status = 'FINALIZED' WHERE id = ${dispute.submission_id}
       `);
 
       await tx.$executeRaw(Prisma.sql`
@@ -3014,11 +3028,12 @@ export const resolveDisputeWithFormEdit = async (req: AuthenticatedRequest, res:
           recordedBy: managerId,
           notes: 'Score recalculated after dispute form edits'
         });
-      } else if (disputeStatus === 'REJECTED') {
-        await tx.$executeRaw(Prisma.sql`
-          UPDATE submissions SET status = 'SUBMITTED' WHERE id = ${submissionId}
-        `);
       }
+
+      // After any dispute resolution the review is complete — always set to FINALIZED
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE submissions SET status = 'FINALIZED' WHERE id = ${submissionId}
+      `);
 
       await tx.$executeRaw(Prisma.sql`
         UPDATE disputes 

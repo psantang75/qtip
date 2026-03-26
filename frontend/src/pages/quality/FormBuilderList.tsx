@@ -7,6 +7,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { useListSort } from '@/hooks/useListSort'
+import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
@@ -72,10 +73,10 @@ export function FormBuilderList({ onEdit, onCreate, onPreview, onDuplicate }: Fo
   }
 
   return (
-    <div className="space-y-5">
+    <QualityListPage>
       <QualityPageHeader
         title="Form Builder"
-        subtitle="Manage QA review forms"
+
         actions={
           <Button onClick={onCreate} className="gap-1.5">
             <Plus size={15} /> New Form
@@ -185,6 +186,6 @@ export function FormBuilderList({ onEdit, onCreate, onPreview, onDuplicate }: Fo
         onPageChange={setPage}
         onPageSizeChange={size => { setPageSize(size); setPage(1) }}
       />
-    </div>
+    </QualityListPage>
   )
 }

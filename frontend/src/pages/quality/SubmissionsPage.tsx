@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import qaService, { scoreColor, type Submission } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
@@ -76,10 +77,10 @@ export default function SubmissionsPage() {
   const resetFilters = () => reset()
 
   return (
-    <div className="p-6 space-y-5">
+    <QualityListPage>
       <QualityPageHeader
         title={isCSR ? 'My Reviews' : isManager ? 'Team Reviews' : 'Submissions'}
-        subtitle={isCSR ? 'Your personal review history' : isManager ? "Your team's QA reviews" : 'All submitted QA reviews'}
+
         count={data?.total}
         onRefresh={refetch}
       />
@@ -147,7 +148,7 @@ export default function SubmissionsPage() {
               {sortedItems.length ? (
                 sortedItems.map((row: Submission) => (
                   <TableRow key={row.id} className="cursor-pointer hover:bg-slate-50/50"
-                    onClick={() => navigate(`/app/quality/submissions/${row.id}`)}>
+                    onClick={() => navigate(`/app/quality/submissions/${row.id}`, { state: { from: isCSR ? 'My Reviews' : isManager ? 'Team Reviews' : 'Submissions', fromPath: '/app/quality/submissions' } })}>
                     <TableCell><StatusBadge status={row.status} /></TableCell>
                     <TableCell className="text-[13px] text-slate-500">{row.form_id ?? '—'}</TableCell>
                     <TableCell className="text-[13px] font-medium text-slate-900">{row.form_name}</TableCell>
@@ -162,7 +163,7 @@ export default function SubmissionsPage() {
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
-                        onClick={e => { e.stopPropagation(); navigate(`/app/quality/submissions/${row.id}`) }}>
+                        onClick={e => { e.stopPropagation(); navigate(`/app/quality/submissions/${row.id}`, { state: { from: isCSR ? 'My Reviews' : isManager ? 'Team Reviews' : 'Submissions', fromPath: '/app/quality/submissions' } }) }}>
                         <Eye size={12} className="mr-1" /> View
                       </Button>
                     </TableCell>
@@ -189,6 +190,6 @@ export default function SubmissionsPage() {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />
-    </div>
+    </QualityListPage>
   )
 }

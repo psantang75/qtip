@@ -20,7 +20,7 @@ export default function AdminLayout() {
       <div className="flex flex-1 overflow-hidden pt-[72px]">
 
         {/* Admin sidebar */}
-        <aside className="fixed left-0 top-[72px] bottom-0 w-56 bg-white border-r border-slate-200 flex flex-col z-30">
+        <aside className="fixed left-0 top-[72px] bottom-0 w-[280px] bg-white border-r border-slate-200 flex flex-col z-30">
           <div className="px-4 pt-4 pb-3 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full shrink-0 bg-[#00aeef]" />
             <span className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
@@ -47,7 +47,7 @@ export default function AdminLayout() {
 
         </aside>
 
-        <main className="flex-1 overflow-y-auto ml-56 p-6">
+        <main className="flex-1 overflow-y-auto ml-[280px] p-6">
           <Outlet />
         </main>
       </div>

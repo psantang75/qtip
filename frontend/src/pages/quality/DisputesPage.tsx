@@ -7,6 +7,7 @@ import qaService, { scoreColor } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
+import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
@@ -70,10 +71,10 @@ function ManagerDisputeResolution() {
   const resetFilters = () => { setSearch(''); setStatus('all'); setCsrId('all'); setDateRange({ start: '', end: '' }); setPage(1); setPageSize(DEFAULT_PAGE_SIZE) }
 
   return (
-    <div className="p-6 space-y-5">
+    <QualityListPage>
       <QualityPageHeader
         title="Dispute Resolution"
-        subtitle="Your team's open and resolved disputes"
+
         count={data?.total}
         onRefresh={refetch}
       />
@@ -151,7 +152,7 @@ function ManagerDisputeResolution() {
                     <TableCell>
                       <button
                         className="text-[13px] font-medium text-primary hover:underline"
-                        onClick={() => navigate(`/app/quality/submissions/${d.submission_id}`)}
+                        onClick={() => navigate(`/app/quality/submissions/${d.submission_id}`, { state: { from: 'Dispute Resolution', fromPath: '/app/quality/disputes' } })}
                       >
                         #{d.submission_id ?? '—'}
                       </button>
@@ -175,7 +176,7 @@ function ManagerDisputeResolution() {
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
-                          onClick={() => navigate(`/app/quality/submissions/${d.submission_id}`)}>
+                          onClick={() => navigate(`/app/quality/submissions/${d.submission_id}`, { state: { from: 'Dispute Resolution', fromPath: '/app/quality/disputes' } })}>
                           <Eye size={12} className="mr-1" />
                           {d.status === 'OPEN' ? 'Resolve' : 'View'}
                         </Button>
@@ -204,7 +205,7 @@ function ManagerDisputeResolution() {
         onPageChange={setPage}
         onPageSizeChange={size => { setPageSize(size); setPage(1) }}
       />
-    </div>
+    </QualityListPage>
   )
 }
 
@@ -256,10 +257,10 @@ function AdminQADisputes() {
   const resetFilters = () => { setSearch(''); setStatus('all'); setCsrId('all'); setDateRange({ start: '', end: '' }); setPage(1); setPageSize(DEFAULT_PAGE_SIZE) }
 
   return (
-    <div className="p-6 space-y-5">
+    <QualityListPage>
       <QualityPageHeader
         title="Disputes"
-        subtitle="Organization-wide dispute management"
+
         count={data?.total}
         onRefresh={refetch}
       />
@@ -330,7 +331,7 @@ function AdminQADisputes() {
                     <TableCell className="text-[13px] font-medium text-slate-900">{d.csr_name ?? '—'}</TableCell>
                     <TableCell>
                       <button className="text-[13px] font-medium text-primary hover:underline"
-                        onClick={() => navigate(`/app/quality/submissions/${d.submission_id}`)}>
+                        onClick={() => navigate(`/app/quality/submissions/${d.submission_id}`, { state: { from: 'Disputes', fromPath: '/app/quality/disputes' } })}>
                         #{d.submission_id ?? '—'}
                       </button>
                     </TableCell>
@@ -346,7 +347,7 @@ function AdminQADisputes() {
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
-                        onClick={() => navigate(`/app/quality/submissions/${d.submission_id}`)}>
+                        onClick={() => navigate(`/app/quality/submissions/${d.submission_id}`, { state: { from: 'Disputes', fromPath: '/app/quality/disputes' } })}>
                         <Eye size={12} className="mr-1" /> View
                       </Button>
                     </TableCell>
@@ -373,7 +374,7 @@ function AdminQADisputes() {
         onPageChange={setPage}
         onPageSizeChange={size => { setPageSize(size); setPage(1) }}
       />
-    </div>
+    </QualityListPage>
   )
 }
 

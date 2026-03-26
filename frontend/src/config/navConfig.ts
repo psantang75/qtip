@@ -23,10 +23,9 @@ export const NAV_CONFIG: SectionConfig[] = [
     label: 'Quality',
     icon: 'Shield',
     color: '#00aeef',
-    defaultPath: '/app/quality/overview',
+    defaultPath: '/app/quality/submissions',
     items: [
-      { label: 'Overview',          path: '/app/quality/overview',        icon: 'LayoutDashboard', roles: [1,2,3,4,5] },
-      { label: 'Form Builder',      path: '/app/quality/forms',           icon: 'ClipboardList',   roles: [1,2] },
+      { label: 'Form Builder',      path: '/app/quality/forms',           icon: 'ClipboardList',   roles: [1] },
       { label: 'Review Forms',      path: '/app/quality/review-forms',    icon: 'ClipboardCheck',  roles: [1,2] },
       { label: 'Submissions',       path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [1,2] },
       { label: 'Team Reviews',      path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [5] },
@@ -41,9 +40,8 @@ export const NAV_CONFIG: SectionConfig[] = [
     label: 'Training',
     icon: 'GraduationCap',
     color: '#00aeef',
-    defaultPath: '/app/training/overview',
+    defaultPath: '/app/training/courses',
     items: [
-      { label: 'Overview',          path: '/app/training/overview',     icon: 'LayoutDashboard', roles: [1,2,3,4,5] },
       { label: 'Course Library',    path: '/app/training/courses',      icon: 'BookOpen',        roles: [1,2,3,4,5] },
       { label: 'Training Paths',    path: '/app/training/paths',        icon: 'Map',             roles: [1,4] },
       { label: 'Enrollments',       path: '/app/training/enrollments',  icon: 'Users',           roles: [1,4,5] },

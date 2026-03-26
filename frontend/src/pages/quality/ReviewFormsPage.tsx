@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
+import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
@@ -72,10 +73,10 @@ export default function ReviewFormsPage() {
   const resetFilters = () => { setSearch(''); setTypeFilter('all'); setDateRange({ start: '', end: '' }); setPage(1) }
 
   return (
-    <div className="p-6 space-y-5">
+    <QualityListPage>
       <QualityPageHeader
         title="Review Forms"
-        subtitle="Select a form to begin a manual QA review"
+
         onRefresh={refetch}
       />
 
@@ -164,6 +165,6 @@ export default function ReviewFormsPage() {
         onPageChange={setPage}
         onPageSizeChange={size => { setPageSize(size); setPage(1) }}
       />
-    </div>
+    </QualityListPage>
   )
 }

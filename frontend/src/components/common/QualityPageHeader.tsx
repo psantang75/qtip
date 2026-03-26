@@ -1,5 +1,3 @@
-import { RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 interface QualityPageHeaderProps {
@@ -14,8 +12,6 @@ interface QualityPageHeaderProps {
 export function QualityPageHeader({
   title,
   subtitle,
-  count,
-  onRefresh,
   actions,
   className,
 }: QualityPageHeaderProps) {
@@ -28,14 +24,11 @@ export function QualityPageHeader({
         )}
       </div>
 
-      <div className="flex items-center gap-2 shrink-0 mt-0.5">
-        {actions}
-        {onRefresh && (
-          <Button variant="ghost" size="sm" onClick={onRefresh}>
-            <RefreshCw className="h-4 w-4 mr-1" /> Refresh
-          </Button>
-        )}
-      </div>
+      {actions && (
+        <div className="flex items-center gap-2 shrink-0 mt-0.5">
+          {actions}
+        </div>
+      )}
     </div>
   )
 }

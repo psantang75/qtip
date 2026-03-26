@@ -62,8 +62,8 @@ export interface DisputeRecord {
   id: number
   submission_id: number
   reason: string
+  // status IS the resolution: OPEN = pending, UPHELD = score kept, ADJUSTED = score changed
   status: 'OPEN' | 'UPHELD' | 'ADJUSTED'
-  resolution_action?: 'UPHOLD' | 'ADJUST' | 'ASSIGN_TRAINING'
   resolution_notes?: string
   new_score?: number
   previous_score?: number | null
@@ -330,6 +330,7 @@ const qaService = {
     resolution_action: 'UPHOLD' | 'ADJUST' | 'ASSIGN_TRAINING'
     resolution_notes: string
     new_score?: number
+    answers?: { question_id: number; answer: string; notes?: string }[]
   }) => api.post(`/manager/disputes/${disputeId}/resolve`, payload).then(r => r.data),
 
   getCSRDisputeHistory: (params?: { page?: number; limit?: number; status?: string }) =>

@@ -165,10 +165,20 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
             f.version,
             f.user_version,
             f.user_version_date,
-            f.interaction_type
+            f.interaction_type,
+            reviewer.username   AS reviewer_name,
+            (
+              SELECT u.username
+              FROM submission_metadata sm
+              JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
+              JOIN users u ON CAST(sm.value AS UNSIGNED) = u.id
+              WHERE sm.submission_id = s.id AND fmf.field_name = 'CSR'
+              LIMIT 1
+            ) AS csr_name
           FROM 
             submissions s
             JOIN forms f ON s.form_id = f.id
+            LEFT JOIN users reviewer ON reviewer.id = s.submitted_by
           WHERE 
             s.id = ${submission_id} AND (s.status = 'FINALIZED' OR s.status = 'DISPUTED' OR s.status = 'SUBMITTED')
         `
@@ -194,12 +204,15 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
         Prisma.sql`
           SELECT 
             fmf.field_name,
+            fmf.field_type,
+            fmf.sort_order,
             sm.value
           FROM 
             submission_metadata sm
             JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
           WHERE 
             sm.submission_id = ${submission_id}
+          ORDER BY fmf.sort_order ASC
         `
       );
       
@@ -244,7 +257,6 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
             d.reason,
             d.status,
             d.resolution_notes,
-            d.resolution_action,
             d.attachment_url,
             d.resolved_by,
             d.created_at,
@@ -276,6 +288,9 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
         form_id: submission.form_id,
         status: submission.status,
         total_score: submission.total_score,
+        submitted_at: submission.submitted_at,
+        reviewer_name: submission.reviewer_name ?? null,
+        csr_name: submission.csr_name ?? null,
         form: {
           id: submission.form_id,
           form_name: submission.form_name,

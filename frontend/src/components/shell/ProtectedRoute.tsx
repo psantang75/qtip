@@ -1,4 +1,4 @@
-﻿import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -23,7 +23,7 @@ function LoadingSkeleton() {
 
       <div className="flex flex-1 pt-[124px]">
         {/* Skeleton sidebar */}
-        <div className="fixed left-0 top-[124px] bottom-0 w-56 bg-white border-r border-slate-100 p-3 space-y-2">
+        <div className="fixed left-0 top-[124px] bottom-0 w-[280px] bg-white border-r border-slate-100 p-3 space-y-2">
           <Skeleton className="h-3 w-20 mb-4" />
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-9 w-full rounded-md" />
@@ -31,7 +31,7 @@ function LoadingSkeleton() {
         </div>
 
         {/* Skeleton content */}
-        <main className="flex-1 ml-56 p-6 bg-surface space-y-4">
+        <main className="flex-1 ml-[280px] p-6 bg-surface space-y-4">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-4 w-40" />
           <div className="grid grid-cols-3 gap-4 mt-6">

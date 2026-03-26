@@ -26,8 +26,13 @@ export default function Sidebar() {
   const sectionConfig  = getSectionConfig(currentSection)
   const navItems       = user ? getNavItemsForRole(currentSection, user.role_id) : []
 
+  // When navigating to a detail page, location.state.fromPath holds the
+  // originating list page path so that nav item stays highlighted instead of
+  // a prefix-matched sibling lighting up.
+  const originPath = (location.state as any)?.fromPath as string | undefined
+
   return (
-    <aside className="fixed left-0 top-[124px] bottom-0 w-56 bg-white border-r border-slate-200 flex flex-col z-30 overflow-y-auto">
+    <aside className="fixed left-0 top-[124px] bottom-0 w-[280px] bg-white border-r border-slate-200 flex flex-col z-30 overflow-y-auto">
 
       {/* Section header — full-width accent block */}
       <div className="mx-3 mt-4 mb-3 rounded-lg bg-gradient-to-r from-[#00aeef]/15 to-[#00aeef]/5 border border-[#00aeef]/20 px-3 py-2.5 flex items-center gap-2.5">
@@ -45,12 +50,16 @@ export default function Sidebar() {
           <NavLink
             key={item.label}
             to={item.path}
-            className={({ isActive }) =>
-              cn(
+            end
+            className={({ isActive }) => {
+              // If we arrived here from a known list page, highlight that item
+              // rather than relying on prefix URL matching
+              const active = originPath ? item.path === originPath : isActive
+              return cn(
                 'flex items-center gap-2.5 px-3 py-2.5 rounded-r-md text-[13.5px] transition-colors',
-                isActive ? ACTIVE_ITEM_CLASS : INACTIVE_ITEM_CLASS,
+                active ? ACTIVE_ITEM_CLASS : INACTIVE_ITEM_CLASS,
               )
-            }
+            }}
           >
             <DynamicIcon name={item.icon} size={15} />
             <span className="flex-1 truncate">{item.label}</span>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, AlertTriangle, CheckCircle, Edit3, Pencil, FileText, X, ChevronDown, ChevronUp, TrendingUp, TrendingDown } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, CheckCircle, Edit3, Pencil, FileText, X, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Phone, Mic, MicOff, FileDown } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import qaService, { scoreColor, type SubmissionDetail } from '@/services/qaService'
 import { api } from '@/services/authService'
@@ -97,6 +97,7 @@ function DisputeForm({ submissionId, onSuccess }: { submissionId: number; onSucc
       toast({ title: 'Dispute submitted', description: 'Sent to your manager for review.' })
       qc.invalidateQueries({ queryKey: ['submission-detail'] })
       qc.invalidateQueries({ queryKey: ['submissions'] })
+      qc.invalidateQueries({ queryKey: ['csr-dispute-history'] })
       onSuccess()
     },
     onError: () => toast({ title: 'Error', description: 'Failed to submit dispute.', variant: 'destructive' }),
@@ -140,6 +141,7 @@ function EditDisputeForm({
     onSuccess: () => {
       toast({ title: 'Dispute updated' })
       qc.invalidateQueries({ queryKey: ['submission-detail'] })
+      qc.invalidateQueries({ queryKey: ['csr-dispute-history'] })
       onSuccess()
     },
     onError: (err: any) =>
@@ -202,7 +204,10 @@ function EditDisputeForm({
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate  = useNavigate()
+  const location  = useLocation()
   const { user }  = useAuth()
+  // Label passed via navigation state — falls back to 'Submissions'
+  const backLabel = (location.state as any)?.from ?? 'Submissions'
   const qc        = useQueryClient()
   const { toast } = useToast()
 
@@ -216,6 +221,7 @@ export default function SubmissionDetailPage() {
   const [finalizeSuccess,  setFinalizeSuccess]  = useState(false)
   const [editingDispute,   setEditingDispute]   = useState(false)
   const [transcriptOpen,   setTranscriptOpen]   = useState(false)
+  const [activeCallIndex,  setActiveCallIndex]  = useState(0)
 
   // Pass threshold — suggested industry baseline of 85%.
   // TODO: make this configurable per-form once form settings are extended.
@@ -300,15 +306,32 @@ export default function SubmissionDetailPage() {
     }
     return raw
   }
-  const metaRows: Array<{ field_name: string; value: string }> = Array.isArray(detail.metadata)
+  // All metadata rows — now includes field_type and sort_order from backend
+  const metaRows: Array<{ field_name: string; value: string; field_type?: string }> = Array.isArray(detail.metadata)
     ? (detail.metadata as any[]).map((m: any) => {
         const name = m.field_name ?? m.key ?? ''
-        return { field_name: name, value: fmtMetaValue(name, String(m.value ?? '')) }
+        return { field_name: name, value: fmtMetaValue(name, String(m.value ?? '')), field_type: m.field_type }
       })
     : Object.entries(detail.metadata ?? {}).map(([k, v]) => {
         const val = typeof v === 'object' ? String((v as any)?.value ?? '') : String(v)
         return { field_name: k, value: fmtMetaValue(k, val) }
       })
+
+  // Build the Review Details grid from formData.metadata_fields (includes SPACER definitions)
+  // sorted by sort_order, with values looked up from metaRows by field_name.
+  // Using formData as the template is the only reliable way to get SPACERs since they
+  // never appear in submission_metadata (no value to store).
+  const metaValueMap = new Map(metaRows.map(r => [r.field_name.toLowerCase(), r.value]))
+  const reviewDetailsFields: Array<{ field_name: string; field_type: string; value: string }> =
+    formData?.metadata_fields
+      ? [...formData.metadata_fields]
+          .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map((f: any) => ({
+            field_name: f.field_name ?? '',
+            field_type: f.field_type ?? 'TEXT',
+            value: metaValueMap.get((f.field_name ?? '').toLowerCase()) ?? '',
+          }))
+      : metaRows.map(r => ({ field_name: r.field_name, field_type: r.field_type ?? 'TEXT', value: r.value }))
 
   // ── Enter resolution / editing mode ─────────────────────────────────────────
   const enterResolutionMode = () => {
@@ -366,9 +389,6 @@ export default function SubmissionDetailPage() {
   }
 
   // ── Submit resolution ────────────────────────────────────────────────────────
-  // Always uses POST /manager/disputes/:id/resolve — the PUT endpoint has a
-  // nested-transaction bug in the backend. The frontend-calculated liveScore
-  // is passed as new_score for adjustments, which is correct and sufficient.
   const submitResolution = async (action: 'UPHOLD' | 'ADJUST') => {
     if (!detail.dispute?.id) return
     if (!resNotes.trim()) { setResError('Resolution notes are required.'); return }
@@ -378,13 +398,22 @@ export default function SubmissionDetailPage() {
       await qaService.resolveDispute(detail.dispute.id, {
         resolution_action: action,
         resolution_notes: resNotes,
-        // For adjustments, pass the score the manager calculated on the frontend
+        // For adjustments, pass both the new total score AND the individual edited answers
+        // so the backend can update submission_answers and show the correct breakdown
         new_score: action === 'ADJUST' ? liveScore : undefined,
+        answers: action === 'ADJUST'
+          ? Object.entries(editedAnswers).map(([qId, a]) => ({
+              question_id: Number(qId),
+              answer: (a as any).answer ?? '',
+              notes: (a as any).notes ?? '',
+            }))
+          : undefined,
       })
       toast({ title: 'Dispute resolved' })
       qc.invalidateQueries({ queryKey: ['submission-detail', id] })
       qc.invalidateQueries({ queryKey: ['submissions'] })
       qc.invalidateQueries({ queryKey: ['manager-disputes'] })
+      qc.invalidateQueries({ queryKey: ['csr-dispute-history'] })
       setResolutionMode(false)
       setResNotes('')
     } catch (err: any) {
@@ -395,11 +424,13 @@ export default function SubmissionDetailPage() {
   }
 
   const isPassing      = score >= PASS_THRESHOLD
-  const disputeAdjusted = detail.dispute?.resolution_action === 'ADJUST' &&
-    detail.dispute.previous_score != null && detail.dispute.new_score != null
-  const scoreDelta = disputeAdjusted
-    ? (detail.dispute!.new_score! - detail.dispute!.previous_score!)
-    : 0
+  // MySQL Decimal columns come back as strings — parse to numbers before arithmetic/toFixed
+  const prevScore = detail.dispute?.previous_score != null ? Number(detail.dispute.previous_score) : null
+  const adjScore  = detail.dispute?.new_score       != null ? Number(detail.dispute.new_score)      : null
+  // status === 'ADJUSTED' means the manager changed the score
+  const disputeAdjusted = detail.dispute?.status === 'ADJUSTED' &&
+    prevScore != null && adjScore != null
+  const scoreDelta = disputeAdjusted ? (adjScore! - prevScore!) : 0
 
   // Score accent colours for the left panel header
   const scoreAccent = score >= 85
@@ -409,47 +440,27 @@ export default function SubmissionDetailPage() {
     : 'bg-red-50 border-red-200'
 
   return (
-    // Break out of main's p-6 padding and take full available height
-    // This gives us true independent-scroll two-pane layout
-    <div className="-m-6 h-full flex flex-col overflow-hidden">
+    // Header lives inside main's natural p-6 — same position as list page.
+    // Only the split panes break out with -mx-6 -mb-6.
+    <div className="flex flex-col" style={{ height: 'calc(100% + 24px)', marginBottom: '-24px' }}>
 
-      {/* ── Fixed header bar ───────────────────────────────────────────────── */}
-      <div className="shrink-0 bg-white border-b border-slate-200 px-5 py-3 z-10">
-        <div className="flex items-start gap-4">
+      {/* ── Page header — px-6 matches SubmissionsPage's own <div className="p-6 space-y-5">
+           Back link + title are grouped tightly so the back link reads as a breadcrumb
+           without pushing the title down visually */}
+      <div className="shrink-0 px-6 pb-5">
 
-          {/* Back to Submissions */}
+        {/* Back link + title grouped with tight gap — info card separated by mb-5 */}
+        <div className="flex flex-col gap-1 mb-5">
           <button onClick={() => navigate(-1)}
-            className="shrink-0 flex items-center gap-1.5 text-[12px] font-medium text-slate-500 hover:text-primary transition-colors mt-1.5 whitespace-nowrap">
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Submissions
+            className="self-start flex items-center gap-1 text-[11px] text-slate-400 hover:text-primary transition-colors">
+            <ArrowLeft className="h-3 w-3" />
+            {backLabel}
           </button>
 
-          <div className="w-px self-stretch bg-slate-200 shrink-0" />
-
-          {/* Form name + key metadata */}
-          <div className="flex-1 min-w-0">
-            <h1 className="text-[20px] font-bold text-slate-900 leading-tight truncate">
-              {detail.form_name}
-            </h1>
-            <div className="flex items-center gap-3 mt-1 flex-wrap">
-              {!isCSR && detail.csr_name && (
-                <span className="text-[13px] text-slate-600 font-medium">{detail.csr_name}</span>
-              )}
-              {detail.created_at && (
-                <span className="text-[12px] text-slate-400">· {fmtDate(detail.created_at)}</span>
-              )}
-              {(detail as any).reviewer_name && (
-                <span className="text-[12px] text-slate-400">· Reviewed by {(detail as any).reviewer_name}</span>
-              )}
-              {!isCSR && (
-                <span className="text-[12px] text-slate-400">· #{detail.id}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Status + actions */}
-          <div className="flex items-center gap-2.5 shrink-0 mt-0.5">
-            <StatusBadge status={detail.status} className="text-[13px] px-3 py-1 rounded-full" />
+          {/* Title row — QualityPageHeader identical classes */}
+          <div className="flex items-start justify-between gap-4">
+          <h1 className="text-2xl font-bold text-slate-900">Completed Review: {detail.form_name}</h1>
+          <div className="flex items-center gap-2 shrink-0 mt-0.5">
             {resolutionMode && (
               <span className="flex items-center gap-1 text-[12px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
                 <Edit3 className="h-3.5 w-3.5" /> Resolving
@@ -475,13 +486,45 @@ export default function SubmissionDetailPage() {
               </span>
             )}
           </div>
+        </div>{/* end title row */}
+        </div>{/* end back+title group */}
 
+        {/* Info card — QualityFilterBar identical classes: rounded-xl border p-4 flex flex-wrap gap-3 */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
+          <span className="text-[13px] text-slate-600">
+            Status: <span className="font-semibold text-slate-800">{detail.status.charAt(0) + detail.status.slice(1).toLowerCase()}</span>
+          </span>
+          {(detail as any).reviewer_name && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span className="text-[13px] text-slate-600">
+                Reviewer: <span className="font-semibold text-slate-800">{(detail as any).reviewer_name}</span>
+              </span>
+            </>
+          )}
+          {!isCSR && detail.csr_name && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span className="text-[13px] text-slate-600">
+                CSR: <span className="font-semibold text-slate-800">{detail.csr_name}</span>
+              </span>
+            </>
+          )}
+          {detail.created_at && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span className="text-[13px] text-slate-600">
+                Date: <span className="font-semibold text-slate-800">{fmtDate(detail.created_at)}</span>
+              </span>
+            </>
+          )}
         </div>
-      </div>
+
+      </div>{/* end page header */}
 
       {/* ── Resolution mode banner ─────────────────────────────────────────── */}
       {resolutionMode && (
-        <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-5 py-2.5 flex items-center gap-3">
+        <div className="shrink-0 bg-amber-50 border border-amber-200 rounded-xl mx-6 px-4 py-2.5 flex items-center gap-3 mb-2">
           <Edit3 className="h-4 w-4 text-amber-600 shrink-0" />
           <p className="flex-1 text-[12px] font-medium text-amber-800">
             <span className="font-bold">Resolution Mode</span> — edit answers in the right panel to adjust the score,
@@ -494,88 +537,54 @@ export default function SubmissionDetailPage() {
         </div>
       )}
 
-      {/* ── Two-pane split (each pane scrolls independently) ──────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* ── Two-pane split — px-6 pb-6 so left/right edges align with info card ── */}
+      <div className="px-6 pb-6 flex flex-1 min-h-0 overflow-hidden gap-4">
 
         {/* ════ LEFT PANE ═══════════════════════════════════════════════════ */}
-        <div className="w-1/2 shrink-0 border-r border-slate-200 bg-slate-50 overflow-y-auto">
-          <div className="p-4 space-y-4">
-
-            {/* ── Score card ──────────────────────────────────────────────── */}
-            <div className={cn('rounded-xl border overflow-hidden', scoreAccent)}>
-              {/* Coloured score header */}
-              <div className="px-5 pt-5 pb-4 text-center">
-                <div className={cn('text-6xl font-bold tracking-tight', scoreColor(score))}>
-                  {score.toFixed(1)}
-                  <span className="text-3xl font-semibold ml-0.5 opacity-70">%</span>
-                </div>
-                <div className="flex items-center justify-center gap-2 mt-2">
-                  <span className={cn(
-                    'text-[11px] font-bold px-2.5 py-0.5 rounded-full',
-                    isPassing ? 'bg-emerald-600 text-white' : 'bg-red-500 text-white'
-                  )}>
-                    {isPassing ? '✓ PASS' : '✗ BELOW THRESHOLD'}
-                  </span>
-                </div>
-                {/* Score bar */}
-                <div className="mt-3 h-1.5 bg-white/60 rounded-full overflow-hidden">
-                  <div
-                    className={cn('h-full rounded-full transition-all', scoreColor(score).replace('text-', 'bg-'))}
-                    style={{ width: `${Math.min(100, score)}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-current opacity-50 mt-1">
-                  Pass threshold: {PASS_THRESHOLD}% · configurable per form
-                </p>
-              </div>
-
-              {/* Before/After comparison */}
-              {disputeAdjusted && (
-                <div className="bg-white/70 border-t border-current/10 px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Score After Dispute</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 text-center">
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">Before</p>
-                      <p className={cn('text-[18px] font-bold line-through opacity-60', scoreColor(detail.dispute!.previous_score!))}>
-                        {detail.dispute!.previous_score!.toFixed(1)}%
-                      </p>
-                    </div>
-                    <div className={cn('flex items-center gap-0.5 font-bold text-[13px]', scoreDelta > 0 ? 'text-emerald-600' : 'text-red-600')}>
-                      {scoreDelta > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                      {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}%
-                    </div>
-                    <div className="flex-1 text-center">
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">After</p>
-                      <p className={cn('text-[18px] font-bold', scoreColor(detail.dispute!.new_score!))}>
-                        {detail.dispute!.new_score!.toFixed(1)}%
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Live score in resolution mode */}
-              {resolutionMode && (
-                <div className="bg-amber-50 border-t border-amber-200 px-4 py-3 flex items-center justify-between">
-                  <span className="text-[12px] font-medium text-amber-800">Live adjusted score</span>
-                  <span className={cn('text-[20px] font-bold', scoreColor(liveScore))}>{liveScore.toFixed(1)}%</span>
-                </div>
-              )}
-            </div>
+        <div className="w-1/2 shrink-0 rounded-xl border border-slate-200 bg-slate-100 overflow-y-auto">
+          <div className="p-3 space-y-2.5">
 
             {/* ── CSR dispute submission form ─────────────────────────────── */}
             {showDisputeForm && (
               <DisputeForm submissionId={detail.id} onSuccess={() => setShowDisputeForm(false)} />
             )}
 
-            {/* ── Dispute information ──────────────────────────────────────── */}
+            {/* ── Review Details — 2-col grid following form-builder sort order ── */}
+            {reviewDetailsFields.length > 0 && (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-4 py-3 bg-white border-b border-slate-100">
+                  <h3 className="text-[15px] font-semibold text-slate-800">Review Details</h3>
+                </div>
+                <div className="px-4 py-3">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    {reviewDetailsFields.map((f, i) => {
+                      if (f.field_type === 'SPACER') {
+                        // Empty cell — pushes the next field to the correct column
+                        return <div key={`spacer-${i}`} />
+                      }
+                      // Resolve CSR dropdown value (stored as user ID) to the real name
+                      const displayValue = f.field_name === 'CSR' && detail.csr_name
+                        ? detail.csr_name
+                        : f.value || '—'
+                      return (
+                        <div key={i} className="min-w-0 flex items-baseline gap-1.5">
+                          <span className="text-[12px] text-slate-500 shrink-0">{f.field_name}:</span>
+                          <span className="text-[13px] font-semibold text-slate-800 truncate" title={displayValue}>
+                            {displayValue}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Dispute information (third) ──────────────────────────────── */}
             {detail.dispute && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                    <span className="text-[13px] font-semibold text-slate-800">Dispute</span>
-                  </div>
+                <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100">
+                  <h3 className="text-[15px] font-semibold text-slate-800">Dispute</h3>
                   <div className="flex items-center gap-2">
                     <StatusBadge
                       status={detail.dispute.status}
@@ -620,14 +629,14 @@ export default function SubmissionDetailPage() {
                     </button>
                   )}
 
-                  {detail.dispute.status !== 'OPEN' && detail.dispute.resolution_action && (
+                  {detail.dispute.status !== 'OPEN' && (
                     <div className="border-t border-slate-100 pt-3 space-y-2">
                       <div className="flex items-center gap-2">
                         <span className={cn(
                           'text-[11px] font-bold px-2.5 py-0.5 rounded-full',
-                          detail.dispute.resolution_action === 'UPHOLD' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                          detail.dispute.status === 'UPHELD' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
                         )}>
-                          {detail.dispute.resolution_action === 'UPHOLD' ? 'Score Upheld' : 'Score Adjusted'}
+                          {detail.dispute.status === 'UPHELD' ? 'Score Upheld' : 'Score Adjusted'}
                         </span>
                       </div>
                       {detail.dispute.resolution_notes && (
@@ -650,7 +659,7 @@ export default function SubmissionDetailPage() {
                 resolutionMode ? 'border-amber-300' : 'border-slate-200 bg-white')}>
                 <div className={cn('px-4 py-3 border-b',
                   resolutionMode ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100')}>
-                  <span className="text-[13px] font-semibold text-slate-800">Resolve Dispute</span>
+                  <h3 className="text-[15px] font-semibold text-slate-800">Resolve Dispute</h3>
                 </div>
                 <div className={cn('px-4 py-3 space-y-3', resolutionMode ? 'bg-amber-50/50' : 'bg-white')}>
                   {!resolutionMode ? (
@@ -699,66 +708,123 @@ export default function SubmissionDetailPage() {
               </div>
             )}
 
-            {/* ── Review metadata ──────────────────────────────────────────── */}
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-100">
-                <span className="text-[13px] font-semibold text-slate-700">Review Details</span>
-              </div>
-              <div className="px-4 py-3 space-y-2">
-                {!isCSR && <Row label="CSR"      value={detail.csr_name} />}
-                {(detail as any).reviewer_name && <Row label="Reviewer" value={(detail as any).reviewer_name} />}
-                <Row label="Form"        value={detail.form_name} />
-                <Row label="Interaction" value={formData?.interaction_type ?? (detail as any).interaction_type} />
-                <Row label="Submission"  value={`#${detail.id}`} />
-                {detail.created_at && <Row label="Date" value={fmtDate(detail.created_at)} />}
-                {metaRows.length > 0 && (
-                  <>
-                    <div className="border-t border-slate-100 my-2" />
-                    {metaRows.map((m, i) => <Row key={i} label={m.field_name} value={m.value} />)}
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* ── Call details (transcript collapsible) ───────────────────── */}
+            {/* ── Call Details (last) ──────────────────────────────────────── */}
             {calls && calls.length > 0 && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100">
-                  <span className="text-[13px] font-semibold text-slate-700">Call Details</span>
+                {/* Header — tabs if multiple calls */}
+                <div className="border-b border-slate-100">
+                  {calls.length > 1 ? (
+                    <div className="flex">
+                      {calls.map((call: any, i: number) => (
+                        <button
+                          key={i}
+                          onClick={() => { setActiveCallIndex(i); setTranscriptOpen(false) }}
+                          className={cn(
+                            'flex items-center gap-2 px-4 py-2.5 text-[12px] font-semibold border-b-2 transition-colors',
+                            activeCallIndex === i
+                              ? 'border-primary text-primary bg-primary/5'
+                              : 'border-transparent text-slate-500 hover:text-slate-700'
+                          )}
+                        >
+                          <Phone className="h-3 w-3" />
+                          Call {i + 1}
+                          {call.recording_url && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-3 bg-white border-b border-slate-100">
+                      <h3 className="text-[15px] font-semibold text-slate-800">Call Details</h3>
+                    </div>
+                  )}
                 </div>
-                <div className="px-4 py-3 space-y-4">
-                  {calls.map((call: any, i: number) => (
-                    <div key={call.call_id || i} className="space-y-2.5">
-                      {calls.length > 1 && (
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Call {i + 1}</p>
-                      )}
-                      {call.call_id   && <Row label="Conversation ID" value={call.call_id} />}
-                      {call.call_date && <Row label="Call Date"       value={fmtDate(call.call_date)} />}
+
+                {/* Active call content */}
+                {(() => {
+                  const call = calls[activeCallIndex] ?? calls[0]
+                  if (!call) return null
+                  return (
+                    <div className="px-4 py-3 space-y-3">
+                      {/* Call identifiers */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        {call.call_id   && (
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Conversation ID</p>
+                            <p className="text-[12px] font-medium text-slate-700 mt-0.5 truncate">{call.call_id}</p>
+                          </div>
+                        )}
+                        {call.call_date && (
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Call Date</p>
+                            <p className="text-[12px] font-medium text-slate-700 mt-0.5">{fmtDate(call.call_date)}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Audio */}
                       {call.recording_url ? (
-                        <audio controls className="w-full h-8 mt-1">
-                          <source src={call.recording_url} type="audio/mpeg" />
-                        </audio>
-                      ) : <p className="text-[12px] text-slate-400">No audio available</p>}
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Audio Recording</p>
+                          <audio controls className="w-full h-9 rounded-lg">
+                            <source src={call.recording_url} type="audio/mpeg" />
+                          </audio>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 py-2 px-3 bg-slate-50 rounded-lg">
+                          <MicOff className="h-4 w-4 text-slate-400 shrink-0" />
+                          <p className="text-[12px] text-slate-400">No audio recording available</p>
+                        </div>
+                      )}
+
+                      {/* Transcript */}
                       {call.transcript && (
                         <div>
                           <button
                             onClick={() => setTranscriptOpen(v => !v)}
-                            className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                            className="w-full flex items-center justify-between py-2 px-3 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors text-left"
                           >
-                            {transcriptOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            {transcriptOpen ? 'Hide' : 'Show'} Transcript
+                            <div className="flex items-center gap-2">
+                              <FileDown className="h-3.5 w-3.5 text-slate-500" />
+                              <span className="text-[12px] font-medium text-slate-700">
+                                {transcriptOpen ? 'Hide' : 'Show'} Transcript
+                              </span>
+                            </div>
+                            {transcriptOpen
+                              ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                              : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                            }
                           </button>
                           {transcriptOpen && (
-                            <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-slate-200 p-2.5 bg-slate-50">
-                              <div className="text-[12px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed"
+                            <div className="mt-2 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50"
+                              style={{ maxHeight: '40vh' }}>
+                              <div className="p-3 text-[12px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed"
                                 dangerouslySetInnerHTML={{ __html: formatTranscriptText(call.transcript) }} />
                             </div>
                           )}
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
+                  )
+                })()}
+
+                {/* Multi-call status summary */}
+                {calls.length > 1 && (
+                  <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center gap-3">
+                    <span className="text-[11px] text-slate-400">{calls.length} calls</span>
+                    {calls.filter((c: any) => c.recording_url).length > 0 && (
+                      <span className="text-[11px] text-emerald-600">
+                        {calls.filter((c: any) => c.recording_url).length} with audio
+                      </span>
+                    )}
+                    {calls.filter((c: any) => c.transcript).length > 0 && (
+                      <span className="text-[11px] text-blue-600">
+                        {calls.filter((c: any) => c.transcript).length} with transcript
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -766,8 +832,56 @@ export default function SubmissionDetailPage() {
         </div>{/* end left pane */}
 
         {/* ════ RIGHT PANE ══════════════════════════════════════════════════ */}
-        <div className="flex-1 bg-white overflow-y-auto">
-          <div className="p-6">
+        <div className="flex-1 rounded-xl border border-slate-200 bg-slate-100 overflow-y-auto min-w-0">
+          <div className="p-3 space-y-2.5">
+
+            {/* ── Overall Score ────────────────────────────────────────────── */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100">
+                <h3 className="text-[15px] font-semibold text-slate-800">Overall Score</h3>
+              </div>
+              <div className="px-5 py-4 text-center">
+                <div className="text-[44px] font-bold tracking-tight text-slate-900 leading-none">
+                  {score.toFixed(1)}
+                  <span className="text-2xl font-semibold ml-0.5 opacity-50">%</span>
+                </div>
+              </div>
+
+              {/* Before/After — only shown when a dispute was adjusted */}
+              {disputeAdjusted && (
+                <div className="border-t border-slate-100 px-5 py-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-3">Score Change</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 text-center">
+                      <p className="text-[11px] text-slate-400 mb-1">Original</p>
+                      <p className="text-[22px] font-bold line-through opacity-40 text-slate-700">
+                        {prevScore!.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div className={cn('flex items-center gap-0.5 font-bold text-[14px]', scoreDelta > 0 ? 'text-emerald-600' : 'text-red-600')}>
+                      {scoreDelta > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                      {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}%
+                    </div>
+                    <div className="flex-1 text-center">
+                      <p className="text-[11px] text-slate-400 mb-1">Updated</p>
+                      <p className="text-[22px] font-bold text-slate-900">
+                        {adjScore!.toFixed(1)}%
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Live score shown only during resolution mode */}
+              {resolutionMode && (
+                <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-amber-800">Live adjusted score</span>
+                  <span className="text-[20px] font-bold text-slate-900">{liveScore.toFixed(1)}%</span>
+                </div>
+              )}
+            </div>
+
+            {/* ── Score breakdown / editable form ─────────────────────────── */}
             {resolutionMode && editRenderData ? (
               <div className="rounded-xl overflow-hidden border border-amber-300">
                 <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">

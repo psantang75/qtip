@@ -845,10 +845,20 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
             f.version,
             f.user_version,
             f.user_version_date,
-            f.interaction_type
+            f.interaction_type,
+            reviewer.username   AS reviewer_name,
+            (
+              SELECT u.username
+              FROM submission_metadata sm
+              JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
+              JOIN users u ON CAST(sm.value AS UNSIGNED) = u.id
+              WHERE sm.submission_id = s.id AND fmf.field_name = 'CSR'
+              LIMIT 1
+            ) AS csr_name
           FROM 
             submissions s
             JOIN forms f ON s.form_id = f.id
+            LEFT JOIN users reviewer ON reviewer.id = s.submitted_by
           WHERE 
             s.id = ${submissionId}
         `
@@ -865,12 +875,15 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
         Prisma.sql`
           SELECT 
             fmf.field_name,
+            fmf.field_type,
+            fmf.sort_order,
             sm.value
           FROM 
             submission_metadata sm
             JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
           WHERE 
             sm.submission_id = ${submissionId}
+          ORDER BY fmf.sort_order ASC
         `
       );
       
@@ -922,7 +935,6 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
             d.reason,
             d.status,
             d.resolution_notes,
-            d.resolution_action,
             d.attachment_url,
             d.resolved_by,
             d.created_at,
@@ -969,8 +981,11 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
         form_id: submission.form_id,
         submitted_by: submission.submitted_by,
         submittedDate: submission.submitted_at,
+        submitted_at: submission.submitted_at,
         score: parseFloat(submission.total_score),
         status: submission.status,
+        reviewer_name: submission.reviewer_name ?? qaAnalystName ?? null,
+        csr_name: submission.csr_name ?? null,
         form: {
           id: submission.form_id,
           form_name: submission.form_name,

@@ -1564,7 +1564,7 @@ export default function FormsPage() {
   const [saving, setSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
 
-  if (user && user.role_id !== 1 && user.role_id !== 2) {
+  if (user && user.role_id !== 1) {
     return (
       <div className="p-6">
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-amber-700">You don't have permission to access Form Builder.</div>

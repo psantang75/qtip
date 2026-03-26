@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
+import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
@@ -72,10 +73,10 @@ export default function DisputeHistoryPage() {
   }
 
   return (
-    <div className="p-6 space-y-5">
+    <QualityListPage>
       <QualityPageHeader
         title="Dispute History"
-        subtitle="All disputes you have submitted"
+
         count={data?.total}
         onRefresh={refetch}
       />
@@ -133,7 +134,7 @@ export default function DisputeHistoryPage() {
                     <TableCell>
                       <button
                         className="text-[13px] font-medium text-primary hover:underline"
-                        onClick={() => navigate(`/app/quality/submissions/${d.audit_id}`)}
+                        onClick={() => navigate(`/app/quality/submissions/${d.audit_id}`, { state: { from: 'Dispute History', fromPath: '/app/quality/dispute-history' } })}
                       >
                         #{d.audit_id}
                       </button>
@@ -154,7 +155,7 @@ export default function DisputeHistoryPage() {
                     <TableCell className="text-[13px] text-slate-600">{fmtDate(d.created_at)}</TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
-                        onClick={() => navigate(`/app/quality/submissions/${d.audit_id}`)}>
+                        onClick={() => navigate(`/app/quality/submissions/${d.audit_id}`, { state: { from: 'Dispute History', fromPath: '/app/quality/dispute-history' } })}>
                         <Eye size={12} className="mr-1" /> View
                       </Button>
                     </TableCell>
@@ -182,6 +183,6 @@ export default function DisputeHistoryPage() {
         onPageChange={setPage}
         onPageSizeChange={size => { setPageSize(size); setPage(1) }}
       />
-    </div>
+    </QualityListPage>
   )
 }
