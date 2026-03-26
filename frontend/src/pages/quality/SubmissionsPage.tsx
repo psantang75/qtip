@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { FileText, Eye } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
 import qaService, { type Submission } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -17,6 +16,7 @@ import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { DateRangeFilter } from '@/components/common/DateRangeFilter'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
+import { useQualityRole } from '@/hooks/useQualityRole'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
 
@@ -24,13 +24,8 @@ import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFo
 const SUBMISSION_STATUSES = ['SUBMITTED', 'DISPUTED', 'FINALIZED']
 
 export default function SubmissionsPage() {
-  const { user } = useAuth()
   const navigate = useNavigate()
-
-  const roleId      = user?.role_id ?? 0
-  const isAdminOrQA = roleId === 1 || roleId === 2
-  const isManager   = roleId === 5
-  const isCSR       = roleId === 3
+  const { roleId, isAdminOrQA, isManager, isCSR } = useQualityRole()
 
   const pageTitle = isCSR ? 'My Reviews' : isManager ? 'Completed Reviews' : 'Completed Forms'
 
@@ -78,7 +73,7 @@ export default function SubmissionsPage() {
       if (isManager) return qaService.getTeamAudits({ page, limit: pageSize, status: apiStatus, start_date: ds, end_date: de })
       return qaService.getSubmissions({ page, limit: pageSize, status: apiStatus, date_start: ds, date_end: de })
     },
-    enabled: !!user,
+    enabled: roleId > 0,
     placeholderData: (prev: any) => prev,
   })
 

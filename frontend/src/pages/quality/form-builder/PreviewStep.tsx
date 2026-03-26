@@ -10,7 +10,7 @@ import {
   type FormRenderData,
   getQuestionScore,
 } from '@/utils/forms'
-import type { CategoryRenderData } from '@/utils/forms/formRendererComponents'
+import type { CategoryRenderData } from '@/utils/forms'
 import { getMaxPossibleScore } from '@/utils/forms/scoringAdapter'
 import FormMetadataDisplay from '@/components/FormMetadataDisplay'
 import { cn } from '@/lib/utils'

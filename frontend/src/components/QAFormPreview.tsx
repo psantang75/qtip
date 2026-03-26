@@ -4,11 +4,11 @@ import { HiOutlineArrowLeft } from 'react-icons/hi';
 import type { Form } from '../types/form.types';
 import { 
   prepareFormForRender, 
-  FormRenderer, 
+  FormRenderer,
   generateFormPreview,
   type FormRenderData,
   type CategoryRenderData
-} from '../utils/forms/formRendererComponents';
+} from '../utils/forms';
 import type { Form as IndexForm, Answer } from '../types';
 import { processConditionalLogic } from '../utils/forms/formConditions';
 import { calculateFormScore, getQuestionScore } from '../utils/forms/scoringAdapter';

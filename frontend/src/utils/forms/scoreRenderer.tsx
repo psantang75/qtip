@@ -54,8 +54,6 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   // Use backend score if available, otherwise use calculated score
   const totalScore = backendScore !== undefined ? backendScore : calculatedTotalScore;
   
-  console.log('backendScore:', backendScore, 'calculatedTotalScore:', calculatedTotalScore, 'totalScore:', totalScore, 'typeof totalScore:', typeof totalScore);
-  
   // Calculate visibility map to exclude hidden conditional questions
   const answerStrings: Record<number, string> = {};
   Object.entries(answers).forEach(([questionId, answer]) => {

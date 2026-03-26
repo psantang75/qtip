@@ -1,8 +1,8 @@
 /**
- * Form Renderer
- * 
- * This file re-exports everything from formRendererComponents.tsx to maintain backward compatibility.
- * All form rendering functionality is now consolidated in formRendererComponents.tsx.
+ * Form Renderer barrel — re-exports all rendering types, data prep, and components.
+ * Import from '@/utils/forms' rather than from this file directly.
  */
 
-export * from './formRendererComponents'; 
+export * from './formRenderTypes';
+export * from './formRenderPrep';
+export * from './formRendererComponents';

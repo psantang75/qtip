@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 /**
  * FormPreviewScreen Component
  * 
@@ -37,12 +37,12 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import type { Form } from '../types/form.types';
 import { 
-  prepareFormForRender, 
-  FormRenderer, 
+  prepareFormForRender,
+  FormRenderer,
   generateFormPreview,
   type FormRenderData,
   type CategoryRenderData
-} from '../utils/forms/formRendererComponents';
+} from '../utils/forms';
 import type { Form as IndexForm } from '../types';
 import { processConditionalLogic } from '../utils/forms/formConditions';
 import { calculateFormScore, getQuestionScore, getMaxPossibleScore, getEffectivePossibleScore } from '../utils/forms/scoringAdapter';

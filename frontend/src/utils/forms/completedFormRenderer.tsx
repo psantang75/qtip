@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../services/apiClient';
-import { prepareFormForRender, FormRenderer } from './formRendererComponents';
+import { prepareFormForRender } from './formRenderPrep';
+import { FormRenderer } from './formRendererComponents';
 import { calculateFormScore } from './scoringAdapter';
 import { processConditionalLogic } from './formConditions';
 import type { Form as FormType, Answer as AnswerType } from '../../types';

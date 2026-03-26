@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Eye } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useQualityRole } from '@/hooks/useQualityRole'
 import qaService, { type DisputeRecord, type DisputeHistoryItem } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -24,10 +24,6 @@ const DISPUTE_STATUSES = ['OPEN', 'UPHELD', 'ADJUSTED']
 
 const DEFAULT_PAGE_SIZE = 20
 
-interface DisputeListViewProps {
-  isManager: boolean
-  isCSR:     boolean
-}
 
 /** Normalize CSR dispute history items to the shared DisputeRecord shape */
 function normalizeCsrItem(d: DisputeHistoryItem): DisputeRecord {
@@ -45,8 +41,9 @@ function normalizeCsrItem(d: DisputeHistoryItem): DisputeRecord {
   }
 }
 
-function DisputeListView({ isManager, isCSR }: DisputeListViewProps) {
+function DisputeListView() {
   const navigate = useNavigate()
+  const { isCSR } = useQualityRole()
 
   const [page, setPage]         = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
@@ -162,7 +159,7 @@ function DisputeListView({ isManager, isCSR }: DisputeListViewProps) {
     setPageSize(DEFAULT_PAGE_SIZE)
   }
 
-  const fromLabel = isCSR ? 'Dispute History' : isManager ? 'Disputes' : 'Disputes'
+  const fromLabel = isCSR ? 'Dispute History' : 'Disputes'
   const fromPath  = '/app/quality/disputes'
   const colSpan   = isCSR ? 8 : 10
 
@@ -311,9 +308,5 @@ function DisputeListView({ isManager, isCSR }: DisputeListViewProps) {
 }
 
 export default function DisputesPage() {
-  const { user } = useAuth()
-  const roleId    = user?.role_id ?? 0
-  const isManager = roleId === 5
-  const isCSR     = roleId === 3
-  return <DisputeListView isManager={isManager} isCSR={isCSR} />
+  return <DisputeListView />
 }

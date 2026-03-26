@@ -12,6 +12,7 @@ import {
   calculateFormScore,
   prepareFormForRender,
   FormRenderer,
+  getQuestionScore,
   type FormRenderData,
 } from '@/utils/forms'
 import { validateAnswers } from '@/utils/submissionUtils'
@@ -119,27 +120,17 @@ export default function AuditFormPage() {
     setFormRenderData(prepareFormForRender(formData, currentAnswers, newVisibility, {}, totalScore))
   }
 
-  const handleAnswerChange = (questionId: number, value: string, questionType: string) => {
+  const handleAnswerChange = (questionId: number, value: string, _questionType: string) => {
     if (!form) return
-    let qScore = 0
     let foundQ: any
     for (const cat of form.categories) {
       const q = cat.questions.find((q: any) => q.id === questionId)
       if (q) { foundQ = q; break }
     }
     if (!foundQ) return
-    const qt = questionType.toLowerCase()
-    if (qt === 'yes_no') {
-      qScore = value.toLowerCase() === 'yes' ? (foundQ.yes_value ?? 0) : value.toLowerCase() === 'no' ? (foundQ.no_value ?? 0) : 0
-    } else if (qt === 'scale') {
-      qScore = parseInt(value) || 0
-    } else if (qt === 'radio' && foundQ.radio_options) {
-      const opt = foundQ.radio_options.find((o: any) => o.option_value === value)
-      if (opt) qScore = opt.score || 0
-    }
+    const qScore = getQuestionScore(foundQ, value)
     const newAnswers = { ...answers, [questionId]: { question_id: questionId, answer: value, score: qScore, notes: answers[questionId]?.notes || '' } }
     setAnswers(newAnswers)
-    
     updateRenderData(form, newAnswers)
   }
 

@@ -5,7 +5,7 @@ import {
   Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { BarChart3, RefreshCw, Filter, FileBarChart } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useQualityRole } from '@/hooks/useQualityRole'
 import qaService from '@/services/qaService'
 import { useTeamCsrs, useAnalyticsFilters, useFormsForFilter } from '@/hooks/useQualityQueries'
 import { Button } from '@/components/ui/button'
@@ -123,10 +123,8 @@ function SummaryCards({ data }: { data: any }) {
 }
 
 export default function QualityAnalyticsPage() {
-  const { user } = useAuth()
   const { toast } = useToast()
-  const roleId = user?.role_id ?? 0
-  const isManager = roleId === 5
+  const { roleId, isManager, canViewAnalytics } = useQualityRole()
 
   const [preset, setPreset] = useState<Preset>('30d')
   const [customStart, setCustomStart] = useState('')
@@ -165,7 +163,7 @@ export default function QualityAnalyticsPage() {
     setRunKey(k => k + 1)
   }
 
-  if (roleId !== 1 && roleId !== 2 && roleId !== 5) {
+  if (!canViewAnalytics) {
     return (
       <div className="p-6">
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-amber-700">QA Analytics is not available for your role.</div>

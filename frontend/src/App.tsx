@@ -20,7 +20,6 @@ import AdminRolesPage       from './pages/admin/AdminRolesPage'
 import ProfilePage          from './pages/admin/ProfilePage'
 
 // Lazy-loaded page components
-const QualityOverviewPage   = React.lazy(() => import('./pages/quality/QualityOverviewPage'))
 const FormsPage             = React.lazy(() => import('./pages/quality/FormsPage'))
 const SubmissionsPage       = React.lazy(() => import('./pages/quality/SubmissionsPage'))
 const DisputesPage          = React.lazy(() => import('./pages/quality/DisputesPage'))
