@@ -1,5 +1,6 @@
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -86,13 +87,15 @@ export function QualityFilterBar({
             <span className="font-semibold text-slate-700">{countLabel}</span> results
           </span>
         )}
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onReset}
           disabled={!hasFilters}
-          className="text-[12px] font-medium text-primary hover:underline disabled:opacity-30 disabled:cursor-not-allowed disabled:no-underline"
+          className="h-7 px-2 text-[12px] text-primary hover:text-primary hover:bg-primary/5"
         >
           Reset Filters
-        </button>
+        </Button>
       </div>
     </div>
   )

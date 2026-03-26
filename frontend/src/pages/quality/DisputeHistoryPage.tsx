@@ -18,9 +18,8 @@ import { ListPagination } from '@/components/common/ListPagination'
 import { DateRangeFilter, type DateRange } from '@/components/common/DateRangeFilter'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { useListSort } from '@/hooks/useListSort'
-
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
 
 export default function DisputeHistoryPage() {
   const { user }  = useAuth()
@@ -29,7 +28,7 @@ export default function DisputeHistoryPage() {
   const [pageSize, setPageSize]   = useState(20)
   const [search, setSearch]       = useState('')
   const [statusFilter, setStatus] = useState('all')
-  const [dateRange, setDateRange] = useState<DateRange>({ start: '', end: '' })
+  const [dateRange, setDateRange] = useState<DateRange>(() => defaultDateRange90())
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['csr-dispute-history', page, pageSize, statusFilter],
@@ -39,7 +38,7 @@ export default function DisputeHistoryPage() {
       status: statusFilter !== 'all' ? statusFilter : undefined,
     }),
     enabled: !!user,
-    placeholderData: (prev: any) => prev,
+    placeholderData: (prev) => prev,
   })
 
   const hasFilters  = search !== '' || statusFilter !== 'all' || !!dateRange.start || !!dateRange.end
@@ -69,7 +68,7 @@ export default function DisputeHistoryPage() {
   const { sort, dir, toggle, sorted } = useListSort(filtered)
 
   const resetFilters = () => {
-    setSearch(''); setStatus('all'); setDateRange({ start: '', end: '' }); setPage(1); setPageSize(20)
+    setSearch(''); setStatus('all'); setDateRange(defaultDateRange90()); setPage(1); setPageSize(20)
   }
 
   return (
@@ -77,8 +76,8 @@ export default function DisputeHistoryPage() {
       <QualityPageHeader
         title="Dispute History"
 
-        count={data?.total}
-        onRefresh={refetch}
+
+
       />
 
       <QualityFilterBar
@@ -106,9 +105,7 @@ export default function DisputeHistoryPage() {
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? (
-          <div className="p-4 space-y-2">
-            {[...Array(8)].map((_, i) => <div key={i} className="h-10 bg-slate-100 animate-pulse rounded" />)}
-          </div>
+          <TableLoadingSkeleton rows={8} />
         ) : isError ? (
           <TableErrorState message="Failed to load dispute history." onRetry={refetch} />
         ) : (

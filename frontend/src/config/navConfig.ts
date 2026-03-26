@@ -27,7 +27,7 @@ export const NAV_CONFIG: SectionConfig[] = [
     items: [
       { label: 'Form Builder',      path: '/app/quality/forms',           icon: 'ClipboardList',   roles: [1] },
       { label: 'Review Forms',      path: '/app/quality/review-forms',    icon: 'ClipboardCheck',  roles: [1,2] },
-      { label: 'Submissions',       path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [1,2] },
+      { label: 'Completed Forms',    path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [1,2] },
       { label: 'Team Reviews',      path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [5] },
       { label: 'My Reviews',        path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [3] },
       { label: 'Disputes',          path: '/app/quality/disputes',        icon: 'AlertTriangle',   roles: [1,2] },

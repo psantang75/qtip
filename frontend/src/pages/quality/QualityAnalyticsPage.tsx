@@ -7,6 +7,7 @@ import {
 import { BarChart3, RefreshCw, Filter, FileBarChart } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import qaService from '@/services/qaService'
+import { useTeamCsrs, useAnalyticsFilters, useFormsForFilter } from '@/hooks/useQualityQueries'
 import { Button } from '@/components/ui/button'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -41,8 +42,13 @@ const PRESETS: { value: Preset; label: string }[] = [
   { value: 'custom', label: 'Custom range' },
 ]
 
+/** Map a chart-API response (labels + datasets[0].data) to a recharts-compatible array */
+function toChartData(data: any): { name: string; score: number }[] {
+  return data?.labels?.map((l: string, i: number) => ({ name: l, score: data.datasets?.[0]?.data?.[i] ?? 0 })) ?? []
+}
+
 function TrendsChart({ data }: { data: any }) {
-  const chartData = data?.labels?.map((l: string, i: number) => ({ name: l, score: data.datasets?.[0]?.data?.[i] ?? 0 })) ?? []
+  const chartData = toChartData(data)
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={chartData}>
@@ -57,7 +63,7 @@ function TrendsChart({ data }: { data: any }) {
 }
 
 function AveragesChart({ data }: { data: any }) {
-  const chartData = data?.labels?.map((l: string, i: number) => ({ name: l, score: data.datasets?.[0]?.data?.[i] ?? 0 })) ?? []
+  const chartData = toChartData(data)
   return (
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={chartData} layout="vertical">
@@ -138,23 +144,9 @@ export default function QualityAnalyticsPage() {
     return getPresetDates(preset)
   }, [preset, customStart, customEnd])
 
-  const { data: filterOptions } = useQuery({
-    queryKey: ['analytics-filters'],
-    queryFn: () => qaService.getAnalyticsFilters(),
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const { data: teamCSRs } = useQuery({
-    queryKey: ['team-csrs'],
-    queryFn: () => qaService.getTeamCSRs(),
-    enabled: isManager,
-  })
-
-  const { data: forms } = useQuery({
-    queryKey: ['forms-filter'],
-    queryFn: () => qaService.getFormsForFilter(),
-    staleTime: 5 * 60 * 1000,
-  })
+  const { data: filterOptions } = useAnalyticsFilters()
+  const { data: teamCSRs }      = useTeamCsrs(isManager)
+  const { data: forms }         = useFormsForFilter()
 
   const { data: report, isLoading: reportLoading, isError: reportError } = useQuery({
     queryKey: ['analytics-report', runKey, dates, reportType, groupBy, aggregation, departmentId, csrId, formId],

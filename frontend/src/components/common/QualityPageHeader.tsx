@@ -3,8 +3,6 @@ import { cn } from '@/lib/utils'
 interface QualityPageHeaderProps {
   title: string
   subtitle?: string
-  count?: number | string
-  onRefresh?: () => void
   actions?: React.ReactNode
   className?: string
 }

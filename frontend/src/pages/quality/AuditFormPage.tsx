@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Save, Send, AlertCircle, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getFormById } from '@/services/formService'
 import submissionService from '@/services/submissionService'
-import phoneSystemService from '@/services/phoneSystemService'
 import MultipleCallSelector from '@/components/MultipleCallSelector'
 import FormMetadataDisplay from '@/components/FormMetadataDisplay'
 import {
@@ -15,7 +15,6 @@ import {
   type FormRenderData,
 } from '@/utils/forms'
 import { validateAnswers } from '@/utils/submissionUtils'
-import { extractTranscriptText } from '@/utils/transcriptUtils'
 import { Button } from '@/components/ui/button'
 
 interface AnswerType {
@@ -49,23 +48,22 @@ export default function AuditFormPage() {
   const callId = searchParams.get('callId')
   const csrId  = searchParams.get('csrId')
 
-  const [form, setForm] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const { data: form, isLoading: loading } = useQuery({
+    queryKey: ['audit-form', formId],
+    queryFn: () => getFormById(Number(formId)),
+    enabled: !!formId,
+    staleTime: 60 * 1000,
+  })
+
   const [submitting, setSubmitting] = useState(false)
   const [score, setScore] = useState(0)
-  const [hasChanges, setHasChanges] = useState(false)
   const [answers, setAnswers] = useState<Record<number, AnswerType>>({})
-  const [callDetails, setCallDetails] = useState<any>(null)
   const [visibilityMap, setVisibilityMap] = useState<Record<number, boolean>>({})
   const [formRenderData, setFormRenderData] = useState<FormRenderData | null>(null)
-  const [categoryScores, setCategoryScores] = useState<Record<number, { raw: number; weighted: number }>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [missingQuestions, setMissingQuestions] = useState<number[]>([])
   const [metadataValues, setMetadataValues] = useState<Record<string, string>>({})
-  const [isLoadingAudio, setIsLoadingAudio] = useState(false)
   const [selectedCalls, setSelectedCalls] = useState<Call[]>([])
-
-  void isLoadingAudio; void hasChanges; void categoryScores; void callDetails
 
   const scrollToQuestion = (questionId: number) => {
     const el = document.getElementById(`question-${questionId}`)
@@ -76,77 +74,47 @@ export default function AuditFormPage() {
     }
   }
 
-  const fetchAudioUrl = async (conversationId: string) => {
-    if (!conversationId.trim()) return
-    setIsLoadingAudio(true)
-    try {
-      const result = await phoneSystemService.getAudioAndTranscriptByConversationId(conversationId.trim())
-      if (result.audio || result.transcript) {
-        const processedTranscript = extractTranscriptText(result.transcript?.transcript)
-        setCallDetails((prev: any) => ({ ...prev, audio_url: result.audio?.audio_url || null, transcript: processedTranscript }))
-      } else {
-        setCallDetails((prev: any) => ({ ...prev, audio_url: null, transcript: 'No transcript available' }))
-      }
-    } catch {
-      setCallDetails((prev: any) => ({ ...prev, audio_url: null, transcript: 'Error loading transcript' }))
-    } finally {
-      setIsLoadingAudio(false)
-    }
-  }
 
+  // Redirect if no formId
   useEffect(() => {
-    if (!formId) { navigate('/app/quality/review-forms'); return }
-    const init = async () => {
-      try {
-        setLoading(true)
-        const fetchedForm = await getFormById(Number(formId))
-        setForm(fetchedForm)
-        const emptyAnswers: Record<number, AnswerType> = {}
-        const emptyStrings: Record<number, string> = {}
-        const initialVisibility = processConditionalLogic(fetchedForm, emptyStrings)
-        const { totalScore, categoryScores: initCatScores } = calculateFormScore(fetchedForm, emptyAnswers)
-        setAnswers(emptyAnswers)
-        setVisibilityMap(initialVisibility)
-        setCategoryScores(initCatScores)
-        setScore(totalScore)
-        setFormRenderData(prepareFormForRender(fetchedForm, emptyAnswers, initialVisibility, initCatScores, totalScore))
+    if (!formId) navigate('/app/quality/review-forms')
+  }, [formId, navigate])
 
-        const initialMeta: Record<string, string> = {}
-        const today = new Date().toISOString().split('T')[0]
-        if (fetchedForm.metadata_fields) {
-          fetchedForm.metadata_fields.forEach((field: any) => {
-            const key = (field.id && field.id !== 0) ? field.id.toString() : field.field_name
-            if (field.field_type === 'AUTO') {
-              if ((field.field_name === 'Reviewer Name' || field.field_name === 'Auditor Name') && user)
-                initialMeta[key] = user.username
-              else if (field.field_name === 'Review Date' || field.field_name === 'Audit Date')
-                initialMeta[key] = today
-            }
-          })
-        }
-        setMetadataValues(initialMeta)
-        if (callId) {
-          setCallDetails({ id: Number(callId), call_id: callId, csr_id: csrId || '', call_date: '', duration: 0, transcript: '', audio_url: null })
-        }
-      } catch (err) {
-        console.error('Error loading form:', err)
-      } finally {
-        setLoading(false)
+  // Initialize derived state once the form data arrives from useQuery
+  useEffect(() => {
+    if (!form) return
+    const emptyAnswers: Record<number, AnswerType> = {}
+    const emptyStrings: Record<number, string> = {}
+    const initialVisibility = processConditionalLogic(form, emptyStrings)
+    const { totalScore, categoryScores: initCatScores } = calculateFormScore(form, emptyAnswers)
+    setAnswers(emptyAnswers)
+    setVisibilityMap(initialVisibility)
+    setScore(totalScore)
+    setFormRenderData(prepareFormForRender(form, emptyAnswers, initialVisibility, initCatScores, totalScore))
+
+    const today = new Date().toISOString().split('T')[0]
+    const initialMeta: Record<string, string> = {}
+    ;(form.metadata_fields ?? []).forEach((field: any) => {
+      const key = (field.id && field.id !== 0) ? field.id.toString() : field.field_name
+      if (field.field_type === 'AUTO') {
+        if ((field.field_name === 'Reviewer Name' || field.field_name === 'Auditor Name') && user)
+          initialMeta[key] = user.username
+        else if (field.field_name === 'Review Date' || field.field_name === 'Audit Date')
+          initialMeta[key] = today
       }
-    }
-    init()
-  }, [formId, callId, csrId, navigate, user])
+    })
+    setMetadataValues(initialMeta)
+  }, [form, user])
 
   const updateRenderData = (formData: any, currentAnswers: Record<number, AnswerType>) => {
     if (!formData) return
     const answerStrings: Record<number, string> = {}
     Object.entries(currentAnswers).forEach(([qId, a]) => { answerStrings[Number(qId)] = a.answer || '' })
     const newVisibility = processConditionalLogic(formData, answerStrings)
-    const { totalScore, categoryScores: newCatScores } = calculateFormScore(formData, currentAnswers)
+    const { totalScore } = calculateFormScore(formData, currentAnswers)
     setScore(totalScore)
-    setCategoryScores(newCatScores)
     setVisibilityMap(newVisibility)
-    setFormRenderData(prepareFormForRender(formData, currentAnswers, newVisibility, newCatScores, totalScore))
+    setFormRenderData(prepareFormForRender(formData, currentAnswers, newVisibility, {}, totalScore))
   }
 
   const handleAnswerChange = (questionId: number, value: string, questionType: string) => {
@@ -169,14 +137,14 @@ export default function AuditFormPage() {
     }
     const newAnswers = { ...answers, [questionId]: { question_id: questionId, answer: value, score: qScore, notes: answers[questionId]?.notes || '' } }
     setAnswers(newAnswers)
-    setHasChanges(true)
+    
     updateRenderData(form, newAnswers)
   }
 
   const handleNotesChange = (questionId: number, notes: string) => {
     if (!form) return
     setAnswers(prev => ({ ...prev, [questionId]: { ...prev[questionId], notes } }))
-    setHasChanges(true)
+    
   }
 
   const handleSubmit = () => {
@@ -230,7 +198,7 @@ export default function AuditFormPage() {
     }
 
     submissionService.submitAudit(payload)
-      .then(() => { setHasChanges(false); navigate('/app/quality/submissions', { state: { message: 'Audit submitted successfully!' } }) })
+      .then(() => { navigate('/app/quality/submissions', { state: { message: 'Audit submitted successfully!' } }) })
       .catch(() => setErrorMessage('Failed to submit. Please try again.'))
       .finally(() => setSubmitting(false))
   }
@@ -245,7 +213,7 @@ export default function AuditFormPage() {
       metadata: Object.entries(metadataValues).map(([fieldId, value]) => ({ field_id: fieldId, value })),
     }
     submissionService.saveDraft(payload)
-      .then(() => { setHasChanges(false); navigate('/app/quality/submissions', { state: { message: 'Draft saved.' } }) })
+      .then(() => { navigate('/app/quality/submissions', { state: { message: 'Draft saved.' } }) })
       .catch(() => setErrorMessage('Failed to save draft. Please try again.'))
       .finally(() => setSubmitting(false))
   }
@@ -365,14 +333,6 @@ export default function AuditFormPage() {
                     )}
                     onChange={async (fieldId: string, value: string) => {
                       setMetadataValues(prev => ({ ...prev, [fieldId]: value }))
-                      const field = form.metadata_fields.find((f: any) => {
-                        const k = (f.id && f.id !== 0) ? f.id.toString() : f.field_name
-                        return k === fieldId
-                      })
-                      if (field && (field.field_name?.toLowerCase().includes('conversation') || field.field_name?.toLowerCase().includes('recording id'))) {
-                        if (value.trim()) await fetchAudioUrl(value)
-                        else setCallDetails((prev: any) => ({ ...prev, audio_url: null }))
-                      }
                     }}
                     readonly={false}
                     currentUser={user ? { id: user.id, username: user.username } : undefined}
@@ -389,7 +349,7 @@ export default function AuditFormPage() {
               <div className="px-4 py-3">
                 <MultipleCallSelector
                   selectedCalls={selectedCalls}
-                  onCallsChange={(calls: Call[]) => { setSelectedCalls(calls); setHasChanges(true) }}
+                  onCallsChange={(calls: Call[]) => { setSelectedCalls(calls);  }}
                   disabled={submitting}
                 />
               </div>
@@ -427,3 +387,4 @@ export default function AuditFormPage() {
     </div>
   )
 }
+

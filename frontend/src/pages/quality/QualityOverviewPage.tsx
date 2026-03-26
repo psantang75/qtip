@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import qaService, { scoreColor } from '@/services/qaService'
+import { formatQualityDate } from '@/utils/dateFormat'
 import { Button } from '@/components/ui/button'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -145,7 +146,7 @@ export default function QualityOverviewPage() {
                     <TableRow key={row.id} className="cursor-pointer hover:bg-slate-50/50"
                       onClick={() => navigate(`/app/quality/submissions/${row.id}`, { state: { from: 'Quality Overview', fromPath: '/app/quality/overview' } })}>
                       <TableCell className="text-[13px] text-slate-600">
-                        {new Date(row.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {formatQualityDate(row.created_at)}
                       </TableCell>
                       <TableCell className="text-[13px] font-medium text-slate-900">{row.form_name}</TableCell>
                       <TableCell className="text-right text-[13px] font-medium">
@@ -268,9 +269,7 @@ export default function QualityOverviewPage() {
                     <TableCell className="text-right text-[13px]">{row.disputes}</TableCell>
                     {isAdminOrQA && (
                       <TableCell className="text-[13px] text-slate-500">
-                        {row.last_audit_date
-                          ? new Date(row.last_audit_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                          : '—'}
+                        {formatQualityDate(row.last_audit_date)}
                       </TableCell>
                     )}
                   </TableRow>

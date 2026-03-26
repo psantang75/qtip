@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, AlertTriangle, CheckCircle, Edit3, Pencil, FileText, X, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Phone, Mic, MicOff, FileDown } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, CheckCircle, Edit3, Pencil, FileText, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Phone, Mic, MicOff, FileDown } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import qaService, { scoreColor, type SubmissionDetail } from '@/services/qaService'
+import qaService, { scoreBg, type SubmissionDetail } from '@/services/qaService'
 import { api } from '@/services/authService'
 import { ScoreRenderer } from '@/utils/forms/scoreRenderer'
 import {
@@ -17,188 +17,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { formatTranscriptText } from '@/utils/transcriptUtils'
-import { StatusBadge } from '@/components/common/StatusBadge'
-
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-
-// ── Shared row ────────────────────────────────────────────────────────────────
-function Row({ label, value }: { label: string; value?: string | number | null }) {
-  return (
-    <div className="flex justify-between gap-4 text-[13px]">
-      <span className="text-slate-500 shrink-0">{label}:</span>
-      <span className="font-medium text-slate-800 text-right">{value ?? '—'}</span>
-    </div>
-  )
-}
-
-// ── Panel ─────────────────────────────────────────────────────────────────────
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl overflow-hidden">
-      <div className="px-4 py-3 bg-white border border-slate-200 rounded-t-lg border-b border-slate-200">
-        <h3 className="text-[15px] font-semibold text-slate-800">{title}</h3>
-      </div>
-      <div className="border border-t-0 border-slate-200 rounded-b-lg bg-white px-4 py-4">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-// ── Category breakdown fallback ───────────────────────────────────────────────
-function CategoryBreakdown({ detail }: { detail: SubmissionDetail }) {
-  const categories = detail.answers.reduce<Record<string, typeof detail.answers>>((acc, a) => {
-    const cat = a.category_name ?? 'General'
-    if (!acc[cat]) acc[cat] = []
-    acc[cat].push(a)
-    return acc
-  }, {})
-  return (
-    <div className="space-y-3">
-      {Object.entries(categories).map(([cat, answers]) => (
-        <div key={cat} className="border border-slate-200 rounded-lg overflow-hidden">
-          <div className="flex items-center gap-2.5 bg-slate-50 border-b border-slate-200 px-4 py-2.5">
-            <span className="w-[3px] h-4 rounded-full bg-primary shrink-0" />
-            <span className="text-[12px] font-semibold text-slate-600 uppercase tracking-wider">{cat}</span>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {answers.map((a, i) => (
-              <div key={i} className="px-4 py-2.5 flex items-start justify-between gap-4">
-                <p className="text-[13px] text-slate-700 flex-1">{a.question_text}</p>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className={cn('text-[13px] font-medium',
-                    a.answer?.toUpperCase() === 'YES' ? 'text-emerald-600' :
-                    a.answer?.toUpperCase() === 'NO'  ? 'text-red-600' : 'text-slate-600'
-                  )}>{a.answer ?? '—'}</span>
-                  {a.score != null && (
-                    <span className={cn('text-[12px] font-semibold', scoreColor(a.score))}>
-                      {a.score.toFixed(0)} pts
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── CSR submit dispute form ───────────────────────────────────────────────────
-function DisputeForm({ submissionId, onSuccess }: { submissionId: number; onSuccess: () => void }) {
-  const [reason, setReason] = useState('')
-  const { toast } = useToast()
-  const qc = useQueryClient()
-  const { mutate, isPending } = useMutation({
-    mutationFn: () => qaService.submitCSRDispute({ submission_id: submissionId, reason }),
-    onSuccess: () => {
-      toast({ title: 'Dispute submitted', description: 'Sent to your manager for review.' })
-      qc.invalidateQueries({ queryKey: ['submission-detail'] })
-      qc.invalidateQueries({ queryKey: ['submissions'] })
-      qc.invalidateQueries({ queryKey: ['csr-dispute-history'] })
-      onSuccess()
-    },
-    onError: () => toast({ title: 'Error', description: 'Failed to submit dispute.', variant: 'destructive' }),
-  })
-  const minLen = 10
-  return (
-    <div className="space-y-3 border border-amber-200 bg-amber-50 rounded-lg p-4">
-      <h4 className="text-[13px] font-semibold text-amber-800">Submit a Dispute</h4>
-      <Textarea value={reason} onChange={e => setReason(e.target.value)}
-        placeholder="Explain why you believe this score is incorrect…" rows={3}
-        className="text-[13px] bg-white" />
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] text-amber-700">{reason.trim().length < minLen ? `${minLen - reason.trim().length} more characters needed` : ''}</span>
-        <Button size="sm" onClick={() => mutate()} disabled={isPending || reason.trim().length < minLen}
-          className="bg-amber-600 hover:bg-amber-700 text-white">
-          {isPending ? 'Submitting…' : 'Submit Dispute'}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-// ── CSR edit dispute form ─────────────────────────────────────────────────────
-function EditDisputeForm({
-  dispute,
-  onSuccess,
-  onCancel,
-}: {
-  dispute: { id: number; reason: string; attachment_url?: string | null }
-  onSuccess: () => void
-  onCancel: () => void
-}) {
-  const [reason, setReason] = useState(dispute.reason)
-  const [file, setFile] = useState<File | null>(null)
-  const [fileError, setFileError] = useState<string | null>(null)
-  const { toast } = useToast()
-  const qc = useQueryClient()
-
-  const { mutate, isPending, error } = useMutation({
-    mutationFn: () => qaService.updateCSRDispute(dispute.id, reason, file),
-    onSuccess: () => {
-      toast({ title: 'Dispute updated' })
-      qc.invalidateQueries({ queryKey: ['submission-detail'] })
-      qc.invalidateQueries({ queryKey: ['csr-dispute-history'] })
-      onSuccess()
-    },
-    onError: (err: any) =>
-      toast({ title: 'Error', description: err?.response?.data?.message ?? 'Failed to update dispute.', variant: 'destructive' }),
-  })
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFileError(null)
-    const f = e.target.files?.[0]
-    if (!f) return
-    if (f.size > 5 * 1024 * 1024) { setFileError('File must be under 5 MB'); return }
-    const allowed = ['application/pdf','application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'image/jpeg','image/jpg','image/png']
-    if (!allowed.includes(f.type)) { setFileError('Only PDF, DOC, DOCX, JPG, PNG allowed'); return }
-    setFile(f)
-  }
-
-  return (
-    <div className="space-y-3 border border-primary/30 bg-primary/5 rounded-lg p-4">
-      <div className="flex items-center justify-between">
-        <h4 className="text-[13px] font-semibold text-slate-800">Edit Dispute</h4>
-        <button onClick={onCancel} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
-      </div>
-      <div>
-        <Textarea value={reason} onChange={e => setReason(e.target.value)}
-          rows={4} className="text-[13px] bg-white" maxLength={1000} />
-        <p className="text-[11px] text-slate-400 mt-1 text-right">{reason.length}/1000</p>
-      </div>
-      <div>
-        <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide block mb-1">
-          Supporting Evidence (optional)
-        </label>
-        <input type="file" onChange={handleFileChange}
-          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-          className="text-[12px] w-full text-slate-600 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-[12px] file:font-medium file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200" />
-        {dispute.attachment_url && !file && (
-          <p className="text-[11px] text-slate-500 mt-1">Current: {dispute.attachment_url.split('/').pop()}</p>
-        )}
-        {file && <p className="text-[11px] text-primary mt-1">New file: {file.name}</p>}
-        {fileError && <p className="text-[11px] text-red-600 mt-1">{fileError}</p>}
-      </div>
-      {error && (
-        <p className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded p-2">
-          {(error as any)?.response?.data?.message ?? 'Failed to update dispute.'}
-        </p>
-      )}
-      <div className="flex gap-2 justify-end pt-1">
-        <Button variant="outline" size="sm" onClick={onCancel} disabled={isPending}>Cancel</Button>
-        <Button size="sm" onClick={() => mutate()} disabled={isPending || !reason.trim()}
-          className="bg-primary hover:bg-primary/90 text-white">
-          {isPending ? 'Saving…' : 'Save Changes'}
-        </Button>
-      </div>
-    </div>
-  )
-}
+import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
+import { Row, Panel, CategoryBreakdown } from './submission-detail/SubmissionDetailPrimitives'
+import { DisputeForm, EditDisputeForm } from './submission-detail/DisputeForms'
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function SubmissionDetailPage() {
@@ -333,6 +154,12 @@ export default function SubmissionDetailPage() {
           }))
       : metaRows.map(r => ({ field_name: r.field_name, field_type: r.field_type ?? 'TEXT', value: r.value }))
 
+  // ── Split Review Details at the first SPACER (mirrors form-builder section break) ──
+  const firstSpacerIdx = reviewDetailsFields.findIndex(f => f.field_type === 'SPACER')
+  const topReviewFields    = firstSpacerIdx >= 0 ? reviewDetailsFields.slice(0, firstSpacerIdx)     : reviewDetailsFields
+  const bottomReviewFields = firstSpacerIdx >= 0 ? reviewDetailsFields.slice(firstSpacerIdx + 1)    : []
+  const hasBottomReviewFields = bottomReviewFields.some(f => f.field_type !== 'SPACER')
+
   // ── Enter resolution / editing mode ─────────────────────────────────────────
   const enterResolutionMode = () => {
     if (!formData) return
@@ -432,12 +259,7 @@ export default function SubmissionDetailPage() {
     prevScore != null && adjScore != null
   const scoreDelta = disputeAdjusted ? (adjScore! - prevScore!) : 0
 
-  // Score accent colours for the left panel header
-  const scoreAccent = score >= 85
-    ? 'bg-emerald-50 border-emerald-200'
-    : score >= 70
-    ? 'bg-amber-50 border-amber-200'
-    : 'bg-red-50 border-red-200'
+  const scoreAccent = scoreBg(score)
 
   return (
     // Header lives inside main's natural p-6 — same position as list page.
@@ -459,7 +281,7 @@ export default function SubmissionDetailPage() {
 
           {/* Title row — QualityPageHeader identical classes */}
           <div className="flex items-start justify-between gap-4">
-          <h1 className="text-2xl font-bold text-slate-900">Completed Review: {detail.form_name}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Completed Review</h1>
           <div className="flex items-center gap-2 shrink-0 mt-0.5">
             {resolutionMode && (
               <span className="flex items-center gap-1 text-[12px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
@@ -489,35 +311,12 @@ export default function SubmissionDetailPage() {
         </div>{/* end title row */}
         </div>{/* end back+title group */}
 
-        {/* Info card — QualityFilterBar identical classes: rounded-xl border p-4 flex flex-wrap gap-3 */}
-        <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
-          <span className="text-[13px] text-slate-600">
-            Status: <span className="font-semibold text-slate-800">{detail.status.charAt(0) + detail.status.slice(1).toLowerCase()}</span>
+        {/* Info card */}
+        <div className="bg-white rounded-xl border border-slate-200 pl-4 pr-11 py-3 flex items-center justify-between">
+          <span className="text-[15px] font-semibold text-slate-900 truncate">Review #: {detail.id} — {detail.form_name}</span>
+          <span className="text-[15px] text-slate-600 shrink-0">
+            Status: <span className="font-bold text-slate-900">{detail.status.charAt(0) + detail.status.slice(1).toLowerCase()}</span>
           </span>
-          {(detail as any).reviewer_name && (
-            <>
-              <span className="text-slate-300">·</span>
-              <span className="text-[13px] text-slate-600">
-                Reviewer: <span className="font-semibold text-slate-800">{(detail as any).reviewer_name}</span>
-              </span>
-            </>
-          )}
-          {!isCSR && detail.csr_name && (
-            <>
-              <span className="text-slate-300">·</span>
-              <span className="text-[13px] text-slate-600">
-                CSR: <span className="font-semibold text-slate-800">{detail.csr_name}</span>
-              </span>
-            </>
-          )}
-          {detail.created_at && (
-            <>
-              <span className="text-slate-300">·</span>
-              <span className="text-[13px] text-slate-600">
-                Date: <span className="font-semibold text-slate-800">{fmtDate(detail.created_at)}</span>
-              </span>
-            </>
-          )}
         </div>
 
       </div>{/* end page header */}
@@ -549,34 +348,59 @@ export default function SubmissionDetailPage() {
               <DisputeForm submissionId={detail.id} onSuccess={() => setShowDisputeForm(false)} />
             )}
 
-            {/* ── Review Details — 2-col grid following form-builder sort order ── */}
+            {/* ── Review Details — key fields pinned at top, form fields below ── */}
             {reviewDetailsFields.length > 0 && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-4 py-3 bg-white border-b border-slate-100">
                   <h3 className="text-[15px] font-semibold text-slate-800">Review Details</h3>
                 </div>
-                <div className="px-4 py-3">
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                    {reviewDetailsFields.map((f, i) => {
-                      if (f.field_type === 'SPACER') {
-                        // Empty cell — pushes the next field to the correct column
-                        return <div key={`spacer-${i}`} />
-                      }
-                      // Resolve CSR dropdown value (stored as user ID) to the real name
-                      const displayValue = f.field_name === 'CSR' && detail.csr_name
-                        ? detail.csr_name
-                        : f.value || '—'
-                      return (
-                        <div key={i} className="min-w-0 flex items-baseline gap-1.5">
-                          <span className="text-[12px] text-slate-500 shrink-0">{f.field_name}:</span>
-                          <span className="text-[13px] font-semibold text-slate-800 truncate" title={displayValue}>
-                            {displayValue}
-                          </span>
-                        </div>
-                      )
-                    })}
+
+                {/* Fields above the first SPACER — larger key fields (Reviewer, Date, CSR) */}
+                {topReviewFields.length > 0 && (
+                  <div className="px-4 py-3">
+                    <div className="grid grid-cols-3 gap-x-4 gap-y-2">
+                      {topReviewFields.map((f, i) => {
+                        const displayValue = f.field_name === 'CSR' && detail.csr_name
+                          ? detail.csr_name
+                          : f.value || '—'
+                        return (
+                          <div key={i} className="min-w-0">
+                            <p className="text-[11px] text-slate-400 mb-0.5">{f.field_name}</p>
+                            <p className="text-[14px] font-semibold text-slate-900 truncate" title={displayValue}>
+                              {displayValue}
+                            </p>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* Divider — mirrors the SPACER boundary from the form builder */}
+                {topReviewFields.length > 0 && hasBottomReviewFields && (
+                  <div className="border-t border-slate-100" />
+                )}
+
+                {/* Fields below the first SPACER — form-defined metadata */}
+                {hasBottomReviewFields && (
+                  <div className="px-4 py-3">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                      {bottomReviewFields.map((f, i) => {
+                        if (f.field_type === 'SPACER') {
+                          return <div key={`spacer-${i}`} />
+                        }
+                        return (
+                          <div key={i} className="min-w-0 flex items-baseline gap-1.5">
+                            <span className="text-[12px] text-slate-500 shrink-0">{f.field_name}:</span>
+                            <span className="text-[14px] font-semibold text-slate-800 truncate" title={f.value || '—'}>
+                              {f.value || '—'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -585,11 +409,12 @@ export default function SubmissionDetailPage() {
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100">
                   <h3 className="text-[15px] font-semibold text-slate-800">Dispute</h3>
-                  <div className="flex items-center gap-2">
-                    <StatusBadge
-                      status={detail.dispute.status}
-                      label={detail.dispute.status === 'OPEN' ? 'Open' : undefined}
-                    />
+                  <div className="flex items-center gap-3">
+                    <span className="text-[13px] text-slate-600">
+                      Status: <span className="font-semibold text-slate-800">
+                        {detail.dispute.status.charAt(0) + detail.dispute.status.slice(1).toLowerCase()}
+                      </span>
+                    </span>
                     {isCSR && detail.dispute.status === 'OPEN' && !detail.dispute.resolved_by && !editingDispute && (
                       <button className="text-[11px] text-slate-400 hover:text-primary flex items-center gap-1"
                         onClick={() => setEditingDispute(true)}>
@@ -599,6 +424,7 @@ export default function SubmissionDetailPage() {
                   </div>
                 </div>
                 <div className="px-4 py-3 space-y-3">
+                  {/* Dates */}
                   <div className="flex gap-4 text-[11px] text-slate-500">
                     {detail.dispute.created_at && <span>Filed {fmtDate(detail.dispute.created_at)}</span>}
                     {detail.dispute.resolved_at && <span>· Resolved {fmtDate(detail.dispute.resolved_at)}</span>}
@@ -611,43 +437,51 @@ export default function SubmissionDetailPage() {
                       onCancel={() => setEditingDispute(false)}
                     />
                   ) : (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-[13px] text-amber-900 leading-relaxed">
-                      {detail.dispute.reason}
-                    </div>
-                  )}
-
-                  {detail.dispute.attachment_url && !editingDispute && (
-                    <button
-                      onClick={() => qaService.downloadDisputeAttachment(
-                        detail.dispute!.id,
-                        detail.dispute!.attachment_url!.split('/').pop() || 'attachment'
-                      )}
-                      className="flex items-center gap-1.5 text-[12px] text-primary hover:underline"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      {detail.dispute.attachment_url.split('/').pop()}
-                    </button>
-                  )}
-
-                  {detail.dispute.status !== 'OPEN' && (
-                    <div className="border-t border-slate-100 pt-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className={cn(
-                          'text-[11px] font-bold px-2.5 py-0.5 rounded-full',
-                          detail.dispute.status === 'UPHELD' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
-                        )}>
-                          {detail.dispute.status === 'UPHELD' ? 'Score Upheld' : 'Score Adjusted'}
-                        </span>
-                      </div>
-                      {detail.dispute.resolution_notes && (
+                    <>
+                      {/* Dispute Reason */}
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Dispute Reason</p>
                         <p className="text-[12px] text-slate-600 bg-slate-50 rounded-lg p-3 leading-relaxed">
-                          {detail.dispute.resolution_notes}
+                          {detail.dispute.reason}
                         </p>
+                      </div>
+
+                      {/* Supporting Evidence */}
+                      {detail.dispute.attachment_url && (
+                        <div>
+                          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Supporting Evidence</p>
+                          <button
+                            onClick={() => qaService.downloadDisputeAttachment(
+                              detail.dispute!.id,
+                              detail.dispute!.attachment_url!.split('/').pop() || 'attachment'
+                            )}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors w-full text-left"
+                          >
+                            <FileText className="h-4 w-4 text-primary shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-primary font-medium truncate">
+                                {detail.dispute.attachment_url.split('/').pop()}
+                              </p>
+                              <p className="text-[11px] text-slate-400">Supporting evidence uploaded with dispute</p>
+                            </div>
+                          </button>
+                        </div>
                       )}
-                    </div>
-                  )}
-                  {detail.dispute.status === 'OPEN' && !editingDispute && (
-                    <p className="text-[12px] text-slate-400 italic">Awaiting manager review.</p>
+
+                      {/* Resolution Notes */}
+                      {detail.dispute.status !== 'OPEN' ? (
+                        detail.dispute.resolution_notes && (
+                          <div className="border-t border-slate-100 pt-3">
+                            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Resolution Notes</p>
+                            <p className="text-[12px] text-slate-600 bg-slate-50 rounded-lg p-3 leading-relaxed">
+                              {detail.dispute.resolution_notes}
+                            </p>
+                          </div>
+                        )
+                      ) : (
+                        <p className="text-[12px] text-slate-400 italic">Awaiting manager review.</p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

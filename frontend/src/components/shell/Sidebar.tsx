@@ -72,17 +72,6 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Collapse toggle placeholder */}
-      <div className="border-t border-slate-100 p-2">
-        <button
-          className="w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-600 py-1.5 rounded transition-colors"
-          aria-label="Collapse sidebar"
-        >
-          <LucideIcons.PanelLeftClose size={14} />
-          <span>Collapse</span>
-        </button>
-      </div>
-
     </aside>
   )
 }

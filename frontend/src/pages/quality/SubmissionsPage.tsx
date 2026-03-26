@@ -1,25 +1,28 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { FileText, Eye } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import qaService, { scoreColor, type Submission } from '@/services/qaService'
+import qaService, { type Submission } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { DateRangeFilter } from '@/components/common/DateRangeFilter'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
+import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
 
-const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+// Submission-level statuses (dispute resolution statuses are separate)
+const SUBMISSION_STATUSES = ['SUBMITTED', 'DISPUTED', 'FINALIZED']
 
-// ── Main page ─────────────────────────────────────────────────────────────────
 export default function SubmissionsPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -29,94 +32,138 @@ export default function SubmissionsPage() {
   const isManager   = roleId === 5
   const isCSR       = roleId === 3
 
+  const pageTitle = isCSR ? 'My Reviews' : isManager ? 'Team Reviews' : 'Completed Forms'
+
+  const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
+
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    q: '', status: 'all', form: 'all', from: '', to: '', page: '1', size: '20',
+    forms: '', csrs: '', statuses: '', from: defaultFrom, to: defaultTo, page: '1', size: '20',
   })
 
-  const search       = get('q')
-  const statusFilter = get('status')
-  const formId       = get('form')
-  const dateFrom     = get('from')
-  const dateTo       = get('to')
-  const page         = parseInt(get('page')) || 1
-  const pageSize     = parseInt(get('size')) || 20
+  const formsParam    = get('forms')
+  const csrsParam     = get('csrs')
+  const statusesParam = get('statuses')
+  const dateFrom      = get('from')
+  const dateTo        = get('to')
+  const page          = parseInt(get('page')) || 1
+  const pageSize      = parseInt(get('size')) || 20
+
+  // Parsed multi-select values
+  const selectedFormNames = useMemo(
+    () => formsParam ? formsParam.split(',').filter(Boolean) : [],
+    [formsParam],
+  )
+  const selectedCsrNames = useMemo(
+    () => csrsParam ? csrsParam.split(',').filter(Boolean) : [],
+    [csrsParam],
+  )
+  const selectedStatuses = useMemo(
+    () => statusesParam ? statusesParam.split(',').filter(Boolean) : [],
+    [statusesParam],
+  )
 
   const setPage     = (p: number) => set('page', String(p))
   const setPageSize = (s: number) => setMany({ size: String(s), page: '1' })
 
-  // Form options — only loaded for admin/QA/manager
-  const { data: formOptions = [] } = useQuery({
-    queryKey: ['forms-filter'],
-    queryFn: () => qaService.getFormsForFilter(),
-    enabled: !!user && !isCSR,
-    staleTime: 5 * 60 * 1000,
-  })
+  // For single selections, pass value to API; multiple = client-side filtered
+  const apiStatus = selectedStatuses.length === 1 ? selectedStatuses[0] : undefined
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['submissions', roleId, page, pageSize, search, statusFilter, formId, dateFrom, dateTo],
+    queryKey: ['submissions', roleId, page, pageSize, statusesParam, formsParam, csrsParam, dateFrom, dateTo],
     queryFn: () => {
-      const status = statusFilter !== 'all' ? statusFilter : undefined
-      const fid    = formId !== 'all' ? parseInt(formId) : undefined
-      const ds     = dateFrom || undefined
-      const de     = dateTo   || undefined
+      const ds = dateFrom || undefined
+      const de = dateTo   || undefined
 
-      if (isCSR)     return qaService.getCSRAudits({ page, limit: pageSize, search: search || undefined, status, start_date: ds, end_date: de })
-      if (isManager) return qaService.getTeamAudits({ page, limit: pageSize, search: search || undefined, status, form_id: fid, start_date: ds, end_date: de })
-      return qaService.getSubmissions({ page, limit: pageSize, search: search || undefined, status, form_id: fid, date_start: ds, date_end: de })
+      if (isCSR)     return qaService.getCSRAudits({ page, limit: pageSize, status: apiStatus, start_date: ds, end_date: de })
+      if (isManager) return qaService.getTeamAudits({ page, limit: pageSize, status: apiStatus, start_date: ds, end_date: de })
+      return qaService.getSubmissions({ page, limit: pageSize, status: apiStatus, date_start: ds, date_end: de })
     },
     enabled: !!user,
     placeholderData: (prev: any) => prev,
   })
 
+  // Derive filter options from the fetched items — only show what's in the current result
+  const formNameOptions = useMemo(() => {
+    const names = new Set((data?.items ?? []).map((r: Submission) => r.form_name).filter(Boolean))
+    return Array.from(names).sort() as string[]
+  }, [data?.items])
+
+  const csrNameOptions = useMemo(() => {
+    const names = new Set((data?.items ?? []).map((r: Submission) => r.csr_name).filter(Boolean))
+    return Array.from(names).sort() as string[]
+  }, [data?.items])
+
+  const statusOptions = useMemo(() => {
+    const present = new Set((data?.items ?? []).map((r: Submission) => r.status).filter(Boolean))
+    return SUBMISSION_STATUSES.filter(s => present.has(s))
+  }, [data?.items])
+
+  // Client-side filtering for multi-selection (single selections handled by API)
+  const clientFiltered = useMemo(() => {
+    let items: Submission[] = data?.items ?? []
+    if (selectedFormNames.length > 0) {
+      items = items.filter(r => selectedFormNames.includes(r.form_name ?? ''))
+    }
+    if (selectedCsrNames.length > 0) {
+      items = items.filter(r => selectedCsrNames.includes(r.csr_name ?? ''))
+    }
+    if (selectedStatuses.length > 1) {
+      items = items.filter(r => selectedStatuses.includes(r.status))
+    }
+    return items
+  }, [data?.items, selectedFormNames, selectedCsrNames, selectedStatuses])
+
   const totalPages = data?.total != null ? Math.ceil(data.total / pageSize) : 1
   const hasFilters = hasAnyFilter
 
-  // Sort within the current page — same shared hook used by every other list view
-  const { sort, dir, toggle, sorted: sortedItems } = useListSort(data?.items ?? [])
+  const { sort, dir, toggle, sorted: sortedItems } = useListSort(clientFiltered)
 
-  const resetFilters = () => reset()
+  const colSpan = isAdminOrQA ? 8 : isManager ? 7 : 6
 
   return (
     <QualityListPage>
-      <QualityPageHeader
-        title={isCSR ? 'My Reviews' : isManager ? 'Team Reviews' : 'Submissions'}
-
-        count={data?.total}
-        onRefresh={refetch}
-      />
+      <QualityPageHeader title={pageTitle} />
 
       <QualityFilterBar
-        search={search}
-        onSearchChange={v => setMany({ q: v, page: '1' })}
-        searchPlaceholder={isCSR ? 'Search by form…' : 'Search by CSR name, form…'}
-        selects={[
-          {
-            id: 'status',
-            value: statusFilter,
-            onChange: v => setMany({ status: v, page: '1' }),
-            options: [
-              { value: 'all',       label: 'All statuses' },
-              { value: 'SUBMITTED', label: 'Submitted' },
-              { value: 'DISPUTED',  label: 'Disputed' },
-              { value: 'FINALIZED', label: 'Finalized' },
-            ],
-          },
-          ...(!isCSR && formOptions.length > 0 ? [{
-            id: 'form',
-            value: formId,
-            onChange: (v: string) => setMany({ form: v, page: '1' }),
-            placeholder: 'All forms',
-            width: 'w-[180px]',
-            options: [
-              { value: 'all', label: 'All forms' },
-              ...(formOptions as any[]).map((f: any) => ({ value: String(f.id), label: f.form_name })),
-            ],
-          }] : []),
-        ]}
         hasFilters={hasFilters}
-        onReset={resetFilters}
+        onReset={reset}
         resultCount={{ total: data?.total ?? 0 }}
       >
+        {/* 1. Forms */}
+        {!isCSR && (
+          <StagedMultiSelect
+            options={formNameOptions}
+            selected={selectedFormNames}
+            onApply={names => setMany({ forms: names.join(','), page: '1' })}
+            placeholder="All Forms"
+            width="w-[340px]"
+          />
+        )}
+
+        {/* 2. CSR Name */}
+        {!isCSR && csrNameOptions.length > 0 && (
+          <StagedMultiSelect
+            options={csrNameOptions}
+            selected={selectedCsrNames}
+            onApply={names => setMany({ csrs: names.join(','), page: '1' })}
+            placeholder="All CSRs"
+            width="w-[200px]"
+          />
+        )}
+
+        {/* 3. Status — options derived from current results, submission-level only */}
+        <StagedMultiSelect
+          options={statusOptions.map(s => s.charAt(0) + s.slice(1).toLowerCase())}
+          selected={selectedStatuses.map(s => s.charAt(0) + s.slice(1).toLowerCase())}
+          onApply={names => setMany({
+            statuses: names.map(n => n.toUpperCase()).join(','),
+            page: '1',
+          })}
+          placeholder="All Statuses"
+          width="w-[160px]"
+        />
+
+        {/* 4. Date range */}
         <DateRangeFilter
           value={{ start: dateFrom, end: dateTo }}
           onChange={v => setMany({ from: v.start, to: v.end, page: '1' })}
@@ -125,9 +172,7 @@ export default function SubmissionsPage() {
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? (
-          <div className="p-4 space-y-2">
-            {[...Array(8)].map((_, i) => <div key={i} className="h-10 bg-slate-100 animate-pulse rounded" />)}
-          </div>
+          <TableLoadingSkeleton rows={8} />
         ) : isError ? (
           <TableErrorState message="Failed to load submissions." onRetry={refetch} />
         ) : (
@@ -135,35 +180,44 @@ export default function SubmissionsPage() {
             <TableHeader>
               <TableRow className="bg-slate-50 border-b border-slate-200">
                 <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
-                <SortableTableHead field="form_id"       sort={sort} dir={dir} onSort={toggle}>Form ID</SortableTableHead>
                 <SortableTableHead field="form_name"     sort={sort} dir={dir} onSort={toggle}>Form Name</SortableTableHead>
+                {!isCSR      && <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>}
                 {isAdminOrQA && <SortableTableHead field="reviewer_name" sort={sort} dir={dir} onSort={toggle}>Reviewer</SortableTableHead>}
-                {!isCSR && <SortableTableHead field="csr_name" sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>}
+                <SortableTableHead field="id"           sort={sort} dir={dir} onSort={toggle}>Review #</SortableTableHead>
                 <SortableTableHead field="created_at"   sort={sort} dir={dir} onSort={toggle}>Date</SortableTableHead>
-                <SortableTableHead field="score"        sort={sort} dir={dir} onSort={toggle} right>Score</SortableTableHead>
-                <TableHead className="w-12" />
+                <SortableTableHead field="score"        sort={sort} dir={dir} onSort={toggle}>Score</SortableTableHead>
+                <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedItems.length ? (
                 sortedItems.map((row: Submission) => (
                   <TableRow key={row.id} className="cursor-pointer hover:bg-slate-50/50"
-                    onClick={() => navigate(`/app/quality/submissions/${row.id}`, { state: { from: isCSR ? 'My Reviews' : isManager ? 'Team Reviews' : 'Submissions', fromPath: '/app/quality/submissions' } })}>
-                    <TableCell><StatusBadge status={row.status} /></TableCell>
-                    <TableCell className="text-[13px] text-slate-500">{row.form_id ?? '—'}</TableCell>
+                    onClick={() => navigate(`/app/quality/submissions/${row.id}`, {
+                      state: { from: pageTitle, fromPath: '/app/quality/submissions' },
+                    })}>
+                    <TableCell className="text-[13px] text-slate-600">
+                      {row.status.charAt(0) + row.status.slice(1).toLowerCase()}
+                    </TableCell>
                     <TableCell className="text-[13px] font-medium text-slate-900">{row.form_name}</TableCell>
+                    {!isCSR      && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}
                     {isAdminOrQA && <TableCell className="text-[13px] text-slate-600">{row.reviewer_name ?? '—'}</TableCell>}
-                    {!isCSR && <TableCell className="text-[13px] text-slate-600">{row.csr_name}</TableCell>}
+                    <TableCell className="text-[13px] text-slate-500">{row.id}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">{fmtDate(row.created_at)}</TableCell>
-                    <TableCell className="text-right text-[13px] font-medium">
+                    <TableCell className="text-[13px] font-medium text-slate-700">
                       {row.score != null && row.score > 0
-                        ? <span className={scoreColor(row.score)}>{row.score.toFixed(1)}%</span>
+                        ? `${row.score.toFixed(1)}%`
                         : <span className="text-slate-400">—</span>
                       }
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="pl-2">
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
-                        onClick={e => { e.stopPropagation(); navigate(`/app/quality/submissions/${row.id}`, { state: { from: isCSR ? 'My Reviews' : isManager ? 'Team Reviews' : 'Submissions', fromPath: '/app/quality/submissions' } }) }}>
+                        onClick={e => {
+                          e.stopPropagation()
+                          navigate(`/app/quality/submissions/${row.id}`, {
+                            state: { from: pageTitle, fromPath: '/app/quality/submissions' },
+                          })
+                        }}>
                         <Eye size={12} className="mr-1" /> View
                       </Button>
                     </TableCell>
@@ -171,10 +225,10 @@ export default function SubmissionsPage() {
                 ))
               ) : (
                 <TableEmptyState
-                  colSpan={isAdminOrQA ? 8 : isCSR ? 6 : 7}
+                  colSpan={colSpan}
                   icon={FileText}
                   title="No submissions found."
-                  action={hasFilters ? { label: 'Clear filters', onClick: resetFilters } : undefined}
+                  action={hasFilters ? { label: 'Clear filters', onClick: reset } : undefined}
                 />
               )}
             </TableBody>
