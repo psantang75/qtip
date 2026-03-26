@@ -74,6 +74,7 @@ export default function SubmissionDetailPage() {
       qc.invalidateQueries({ queryKey: ['submission-detail', id] })
       qc.invalidateQueries({ queryKey: ['submissions'] })
     },
+    onError: () => toast({ title: 'Failed to accept review', description: 'Please try again.', variant: 'destructive' }),
   })
 
   if (isLoading) {

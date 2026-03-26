@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, Send, AlertCircle, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getFormById } from '@/services/formService'
@@ -58,13 +58,27 @@ export default function AuditFormPage() {
     staleTime: 60 * 1000,
   })
 
-  const [submitting, setSubmitting] = useState(false)
   const [score, setScore] = useState(0)
   const [answers, setAnswers] = useState<Record<number, AnswerType>>({})
   const [visibilityMap, setVisibilityMap] = useState<Record<number, boolean>>({})
   const [formRenderData, setFormRenderData] = useState<FormRenderData | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [missingQuestions, setMissingQuestions] = useState<number[]>([])
+
+  const { mutate: doSubmit, isPending: isSubmitting } = useMutation({
+    mutationFn: (payload: any) => submissionService.submitAudit(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['submissions'] })
+      navigate('/app/quality/review-forms', { state: { message: 'Audit submitted successfully!' } })
+    },
+    onError: () => setErrorMessage('Failed to submit. Please try again.'),
+  })
+
+  const { mutate: doSaveDraft, isPending: isSavingDraft } = useMutation({
+    mutationFn: (payload: any) => submissionService.saveDraft(payload),
+    onSuccess: () => navigate('/app/quality/submissions', { state: { message: 'Draft saved.' } }),
+    onError: () => setErrorMessage('Failed to save draft. Please try again.'),
+  })
   const [metadataValues, setMetadataValues] = useState<Record<string, string>>({})
   const [selectedCalls, setSelectedCalls] = useState<Call[]>([])
 
@@ -142,7 +156,7 @@ export default function AuditFormPage() {
 
   const handleSubmit = () => {
     if (!form || !formId || !user) return
-    setSubmitting(true); setErrorMessage(null); setMissingQuestions([])
+    setErrorMessage(null); setMissingQuestions([])
 
     if (form.metadata_fields?.length > 0) {
       const missing: string[] = []
@@ -154,7 +168,7 @@ export default function AuditFormPage() {
       })
       if (missing.length > 0) {
         setErrorMessage(`Please fill in all required form details:\n${missing.map((f: string) => `- ${f}`).join('\n')}`)
-        setSubmitting(false); return
+        return
       }
     }
 
@@ -165,7 +179,7 @@ export default function AuditFormPage() {
       setErrorMessage(`Please answer all required questions:\n${validation.unansweredQuestions.map((qId: number) => `- ${qMap.get(qId) || `Q${qId}`}`).join('\n')}`)
       setMissingQuestions(validation.unansweredQuestions)
       if (validation.unansweredQuestions.length > 0) setTimeout(() => scrollToQuestion(validation.unansweredQuestions[0]), 100)
-      setSubmitting(false); return
+      return
     }
 
     let customerId: string | null = null
@@ -190,28 +204,19 @@ export default function AuditFormPage() {
       metadata: Object.entries(metadataValues).map(([fieldId, value]) => ({ field_id: fieldId, value })),
     }
 
-    submissionService.submitAudit(payload)
-      .then(() => {
-        qc.invalidateQueries({ queryKey: ['submissions'] })
-        navigate('/app/quality/review-forms', { state: { message: 'Audit submitted successfully!' } })
-      })
-      .catch(() => setErrorMessage('Failed to submit. Please try again.'))
-      .finally(() => setSubmitting(false))
+    doSubmit(payload)
   }
 
   const handleSaveDraft = () => {
     if (!form || !formId || !user) return
-    setSubmitting(true)
-    const payload = {
-      form_id: Number(formId), call_id: callId ? Number(callId) : null,
-      call_ids: selectedCalls.map(c => c.id), submitted_by: user.id,
-      answers: Object.entries(answers).map(([qId, a]) => ({ question_id: Number(qId), answer: a.answer, notes: a.notes || '' })),
+    doSaveDraft({
+      form_id:  Number(formId),
+      call_id:  callId ? Number(callId) : null,
+      call_ids: selectedCalls.map(c => c.id),
+      submitted_by: user.id,
+      answers:  Object.entries(answers).map(([qId, a]) => ({ question_id: Number(qId), answer: a.answer, notes: a.notes || '' })),
       metadata: Object.entries(metadataValues).map(([fieldId, value]) => ({ field_id: fieldId, value })),
-    }
-    submissionService.saveDraft(payload)
-      .then(() => { navigate('/app/quality/submissions', { state: { message: 'Draft saved.' } }) })
-      .catch(() => setErrorMessage('Failed to save draft. Please try again.'))
-      .finally(() => setSubmitting(false))
+    })
   }
 
   if (loading) {
@@ -254,14 +259,14 @@ export default function AuditFormPage() {
 
           {/* Actions */}
           <div className="flex items-center gap-3 shrink-0 mt-0.5">
-            <Button variant="outline" onClick={handleSaveDraft} disabled={submitting}>
+            <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
               <Save className="h-4 w-4 mr-1.5" />
-              {submitting ? 'Saving…' : 'Save Draft'}
+              {isSavingDraft ? 'Saving…' : 'Save Draft'}
             </Button>
-            <Button onClick={handleSubmit} disabled={submitting}
+            <Button onClick={handleSubmit} disabled={isSubmitting || isSavingDraft}
               className="bg-primary hover:bg-primary/90 text-white">
               <Send className="h-4 w-4 mr-1.5" />
-              {submitting ? 'Submitting…' : 'Submit Review'}
+              {isSubmitting ? 'Submitting…' : 'Submit Review'}
             </Button>
           </div>
 
@@ -331,7 +336,7 @@ export default function AuditFormPage() {
                 <MultipleCallSelector
                   selectedCalls={selectedCalls}
                   onCallsChange={(calls: Call[]) => { setSelectedCalls(calls);  }}
-                  disabled={submitting}
+                  disabled={isSubmitting || isSavingDraft}
                 />
               </div>
             </div>

@@ -6,6 +6,7 @@ import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import ExcelJS from 'exceljs';
 import { getDisputeScoreHistory, recordDisputeScore } from '../utils/disputeScoreHistory';
+import { serviceLogger } from '../config/logger';
 
 // Cache for role IDs to avoid repeated database queries
 let roleCache: { [key: string]: number } = {};
@@ -43,7 +44,7 @@ const getRoleId = async (roleName: string): Promise<number | null> => {
       return role.id;
     }
   } catch (error) {
-    console.error(`Error fetching role ID for ${roleName}:`, error);
+    serviceLogger.error('MANAGER', `getRoleId:${roleName}`, error as Error);
   }
   
   return null;
@@ -178,7 +179,7 @@ export const getManagerStats = async (req: AuthenticatedRequest, res: Response) 
       }
     });
   } catch (error) {
-    console.error('Error fetching manager stats:', error);
+    serviceLogger.error('MANAGER', 'Error fetching manager stats:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -197,9 +198,6 @@ export const getManagerTeamTraining = async (req: AuthenticatedRequest, res: Res
     const csrId = req.query.csr_id as string || '';
     const courseId = req.query.course_id as string || '';
     const status = req.query.status as string || '';
-
-    console.log('getManagerTeamTraining called with managerId:', managerId);
-
     if (!managerId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
@@ -316,10 +314,6 @@ export const getManagerTeamTraining = async (req: AuthenticatedRequest, res: Res
     queryParams.push(pageSize, offset);
 
     const training = await prisma.$queryRawUnsafe<any[]>(query, ...queryParams);
-
-    console.log('Training query executed, found:', training.length);
-    console.log('Training total count:', total);
-
     const formattedTraining = training.map((item: any) => ({
       ...item,
       total_pages: Number(item.total_pages),
@@ -336,7 +330,7 @@ export const getManagerTeamTraining = async (req: AuthenticatedRequest, res: Res
       limit: pageSize
     });
   } catch (error) {
-    console.error('Error fetching team training:', error);
+    serviceLogger.error('MANAGER', 'Error fetching team training:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -504,7 +498,7 @@ export const getManagerTrainingDetails = async (req: AuthenticatedRequest, res: 
     });
 
   } catch (error) {
-    console.error('Error fetching training details:', error);
+    serviceLogger.error('MANAGER', 'Error fetching training details:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -553,7 +547,7 @@ export const getManagerTeamCSRs = async (req: AuthenticatedRequest, res: Respons
       data: csrs || []
     });
   } catch (error) {
-    console.error('Error fetching team CSRs:', error);
+    serviceLogger.error('MANAGER', 'Error fetching team CSRs:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -575,7 +569,7 @@ export const getManagerForms = async (req: AuthenticatedRequest, res: Response) 
       data: forms || []
     });
   } catch (error) {
-    console.error('Error fetching forms:', error);
+    serviceLogger.error('MANAGER', 'Error fetching forms:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -597,7 +591,7 @@ export const getManagerCourses = async (req: AuthenticatedRequest, res: Response
       data: courses || []
     });
   } catch (error) {
-    console.error('Error fetching courses:', error);
+    serviceLogger.error('MANAGER', 'Error fetching courses:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -789,7 +783,7 @@ export const getManagerTeamDisputes = async (req: AuthenticatedRequest, res: Res
     });
 
   } catch (error) {
-    console.error('Error fetching team disputes:', error);
+    serviceLogger.error('MANAGER', 'Error fetching team disputes:', error as Error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch team disputes',
@@ -1004,7 +998,7 @@ export const exportManagerTeamDisputes = async (req: AuthenticatedRequest, res: 
     res.setHeader('Content-Disposition', `attachment; ${escapeFilename(fileName)}`);
     res.send(Buffer.from(buffer));
   } catch (error) {
-    console.error('Error exporting team disputes:', error);
+    serviceLogger.error('MANAGER', 'Error exporting team disputes:', error as Error);
     res.status(500).json({
       success: false,
       message: 'Failed to export team disputes',
@@ -1133,25 +1127,32 @@ export const resolveManagerDispute = async (req: AuthenticatedRequest, res: Resp
       `);
     });
 
-    // Record score history AFTER the transaction commits to avoid deadlock
+    // Record score history AFTER the transaction commits to avoid deadlock.
+    // A PREVIOUS row is written at dispute creation — only write it here if one
+    // doesn't already exist (prevents duplicate rows if two resolves occur or
+    // dispute creation already captured the original score).
     if (resolution_action === 'ADJUST' && new_score !== undefined) {
-      // Record the original score as PREVIOUS before saving the adjusted score
-      await recordDisputeScore(null, {
-        disputeId: Number(disputeId),
-        submissionId: Number(dispute.submission_id),
-        scoreType: 'PREVIOUS',
-        score: Number(dispute.current_score),
-        recordedBy: userId,
-        notes: 'Original score before dispute resolution'
-      });
+      const existingHistory = await getDisputeScoreHistory(null, Number(disputeId));
+      const hasPrevious = existingHistory.some(h => h.score_type === 'PREVIOUS');
+
+      if (!hasPrevious) {
+        await recordDisputeScore(null, {
+          disputeId:    Number(disputeId),
+          submissionId: Number(dispute.submission_id),
+          scoreType:    'PREVIOUS',
+          score:        Number(dispute.current_score),
+          recordedBy:   userId,
+          notes:        'Original score before dispute resolution',
+        });
+      }
 
       await recordDisputeScore(null, {
-        disputeId: Number(disputeId),
+        disputeId:    Number(disputeId),
         submissionId: Number(dispute.submission_id),
-        scoreType: 'ADJUSTED',
-        score: Number(new_score),
-        recordedBy: userId,
-        notes: 'Score adjusted during dispute resolution'
+        scoreType:    'ADJUSTED',
+        score:        Number(new_score),
+        recordedBy:   userId,
+        notes:        'Score adjusted during dispute resolution',
       });
     }
     
@@ -1177,7 +1178,7 @@ export const resolveManagerDispute = async (req: AuthenticatedRequest, res: Resp
         return;
       }
     }
-    console.error('Error resolving dispute:', error);
+    serviceLogger.error('MANAGER', 'Error resolving dispute:', error as Error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to resolve dispute',
@@ -1320,7 +1321,7 @@ export const getManagerTeamAuditDetails = async (req: AuthenticatedRequest, res:
       const qaAnalystName = qaResults.length > 0 ? qaResults[0].username : null;
 
       let csrName = null;
-      const csrMeta = metadataRows.find((m: any) => m.fieldname === csrFieldName);
+      const csrMeta = metadataRows.find((m: any) => m.field_name === csrFieldName);
       if (csrMeta && csrMeta.value) {
         const csrResults = await prisma.$queryRaw<any[]>(Prisma.sql`
           SELECT username FROM users WHERE id = ${csrMeta.value}
@@ -1400,7 +1401,6 @@ export const getManagerTeamAuditDetails = async (req: AuthenticatedRequest, res:
         `);
         
         if (categoriesRows.length === 0) {
-          console.log(`No categories found for form_id: ${submission.form_id}`);
           return res.status(200).json(response);
         }
         
@@ -1438,17 +1438,17 @@ export const getManagerTeamAuditDetails = async (req: AuthenticatedRequest, res:
         
         return res.status(200).json(response);
       } catch (formError) {
-        console.error('Error fetching form structure:', formError);
+        serviceLogger.error('MANAGER', 'Error fetching form structure:', formError as Error);
         return res.status(200).json(response);
       }
       
     } catch (queryError) {
-      console.error('Error executing audit details queries:', queryError);
+      serviceLogger.error('MANAGER', 'Error executing audit details queries:', queryError as Error);
       return res.status(500).json({ message: 'Failed to retrieve audit details' });
     }
     
   } catch (error) {
-    console.error('Error fetching audit details:', error);
+    serviceLogger.error('MANAGER', 'Error fetching audit details:', error as Error);
     return res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch audit details',
@@ -1591,7 +1591,7 @@ export const getManagerDisputeDetails = async (req: AuthenticatedRequest, res: R
     });
 
   } catch (error) {
-    console.error('Error fetching dispute details:', error);
+    serviceLogger.error('MANAGER', 'Error fetching dispute details:', error as Error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch dispute details',
@@ -1694,10 +1694,6 @@ export const getManagerCoachingSessions = async (req: AuthenticatedRequest, res:
       JOIN departments d ON u.department_id = d.id
       ${baseWhereClause}
     `;
-
-    console.log('Count query:', countQuery);
-    console.log('Count parameters:', queryParams);
-
     const countResult = await prisma.$queryRawUnsafe<any[]>(countQuery, ...queryParams);
     const totalCount = Number(countResult[0]?.total || 0);
 
@@ -1729,10 +1725,6 @@ export const getManagerCoachingSessions = async (req: AuthenticatedRequest, res:
       ORDER BY cs.session_date DESC
       LIMIT ${limit} OFFSET ${offset}
     `;
-
-    console.log('Sessions query:', sessionsQuery);
-    console.log('Sessions parameters:', queryParams);
-
     const sessions = await prisma.$queryRawUnsafe<any[]>(sessionsQuery, ...queryParams);
 
     const transformedSessions = (sessions || []).map((session: any) => ({
@@ -1751,7 +1743,7 @@ export const getManagerCoachingSessions = async (req: AuthenticatedRequest, res:
       }
     });
   } catch (error) {
-    console.error('Error fetching coaching sessions:', error);
+    serviceLogger.error('MANAGER', 'Error fetching coaching sessions:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -1921,7 +1913,7 @@ export const exportManagerCoachingSessions = async (req: AuthenticatedRequest, r
     res.setHeader('Content-Disposition', `attachment; ${escapeFilename(fileName)}`);
     res.send(Buffer.from(buffer));
   } catch (error) {
-    console.error('Error exporting coaching sessions:', error);
+    serviceLogger.error('MANAGER', 'Error exporting coaching sessions:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -2043,7 +2035,7 @@ export const getManagerCoachingSessionDetails = async (req: AuthenticatedRequest
       data: responseData
     });
   } catch (error) {
-    console.error('Error fetching coaching session details:', error);
+    serviceLogger.error('MANAGER', 'Error fetching coaching session details:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -2170,7 +2162,7 @@ export const createManagerCoachingSession = async (req: AuthenticatedRequest, re
       try {
         await fsLib.mkdir(uploadsDir, { recursive: true });
       } catch (err) {
-        console.error('Error creating uploads directory:', err);
+        serviceLogger.error('MANAGER', 'Error creating uploads directory:', err as Error);
       }
 
       const timestamp = Date.now();
@@ -2187,7 +2179,7 @@ export const createManagerCoachingSession = async (req: AuthenticatedRequest, re
           mime_type: attachment.mimetype
         };
       } catch (err) {
-        console.error('Error saving file:', err);
+        serviceLogger.error('MANAGER', 'Error saving file:', err as Error);
         return res.status(500).json({ 
           success: false, 
           message: 'Failed to save attachment' 
@@ -2258,7 +2250,7 @@ export const createManagerCoachingSession = async (req: AuthenticatedRequest, re
       message: 'Coaching session created successfully'
     });
   } catch (error) {
-    console.error('Error creating coaching session:', error);
+    serviceLogger.error('MANAGER', 'Error creating coaching session:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -2472,7 +2464,7 @@ export const updateManagerCoachingSession = async (req: AuthenticatedRequest, re
       try {
         await fsLib.mkdir(uploadsDir, { recursive: true });
       } catch (err) {
-        console.error('Error creating uploads directory:', err);
+        serviceLogger.error('MANAGER', 'Error creating uploads directory:', err as Error);
       }
 
       const timestamp = Date.now();
@@ -2489,7 +2481,7 @@ export const updateManagerCoachingSession = async (req: AuthenticatedRequest, re
           attachment_mime_type: attachment.mimetype
         };
       } catch (err) {
-        console.error('Error saving file:', err);
+        serviceLogger.error('MANAGER', 'Error saving file:', err as Error);
         return res.status(500).json({ 
           success: false, 
           message: 'Failed to save attachment' 
@@ -2608,7 +2600,7 @@ export const updateManagerCoachingSession = async (req: AuthenticatedRequest, re
       message: 'Coaching session updated successfully'
     });
   } catch (error) {
-    console.error('Error updating coaching session:', error);
+    serviceLogger.error('MANAGER', 'Error updating coaching session:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -2722,7 +2714,7 @@ export const completeManagerCoachingSession = async (req: AuthenticatedRequest, 
       message: 'Coaching session marked as completed successfully'
     });
   } catch (error) {
-    console.error('Error completing coaching session:', error);
+    serviceLogger.error('MANAGER', 'Error completing coaching session:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -2834,7 +2826,7 @@ export const reopenManagerCoachingSession = async (req: AuthenticatedRequest, re
       message: 'Coaching session reopened successfully'
     });
   } catch (error) {
-    console.error('Error reopening coaching session:', error);
+    serviceLogger.error('MANAGER', 'Error reopening coaching session:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -2916,20 +2908,20 @@ export const downloadManagerCoachingSessionAttachment = async (req: Authenticate
           message: 'Error reading file' 
         });
       } else {
-        console.error('File stream error after headers sent:', streamError);
+        serviceLogger.error('MANAGER', 'File stream error after headers sent:', streamError as Error);
         res.destroy();
       }
     });
     
     res.on('error', (responseError) => {
-      console.error('Response error during file stream:', responseError);
+      serviceLogger.error('MANAGER', 'Response error during file stream:', responseError as Error);
       fileStream.destroy();
     });
     
     fileStream.pipe(res);
 
   } catch (error) {
-    console.error('Error downloading coaching session attachment:', error);
+    serviceLogger.error('MANAGER', 'Error downloading coaching session attachment:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -3084,7 +3076,7 @@ export const resolveDisputeWithFormEdit = async (req: AuthenticatedRequest, res:
         return;
       }
     }
-    console.error('Error resolving dispute:', error);
+    serviceLogger.error('MANAGER', 'Error resolving dispute:', error as Error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to resolve dispute',
@@ -3144,7 +3136,7 @@ export const getTeamFilterOptions = async (req: AuthenticatedRequest, res: Respo
       }
     });
   } catch (error) {
-    console.error('Error fetching team filter options:', error);
+    serviceLogger.error('MANAGER', 'Error fetching team filter options:', error as Error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -3163,9 +3155,6 @@ export const generateTeamReport = async (req: Request, res: Response) => {
     }
 
     const { reportType, startDate, endDate, departmentIds, csrIds } = req.body;
-
-    console.log('[MANAGER CONTROLLER] Generating team report:', { reportType, startDate, endDate });
-
     const reportData = {
       id: Date.now(),
       reportType: reportType || 'PERFORMANCE_SUMMARY',
@@ -3191,7 +3180,7 @@ export const generateTeamReport = async (req: Request, res: Response) => {
       data: reportData
     });
   } catch (error) {
-    console.error('[MANAGER CONTROLLER] Error generating team report:', error);
+    serviceLogger.error('MANAGER', '[MANAGER CONTROLLER] Error generating team report:', error as Error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to generate team report' 
@@ -3334,7 +3323,7 @@ export const getManagerDashboardStats = async (req: AuthenticatedRequest, res: R
 
     res.status(200).json(stats);
   } catch (error) {
-    console.error('Error fetching manager dashboard statistics:', error);
+    serviceLogger.error('MANAGER', 'Error fetching manager dashboard statistics:', error as Error);
     res.status(500).json({ message: 'Failed to fetch manager dashboard statistics' });
   }
 };
@@ -3560,7 +3549,7 @@ export const getManagerCSRActivity = async (req: AuthenticatedRequest, res: Resp
 
     res.status(200).json(formattedCSRActivity);
   } catch (error) {
-    console.error('Error fetching manager CSR activity data:', error);
+    serviceLogger.error('MANAGER', 'Error fetching manager CSR activity data:', error as Error);
     res.status(500).json({ message: 'Failed to fetch CSR activity data' });
   }
 };

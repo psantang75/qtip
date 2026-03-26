@@ -7,6 +7,7 @@ import { QuestionsStep }  from './form-builder/QuestionsStep'
 import { PreviewStep }    from './form-builder/PreviewStep'
 import { STEPS, StepBar, freshForm, totalCategoryWeight, type Step } from './form-builder/formBuilderUtils'
 import { useAuth } from '@/contexts/AuthContext'
+import { useQualityRole } from '@/hooks/useQualityRole'
 import { getFormById, createForm, updateForm } from '@/services/formService'
 import type { Form } from '@/types/form.types'
 import { Button } from '@/components/ui/button'
@@ -22,7 +23,8 @@ export default function FormsPage() {
   const [saving, setSaving]       = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
 
-  if (user && user.role_id !== 1) {
+  const { isAdmin } = useQualityRole()
+  if (user && !isAdmin) {
     return (
       <div className="p-6">
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-amber-700">

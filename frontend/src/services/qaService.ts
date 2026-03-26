@@ -14,6 +14,44 @@ export function scoreBg(score: number): string {
   return 'bg-red-50 text-red-700 border-red-200'
 }
 
+// ── Pagination helpers ────────────────────────────────────────────────────────
+
+/**
+ * Standard paginated response shape used throughout the app.
+ * Backend endpoints may return different field names; use normalizePaginated
+ * to coerce them into this shape before returning from service functions.
+ */
+export interface PaginatedResult<T> {
+  items:      T[]
+  total:      number
+  page:       number
+  limit:      number
+  totalPages: number
+}
+
+/**
+ * Normalizes any backend paginated response into PaginatedResult<T>.
+ * Handles the three shapes currently in use:
+ *   { data, pagination: { total, page, limit, totalPages } }  — QA list
+ *   { data, total, page, perPage, totalPages }                 — CSR
+ *   { disputes, total, page, limit, totalPages }               — Manager disputes
+ */
+export function normalizePaginated<T>(
+  raw: any,
+  itemKey: string = 'data',
+  mapItem?: (item: any) => T,
+): PaginatedResult<T> {
+  const items: any[] = raw?.[itemKey] ?? raw?.data ?? raw?.items ?? (Array.isArray(raw) ? raw : [])
+  const pagination   = raw?.pagination ?? raw
+  return {
+    items:      mapItem ? items.map(mapItem) : (items as T[]),
+    total:      Number(pagination?.total      ?? items.length),
+    page:       Number(pagination?.page       ?? 1),
+    limit:      Number(pagination?.limit ?? pagination?.perPage ?? items.length),
+    totalPages: Number(pagination?.totalPages ?? 1),
+  }
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface DashboardStats {
@@ -67,6 +105,7 @@ export interface DisputeRecord {
   resolution_notes?: string
   new_score?: number
   previous_score?: number | null
+  adjusted_score?: number | null
   created_at: string
   resolved_at?: string
   resolved_by?: number | null
@@ -74,6 +113,7 @@ export interface DisputeRecord {
   csr_name?: string
   form_name?: string
   original_score?: number
+  qa_analyst_name?: string
 }
 
 export interface MetadataEntry {
@@ -121,13 +161,6 @@ export interface AnalyticsResult {
   labels: string[]
   datasets: { name: string; data: number[] }[]
   summary?: Record<string, number>
-}
-
-export interface PaginatedResult<T> {
-  items: T[]
-  total: number
-  page: number
-  totalPages: number
 }
 
 // ── Dispute history item (from /csr/disputes/history) ────────────────────────

@@ -1,6 +1,7 @@
 import { useNavigate, Navigate } from 'react-router-dom'
 import { PlayCircle, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useQualityRole } from '@/hooks/useQualityRole'
 import { useActiveForms } from '@/hooks/useQualityQueries'
 import { useFormListFilters } from '@/hooks/useFormListFilters'
 import { Button } from '@/components/ui/button'
@@ -41,7 +42,8 @@ export default function ReviewFormsPage() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
   const forms      = sorted.slice((page - 1) * pageSize, page * pageSize)
 
-  if (user && user.role_id !== 1 && user.role_id !== 2) {
+  const { isAdminOrQA } = useQualityRole()
+  if (user && !isAdminOrQA) {
     return <Navigate to="/app/quality/submissions" replace />
   }
 

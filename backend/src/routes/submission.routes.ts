@@ -1,8 +1,9 @@
-﻿import express, { Request, Response, RequestHandler } from 'express';
+import express, { Request, Response, RequestHandler } from 'express';
 import { authenticate } from '../middleware/auth';
 import { SubmissionService, SubmissionServiceError } from '../services/SubmissionService';
 import { MySQLSubmissionRepository } from '../repositories/MySQLSubmissionRepository';
 import { finalizeSubmission } from '../controllers/qa.controller';
+import { serviceLogger } from '../config/logger';
 
 const router = express.Router();
 
@@ -30,7 +31,7 @@ const getAssignedAudits = async (req: Request, res: Response) => {
     if (error instanceof SubmissionServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
-      console.error('[SUBMISSION ROUTE] Error getting assigned audits:', error);
+      serviceLogger.error('SUBMISSION', 'getAssignedAudits', error as Error);
       res.status(500).json({ message: 'Failed to fetch assigned audits' });
     }
   }
@@ -55,7 +56,7 @@ const getCallWithForm = async (req: Request, res: Response) => {
     if (error instanceof SubmissionServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
-      console.error('[SUBMISSION ROUTE] Error getting call with form:', error);
+      serviceLogger.error('SUBMISSION', 'getCallWithForm', error as Error);
       res.status(500).json({ message: 'Failed to fetch call with form' });
     }
   }
@@ -72,21 +73,15 @@ const submitAudit = async (req: Request, res: Response) => {
       return;
     }
 
-    console.log('[SUBMISSION ROUTE] Full request body:', JSON.stringify(req.body, null, 2));
-    console.log('[SUBMISSION ROUTE] call_ids:', req.body.call_ids);
-    console.log('[SUBMISSION ROUTE] call_data:', req.body.call_data);
-
     const submissionData = {
-      form_id: req.body.form_id,
-      call_id: req.body.call_id,
-      call_ids: req.body.call_ids,
-      call_data: req.body.call_data, // Add this line
+      form_id:    req.body.form_id,
+      call_id:    req.body.call_id,
+      call_ids:   req.body.call_ids,
+      call_data:  req.body.call_data,
       submitted_by: qa_id,
-      answers: req.body.answers || [],
-      metadata: req.body.metadata || []
+      answers:    req.body.answers  || [],
+      metadata:   req.body.metadata || [],
     };
-
-    console.log('[SUBMISSION ROUTE] Prepared submission data:', JSON.stringify(submissionData, null, 2));
 
     const result = await submissionService.submitAudit(submissionData, qa_id);
     res.status(201).json(result);
@@ -94,7 +89,7 @@ const submitAudit = async (req: Request, res: Response) => {
     if (error instanceof SubmissionServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
-      console.error('[SUBMISSION ROUTE] Error submitting audit:', error);
+      serviceLogger.error('SUBMISSION', 'submitAudit', error as Error);
       res.status(500).json({ message: 'Failed to submit audit' });
     }
   }
@@ -126,7 +121,7 @@ const saveDraft = async (req: Request, res: Response) => {
     if (error instanceof SubmissionServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
-      console.error('[SUBMISSION ROUTE] Error saving draft:', error);
+      serviceLogger.error('SUBMISSION', 'saveDraft', error as Error);
       res.status(500).json({ message: 'Failed to save draft' });
     }
   }
@@ -155,7 +150,7 @@ const flagSubmission = async (req: Request, res: Response) => {
     if (error instanceof SubmissionServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
-      console.error('[SUBMISSION ROUTE] Error flagging submission:', error);
+      serviceLogger.error('SUBMISSION', 'flagSubmission', error as Error);
       res.status(500).json({ message: 'Failed to flag submission' });
     }
   }
