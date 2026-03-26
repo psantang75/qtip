@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate, authorizeQA } from '../middleware/auth';
+import { authenticate, authorizeQA, authorizeQAOrTrainer } from '../middleware/auth';
 // Rate limiting imports removed - rate limiting disabled
 // import { lenientRateLimit, standardRateLimit, strictRateLimit } from '../middleware/rateLimiter';
 import { 
@@ -79,20 +79,19 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// All other QA routes require authentication and QA role authorization
+// All other QA routes require authentication
 router.use(authenticate);
-router.use(authorizeQA);
 
-// QA Dashboard routes - rate limiting DISABLED
-router.get('/stats', getQAStats);
-router.get('/csr-activity', getQACSRActivity);
+// QA Dashboard routes — QA and Admin only
+router.get('/stats', authorizeQA, getQAStats);
+router.get('/csr-activity', authorizeQA, getQACSRActivity);
 
-// Completed submissions routes - rate limiting DISABLED
-router.get('/completed', getCompletedSubmissions);
-router.get('/completed/:id', getSubmissionDetails);
-router.get('/completed/:id/export', exportSubmission);
+// Completed submissions routes — QA, Admin, and Trainer
+router.get('/completed', authorizeQAOrTrainer, getCompletedSubmissions);
+router.get('/completed/:id', authorizeQAOrTrainer, getSubmissionDetails);
+router.get('/completed/:id/export', authorizeQAOrTrainer, exportSubmission);
 
-// Submission management routes - rate limiting DISABLED
-router.put('/submissions/:id/finalize', finalizeSubmission);
+// Submission management routes — QA and Admin only
+router.put('/submissions/:id/finalize', authorizeQA, finalizeSubmission);
 
 export default router;

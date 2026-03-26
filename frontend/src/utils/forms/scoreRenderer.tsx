@@ -249,8 +249,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     : 0;
   
   
-  const scoreClass = (s: number) =>
-    s >= 85 ? 'text-emerald-600' : s >= 70 ? 'text-amber-600' : 'text-red-600';
+  const scoreClass = (_s: number) => 'text-slate-700';
 
   return (
     <div className="space-y-6 p-5">
@@ -352,10 +351,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                         )}
                         {(questions as QuestionWithScore[]).map((q: QuestionWithScore) => {
                           const hasScore = !(q.pointsEarned === 0 && q.pointsPossible === 0);
-                          const answerLower = q.answer?.toLowerCase();
-                          const answerClass = answerLower === 'yes' ? 'text-emerald-600 font-medium' :
-                                              answerLower === 'no'  ? 'text-red-600 font-medium' :
-                                              'text-slate-600';
+                          const answerClass = 'text-slate-600';
                           return (
                             <tr key={q.id} className="hover:bg-slate-50/60 transition-colors">
                               <td className="px-4 py-2.5 text-slate-700 leading-snug">{q.text}</td>

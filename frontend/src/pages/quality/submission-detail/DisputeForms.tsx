@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X } from 'lucide-react'
+import { AlertTriangle, X } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import qaService from '@/services/qaService'
 import { Button } from '@/components/ui/button'
@@ -26,19 +26,24 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
 
   const minLen = 10
   return (
-    <div className="space-y-3 border border-amber-200 bg-amber-50 rounded-lg p-4">
-      <h4 className="text-[13px] font-semibold text-amber-800">Submit a Dispute</h4>
-      <Textarea value={reason} onChange={e => setReason(e.target.value)}
-        placeholder="Explain why you believe this score is incorrect…" rows={3}
-        className="text-[13px] bg-white" />
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] text-amber-700">
-          {reason.trim().length < minLen ? `${minLen - reason.trim().length} more characters needed` : ''}
-        </span>
-        <Button size="sm" onClick={() => mutate()} disabled={isPending || reason.trim().length < minLen}
-          className="bg-amber-600 hover:bg-amber-700 text-white">
-          {isPending ? 'Submitting…' : 'Submit Dispute'}
-        </Button>
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 bg-white border-b border-slate-100">
+        <AlertTriangle className="h-4 w-4 text-slate-500 shrink-0" />
+        <h3 className="text-[15px] font-semibold text-slate-800 flex-1">Dispute</h3>
+      </div>
+      <div className="px-4 py-3 space-y-3">
+        <Textarea value={reason} onChange={e => setReason(e.target.value)}
+          placeholder="Explain why you believe this score is incorrect…" rows={3}
+          className="text-[13px]" />
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-slate-400">
+            {reason.trim().length < minLen ? `${minLen - reason.trim().length} more characters needed` : ''}
+          </span>
+          <Button size="sm" onClick={() => mutate()} disabled={isPending || reason.trim().length < minLen}
+            className="bg-primary hover:bg-primary/90 text-white">
+            {isPending ? 'Submitting…' : 'Submit Dispute'}
+          </Button>
+        </div>
       </div>
     </div>
   )

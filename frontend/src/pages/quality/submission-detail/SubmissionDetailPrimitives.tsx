@@ -1,6 +1,4 @@
 import React from 'react'
-import { cn } from '@/lib/utils'
-import { scoreColor } from '@/services/qaService'
 import type { SubmissionDetail } from '@/services/qaService'
 
 /** Inline label:value row used throughout the detail view */
@@ -48,12 +46,9 @@ export function CategoryBreakdown({ detail }: { detail: SubmissionDetail }) {
               <div key={i} className="px-4 py-2.5 flex items-start justify-between gap-4">
                 <p className="text-[13px] text-slate-700 flex-1">{a.question_text}</p>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className={cn('text-[13px] font-medium',
-                    a.answer?.toUpperCase() === 'YES' ? 'text-emerald-600' :
-                    a.answer?.toUpperCase() === 'NO'  ? 'text-red-600' : 'text-slate-600'
-                  )}>{a.answer ?? '—'}</span>
+                  <span className="text-[13px] font-medium text-slate-600">{a.answer ?? '—'}</span>
                   {a.score != null && (
-                    <span className={cn('text-[12px] font-semibold', scoreColor(a.score))}>
+                    <span className="text-[12px] font-semibold text-slate-600">
                       {a.score.toFixed(0)} pts
                     </span>
                   )}

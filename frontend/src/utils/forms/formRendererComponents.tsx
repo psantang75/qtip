@@ -533,11 +533,9 @@ export const YesNoQuestion: React.FC<QuestionProps> = ({
     ...(isNaAllowed ? [{ value: 'na', label: 'N/A' }] : []),
   ];
 
-  const colorFor = (val: string, selected: boolean) => {
-    if (!selected) return 'bg-white text-slate-600 border-slate-200 hover:border-slate-400';
-    if (val === 'yes') return 'bg-emerald-500 text-white border-emerald-500';
-    if (val === 'no')  return 'bg-red-500 text-white border-red-500';
-    return 'bg-slate-400 text-white border-slate-400';
+  const colorFor = (_val: string, selected: boolean) => {
+    if (!selected) return 'bg-white text-slate-600 border-slate-200 hover:border-[#00aeef] hover:text-[#00aeef]';
+    return 'bg-[#00aeef] text-white border-[#00aeef]';
   };
 
   return (

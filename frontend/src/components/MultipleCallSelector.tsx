@@ -239,20 +239,17 @@ const MultipleCallSelector: React.FC<MultipleCallSelectorProps> = ({
                   <div className="w-5 h-5 rounded-full bg-[#00aeef]/10 flex items-center justify-center shrink-0">
                     <span className="text-[11px] font-semibold text-[#00aeef]">{index + 1}</span>
                   </div>
-                  <p className="text-[13px] font-medium text-slate-800 truncate">{call.call_id}</p>
-                  {call.id === -1 ? (
-                    <span className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 shrink-0">
-                      No record found
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-[13px] text-slate-700">
+                      <span className="font-medium">Call ID:</span> {call.call_id}
                     </span>
-                  ) : (
-                    <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 shrink-0">
-                      {formatDuration(call.duration)}
+                    <span className="text-[13px] text-slate-700">
+                      <span className="font-medium">Call Date:</span> {formatCallDate(call.call_date)}
                     </span>
-                  )}
-                  <span className="text-[12px] text-slate-400 shrink-0">{formatCallDate(call.call_date)}</span>
-                  {call.customer_id && (
-                    <span className="text-[12px] text-slate-400 shrink-0">· {call.customer_id}</span>
-                  )}
+                    {call.customer_id && (
+                      <span className="text-[12px] text-slate-400 shrink-0">· {call.customer_id}</span>
+                    )}
+                  </div>
                 </div>
                 <Button
                   type="button"

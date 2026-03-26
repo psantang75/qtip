@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, AlertTriangle, CheckCircle, Edit3, Pencil, FileText, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Phone, Mic, MicOff, FileDown } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, CheckCircle, Edit3, Pencil, FileText, ChevronDown, ChevronUp, Phone, Mic, MicOff, FileDown, X } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import qaService, { scoreBg, type SubmissionDetail } from '@/services/qaService'
+import qaService, { type SubmissionDetail } from '@/services/qaService'
 import { api } from '@/services/authService'
 import { ScoreRenderer } from '@/utils/forms/scoreRenderer'
 import {
@@ -257,9 +257,6 @@ export default function SubmissionDetailPage() {
   // status === 'ADJUSTED' means the manager changed the score
   const disputeAdjusted = detail.dispute?.status === 'ADJUSTED' &&
     prevScore != null && adjScore != null
-  const scoreDelta = disputeAdjusted ? (adjScore! - prevScore!) : 0
-
-  const scoreAccent = scoreBg(score)
 
   return (
     // Header lives inside main's natural p-6 — same position as list page.
@@ -290,20 +287,20 @@ export default function SubmissionDetailPage() {
             )}
             {canAcceptReview && !finalizeSuccess && (
               <Button size="sm" disabled={finalizing} onClick={() => finalize()}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                className="bg-primary hover:bg-primary/90 text-white">
                 <CheckCircle className="h-4 w-4 mr-1.5" />
                 {finalizing ? 'Accepting…' : 'Accept Review'}
               </Button>
             )}
             {canDispute && !showDisputeForm && !finalizeSuccess && (
               <Button size="sm" variant="outline"
-                className="border-amber-400 text-amber-700 hover:bg-amber-50"
+                className="border-primary text-slate-600 hover:bg-primary/5"
                 onClick={() => setShowDisputeForm(true)}>
                 <AlertTriangle className="h-4 w-4 mr-1.5" /> Dispute Score
               </Button>
             )}
             {finalizeSuccess && (
-              <span className="flex items-center gap-1.5 text-[13px] text-emerald-600 font-semibold">
+              <span className="flex items-center gap-1.5 text-[13px] text-primary font-semibold pr-2">
                 <CheckCircle className="h-4 w-4" /> Accepted
               </span>
             )}
@@ -360,9 +357,11 @@ export default function SubmissionDetailPage() {
                   <div className="px-4 py-3">
                     <div className="grid grid-cols-3 gap-x-4 gap-y-2">
                       {topReviewFields.map((f, i) => {
-                        const displayValue = f.field_name === 'CSR' && detail.csr_name
-                          ? detail.csr_name
-                          : f.value || '—'
+                        // CSR endpoint doesn't return csr_name for the CSR's own record;
+                        // fall back to the logged-in user's username in that case.
+                        const displayValue = f.field_name === 'CSR'
+                          ? (detail.csr_name ?? (isCSR ? user?.username : null) ?? f.value ?? '—')
+                          : (f.value || '—')
                         return (
                           <div key={i} className="min-w-0">
                             <p className="text-[11px] text-slate-400 mb-0.5">{f.field_name}</p>
@@ -545,35 +544,34 @@ export default function SubmissionDetailPage() {
             {/* ── Call Details (last) ──────────────────────────────────────── */}
             {calls && calls.length > 0 && (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                {/* Header — tabs if multiple calls */}
-                <div className="border-b border-slate-100">
-                  {calls.length > 1 ? (
-                    <div className="flex">
-                      {calls.map((call: any, i: number) => (
-                        <button
-                          key={i}
-                          onClick={() => { setActiveCallIndex(i); setTranscriptOpen(false) }}
-                          className={cn(
-                            'flex items-center gap-2 px-4 py-2.5 text-[12px] font-semibold border-b-2 transition-colors',
-                            activeCallIndex === i
-                              ? 'border-primary text-primary bg-primary/5'
-                              : 'border-transparent text-slate-500 hover:text-slate-700'
-                          )}
-                        >
-                          <Phone className="h-3 w-3" />
-                          Call {i + 1}
-                          {call.recording_url && (
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="px-4 py-3 bg-white border-b border-slate-100">
-                      <h3 className="text-[15px] font-semibold text-slate-800">Call Details</h3>
-                    </div>
-                  )}
+                {/* Header — always shown */}
+                <div className="px-4 py-3 bg-white border-b border-slate-100">
+                  <h3 className="text-[15px] font-semibold text-slate-800">Call Details</h3>
                 </div>
+
+                {/* Tabs — only shown when multiple calls */}
+                {calls.length > 1 && (
+                  <div className="flex border-b border-slate-100">
+                    {calls.map((call: any, i: number) => (
+                      <button
+                        key={i}
+                        onClick={() => { setActiveCallIndex(i); setTranscriptOpen(false) }}
+                        className={cn(
+                          'flex items-center gap-2 px-4 py-2.5 text-[12px] font-semibold border-b-2 transition-colors',
+                          activeCallIndex === i
+                            ? 'border-primary text-primary bg-primary/5'
+                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                        )}
+                      >
+                        <Phone className="h-3 w-3" />
+                        Call {i + 1}
+                        {call.recording_url && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Active call content */}
                 {(() => {
@@ -674,34 +672,29 @@ export default function SubmissionDetailPage() {
               <div className="px-4 py-3 border-b border-slate-100">
                 <h3 className="text-[15px] font-semibold text-slate-800">Overall Score</h3>
               </div>
-              <div className="px-5 py-4 text-center">
-                <div className="text-[44px] font-bold tracking-tight text-slate-900 leading-none">
-                  {score.toFixed(1)}
-                  <span className="text-2xl font-semibold ml-0.5 opacity-50">%</span>
-                </div>
-              </div>
-
-              {/* Before/After — only shown when a dispute was adjusted */}
-              {disputeAdjusted && (
-                <div className="border-t border-slate-100 px-5 py-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-3">Score Change</p>
-                  <div className="flex items-center gap-3">
+              {disputeAdjusted ? (
+                <div className="px-5 py-4">
+                  <div className="flex items-center gap-6">
                     <div className="flex-1 text-center">
                       <p className="text-[11px] text-slate-400 mb-1">Original</p>
-                      <p className="text-[22px] font-bold line-through opacity-40 text-slate-700">
+                      <p className="text-[36px] font-bold text-slate-400 leading-none line-through">
                         {prevScore!.toFixed(1)}%
                       </p>
                     </div>
-                    <div className={cn('flex items-center gap-0.5 font-bold text-[14px]', scoreDelta > 0 ? 'text-emerald-600' : 'text-red-600')}>
-                      {scoreDelta > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                      {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}%
-                    </div>
+                    <div className="w-px self-stretch bg-slate-100" />
                     <div className="flex-1 text-center">
                       <p className="text-[11px] text-slate-400 mb-1">Updated</p>
-                      <p className="text-[22px] font-bold text-slate-900">
+                      <p className="text-[36px] font-bold text-slate-900 leading-none">
                         {adjScore!.toFixed(1)}%
                       </p>
                     </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="px-5 py-4 text-center">
+                  <div className="text-[44px] font-bold tracking-tight text-slate-900 leading-none">
+                    {score.toFixed(1)}
+                    <span className="text-2xl font-semibold ml-0.5 opacity-50">%</span>
                   </div>
                 </div>
               )}

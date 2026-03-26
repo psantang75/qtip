@@ -28,8 +28,6 @@ const QualityAnalyticsPage  = React.lazy(() => import('./pages/quality/QualityAn
 const ReviewFormsPage         = React.lazy(() => import('./pages/quality/ReviewFormsPage'))
 const AuditFormPage           = React.lazy(() => import('./pages/quality/AuditFormPage'))
 const SubmissionDetailPage    = React.lazy(() => import('./pages/quality/SubmissionDetailPage'))
-const DisputeHistoryPage      = React.lazy(() => import('./pages/quality/DisputeHistoryPage'))
-
 const TrainingOverviewPage  = React.lazy(() => import('./pages/training/TrainingOverviewPage'))
 const CoursesPage           = React.lazy(() => import('./pages/training/CoursesPage'))
 const TrainingPathsPage     = React.lazy(() => import('./pages/training/TrainingPathsPage'))
@@ -135,7 +133,7 @@ export default function App() {
                   <Route path="submissions"     element={<PageLoader><SubmissionsPage /></PageLoader>} />
                   <Route path="submissions/:id"   element={<PageLoader><SubmissionDetailPage /></PageLoader>} />
                   <Route path="disputes"          element={<PageLoader><DisputesPage /></PageLoader>} />
-                  <Route path="dispute-history"   element={<PageLoader><DisputeHistoryPage /></PageLoader>} />
+                  <Route path="dispute-history"   element={<Navigate to="/app/quality/disputes" replace />} />
                   <Route path="analytics"       element={<Navigate to="/app/analytics/quality" replace />} />
                   <Route path="review-forms"    element={<PageLoader><ReviewFormsPage /></PageLoader>} />
                   <Route path="audit"           element={<PageLoader><AuditFormPage /></PageLoader>} />

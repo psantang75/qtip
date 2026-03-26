@@ -263,8 +263,8 @@ const qaService = {
     if (params.limit)      q.set('limit', String(params.limit))
     if (params.status)     q.set('status', params.status)
     if (params.search)     q.set('search', params.search)
-    if (params.start_date) q.set('start_date', params.start_date)
-    if (params.end_date)   q.set('end_date', params.end_date)
+    if (params.start_date) q.set('startDate', params.start_date)
+    if (params.end_date)   q.set('endDate', params.end_date)
     return api.get(`/csr/audits?${q}`).then(r => {
       const d = r.data
       // CSR endpoint returns { audits: [...], totalCount: N }
@@ -305,7 +305,7 @@ const qaService = {
           submission_id:  item.submission_id,
           csr_name:       item.csr_name,
           form_name:      item.form_name,
-          original_score: toNum(item.original_score ?? item.total_score),
+          original_score: toNum(item.previous_score ?? item.original_score ?? item.total_score),
           previous_score: toNum(item.previous_score),
           adjusted_score: toNum(item.adjusted_score),
           status:         item.status,

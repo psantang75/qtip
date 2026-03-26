@@ -1338,7 +1338,21 @@ export const getManagerTeamAuditDetails = async (req: AuthenticatedRequest, res:
           d.created_at,
           d.resolved_at,
           disputed_user.username as disputed_by_name,
-          resolved_user.username as resolved_by_name
+          resolved_user.username as resolved_by_name,
+          (
+            SELECT dsh.score
+            FROM dispute_score_history dsh
+            WHERE dsh.dispute_id = d.id AND dsh.score_type = 'PREVIOUS'
+            ORDER BY dsh.created_at ASC, dsh.id ASC
+            LIMIT 1
+          ) as previous_score,
+          (
+            SELECT dsh.score
+            FROM dispute_score_history dsh
+            WHERE dsh.dispute_id = d.id AND dsh.score_type = 'ADJUSTED'
+            ORDER BY dsh.created_at DESC, dsh.id DESC
+            LIMIT 1
+          ) as new_score
         FROM 
           disputes d
           LEFT JOIN users disputed_user ON d.disputed_by = disputed_user.id

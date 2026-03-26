@@ -32,7 +32,7 @@ export default function SubmissionsPage() {
   const isManager   = roleId === 5
   const isCSR       = roleId === 3
 
-  const pageTitle = isCSR ? 'My Reviews' : isManager ? 'Team Reviews' : 'Completed Forms'
+  const pageTitle = isCSR ? 'My Reviews' : isManager ? 'Completed Reviews' : 'Completed Forms'
 
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
@@ -130,15 +130,13 @@ export default function SubmissionsPage() {
         resultCount={{ total: data?.total ?? 0 }}
       >
         {/* 1. Forms */}
-        {!isCSR && (
-          <StagedMultiSelect
-            options={formNameOptions}
-            selected={selectedFormNames}
-            onApply={names => setMany({ forms: names.join(','), page: '1' })}
-            placeholder="All Forms"
-            width="w-[340px]"
-          />
-        )}
+        <StagedMultiSelect
+          options={formNameOptions}
+          selected={selectedFormNames}
+          onApply={names => setMany({ forms: names.join(','), page: '1' })}
+          placeholder="All Forms"
+          width="w-[340px]"
+        />
 
         {/* 2. CSR Name */}
         {!isCSR && csrNameOptions.length > 0 && (

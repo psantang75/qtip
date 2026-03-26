@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, Send, AlertCircle, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getFormById } from '@/services/formService'
@@ -47,6 +47,8 @@ export default function AuditFormPage() {
   const formId = searchParams.get('formId')
   const callId = searchParams.get('callId')
   const csrId  = searchParams.get('csrId')
+
+  const qc = useQueryClient()
 
   const { data: form, isLoading: loading } = useQuery({
     queryKey: ['audit-form', formId],
@@ -198,7 +200,10 @@ export default function AuditFormPage() {
     }
 
     submissionService.submitAudit(payload)
-      .then(() => { navigate('/app/quality/submissions', { state: { message: 'Audit submitted successfully!' } }) })
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ['submissions'] })
+        navigate('/app/quality/review-forms', { state: { message: 'Audit submitted successfully!' } })
+      })
       .catch(() => setErrorMessage('Failed to submit. Please try again.'))
       .finally(() => setSubmitting(false))
   }
@@ -217,11 +222,6 @@ export default function AuditFormPage() {
       .catch(() => setErrorMessage('Failed to save draft. Please try again.'))
       .finally(() => setSubmitting(false))
   }
-
-  const scoreColor = score >= 85 ? 'text-emerald-600' : score >= 70 ? 'text-amber-600' : 'text-red-600'
-  const scoreBg    = score >= 85 ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                   : score >= 70 ? 'bg-amber-50 border-amber-200 text-amber-700'
-                   : 'bg-red-50 border-red-200 text-red-700'
 
   if (loading) {
     return (
@@ -261,18 +261,8 @@ export default function AuditFormPage() {
             </div>
           </div>
 
-          {/* Live score + actions */}
+          {/* Actions */}
           <div className="flex items-center gap-3 shrink-0 mt-0.5">
-            {/* Live score badge */}
-            <div className={`flex flex-col items-center px-4 py-1.5 rounded-xl border ${scoreBg}`}>
-              <span className={`text-[22px] font-bold leading-tight ${scoreColor}`}>
-                {score.toFixed(1)}%
-              </span>
-              <span className="text-[10px] font-medium uppercase tracking-wide opacity-70">Live Score</span>
-            </div>
-
-            <div className="w-px h-8 bg-slate-200" />
-
             <Button variant="outline" onClick={handleSaveDraft} disabled={submitting}>
               <Save className="h-4 w-4 mr-1.5" />
               {submitting ? 'Saving…' : 'Save Draft'}
@@ -362,12 +352,11 @@ export default function AuditFormPage() {
         <div className="w-1/2 bg-white overflow-y-auto">
           <div className="p-4">
             <div className="rounded-xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center px-4 py-3 border-b border-slate-100 bg-slate-50">
                 <div className="flex items-center gap-2">
                   <span className="w-[3px] h-4 rounded-full bg-primary shrink-0" />
                   <span className="text-[13px] font-semibold text-slate-800">{form?.form_name}</span>
                 </div>
-                <span className={`text-[12px] font-semibold ${scoreColor}`}>{score.toFixed(1)}%</span>
               </div>
               {formRenderData ? (
                 <FormRenderer

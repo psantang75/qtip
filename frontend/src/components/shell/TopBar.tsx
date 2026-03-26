@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ChevronDown, LogOut, User, Settings, HelpCircle, ArrowLeft } from 'lucide-react'
+import { ChevronDown, LogOut, User, Settings, ArrowLeft } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -130,17 +130,9 @@ export default function TopBar() {
 
           <DropdownMenuSeparator />
 
-          <DropdownMenuItem onClick={() => navigate('/app/settings')}>
-            <Settings size={14} className="mr-2.5 text-muted-foreground" />
-            Settings
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => navigate('/app/profile')}>
             <User size={14} className="mr-2.5 text-muted-foreground" />
             My Profile
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => navigate('/app/help')}>
-            <HelpCircle size={14} className="mr-2.5 text-muted-foreground" />
-            Help &amp; Support
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />

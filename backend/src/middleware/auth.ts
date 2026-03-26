@@ -160,6 +160,24 @@ export const authorizeTrainer = (req: Request, res: Response, next: NextFunction
 };
 
 /**
+ * QA or Trainer read-only authorization — used for completed submission routes
+ * that trainers need visibility into alongside QA and Admin.
+ */
+export const authorizeQAOrTrainer = (req: Request, res: Response, next: NextFunction): void => {
+  if (!req.user) {
+    res.status(401).json({ error: 'UNAUTHORIZED', message: 'Authentication required', code: 'AUTH_REQUIRED' });
+    return;
+  }
+  const allowed = ['Admin', 'QA', 'Trainer'];
+  if (!allowed.includes(req.user.role)) {
+    securityLogger.accessDenied(req.ip || 'unknown', req.originalUrl, 'Insufficient permissions', req.user.user_id);
+    res.status(403).json({ error: 'FORBIDDEN', message: 'Access denied: insufficient permissions', code: 'INSUFFICIENT_PERMISSIONS' });
+    return;
+  }
+  next();
+};
+
+/**
  * QA role authorization middleware
  */
 export const authorizeQA = (req: Request, res: Response, next: NextFunction): void => {
@@ -264,4 +282,4 @@ export const authorizeManager = (req: Request, res: Response, next: NextFunction
   next();
 };
 
-export default { authenticate, authorizeAdmin, authorizeTrainer, authorizeQA, authorizeManager }; 
+export default { authenticate, authorizeAdmin, authorizeTrainer, authorizeQA, authorizeQAOrTrainer, authorizeManager }; 
