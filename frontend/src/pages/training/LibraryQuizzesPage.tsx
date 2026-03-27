@@ -1,141 +1,203 @@
-﻿import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
-import trainingService from '@/services/trainingService'
+import { Plus, Pencil, Eye } from 'lucide-react'
+import trainingService, { type LibraryQuiz } from '@/services/trainingService'
 import topicService from '@/services/topicService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
+import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
+import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
+import { ListPagination } from '@/components/common/ListPagination'
+import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
-import { LibraryTabNav } from '@/components/training/LibraryTabNav'
-import { QuizBuilder, validateQuizBuilder, type QuizBuilderData, type QuizBuilderErrors } from '@/components/training/QuizBuilder'
+import { useListSort } from '@/hooks/useListSort'
+import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
 
-const EMPTY_QUIZ: QuizBuilderData = { quiz_title: '', pass_score: 80, topic_id: undefined, questions: [] }
+type StatusFilter = 'all' | 'active' | 'inactive'
 
 export default function LibraryQuizzesPage() {
-  const qc        = useQueryClient()
-  const { toast } = useToast()
+  const navigate        = useNavigate()
+  const qc              = useQueryClient()
+  const { toast }       = useToast()
 
-  const [open,        setOpen]        = useState(false)
-  const [editingId,   setEditingId]   = useState<number | null>(null)
-  const [formData,    setFormData]    = useState<QuizBuilderData>(EMPTY_QUIZ)
-  const [errors,      setErrors]      = useState<QuizBuilderErrors>({})
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [search,        setSearch]        = useState('')
+  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('active')
+  const [topicFilter,   setTopicFilter]   = useState<string[]>([])
+  const [page,          setPage]          = useState(1)
+  const [pageSize,      setPageSize]      = useState(20)
+  const [previewQuiz,   setPreviewQuiz]   = useState<any | null>(null)
+  const [previewOpen,   setPreviewOpen]   = useState(false)
 
-  const { data: quizData,   isLoading } = useQuery({ queryKey: ['quiz-library-all'], queryFn: () => trainingService.getQuizLibrary({ limit: 200 }) })
-  const { data: topicsData }            = useQuery({ queryKey: ['topics'],            queryFn: () => topicService.getTopics(1, 200) })
+  const { data: quizData, isLoading } = useQuery({
+    queryKey: ['quiz-library-all'],
+    queryFn:  () => trainingService.getQuizLibrary({ limit: 500 }),
+  })
+  const { data: topicsData } = useQuery({
+    queryKey: ['topics-active'],
+    queryFn:  () => topicService.getTopics(1, 200, { is_active: true }),
+  })
 
-  const quizzes = quizData?.items ?? []
-  const topics  = (topicsData as any)?.items ?? []
+  const allQuizzes = quizData?.items ?? []
+
+  // Base filter (search + status) — used to derive the topic option list
+  const baseFiltered = useMemo(() => {
+    let items = allQuizzes
+    if (search.trim())
+      items = items.filter((q: LibraryQuiz) =>
+        q.quiz_title.toLowerCase().includes(search.toLowerCase()) ||
+        q.topic_names.some(n => n.toLowerCase().includes(search.toLowerCase())))
+    if (statusFilter === 'active')   items = items.filter((q: LibraryQuiz) => q.is_active)
+    if (statusFilter === 'inactive') items = items.filter((q: LibraryQuiz) => !q.is_active)
+    return items
+  }, [allQuizzes, search, statusFilter])
+
+  const filtered = useMemo(() => {
+    if (topicFilter.length === 0) return baseFiltered
+    return baseFiltered.filter((q: LibraryQuiz) =>
+      topicFilter.some(t => q.topic_names.includes(t)))
+  }, [baseFiltered, topicFilter])
+
+  const { sort, dir, toggle, sorted } = useListSort(filtered)
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const quizzes    = sorted.slice((page - 1) * pageSize, page * pageSize)
+  const onSort     = (field: string) => { toggle(field); setPage(1) }
+
+  // Topic options: only those present in the current search+status results
+  const topicOptions = useMemo(() => {
+    const present = new Set(baseFiltered.flatMap((q: LibraryQuiz) => q.topic_names))
+    return [...present].sort()
+  }, [baseFiltered])
+
+  const hasFilters = search.trim().length > 0 || statusFilter !== 'active' || topicFilter.length > 0
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['quiz-library-all'] })
 
-  const openCreate = () => { setEditingId(null); setFormData(EMPTY_QUIZ); setErrors({}); setOpen(true) }
+  const toggleMut = useMutation({
+    mutationFn: (id: number) => trainingService.toggleQuizStatus(id),
+    onSuccess: invalidate,
+    onError: () => toast({ title: 'Failed to update status', variant: 'destructive' }),
+  })
 
-  const openEdit = async (id: number) => {
+  const openPreview = async (id: number) => {
     try {
       const detail = await trainingService.getLibraryQuizDetail(id)
-      setFormData({
-        quiz_title: detail.quiz_title,
-        pass_score: detail.pass_score,
-        topic_id:   detail.topic_id,
-        questions:  (detail as any).questions?.map((q: any) => ({
-          question_text:  q.question_text,
-          options:        q.options,
-          correct_option: q.correct_option,
-        })) ?? [],
-      })
-      setEditingId(id)
-      setErrors({})
-      setOpen(true)
+      setPreviewQuiz(detail)
+      setPreviewOpen(true)
     } catch {
-      toast({ title: 'Failed to load quiz', variant: 'destructive' })
+      toast({ title: 'Failed to load quiz preview', variant: 'destructive' })
     }
-  }
-
-  const saveMut = useMutation({
-    mutationFn: async (data: QuizBuilderData) => {
-      const payload = {
-        ...data,
-        questions: data.questions.map(q => ({
-          question_text:  q.question_text,
-          options:        q.options,
-          correct_option: q.correct_option,
-        })),
-      }
-      return editingId
-        ? trainingService.updateLibraryQuiz(editingId, payload)
-        : trainingService.createLibraryQuiz(payload as any)
-    },
-    onSuccess: () => {
-      invalidate()
-      setOpen(false)
-      toast({ title: editingId ? 'Quiz updated' : 'Quiz created' })
-    },
-    onError: (err: any) => toast({ title: 'Save failed', description: err?.message, variant: 'destructive' }),
-  })
-
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => trainingService.deleteLibraryQuiz(id),
-    onSuccess: () => { invalidate(); setDeleteConfirm(null); toast({ title: 'Quiz deleted' }) },
-    onError: (err: any) => toast({ title: err?.response?.data?.message ?? 'Cannot delete quiz', variant: 'destructive' }),
-  })
-
-  const handleSave = () => {
-    const errs = validateQuizBuilder(formData)
-    if (Object.keys(errs).length) { setErrors(errs); return }
-    setErrors({})
-    saveMut.mutate(formData)
   }
 
   return (
     <QualityListPage>
-      <QualityPageHeader title="Library"
+      <QualityPageHeader
+        title="Quizzes"
         actions={
-          <Button className="bg-primary hover:bg-primary/90 text-white" onClick={openCreate}>
+          <Button className="bg-primary hover:bg-primary/90 text-white"
+            onClick={() => navigate('/app/training/library/quizzes/new')}>
             <Plus className="h-4 w-4 mr-1" /> New Quiz
           </Button>
         }
       />
-      <LibraryTabNav />
+
+      <QualityFilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search quizzes..."
+        hasFilters={hasFilters}
+        onReset={() => { setSearch(''); setStatusFilter('active'); setTopicFilter([]); setPage(1) }}
+        resultCount={{ filtered: sorted.length, total: allQuizzes.length }}
+      >
+        <StagedMultiSelect
+          options={topicOptions}
+          selected={topicFilter}
+          onApply={v => { setTopicFilter(v); setPage(1) }}
+          placeholder="All Topics"
+          width="w-[280px]"
+        />
+        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v as StatusFilter); setPage(1) }}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="All Statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </QualityFilterBar>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? <TableLoadingSkeleton rows={6} /> : (
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 border-b border-slate-200">
-                <TableHead>Quiz Title</TableHead>
-                <TableHead>Topic</TableHead>
-                <TableHead className="text-center">Questions</TableHead>
-                <TableHead className="text-center">Pass Score</TableHead>
-                <TableHead className="text-center">Times Used</TableHead>
-                <TableHead className="w-20" />
-              </TableRow>
+              <StandardTableHeaderRow>
+                <SortableTableHead field="quiz_title"     sort={sort} dir={dir} onSort={onSort}>Quiz Title</SortableTableHead>
+                <TableHead>Topics</TableHead>
+                <SortableTableHead field="question_count" sort={sort} dir={dir} onSort={onSort} className="text-center">Questions</SortableTableHead>
+                <SortableTableHead field="pass_score"     sort={sort} dir={dir} onSort={onSort} className="text-center">Pass Score</SortableTableHead>
+                <SortableTableHead field="times_used"     sort={sort} dir={dir} onSort={onSort} className="text-center">Times Used</SortableTableHead>
+                <SortableTableHead field="is_active"      sort={sort} dir={dir} onSort={onSort}>Status</SortableTableHead>
+                <TableHead className="w-32" />
+              </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {quizzes.length === 0 ? (
-                <TableEmptyState colSpan={6} title="No quizzes yet" description="Create your first quiz" />
-              ) : quizzes.map((q: any) => (
+                <TableEmptyState colSpan={7} title="No quizzes found" description="Try adjusting your filters or create a new quiz" />
+              ) : quizzes.map((q: LibraryQuiz) => (
                 <TableRow key={q.id} className="hover:bg-slate-50/50">
                   <TableCell className="text-[13px] font-medium text-slate-900">{q.quiz_title}</TableCell>
-                  <TableCell className="text-[13px] text-slate-500">{q.topic_name ?? 'â€”'}</TableCell>
+
+                  {/* Topics with tooltip — same as resources */}
+                  <TableCell className="max-w-[180px]">
+                    {q.topic_names.length > 0 ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[13px] text-slate-500 truncate block max-w-[180px] cursor-default">
+                            {[...q.topic_names].sort().join(', ')}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg"
+                          sideOffset={6}
+                        >
+                          <ul className="space-y-1">
+                            {[...q.topic_names].sort().map(name => (
+                              <li key={name} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                                {name}
+                              </li>
+                            ))}
+                          </ul>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <span className="text-[13px] text-slate-300">&mdash;</span>
+                    )}
+                  </TableCell>
+
                   <TableCell className="text-center text-[13px] text-slate-600">{q.question_count}</TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">{q.pass_score}%</TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">{q.times_used}</TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{q.is_active ? 'Active' : 'Inactive'}</TableCell>
+
                   <TableCell>
                     <div className="flex items-center gap-1 justify-end">
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(q.id)}>
-                        <Pencil className="h-3.5 w-3.5 text-slate-400" />
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
+                        onClick={() => openPreview(q.id)}>
+                        <Eye className="h-3.5 w-3.5" /> Preview
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                        disabled={q.times_used > 0}
-                        title={q.times_used > 0 ? 'In use â€” cannot delete' : 'Delete'}
-                        onClick={() => setDeleteConfirm(q.id)}>
-                        <Trash2 className="h-3.5 w-3.5 text-slate-400 hover:text-red-500" />
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
+                        onClick={() => navigate(`/app/training/library/quizzes/${q.id}/edit`)}>
+                        <Pencil className="h-3.5 w-3.5" /> Edit
                       </Button>
                     </div>
                   </TableCell>
@@ -146,36 +208,20 @@ export default function LibraryQuizzesPage() {
         )}
       </div>
 
-      {/* Quiz Builder Dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent aria-describedby={undefined} className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Quiz' : 'New Quiz'}</DialogTitle>
-          </DialogHeader>
-          <QuizBuilder value={formData} onChange={setFormData} errors={errors} topics={topics} />
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 mt-2">
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button className="bg-primary hover:bg-primary/90 text-white" onClick={handleSave} disabled={saveMut.isPending}>
-              {saveMut.isPending ? 'Savingâ€¦' : 'Save Quiz'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ListPagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={sorted.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={size => { setPageSize(size); setPage(1) }}
+      />
 
-      {/* Delete confirm */}
-      <Dialog open={deleteConfirm !== null} onOpenChange={() => setDeleteConfirm(null)}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete Quiz?</DialogTitle></DialogHeader>
-          <p className="text-[13px] text-slate-600">This cannot be undone.</p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => deleteMut.mutate(deleteConfirm!)} disabled={deleteMut.isPending}>
-              {deleteMut.isPending ? 'Deletingâ€¦' : 'Delete'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <QuizPreviewModal
+        quiz={previewQuiz}
+        open={previewOpen}
+        onClose={() => { setPreviewOpen(false); setPreviewQuiz(null) }}
+      />
     </QualityListPage>
   )
 }
-

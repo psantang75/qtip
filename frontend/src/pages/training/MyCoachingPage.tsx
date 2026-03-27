@@ -6,18 +6,19 @@ import trainingService from '@/services/trainingService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
-import { CoachingTypeBadge, TopicChips } from './CoachingSessionsPage'
+import { CoachingPurposeBadge, TopicChips } from './CoachingSessionsPage'
 
-// ── CSR-friendly status labels ────────────────────────────────────────────────
+// â”€â”€ CSR-friendly status labels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const CSR_STATUS: Record<string, { label: string; classes: string }> = {
   SCHEDULED:           { label: 'Upcoming',            classes: 'bg-slate-100   text-slate-600'               },
-  DELIVERED:           { label: 'Needs Your Response',  classes: 'bg-amber-100   text-amber-800 font-semibold'  },
+  IN_PROCESS:          { label: 'Needs Your Response',  classes: 'bg-amber-100   text-amber-800 font-semibold'  },
   AWAITING_CSR_ACTION: { label: 'Needs Your Response',  classes: 'bg-amber-100   text-amber-800 font-semibold'  },
   QUIZ_PENDING:        { label: 'Quiz Required',         classes: 'bg-purple-100  text-purple-800'               },
   COMPLETED:           { label: 'Completed',             classes: 'bg-emerald-100 text-emerald-800'              },
@@ -34,13 +35,13 @@ function CSRStatusBadge({ status }: { status: string }) {
   )
 }
 
-// ── Sorting ───────────────────────────────────────────────────────────────────
+// â”€â”€ Sorting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const NEEDS_RESPONSE = new Set(['DELIVERED', 'AWAITING_CSR_ACTION', 'QUIZ_PENDING'])
+const NEEDS_RESPONSE = new Set(['IN_PROCESS', 'AWAITING_CSR_ACTION', 'QUIZ_PENDING'])
 const COMPLETED_SET  = new Set(['COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED'])
-const SORT_PRIORITY: Record<string, number> = { DELIVERED: 0, AWAITING_CSR_ACTION: 0, QUIZ_PENDING: 1 }
+const SORT_PRIORITY: Record<string, number> = { IN_PROCESS: 0, AWAITING_CSR_ACTION: 0, QUIZ_PENDING: 1 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type Tab = 'all' | 'needs_response' | 'completed'
 
@@ -109,14 +110,14 @@ export default function MyCoachingPage() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 border-b border-slate-200">
+              <StandardTableHeaderRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Topics</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Due Date</TableHead>
                 <TableHead className="w-16" />
-              </TableRow>
+              </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
@@ -129,11 +130,11 @@ export default function MyCoachingPage() {
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {formatQualityDate(s.session_date)}
                   </TableCell>
-                  <TableCell><CoachingTypeBadge type={s.coaching_type} /></TableCell>
+                  <TableCell><CoachingPurposeBadge purpose={s.coaching_purpose} /></TableCell>
                   <TableCell><TopicChips topics={s.topics} max={2} /></TableCell>
                   <TableCell><CSRStatusBadge status={s.status} /></TableCell>
                   <TableCell className={cn('text-[13px] whitespace-nowrap', s.is_overdue ? 'text-red-600 font-medium' : 'text-slate-600')}>
-                    {s.due_date ? formatQualityDate(s.due_date) : '—'}{s.is_overdue ? ' ⚠' : ''}
+                    {s.due_date ? formatQualityDate(s.due_date) : 'â€”'}{s.is_overdue ? ' âš ' : ''}
                   </TableCell>
                   <TableCell>
                     <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
@@ -150,3 +151,5 @@ export default function MyCoachingPage() {
     </QualityListPage>
   )
 }
+
+

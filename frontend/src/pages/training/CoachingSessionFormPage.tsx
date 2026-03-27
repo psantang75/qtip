@@ -9,7 +9,7 @@ import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { Button } from '@/components/ui/button'
 import { formatQualityDate } from '@/utils/dateFormat'
-import { CoachingTypeBadge, TopicChips } from './CoachingSessionsPage'
+import { CoachingPurposeBadge, TopicChips } from './CoachingSessionsPage'
 import {
   SessionInfoSection, ContextSection, TopicsSection, RequiredActionSection,
   KBResourceSection, QuizSection, AccountabilitySection, TimingSection, AttachmentSection,
@@ -75,7 +75,8 @@ export default function CoachingSessionFormPage() {
     setForm({
       csr_id:               s.csr_id,
       session_date:         s.session_date?.slice(0, 16) ?? new Date().toISOString().slice(0, 16),
-      coaching_type:        s.coaching_type,
+      coaching_purpose:     s.coaching_purpose,
+      coaching_format:      s.coaching_format,
       source_type:          s.source_type,
       notes:                s.notes ?? '',
       topic_ids:            s.topic_ids ?? [],
@@ -102,7 +103,8 @@ export default function CoachingSessionFormPage() {
     const e: CoachingFormErrors = {}
     if (!form.csr_id)          e.csr_id         = 'Select a CSR'
     if (!form.session_date)    e.session_date    = 'Date is required'
-    if (!form.coaching_type)   e.coaching_type   = 'Select a coaching type'
+    if (!form.coaching_purpose) e.coaching_purpose = 'Select a coaching purpose'
+    if (!form.coaching_format)  e.coaching_format  = 'Select a coaching format'
     if (!form.source_type)     e.source_type     = 'Select a source'
     if (!form.notes.trim())    e.notes           = 'Notes are required'
     if (!form.topic_ids.length) e.topic_ids      = 'Select at least one topic'
@@ -114,7 +116,7 @@ export default function CoachingSessionFormPage() {
 
   // ── Save ────────────────────────────────────────────────────────────────────
 
-  const handleSave = async (saveStatus: 'SCHEDULED' | 'DELIVERED' | 'COMPLETED') => {
+  const handleSave = async (saveStatus: 'SCHEDULED' | 'IN_PROCESS' | 'COMPLETED') => {
     if (!validate()) return
     if (saveStatus === 'COMPLETED') {
       toast({ title: 'Saving as Completed…', description: 'Marking this session complete.' })
@@ -126,7 +128,8 @@ export default function CoachingSessionFormPage() {
       const fd = new FormData()
       fd.append('csr_id',               String(form.csr_id))
       fd.append('session_date',         form.session_date)
-      fd.append('coaching_type',        form.coaching_type)
+      fd.append('coaching_purpose',     form.coaching_purpose)
+      fd.append('coaching_format',      form.coaching_format)
       fd.append('source_type',          form.source_type)
       fd.append('notes',                form.notes)
       fd.append('topic_ids',            form.topic_ids.join(','))
@@ -200,7 +203,7 @@ export default function CoachingSessionFormPage() {
                   <div key={s.id} className="py-2 border-b border-slate-100 last:border-0">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[12px] text-slate-500">{formatQualityDate(s.session_date)}</span>
-                      <CoachingTypeBadge type={s.coaching_type} />
+                      <CoachingPurposeBadge purpose={s.coaching_purpose} />
                     </div>
                     <TopicChips topics={s.topics} max={3} />
                   </div>
@@ -227,8 +230,8 @@ export default function CoachingSessionFormPage() {
             Save as Scheduled
           </Button>
           <Button variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50"
-            onClick={() => handleSave('DELIVERED')} disabled={saving}>
-            Save as Delivered
+            onClick={() => handleSave('IN_PROCESS')} disabled={saving}>
+            Save as In Process
           </Button>
           <Button className="bg-primary hover:bg-primary/90 text-white"
             onClick={() => handleSave('COMPLETED')} disabled={saving}>

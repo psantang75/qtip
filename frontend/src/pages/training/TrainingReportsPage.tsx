@@ -12,6 +12,7 @@ import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { DateRangeFilter } from '@/components/common/DateRangeFilter'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -20,19 +21,19 @@ import { useQualityRole } from '@/hooks/useQualityRole'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const TYPE_COLORS: Record<string, string> = {
   WEEKLY_COACHING: '#60a5fa', PERFORMANCE_COACHING: '#fbbf24',
   ESCALATION: '#f87171', SIDE_BY_SIDE: '#2dd4bf', TEAM_SESSION: '#818cf8',
 }
 const STATUS_COLORS: Record<string, string> = {
-  SCHEDULED: '#94a3b8', DELIVERED: '#3b82f6', AWAITING_CSR_ACTION: '#f59e0b',
+  SCHEDULED: '#94a3b8', IN_PROCESS: '#3b82f6', AWAITING_CSR_ACTION: '#f59e0b',
   QUIZ_PENDING: '#a855f7', COMPLETED: '#10b981', FOLLOW_UP_REQUIRED: '#f97316', CLOSED: '#64748b',
 }
 const typeLabel = (t: string) => t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
-// ── Stat Card ─────────────────────────────────────────────────────────────────
+// â”€â”€ Stat Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function StatCard({ label, value, icon: Icon, valueClass }: {
   label: string; value: string | number
@@ -47,7 +48,7 @@ function StatCard({ label, value, icon: Icon, valueClass }: {
   )
 }
 
-// ── Chart Card ────────────────────────────────────────────────────────────────
+// â”€â”€ Chart Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -58,7 +59,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function TrainingReportsPage() {
   const navigate      = useNavigate()
@@ -108,7 +109,7 @@ export default function TrainingReportsPage() {
   // Chart data
   const weekData   = (s.sessions_by_week   ?? []).map((r: any) => ({ name: r.week,         count: Number(r.count) }))
   const topicData  = (s.top_topics         ?? []).slice(0, 10).map((r: any) => ({ name: r.topic_name,   count: Number(r.count) }))
-  const typeData   = (s.sessions_by_type   ?? []).map((r: any) => ({ name: typeLabel(r.coaching_type), type: r.coaching_type, count: Number(r.count) }))
+  const typeData   = (s.sessions_by_type   ?? []).map((r: any) => ({ name: typeLabel(r.coaching_purpose ?? r.coaching_type), type: r.coaching_purpose ?? r.coaching_type, count: Number(r.count) }))
   const statusData = (s.sessions_by_status ?? []).map((r: any) => ({ name: r.status, count: Number(r.count) }))
 
   return (
@@ -122,25 +123,25 @@ export default function TrainingReportsPage() {
           onChange={v => setMany({ from: v.start, to: v.end, page: '1' })}
         />
         <div className="flex items-center gap-1.5 text-[12px] text-slate-500">
-          <span className="font-medium text-slate-700">{s.total_sessions ?? '—'}</span> sessions in range
+          <span className="font-medium text-slate-700">{s.total_sessions ?? 'â€”'}</span> sessions in range
         </div>
       </QualityFilterBar>
 
-      {/* ── Stat cards ─────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Stat cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
-        <StatCard label="Total Sessions"      value={summaryLoading ? '—' : (s.total_sessions ?? 0)} icon={MessageSquare} />
-        <StatCard label="Completion Rate"     value={summaryLoading ? '—' : `${compRate}%`} icon={TrendingUp}
+        <StatCard label="Total Sessions"      value={summaryLoading ? 'â€”' : (s.total_sessions ?? 0)} icon={MessageSquare} />
+        <StatCard label="Completion Rate"     value={summaryLoading ? 'â€”' : `${compRate}%`} icon={TrendingUp}
           valueClass={compRate >= 70 ? 'text-emerald-600' : compRate >= 40 ? 'text-amber-600' : 'text-red-600'} />
         <StatCard label="Avg Days to Complete"
-          value={summaryLoading ? '—' : s.avg_days_to_completion != null ? `${s.avg_days_to_completion}d` : '—'}
+          value={summaryLoading ? 'â€”' : s.avg_days_to_completion != null ? `${s.avg_days_to_completion}d` : 'â€”'}
           icon={Clock} />
-        <StatCard label="Quiz Pass Rate"      value={summaryLoading ? '—' : `${quizRate}%`} icon={CheckCircle} />
-        <StatCard label="Repeat Coaching"     value={summaryLoading ? '—' : `${s.repeat_coaching_rate ?? 0}%`}
+        <StatCard label="Quiz Pass Rate"      value={summaryLoading ? 'â€”' : `${quizRate}%`} icon={CheckCircle} />
+        <StatCard label="Repeat Coaching"     value={summaryLoading ? 'â€”' : `${s.repeat_coaching_rate ?? 0}%`}
           icon={RefreshCw}
           valueClass={(s.repeat_coaching_rate ?? 0) > 20 ? 'text-amber-600' : undefined} />
       </div>
 
-      {/* ── Charts 2x2 grid ─────────────────────────────────────────────────── */}
+      {/* â”€â”€ Charts 2x2 grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
 
         <ChartCard title="Sessions by Week">
@@ -212,7 +213,7 @@ export default function TrainingReportsPage() {
 
       </div>
 
-      {/* ── CSR Drill-Down Table ─────────────────────────────────────────────── */}
+      {/* â”€â”€ CSR Drill-Down Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700">CSR Breakdown</p>
@@ -234,7 +235,7 @@ export default function TrainingReportsPage() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 border-b border-slate-200">
+              <StandardTableHeaderRow>
                 <TableHead>CSR</TableHead>
                 <TableHead className="text-center">Sessions</TableHead>
                 <TableHead className="text-center">Completed</TableHead>
@@ -244,7 +245,7 @@ export default function TrainingReportsPage() {
                 <TableHead>Top Topic</TableHead>
                 <TableHead>Last Session</TableHead>
                 <TableHead className="w-8" />
-              </TableRow>
+              </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {csrRows.length === 0 ? (
@@ -264,14 +265,14 @@ export default function TrainingReportsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">
-                    {csr.avg_days_to_completion != null ? `${csr.avg_days_to_completion}d` : '—'}
+                    {csr.avg_days_to_completion != null ? `${csr.avg_days_to_completion}d` : 'â€”'}
                   </TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">{csr.quizzes_passed ?? 0}</TableCell>
-                  <TableCell className="text-[13px] text-slate-500 max-w-[120px] truncate">{csr.most_common_topic ?? '—'}</TableCell>
+                  <TableCell className="text-[13px] text-slate-500 max-w-[120px] truncate">{csr.most_common_topic ?? 'â€”'}</TableCell>
                   <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">
-                    {csr.last_session_date ? formatQualityDate(csr.last_session_date) : '—'}
+                    {csr.last_session_date ? formatQualityDate(csr.last_session_date) : 'â€”'}
                   </TableCell>
-                  <TableCell className="text-slate-400 text-[13px]">→</TableCell>
+                  <TableCell className="text-slate-400 text-[13px]">â†’</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -290,3 +291,5 @@ export default function TrainingReportsPage() {
     </QualityListPage>
   )
 }
+
+

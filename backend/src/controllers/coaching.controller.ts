@@ -29,13 +29,14 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
     const offset = (page - 1) * limit;
-    const { csr_id, status, coaching_type, topic_ids, date_from, date_to, overdue_only } = req.query;
+    const { csr_id, status, coaching_purpose, coaching_format, topic_ids, date_from, date_to, overdue_only } = req.query;
 
     const conditions: Prisma.Sql[] = [Prisma.sql`u.is_active = 1`, roleCondition(role, userId)];
 
-    if (csr_id) conditions.push(Prisma.sql`cs.csr_id = ${parseInt(csr_id as string)}`);
-    if (status) conditions.push(Prisma.sql`cs.status = ${status}`);
-    if (coaching_type) conditions.push(Prisma.sql`cs.coaching_type = ${coaching_type}`);
+    if (csr_id)          conditions.push(Prisma.sql`cs.csr_id = ${parseInt(csr_id as string)}`);
+    if (status)          conditions.push(Prisma.sql`cs.status = ${status}`);
+    if (coaching_purpose) conditions.push(Prisma.sql`cs.coaching_purpose = ${coaching_purpose}`);
+    if (coaching_format)  conditions.push(Prisma.sql`cs.coaching_format = ${coaching_format}`);
     if (date_from) conditions.push(Prisma.sql`DATE(cs.session_date) >= ${date_from}`);
     if (date_to) conditions.push(Prisma.sql`DATE(cs.session_date) <= ${date_to}`);
     if (overdue_only === 'true') {
@@ -54,7 +55,7 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
       ),
       prisma.$queryRaw<any[]>(
         Prisma.sql`
-          SELECT cs.id, cs.csr_id, u.username as csr_name, cs.coaching_type, cs.source_type,
+          SELECT cs.id, cs.csr_id, u.username as csr_name, cs.coaching_purpose, cs.coaching_format, cs.source_type,
             cs.status, cs.quiz_required, cs.quiz_id, cs.session_date, cs.follow_up_date,
             cs.created_at, cb.username as created_by_name, cs.attachment_filename,
             GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics,
@@ -133,7 +134,7 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
       ),
       prisma.$queryRaw<any[]>(
         Prisma.sql`
-          SELECT cs2.id, cs2.session_date, cs2.coaching_type, cs2.status,
+          SELECT cs2.id, cs2.session_date, cs2.coaching_purpose, cs2.coaching_format, cs2.status,
             GROUP_CONCAT(DISTINCT t2.topic_name ORDER BY t2.topic_name SEPARATOR ',') as topics
           FROM coaching_sessions cs2
           LEFT JOIN coaching_session_topics cst2 ON cs2.id = cst2.coaching_session_id
@@ -170,15 +171,15 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
   try {
     const userId = req.user!.user_id;
     const attachment = req.file;
-    let { csr_id, session_date, coaching_type, source_type, notes, topic_ids,
+    let { csr_id, session_date, coaching_purpose, coaching_format, source_type, notes, topic_ids,
           required_action, kb_resource_id, kb_url, quiz_id, quiz_required,
           require_acknowledgment, require_action_plan, follow_up_required, follow_up_date } = req.body;
 
     if (typeof topic_ids === 'string') topic_ids = topic_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean);
     if (!Array.isArray(topic_ids)) topic_ids = topic_ids ? [parseInt(topic_ids)] : [];
 
-    if (!csr_id || !session_date || !coaching_type || !source_type) {
-      return res.status(400).json({ success: false, message: 'Required: csr_id, session_date, coaching_type, source_type' });
+    if (!csr_id || !session_date || !coaching_purpose || !coaching_format || !source_type) {
+      return res.status(400).json({ success: false, message: 'Required: csr_id, session_date, coaching_purpose, coaching_format, source_type' });
     }
     if (!topic_ids.length) return res.status(400).json({ success: false, message: 'At least one topic is required' });
 
@@ -200,11 +201,11 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
     const newId = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw(
         Prisma.sql`INSERT INTO coaching_sessions
-          (csr_id, session_date, coaching_type, source_type, notes, status, required_action, kb_resource_id, kb_url,
+          (csr_id, session_date, coaching_purpose, coaching_format, source_type, notes, status, required_action, kb_resource_id, kb_url,
            quiz_id, quiz_required, require_acknowledgment, require_action_plan, follow_up_required, follow_up_date,
            attachment_filename, attachment_path, attachment_size, attachment_mime_type, created_by)
           VALUES
-          (${parseInt(csr_id)}, ${session_date}, ${coaching_type}, ${source_type}, ${notes || null}, 'SCHEDULED',
+          (${parseInt(csr_id)}, ${session_date}, ${coaching_purpose}, ${coaching_format}, ${source_type}, ${notes || null}, 'SCHEDULED',
            ${required_action || null}, ${kb_resource_id ? parseInt(kb_resource_id) : null}, ${kb_url || null},
            ${quiz_id ? parseInt(quiz_id) : null}, ${quiz_required === 'true' || quiz_required === true ? 1 : 0},
            ${require_acknowledgment === 'false' || require_acknowledgment === false ? 0 : 1},
@@ -217,7 +218,7 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
       for (const topicId of topic_ids) {
         await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sessionId}, ${topicId})`);
       }
-      await tx.auditLog.create({ data: { user_id: userId, action: 'CREATE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ csr_id, coaching_type, topic_ids }) } });
+      await tx.auditLog.create({ data: { user_id: userId, action: 'CREATE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ csr_id, coaching_purpose, coaching_format, topic_ids }) } });
       return sessionId;
     });
 
@@ -235,7 +236,7 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
     const sessionId = parseInt(req.params.id);
     const attachment = req.file;
 
-    let { session_date, coaching_type, source_type, notes, topic_ids,
+    let { session_date, coaching_purpose, coaching_format, source_type, notes, topic_ids,
           required_action, kb_resource_id, kb_url, quiz_id, quiz_required,
           require_acknowledgment, require_action_plan, follow_up_required, follow_up_date } = req.body;
 
@@ -249,9 +250,10 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
     if (['COMPLETED', 'CLOSED'].includes(existing[0].status)) return res.status(400).json({ success: false, message: 'Cannot edit a completed or closed session' });
 
     const parts: Prisma.Sql[] = [];
-    if (session_date !== undefined) parts.push(Prisma.sql`session_date = ${session_date}`);
-    if (coaching_type !== undefined) parts.push(Prisma.sql`coaching_type = ${coaching_type}`);
-    if (source_type !== undefined) parts.push(Prisma.sql`source_type = ${source_type}`);
+    if (session_date     !== undefined) parts.push(Prisma.sql`session_date = ${session_date}`);
+    if (coaching_purpose !== undefined) parts.push(Prisma.sql`coaching_purpose = ${coaching_purpose}`);
+    if (coaching_format  !== undefined) parts.push(Prisma.sql`coaching_format = ${coaching_format}`);
+    if (source_type      !== undefined) parts.push(Prisma.sql`source_type = ${source_type}`);
     if (notes !== undefined) parts.push(Prisma.sql`notes = ${notes || null}`);
     if (required_action !== undefined) parts.push(Prisma.sql`required_action = ${required_action || null}`);
     if (kb_resource_id !== undefined) parts.push(Prisma.sql`kb_resource_id = ${kb_resource_id ? parseInt(kb_resource_id) : null}`);
@@ -303,11 +305,11 @@ export const deliverCoachingSession = async (req: AuthReq, res: Response) => {
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.id, cs.status FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
 
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
-    if (rows[0].status !== 'SCHEDULED') return res.status(400).json({ success: false, message: 'Can only deliver a SCHEDULED session' });
+    if (rows[0].status !== 'SCHEDULED') return res.status(400).json({ success: false, message: 'Can only mark in-process a SCHEDULED session' });
 
-    await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'DELIVERED', delivered_at = NOW() WHERE id = ${sessionId}`);
-    await prisma.auditLog.create({ data: { user_id: userId, action: 'DELIVER', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
-    res.json({ success: true, message: 'Session marked as delivered' });
+    await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'IN_PROCESS', delivered_at = NOW() WHERE id = ${sessionId}`);
+    await prisma.auditLog.create({ data: { user_id: userId, action: 'IN_PROCESS', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
+    res.json({ success: true, message: 'Session marked as in-process' });
   } catch (error) {
     console.error('[COACHING] deliverCoachingSession error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
@@ -426,7 +428,7 @@ export const getCSRCoachingHistory = async (req: AuthReq, res: Response) => {
 
     const sessions = await prisma.$queryRaw<any[]>(
       Prisma.sql`
-        SELECT cs.id, cs.session_date, cs.coaching_type, cs.status,
+        SELECT cs.id, cs.session_date, cs.coaching_purpose, cs.coaching_format, cs.status,
           GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id

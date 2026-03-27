@@ -97,7 +97,7 @@ export default function MyCoachingDetailPage() {
     <QualityListPage>
       <QualityPageHeader
         title="Coaching Session"
-        subtitle={`${formatQualityDate(session.session_date)} · ${coachingLabel(session.coaching_type)}`}
+        subtitle={`${formatQualityDate(session.session_date)} · ${coachingLabel(session.coaching_purpose)} · ${coachingLabel(session.coaching_format)}`}
         actions={
           <Button variant="outline" onClick={() => navigate('/app/training/my-coaching')}>← Back</Button>
         }

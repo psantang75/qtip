@@ -3,7 +3,7 @@
  * Keeps the main page file focused on state / logic.
  */
 import { Switch } from '@/components/ui/switch'
-import type { CoachingType, CoachingSourceType, TrainingResource, LibraryQuiz } from '@/services/trainingService'
+import type { CoachingPurpose, CoachingFormat, CoachingSourceType, TrainingResource, LibraryQuiz } from '@/services/trainingService'
 import type { Topic } from '@/services/topicService'
 import type { CoachingFormState, CoachingFormErrors } from './types'
 
@@ -34,12 +34,10 @@ const sel = 'w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] bg-w
 const inp = 'w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-primary/40'
 const tex = 'w-full px-3 py-2 border border-slate-200 rounded-md text-[13px] resize-none focus:outline-none focus:ring-1 focus:ring-primary/40'
 
-const NOTES_PLACEHOLDER: Record<CoachingType, string> = {
-  WEEKLY_COACHING:      'Summarize performance trends, strengths, and focus areas...',
-  PERFORMANCE_COACHING: 'Describe the specific gap or pattern being addressed...',
-  ESCALATION:           'Describe the incident, what happened, and why it matters...',
-  SIDE_BY_SIDE:         'Summarize observations from the live session...',
-  TEAM_SESSION:         'Describe the group session topic and key points covered...',
+const NOTES_PLACEHOLDER: Record<CoachingPurpose, string> = {
+  WEEKLY:      'Summarize performance trends, strengths, and focus areas...',
+  PERFORMANCE: 'Describe the specific gap or pattern being addressed...',
+  ONBOARDING:  'Describe the onboarding topic and key points covered...',
 }
 
 // ── Section 1: Session Info ───────────────────────────────────────────────────
@@ -65,12 +63,18 @@ export function SessionInfoSection({ form, errors, csrs, currentUserName, update
           <input type="datetime-local" className={inp} value={form.session_date}
             onChange={e => update('session_date', e.target.value)} />
         </Field>
-        <Field label="Coaching Type" required error={errors.coaching_type}>
-          <select className={sel} value={form.coaching_type} onChange={e => update('coaching_type', e.target.value as CoachingType)}>
-            <option value="">Select type…</option>
-            <option value="WEEKLY_COACHING">Weekly Coaching</option>
-            <option value="PERFORMANCE_COACHING">Performance Coaching</option>
-            <option value="ESCALATION">Escalation</option>
+        <Field label="Coaching Purpose" required error={errors.coaching_purpose}>
+          <select className={sel} value={form.coaching_purpose} onChange={e => update('coaching_purpose', e.target.value as CoachingPurpose)}>
+            <option value="">Select purpose…</option>
+            <option value="WEEKLY">Weekly Performance</option>
+            <option value="PERFORMANCE">Performance</option>
+            <option value="ONBOARDING">Onboarding</option>
+          </select>
+        </Field>
+        <Field label="Coaching Format" required error={errors.coaching_format}>
+          <select className={sel} value={form.coaching_format} onChange={e => update('coaching_format', e.target.value as CoachingFormat)}>
+            <option value="">Select format…</option>
+            <option value="ONE_ON_ONE">1-on-1</option>
             <option value="SIDE_BY_SIDE">Side-by-Side</option>
             <option value="TEAM_SESSION">Team Session</option>
           </select>
@@ -105,7 +109,7 @@ export function ContextSection({ form, errors, update }: S2Props) {
         </Field>
         <Field label="Notes" required error={errors.notes}>
           <textarea className={tex} rows={5} maxLength={3000} value={form.notes}
-            placeholder={form.coaching_type ? NOTES_PLACEHOLDER[form.coaching_type as CoachingType] : 'Enter session notes…'}
+            placeholder={form.coaching_purpose ? NOTES_PLACEHOLDER[form.coaching_purpose as CoachingPurpose] : 'Enter session notes…'}
             onChange={e => update('notes', e.target.value)} />
           <p className="text-[11px] text-slate-400 mt-1 text-right">{form.notes.length}/3000</p>
         </Field>

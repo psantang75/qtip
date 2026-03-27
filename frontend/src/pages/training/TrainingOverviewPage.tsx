@@ -81,7 +81,7 @@ function CSRView() {
 
   const sessions = sessionsPage?.items ?? []
   const awaitingCount = useMemo(
-    () => sessions.filter(s => ['DELIVERED', 'AWAITING_CSR_ACTION', 'QUIZ_PENDING'].includes(s.status)).length,
+    () => sessions.filter(s => ['IN_PROCESS', 'AWAITING_CSR_ACTION', 'QUIZ_PENDING'].includes(s.status)).length,
     [sessions],
   )
   const completedCount = useMemo(
@@ -154,7 +154,7 @@ function CSRView() {
                     </TableCell>
                     <TableCell>
                       <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
-                        {coachingLabel(s.coaching_type)}
+                        {coachingLabel(s.coaching_purpose)}
                       </span>
                     </TableCell>
                     <TableCell><TopicChips topics={s.topics} /></TableCell>
@@ -208,7 +208,7 @@ function TrainerView() {
     const needs = [
       ...overdueSessions,
       ...recentSessions.filter(s =>
-        ['DELIVERED', 'AWAITING_CSR_ACTION'].includes(s.status) &&
+        ['IN_PROCESS', 'AWAITING_CSR_ACTION'].includes(s.status) &&
         !overdueSessions.find(o => o.id === s.id),
       ),
     ]
@@ -249,7 +249,7 @@ function TrainerView() {
           value={statsLoading ? '—' : s.awaitingCsrAction}
           icon={Clock}
           valueClass={s.awaitingCsrAction > 0 ? 'text-amber-600' : undefined}
-          onClick={() => navigate('/app/training/coaching?statuses=AWAITING_CSR_ACTION,DELIVERED')}
+          onClick={() => navigate('/app/training/coaching?statuses=AWAITING_CSR_ACTION,IN_PROCESS')}
         />
         <StatCard
           label="Overdue"
@@ -307,7 +307,7 @@ function TrainerView() {
                       <TableCell className="font-medium text-sm">{s.csr_name}</TableCell>
                       <TableCell>
                         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-                          {coachingLabel(s.coaching_type)}
+                          {coachingLabel(s.coaching_purpose)}
                         </span>
                       </TableCell>
                       <TableCell><TopicChips topics={s.topics} /></TableCell>

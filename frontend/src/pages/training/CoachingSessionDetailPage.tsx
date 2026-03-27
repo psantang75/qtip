@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
-import { CoachingTypeBadge, TopicChips } from './CoachingSessionsPage'
+import { CoachingPurposeBadge, CoachingFormatBadge, TopicChips } from './CoachingSessionsPage'
 
 // ── Local helpers ─────────────────────────────────────────────────────────────
 
@@ -146,7 +146,8 @@ export default function CoachingSessionDetailPage() {
           {/* Session header */}
           <Card>
             <div className="flex flex-wrap items-center gap-2 mb-4">
-              <CoachingTypeBadge type={session.coaching_type} />
+              <CoachingPurposeBadge purpose={session.coaching_purpose} />
+              <CoachingFormatBadge format={session.coaching_format} />
               <SourceBadge source={session.source_type} />
               <StatusBadge status={session.status} />
               {!!session.is_overdue && <span className="text-[12px] font-semibold text-red-600">Overdue</span>}
@@ -328,7 +329,7 @@ export default function CoachingSessionDetailPage() {
                       <div className="flex items-center gap-2 mb-1.5">
                         <span className="text-[12px] text-slate-500">{formatQualityDate(s.session_date)}</span>
                         {hasRepeat && <span className="h-2 w-2 rounded-full bg-orange-400 shrink-0" title="Repeat topic" />}
-                        <CoachingTypeBadge type={s.coaching_type} />
+                        <CoachingPurposeBadge purpose={s.coaching_purpose} />
                       </div>
                       <TopicChips topics={s.topics} max={3} />
                     </div>
@@ -349,7 +350,7 @@ export default function CoachingSessionDetailPage() {
               {session.status === 'SCHEDULED' && (
                 <Button className="w-full bg-primary hover:bg-primary/90 text-white"
                   onClick={() => deliverMut.mutate()} disabled={isAnyPending}>
-                  {deliverMut.isPending ? 'Updating…' : 'Mark Delivered'}
+                  {deliverMut.isPending ? 'Updating…' : 'Mark In Process'}
                 </Button>
               )}
               {session.status === 'COMPLETED' && (

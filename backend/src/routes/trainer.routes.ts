@@ -33,13 +33,18 @@ import {
   getResources,
   createResource,
   updateResource,
-  toggleResourceStatus
+  toggleResourceStatus,
+  downloadResourceFile,
+  generateViewToken,
+  serveFileWithToken,
 } from '../controllers/resource.controller';
 import {
   getQuizLibrary,
+  getLibraryQuizDetail,
   createLibraryQuiz,
   updateLibraryQuiz,
-  deleteLibraryQuiz
+  toggleQuizStatus,
+  deleteLibraryQuiz,
 } from '../controllers/quizLibrary.controller';
 import {
   getReportsSummary,
@@ -101,15 +106,40 @@ router.patch('/coaching-sessions/:id/close', auth, coaching, closeCoachingSessio
 router.get('/csr-coaching-history/:csrId', auth, coaching, getCSRCoachingHistory as unknown as RequestHandler);
 
 // ─── KB Resources ────────────────────────────────────────────────────────────
+const resourceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'video/mp4', 'video/webm',
+    ];
+    cb(null, allowed.includes(file.mimetype) ? true : (new Error('Unsupported file type') as any));
+  },
+});
+
 router.get('/resources', auth, coaching, getResources as unknown as RequestHandler);
-router.post('/resources', auth, coaching, createResource as unknown as RequestHandler);
-router.put('/resources/:id', auth, coaching, updateResource as unknown as RequestHandler);
+router.get('/resources/:id/file', auth, coaching, downloadResourceFile as unknown as RequestHandler);
+router.get('/resources/:id/view-token', auth, coaching, generateViewToken as unknown as RequestHandler);
+// No auth middleware — the token IS the authentication
+router.get('/resources/:id/view', serveFileWithToken as unknown as RequestHandler);
+router.post('/resources', auth, coaching, resourceUpload.single('file'), createResource as unknown as RequestHandler);
+router.put('/resources/:id', auth, coaching, resourceUpload.single('file'), updateResource as unknown as RequestHandler);
 router.patch('/resources/:id/status', auth, coaching, toggleResourceStatus as unknown as RequestHandler);
 
 // ─── Quiz Library ─────────────────────────────────────────────────────────────
 router.get('/quiz-library', auth, coaching, getQuizLibrary as unknown as RequestHandler);
+router.get('/quiz-library/:id', auth, coaching, getLibraryQuizDetail as unknown as RequestHandler);
 router.post('/quiz-library', auth, coaching, createLibraryQuiz as unknown as RequestHandler);
 router.put('/quiz-library/:id', auth, coaching, updateLibraryQuiz as unknown as RequestHandler);
+router.patch('/quiz-library/:id/status', auth, coaching, toggleQuizStatus as unknown as RequestHandler);
 router.delete('/quiz-library/:id', auth, coaching, deleteLibraryQuiz as unknown as RequestHandler);
 
 // ─── Coaching Reports ─────────────────────────────────────────────────────────

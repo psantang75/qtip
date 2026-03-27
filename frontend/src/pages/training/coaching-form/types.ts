@@ -1,9 +1,10 @@
-import type { CoachingType, CoachingSourceType } from '@/services/trainingService'
+import type { CoachingPurpose, CoachingFormat, CoachingSourceType } from '@/services/trainingService'
 
 export interface CoachingFormState {
   csr_id: number
   session_date: string
-  coaching_type: CoachingType | ''
+  coaching_purpose: CoachingPurpose | ''
+  coaching_format: CoachingFormat | ''
   source_type: CoachingSourceType | ''
   notes: string
   topic_ids: number[]
@@ -28,7 +29,8 @@ export function emptyForm(): CoachingFormState {
   return {
     csr_id: 0,
     session_date: new Date().toISOString().slice(0, 16),
-    coaching_type: '',
+    coaching_purpose: '',
+    coaching_format: '',
     source_type: '',
     notes: '',
     topic_ids: [],

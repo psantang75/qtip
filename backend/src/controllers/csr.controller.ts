@@ -1798,7 +1798,7 @@ export const finalizeSubmission = async (req: Request, res: Response): Promise<v
 export const getCSRCoachingSessions = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
-    const { page = 1, pageSize = 10, status, coaching_type, startDate, endDate, search } = req.query;
+    const { page = 1, pageSize = 10, status, coaching_purpose, coaching_format, startDate, endDate, search } = req.query;
     
     const pageNum = Number(page);
     const pageSizeNum = Number(pageSize);
@@ -1851,12 +1851,13 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
       });
     }
     
-    const validCoachingTypes = ['Classroom', 'Side-by-Side', 'Team Session', '1-on-1', 'PIP', 'Verbal Warning', 'Written Warning'];
-    if (coaching_type && typeof coaching_type === 'string' && !validCoachingTypes.includes(coaching_type)) {
-      return res.status(400).json({ 
-        error: 'INVALID_COACHING_TYPE',
-        message: 'Invalid coaching type provided' 
-      });
+    const validPurposes = ['WEEKLY', 'PERFORMANCE', 'ONBOARDING'];
+    if (coaching_purpose && typeof coaching_purpose === 'string' && !validPurposes.includes(coaching_purpose)) {
+      return res.status(400).json({ error: 'INVALID_COACHING_PURPOSE', message: 'Invalid coaching purpose provided' });
+    }
+    const validFormats = ['ONE_ON_ONE', 'SIDE_BY_SIDE', 'TEAM_SESSION'];
+    if (coaching_format && typeof coaching_format === 'string' && !validFormats.includes(coaching_format)) {
+      return res.status(400).json({ error: 'INVALID_COACHING_FORMAT', message: 'Invalid coaching format provided' });
     }
     
     const offset = (pageNum - 1) * pageSizeNum;
@@ -1868,8 +1869,11 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
       conditions.push(Prisma.sql`cs.status = ${status}`);
     }
 
-    if (coaching_type && coaching_type !== 'all') {
-      conditions.push(Prisma.sql`cs.coaching_type = ${coaching_type}`);
+    if (coaching_purpose && coaching_purpose !== 'all') {
+      conditions.push(Prisma.sql`cs.coaching_purpose = ${coaching_purpose}`);
+    }
+    if (coaching_format && coaching_format !== 'all') {
+      conditions.push(Prisma.sql`cs.coaching_format = ${coaching_format}`);
     }
 
     if (startDate) {
@@ -1917,7 +1921,8 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
         SELECT 
           cs.id,
           cs.session_date,
-          cs.coaching_type,
+          cs.coaching_purpose,
+          cs.coaching_format,
           cs.notes,
           cs.status,
           cs.attachment_filename,
@@ -1934,7 +1939,8 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
         GROUP BY 
           cs.id,
           cs.session_date,
-          cs.coaching_type,
+          cs.coaching_purpose,
+          cs.coaching_format,
           cs.notes,
           cs.status,
           cs.attachment_filename,
@@ -2006,7 +2012,7 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
 
     const sessionRows = await prisma.$queryRaw<any[]>(
       Prisma.sql`
-        SELECT cs.id, cs.session_date, cs.coaching_type, cs.source_type, cs.status,
+        SELECT cs.id, cs.session_date, cs.coaching_purpose, cs.coaching_format, cs.source_type, cs.status,
           cs.notes, cs.required_action,
           cs.require_action_plan, cs.require_acknowledgment,
           cs.quiz_required, cs.quiz_id,
@@ -2230,7 +2236,7 @@ export const submitCSRResponse = async (req: Request, res: Response) => {
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
 
     const session = rows[0];
-    if (!['DELIVERED', 'AWAITING_CSR_ACTION'].includes(session.status)) {
+    if (!['IN_PROCESS', 'AWAITING_CSR_ACTION'].includes(session.status)) {
       return res.status(400).json({ success: false, message: 'Session is not awaiting a CSR response' });
     }
 

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus, Trash2, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
 import { cn } from '@/lib/utils'
 import type { Topic } from '@/services/topicService'
 
@@ -17,6 +18,8 @@ export interface QuizBuilderData {
   quiz_title: string
   pass_score: number
   topic_id?: number
+  topic_ids?: number[]
+  is_active?: boolean
   questions: BuilderQuestion[]
 }
 
@@ -101,17 +104,29 @@ export function QuizBuilder({ value, onChange, errors, topics }: QuizBuilderProp
       </div>
 
       <div>
-        <label className="text-[12px] font-medium text-slate-700 block mb-1">Topic (optional)</label>
-        <select className={sel} value={value.topic_id ?? ''} onChange={e => update({ topic_id: Number(e.target.value) || undefined })}>
-          <option value="">No topic</option>
-          {topics.map(t => <option key={t.id} value={t.id}>{t.topic_name}</option>)}
-        </select>
+        <label className="text-[12px] font-medium text-slate-700 block mb-1">Topics <span className="text-slate-400 font-normal">(optional)</span></label>
+        <SearchableMultiSelect
+          items={topics.map(t => ({ id: t.id, label: t.topic_name }))}
+          selectedIds={value.topic_ids ?? []}
+          onChange={ids => update({ topic_ids: ids, topic_id: ids[0] })}
+          placeholder="No topics selected"
+          emptyMessage="No topics match"
+        />
+      </div>
+
+      {/* ── Divider ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 pt-1">
+        <div className="flex-1 h-px bg-slate-200" />
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Questions</span>
+        <div className="flex-1 h-px bg-slate-200" />
       </div>
 
       {/* Questions */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-[13px] font-semibold text-slate-700">Questions</p>
+          <p className="text-[13px] font-semibold text-slate-700">
+            {value.questions.length > 0 ? `${value.questions.length} question${value.questions.length !== 1 ? 's' : ''}` : 'No questions yet'}
+          </p>
           <Button variant="outline" size="sm" onClick={addQuestion}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Add Question
           </Button>

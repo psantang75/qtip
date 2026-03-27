@@ -3,12 +3,18 @@ import { normalizePaginated, PaginatedResult } from './qaService'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type CoachingType =
-  | 'WEEKLY_COACHING'
-  | 'PERFORMANCE_COACHING'
-  | 'ESCALATION'
+export type CoachingPurpose =
+  | 'WEEKLY'
+  | 'PERFORMANCE'
+  | 'ONBOARDING'
+
+export type CoachingFormat =
+  | 'ONE_ON_ONE'
   | 'SIDE_BY_SIDE'
   | 'TEAM_SESSION'
+
+/** @deprecated use CoachingPurpose + CoachingFormat */
+export type CoachingType = CoachingPurpose
 
 export type CoachingSourceType =
   | 'QA_AUDIT'
@@ -20,7 +26,7 @@ export type CoachingSourceType =
 
 export type CoachingStatus =
   | 'SCHEDULED'
-  | 'DELIVERED'
+  | 'IN_PROCESS'
   | 'AWAITING_CSR_ACTION'
   | 'QUIZ_PENDING'
   | 'COMPLETED'
@@ -53,7 +59,8 @@ export interface QuizAttemptResult {
 export interface RecentSession {
   id: number
   session_date: string
-  coaching_type: CoachingType
+  coaching_purpose: CoachingPurpose
+  coaching_format: CoachingFormat
   topics: string[]
   status: CoachingStatus
 }
@@ -64,7 +71,8 @@ export interface CoachingSession {
   csr_name: string
   created_by: number
   created_by_name: string
-  coaching_type: CoachingType
+  coaching_purpose: CoachingPurpose
+  coaching_format: CoachingFormat
   source_type: CoachingSourceType
   qa_audit_id?: number
   notes?: string
@@ -98,13 +106,19 @@ export interface CoachingSession {
   quiz_attempts?: QuizAttemptSummary[]
 }
 
+export type ResourceType = 'URL' | 'PDF' | 'IMAGE' | 'WORD' | 'POWERPOINT' | 'EXCEL' | 'VIDEO' | 'FILE'
+
 export interface TrainingResource {
   id: number
   title: string
-  url: string
+  resource_type: ResourceType
+  url?: string
+  file_name?: string
+  file_size?: number
+  file_mime_type?: string
   description?: string
-  topic_id?: number
-  topic_name?: string
+  topic_ids: number[]
+  topic_names: string[]
   is_active: boolean
   created_by: number
   created_at: string
@@ -114,8 +128,11 @@ export interface LibraryQuiz {
   id: number
   quiz_title: string
   pass_score: number
+  is_active: boolean
   topic_id?: number
   topic_name?: string
+  topic_ids: number[]
+  topic_names: string[]
   question_count: number
   times_used: number
 }
@@ -262,18 +279,48 @@ export const trainingService = {
     }
   },
 
-  async createResource(payload: Partial<TrainingResource>): Promise<TrainingResource> {
-    const { data } = await api.post('/trainer/resources', payload)
+  async createResource(payload: Partial<TrainingResource> & { file?: File }): Promise<TrainingResource> {
+    const fd = new FormData()
+    Object.entries(payload).forEach(([k, v]) => {
+      if (k === 'file') return
+      if (k === 'topic_ids') { fd.append('topic_ids', JSON.stringify(v)); return }
+      if (k === 'topic_names') return
+      if (v !== undefined) fd.append(k, String(v))
+    })
+    if (payload.file) fd.append('file', payload.file)
+    const { data } = await api.post('/trainer/resources', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
     return data?.data ?? data
   },
 
-  async updateResource(id: number, payload: Partial<TrainingResource>): Promise<TrainingResource> {
-    const { data } = await api.put(`/trainer/resources/${id}`, payload)
+  async updateResource(id: number, payload: Partial<TrainingResource> & { file?: File }): Promise<TrainingResource> {
+    const fd = new FormData()
+    Object.entries(payload).forEach(([k, v]) => {
+      if (k === 'file') return
+      if (k === 'topic_ids') { fd.append('topic_ids', JSON.stringify(v)); return }
+      if (k === 'topic_names') return
+      if (v !== undefined) fd.append(k, String(v))
+    })
+    if (payload.file) fd.append('file', payload.file)
+    const { data } = await api.put(`/trainer/resources/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
     return data?.data ?? data
   },
 
   async toggleResourceStatus(id: number, is_active: boolean): Promise<void> {
     await api.patch(`/trainer/resources/${id}/status`, { is_active })
+  },
+
+  getResourceFileUrl(id: number): string {
+    return `/api/trainer/resources/${id}/file`
+  },
+
+  async downloadResourceFile(id: number): Promise<Blob> {
+    const { data } = await api.get(`/trainer/resources/${id}/file`, { responseType: 'blob' })
+    return data
+  },
+
+  async getResourceViewUrl(id: number): Promise<string> {
+    const { data } = await api.get(`/trainer/resources/${id}/view-token`)
+    return (data?.data ?? data).viewUrl as string
   },
 
   // ── Quiz Library ──────────────────────────────────────────────────────────
@@ -296,7 +343,7 @@ export const trainingService = {
   },
 
   async createLibraryQuiz(
-    payload: { quiz_title: string; pass_score: number; topic_id?: number; course_id?: number; questions: Omit<QuizQuestion, 'id'>[] },
+    payload: { quiz_title: string; pass_score: number; topic_id?: number; topic_ids?: number[]; course_id?: number; questions: Omit<QuizQuestion, 'id'>[] },
   ): Promise<LibraryQuiz> {
     const { data } = await api.post('/trainer/quiz-library', payload)
     return data?.data ?? data
@@ -304,10 +351,14 @@ export const trainingService = {
 
   async updateLibraryQuiz(
     id: number,
-    payload: { quiz_title?: string; pass_score?: number; topic_id?: number; questions?: Omit<QuizQuestion, 'id'>[] },
+    payload: { quiz_title?: string; pass_score?: number; topic_id?: number; topic_ids?: number[]; questions?: Omit<QuizQuestion, 'id'>[] },
   ): Promise<LibraryQuiz> {
     const { data } = await api.put(`/trainer/quiz-library/${id}`, payload)
     return data?.data ?? data
+  },
+
+  async toggleQuizStatus(id: number): Promise<void> {
+    await api.patch(`/trainer/quiz-library/${id}/status`)
   },
 
   async deleteLibraryQuiz(id: number): Promise<void> {

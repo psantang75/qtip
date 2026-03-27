@@ -1,203 +1,272 @@
-﻿import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, ChevronRight, ChevronDown, Pencil, Check, X, ExternalLink } from 'lucide-react'
+import { Plus, ChevronRight, ChevronDown, Pencil } from 'lucide-react'
 import topicService from '@/services/topicService'
 import trainingService from '@/services/trainingService'
+import { ResourceLink } from '@/components/training/ResourceLink'
+import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
+import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { TableEmptyState } from '@/components/common/TableEmptyState'
+import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
+
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
-import { StatusBadge } from '@/components/common/StatusBadge'
-import { LibraryTabNav } from '@/components/training/LibraryTabNav'
 import { cn } from '@/lib/utils'
+
+type StatusFilter = 'all' | 'active' | 'inactive'
+
+interface TopicForm {
+  name: string
+  is_active: boolean
+  linkedResourceIds: number[]
+  linkedQuizIds: number[]
+}
+
+const EMPTY_FORM: TopicForm = { name: '', is_active: true, linkedResourceIds: [], linkedQuizIds: [] }
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function LibraryTopicsPage() {
   const qc        = useQueryClient()
   const { toast } = useToast()
 
-  const [expanded,    setExpanded]    = useState<Set<number>>(new Set())
-  const [editingId,   setEditingId]   = useState<number | null>(null)
-  const [editName,    setEditName]    = useState('')
-  const [showAdd,     setShowAdd]     = useState(false)
-  const [newName,     setNewName]     = useState('')
-  const [nameError,   setNameError]   = useState('')
+  const [expanded,      setExpanded]      = useState<Set<number>>(new Set())
+  const [search,        setSearch]        = useState('')
+  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('active')
+  const [modalOpen,     setModalOpen]     = useState(false)
+  const [editingTopic,  setEditingTopic]  = useState<any | null>(null)
+  const [form,          setForm]          = useState<TopicForm>(EMPTY_FORM)
+  const [nameError,     setNameError]     = useState('')
+  const [previewQuiz,   setPreviewQuiz]   = useState<any | null>(null)
+  const [previewOpen,   setPreviewOpen]   = useState(false)
 
-  const { data: topicsData, isLoading } = useQuery({
-    queryKey: ['topics'],
-    queryFn: () => topicService.getTopics(1, 200),
-  })
-  const { data: resourcesData } = useQuery({
-    queryKey: ['resources-all'],
-    queryFn: () => trainingService.getResources({ limit: 200 }),
-  })
-  const { data: quizData } = useQuery({
-    queryKey: ['quiz-library-all'],
-    queryFn: () => trainingService.getQuizLibrary({ limit: 200 }),
-  })
+  const { data: topicsData, isLoading } = useQuery({ queryKey: ['topics'], queryFn: () => topicService.getTopics(1, 200) })
+  const { data: resourcesData }         = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 200 }) })
+  const { data: quizData }              = useQuery({ queryKey: ['quiz-library-all'], queryFn: () => trainingService.getQuizLibrary({ limit: 200 }) })
 
-  const topics    = (topicsData as any)?.items ?? []
-  const resources = resourcesData?.items ?? []
-  const quizzes   = quizData?.items ?? []
+  const allTopics   = (topicsData as any)?.items ?? []
+  const allResources = (resourcesData?.items ?? []).filter((r: any) => r.is_active)
+  const allQuizzes   = (quizData?.items ?? []).filter((q: any) => q.is_active)
 
+  const filtered = useMemo(() => {
+    let items = allTopics
+    if (search.trim()) items = items.filter((t: any) => t.topic_name.toLowerCase().includes(search.toLowerCase()))
+    if (statusFilter === 'active')   items = items.filter((t: any) => t.is_active)
+    if (statusFilter === 'inactive') items = items.filter((t: any) => !t.is_active)
+    return items
+  }, [allTopics, search, statusFilter])
+
+  const hasFilters = search.trim().length > 0 || statusFilter !== 'active'
+
+  // Build lookup maps for expanded rows
   const resourcesByTopic = useMemo(() => {
-    const map = new Map<number | null, typeof resources>()
-    for (const r of resources) {
-      const k = r.topic_id ?? null
-      if (!map.has(k)) map.set(k, [])
-      map.get(k)!.push(r)
+    const map = new Map<number, any[]>()
+    for (const r of allResources) {
+      for (const tid of (r.topic_ids ?? [])) {
+        if (!map.has(tid)) map.set(tid, [])
+        map.get(tid)!.push(r)
+      }
     }
     return map
-  }, [resources])
+  }, [allResources])
 
   const quizzesByTopic = useMemo(() => {
-    const map = new Map<number | null, typeof quizzes>()
-    for (const q of quizzes) {
-      const k = q.topic_id ?? null
-      if (!map.has(k)) map.set(k, [])
-      map.get(k)!.push(q)
+    const map = new Map<number, any[]>()
+    for (const q of allQuizzes) {
+      for (const tid of (q.topic_ids ?? [])) {
+        if (!map.has(tid)) map.set(tid, [])
+        map.get(tid)!.push(q)
+      }
     }
     return map
-  }, [quizzes])
+  }, [allQuizzes])
 
-  const invalidate = () => {
+  const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ['topics'] })
     qc.invalidateQueries({ queryKey: ['resources-all'] })
     qc.invalidateQueries({ queryKey: ['quiz-library-all'] })
   }
 
-  const toggleExpanded = (id: number) => {
-    setExpanded(prev => {
-      const s = new Set(prev)
-      s.has(id) ? s.delete(id) : s.add(id)
-      return s
-    })
+  const toggleExpanded = (id: number) =>
+    setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+
+  const openPreview = async (quizId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const detail = await trainingService.getLibraryQuizDetail(quizId)
+      setPreviewQuiz(detail)
+      setPreviewOpen(true)
+    } catch {
+      // silently fail
+    }
   }
 
-  // â”€â”€ Mutations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Mutations ──────────────────────────────────────────────────────────────
 
-  const toggleMut = useMutation({
-    mutationFn: ({ id, active }: { id: number; active: boolean }) =>
-      topicService.toggleTopicStatus(id, active),
-    onSuccess: () => invalidate(),
-    onError: () => toast({ title: 'Error', variant: 'destructive' }),
+  const saveMut = useMutation({
+    mutationFn: async (f: TopicForm & { id?: number }) => {
+      // 1. Create or update the topic
+      const topicId = f.id
+        ? (await topicService.updateTopic(f.id, { topic_name: f.name, is_active: f.is_active }), f.id)
+        : (await topicService.createTopic({ topic_name: f.name, is_active: f.is_active })).id
+
+      // 2. Sync resource links: compare original vs new
+      const origResIds = f.id ? (resourcesByTopic.get(f.id)?.map((r: any) => r.id) ?? []) : []
+      const toLink   = f.linkedResourceIds.filter(id => !origResIds.includes(id))
+      const toUnlink = origResIds.filter(id => !f.linkedResourceIds.includes(id))
+      for (const rid of toLink) {
+        const res = (resourcesData?.items ?? []).find((r: any) => r.id === rid)
+        if (res) await trainingService.updateResource(rid, { topic_ids: [...(res.topic_ids ?? []), topicId] } as any)
+      }
+      for (const rid of toUnlink) {
+        const res = (resourcesData?.items ?? []).find((r: any) => r.id === rid)
+        if (res) await trainingService.updateResource(rid, { topic_ids: (res.topic_ids ?? []).filter((x: number) => x !== topicId) } as any)
+      }
+
+      // 3. Sync quiz links
+      const origQuizIds = f.id ? (quizzesByTopic.get(f.id)?.map((q: any) => q.id) ?? []) : []
+      const toLinkQ   = f.linkedQuizIds.filter(id => !origQuizIds.includes(id))
+      const toUnlinkQ = origQuizIds.filter(id => !f.linkedQuizIds.includes(id))
+      for (const qid of toLinkQ) {
+        const quiz = allQuizzes.find((q: any) => q.id === qid)
+        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: [...(quiz.topic_ids ?? []), topicId] })
+      }
+      for (const qid of toUnlinkQ) {
+        const quiz = allQuizzes.find((q: any) => q.id === qid)
+        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: (quiz.topic_ids ?? []).filter((x: number) => x !== topicId) })
+      }
+    },
+    onSuccess: () => {
+      invalidateAll()
+      setModalOpen(false)
+      toast({ title: editingTopic ? 'Topic updated' : 'Topic created' })
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message ?? 'Failed to save topic'
+      if (msg.toLowerCase().includes('name') || msg.toLowerCase().includes('duplicate')) setNameError(msg)
+      else toast({ title: msg, variant: 'destructive' })
+    },
   })
 
-  const renameMut = useMutation({
-    mutationFn: ({ id, name }: { id: number; name: string }) =>
-      topicService.updateTopic(id, { topic_name: name }),
-    onSuccess: () => { invalidate(); setEditingId(null) },
-    onError: () => toast({ title: 'Failed to rename', variant: 'destructive' }),
-  })
+  // ── Modal helpers ──────────────────────────────────────────────────────────
 
-  const addMut = useMutation({
-    mutationFn: (name: string) => topicService.createTopic({ topic_name: name }),
-    onSuccess: () => { invalidate(); setShowAdd(false); setNewName(''); toast({ title: 'Topic added' }) },
-    onError: (err: any) => setNameError(err?.response?.data?.message ?? 'Failed to create topic'),
-  })
-
-  const unlinkResourceMut = useMutation({
-    mutationFn: ({ id }: { id: number }) => trainingService.updateResource(id, { topic_id: null } as any),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['resources-all'] }) },
-  })
-
-  const linkResourceMut = useMutation({
-    mutationFn: ({ id, topicId }: { id: number; topicId: number }) =>
-      trainingService.updateResource(id, { topic_id: topicId } as any),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['resources-all'] }) },
-  })
-
-  const unlinkQuizMut = useMutation({
-    mutationFn: ({ id }: { id: number }) => trainingService.updateLibraryQuiz(id, { topic_id: null as any }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['quiz-library-all'] }) },
-  })
-
-  const linkQuizMut = useMutation({
-    mutationFn: ({ id, topicId }: { id: number; topicId: number }) =>
-      trainingService.updateLibraryQuiz(id, { topic_id: topicId }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['quiz-library-all'] }) },
-  })
-
-  const startEdit = (id: number, name: string) => { setEditingId(id); setEditName(name) }
-  const saveEdit  = () => { if (editName.trim()) renameMut.mutate({ id: editingId!, name: editName.trim() }) }
-
-  const handleAddTopic = () => {
-    if (!newName.trim()) { setNameError('Name is required'); return }
+  const openAdd = () => {
+    setEditingTopic(null)
+    setForm(EMPTY_FORM)
     setNameError('')
-    addMut.mutate(newName.trim())
+    setModalOpen(true)
+  }
+
+  const openEdit = (topic: any) => {
+    setEditingTopic(topic)
+    setForm({
+      name:              topic.topic_name,
+      is_active:         !!topic.is_active,
+      linkedResourceIds: resourcesByTopic.get(topic.id)?.map((r: any) => r.id) ?? [],
+      linkedQuizIds:     quizzesByTopic.get(topic.id)?.map((q: any) => q.id) ?? [],
+    })
+    setNameError('')
+    setModalOpen(true)
+  }
+
+  const handleSave = () => {
+    if (!form.name.trim()) { setNameError('Topic name is required'); return }
+    setNameError('')
+    saveMut.mutate({ ...form, id: editingTopic?.id })
   }
 
   return (
     <QualityListPage>
-      <QualityPageHeader title="Library"
+      <QualityPageHeader title="Training Topics"
         actions={
-          <Button className="bg-primary hover:bg-primary/90 text-white" onClick={() => setShowAdd(true)}>
+          <Button className="bg-primary hover:bg-primary/90 text-white" onClick={openAdd}>
             <Plus className="h-4 w-4 mr-1" /> Add Topic
           </Button>
         }
       />
 
-      <LibraryTabNav />
+      <QualityFilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search topics…"
+        hasFilters={hasFilters}
+        onReset={() => { setSearch(''); setStatusFilter('active') }}
+        resultCount={{ filtered: filtered.length, total: allTopics.length }}
+      >
+        <Select value={statusFilter} onValueChange={v => setStatusFilter(v as StatusFilter)}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="All Statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </QualityFilterBar>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? <TableLoadingSkeleton rows={6} /> : (
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 border-b border-slate-200">
+              <StandardTableHeaderRow>
                 <TableHead className="w-8" />
                 <TableHead>Topic Name</TableHead>
                 <TableHead className="text-center">Resources</TableHead>
                 <TableHead className="text-center">Quizzes</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Active</TableHead>
-              </TableRow>
+                <TableHead className="w-24" />
+              </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
-              {topics.map((topic: any) => {
-                const isOpen      = expanded.has(topic.id)
+              {filtered.length === 0 ? (
+                <TableEmptyState colSpan={6} title="No topics found" description="Try adjusting your filters or add a new topic" />
+              ) : filtered.map((topic: any) => {
+                const isOpen         = expanded.has(topic.id)
                 const topicResources = resourcesByTopic.get(topic.id) ?? []
                 const topicQuizzes   = quizzesByTopic.get(topic.id) ?? []
-                const unlinkedResources = resources.filter(r => !r.topic_id)
-                const unlinkedQuizzes   = quizzes.filter(q => !q.topic_id)
 
                 return (
                   <React.Fragment key={topic.id}>
-                    <TableRow className="cursor-pointer hover:bg-slate-50/50"
-                      onClick={() => toggleExpanded(topic.id)}>
+                    <TableRow
+                      className="cursor-pointer hover:bg-slate-50/50"
+                      onClick={() => toggleExpanded(topic.id)}
+                    >
                       <TableCell>
-                        {isOpen ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+                        {isOpen
+                          ? <ChevronDown  className="h-4 w-4 text-slate-400" />
+                          : <ChevronRight className="h-4 w-4 text-slate-400" />}
+                      </TableCell>
+                      <TableCell className="text-[13px] font-medium text-slate-900">
+                        {topic.topic_name}
+                      </TableCell>
+                      <TableCell className="text-center text-[13px] text-slate-500">
+                        {topicResources.length}
+                      </TableCell>
+                      <TableCell className="text-center text-[13px] text-slate-500">
+                        {topicQuizzes.length}
+                      </TableCell>
+                      <TableCell className="text-[13px] text-slate-600">
+                        {topic.is_active ? 'Active' : 'Inactive'}
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {editingId === topic.id ? (
-                          <div className="flex items-center gap-2">
-                            <Input value={editName} onChange={e => setEditName(e.target.value)}
-                              onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditingId(null) }}
-                              className="h-7 text-[13px] w-48" autoFocus />
-                            <button onClick={saveEdit} className="text-emerald-600 hover:text-emerald-700"><Check className="h-4 w-4" /></button>
-                            <button onClick={() => setEditingId(null)} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 group">
-                            <span className="text-[13px] font-medium text-slate-900">{topic.topic_name}</span>
-                            <button onClick={() => startEdit(topic.id, topic.topic_name)}
-                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-primary transition-opacity">
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center text-[13px] text-slate-500">{topicResources.length}</TableCell>
-                      <TableCell className="text-center text-[13px] text-slate-500">{topicQuizzes.length}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={topic.is_active ? 'ACTIVE' : 'INACTIVE'} />
-                      </TableCell>
-                      <TableCell onClick={e => e.stopPropagation()}>
-                        <Switch checked={!!topic.is_active}
-                          onCheckedChange={v => toggleMut.mutate({ id: topic.id, active: v })} />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[12px] text-slate-600 gap-1"
+                          onClick={() => openEdit(topic)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Edit
+                        </Button>
                       </TableCell>
                     </TableRow>
 
@@ -206,60 +275,46 @@ export default function LibraryTopicsPage() {
                         <TableCell colSpan={6} className="p-0 bg-slate-50/60">
                           <div className="p-4 space-y-4 border-t border-slate-100">
 
-                            {/* Resources sub-section */}
                             <div>
-                              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Resources</p>
-                              <div className="space-y-1.5">
-                                {topicResources.map(r => (
-                                  <div key={r.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-200">
-                                    <a href={r.url} target="_blank" rel="noopener noreferrer"
-                                      className="flex-1 text-[13px] text-primary hover:underline flex items-center gap-1 truncate">
-                                      {r.title} <ExternalLink className="h-3 w-3 shrink-0" />
-                                    </a>
-                                    <StatusBadge status={r.is_active ? 'ACTIVE' : 'INACTIVE'} />
-                                    <button onClick={() => unlinkResourceMut.mutate({ id: r.id })}
-                                      className="text-[12px] text-slate-400 hover:text-red-500 shrink-0">Unlink</button>
-                                  </div>
-                                ))}
-                                {unlinkedResources.length > 0 && (
-                                  <div className="flex items-center gap-2 mt-2">
-                                    <select className="h-8 text-[12px] border border-slate-200 rounded px-2 bg-white"
-                                      defaultValue="" onChange={e => {
-                                        if (e.target.value) { linkResourceMut.mutate({ id: Number(e.target.value), topicId: topic.id }); e.target.value = '' }
-                                      }}>
-                                      <option value="" disabled>Link existing resourceâ€¦</option>
-                                      {unlinkedResources.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
-                                    </select>
-                                  </div>
-                                )}
-                              </div>
+                              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                Resources
+                              </p>
+                              {topicResources.length === 0 ? (
+                                <p className="text-[13px] text-slate-400">No resources linked</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {topicResources.map((r: any) => (
+                                    <div key={r.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-200"
+                                      onClick={e => e.stopPropagation()}>
+                                      <ResourceLink resource={r} maxWidth="max-w-none flex-1" />
+                                      <span className="text-[12px] text-slate-400 shrink-0">{r.resource_type}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
 
-                            {/* Quizzes sub-section */}
                             <div>
-                              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Quizzes</p>
-                              <div className="space-y-1.5">
-                                {topicQuizzes.map(q => (
-                                  <div key={q.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-200">
-                                    <span className="flex-1 text-[13px] font-medium text-slate-800 truncate">{q.quiz_title}</span>
-                                    <span className="text-[12px] text-slate-500">{q.question_count}Q</span>
-                                    <span className="text-[12px] text-slate-500">Pass: {q.pass_score}%</span>
-                                    <button onClick={() => unlinkQuizMut.mutate({ id: q.id })}
-                                      className="text-[12px] text-slate-400 hover:text-red-500 shrink-0">Unlink</button>
-                                  </div>
-                                ))}
-                                {unlinkedQuizzes.length > 0 && (
-                                  <div className="flex items-center gap-2 mt-2">
-                                    <select className="h-8 text-[12px] border border-slate-200 rounded px-2 bg-white"
-                                      defaultValue="" onChange={e => {
-                                        if (e.target.value) { linkQuizMut.mutate({ id: Number(e.target.value), topicId: topic.id }); e.target.value = '' }
-                                      }}>
-                                      <option value="" disabled>Link existing quizâ€¦</option>
-                                      {unlinkedQuizzes.map(q => <option key={q.id} value={q.id}>{q.quiz_title}</option>)}
-                                    </select>
-                                  </div>
-                                )}
-                              </div>
+                              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                Quizzes
+                              </p>
+                              {topicQuizzes.length === 0 ? (
+                                <p className="text-[13px] text-slate-400">No quizzes linked</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {topicQuizzes.map((q: any) => (
+                                    <div key={q.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-200">
+                                      <button
+                                        onClick={e => openPreview(q.id, e)}
+                                        className="flex-1 text-[13px] font-medium text-primary hover:underline truncate text-left"
+                                      >
+                                        {q.quiz_title}
+                                      </button>
+                                      <span className="text-[12px] text-slate-500 shrink-0">{q.question_count}Q · Pass: {q.pass_score}%</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
 
                           </div>
@@ -274,26 +329,93 @@ export default function LibraryTopicsPage() {
         )}
       </div>
 
-      {/* Add Topic Dialog */}
-      <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm">
-          <DialogHeader><DialogTitle>Add Topic</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
+      <QuizPreviewModal
+        quiz={previewQuiz}
+        open={previewOpen}
+        onClose={() => { setPreviewOpen(false); setPreviewQuiz(null) }}
+      />
+
+      {/* ── Add / Edit Modal ────────────────────────────────────────────────── */}
+      <Dialog open={modalOpen} onOpenChange={open => { if (!open) setModalOpen(false) }}>
+        <DialogContent aria-describedby={undefined} className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingTopic ? 'Edit Topic' : 'Add Topic'}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5 pt-1">
+
+            {/* Topic name */}
             <div>
-              <Input placeholder="Topic name" value={newName} onChange={e => { setNewName(e.target.value); setNameError('') }}
-                onKeyDown={e => e.key === 'Enter' && handleAddTopic()} autoFocus />
+              <label className="text-[12px] font-medium text-slate-700 block mb-1">
+                Topic Name <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={form.name}
+                onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setNameError('') }}
+                placeholder="e.g. Call Handling"
+                className="text-[13px]"
+                autoFocus
+              />
               {nameError && <p className="text-[12px] text-red-600 mt-1">{nameError}</p>}
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => { setShowAdd(false); setNewName(''); setNameError('') }}>Cancel</Button>
-              <Button className="bg-primary hover:bg-primary/90 text-white" onClick={handleAddTopic} disabled={addMut.isPending}>
-                {addMut.isPending ? 'Savingâ€¦' : 'Add Topic'}
-              </Button>
+
+            {/* Active / inactive */}
+            <div className="flex items-center justify-between py-3 border-y border-slate-100">
+              <div>
+                <p className="text-[13px] font-medium text-slate-700">Status</p>
+                <p className="text-[12px] text-slate-400">Inactive topics are hidden from quizzes and resources</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] text-slate-500">{form.is_active ? 'Active' : 'Inactive'}</span>
+                <Switch
+                  checked={form.is_active}
+                  onCheckedChange={v => setForm(f => ({ ...f, is_active: v }))}
+                />
+              </div>
             </div>
+
+            {/* Linked resources */}
+            <div>
+              <label className="text-[12px] font-medium text-slate-700 block mb-1">
+                Resources <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <SearchableMultiSelect
+                items={allResources.map((r: any) => ({ id: r.id, label: r.title }))}
+                selectedIds={form.linkedResourceIds}
+                onChange={ids => setForm(f => ({ ...f, linkedResourceIds: ids }))}
+                placeholder="No resources linked"
+                emptyMessage="No resources found"
+              />
+            </div>
+
+            {/* Linked quizzes */}
+            <div>
+              <label className="text-[12px] font-medium text-slate-700 block mb-1">
+                Quizzes <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <SearchableMultiSelect
+                items={allQuizzes.map((q: any) => ({ id: q.id, label: `${q.quiz_title} — ${q.question_count}Q · Pass: ${q.pass_score}%` }))}
+                selectedIds={form.linkedQuizIds}
+                onChange={ids => setForm(f => ({ ...f, linkedQuizIds: ids }))}
+                placeholder="No quizzes linked"
+                emptyMessage="No quizzes found"
+              />
+            </div>
+
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 mt-2">
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button
+              className="bg-primary hover:bg-primary/90 text-white"
+              onClick={handleSave}
+              disabled={saveMut.isPending}
+            >
+              {saveMut.isPending ? 'Saving…' : editingTopic ? 'Save Changes' : 'Add Topic'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
     </QualityListPage>
   )
 }
-

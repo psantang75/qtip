@@ -23,7 +23,7 @@ const STATUS_MAP: Record<string, StatusConfig> = {
   DRAFT:     { label: 'Draft',      classes: 'bg-slate-100  text-slate-600'   },
   // Coaching session statuses
   SCHEDULED:           { label: 'Scheduled',    classes: 'bg-slate-100   text-slate-700'   },
-  DELIVERED:           { label: 'Delivered',    classes: 'bg-blue-100    text-blue-800'    },
+  IN_PROCESS:          { label: 'In Process',   classes: 'bg-blue-100    text-blue-800'    },
   AWAITING_CSR_ACTION: { label: 'Awaiting CSR', classes: 'bg-amber-100   text-amber-800'   },
   QUIZ_PENDING:        { label: 'Quiz Pending',  classes: 'bg-purple-100  text-purple-800'  },
   FOLLOW_UP_REQUIRED:  { label: 'Follow-Up',     classes: 'bg-orange-100  text-orange-800'  },

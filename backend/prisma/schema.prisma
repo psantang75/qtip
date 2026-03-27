@@ -392,14 +392,29 @@ model Quiz {
   quiz_title String  @db.VarChar(100)
   pass_score Decimal @db.Decimal(5, 2)
   topic_id   Int?
+  is_active  Boolean @default(true) @db.TinyInt
 
   course            Course            @relation(fields: [course_id], references: [id], onDelete: Cascade)
   topic             Topic?            @relation(fields: [topic_id], references: [id], onDelete: SetNull)
   quiz_questions    QuizQuestion[]
   coaching_sessions CoachingSession[] @relation("CoachingSessionQuiz")
   quiz_attempts     QuizAttempt[]
+  quiz_topics       QuizTopic[]
 
+  @@index([is_active])
   @@map("quizzes")
+}
+
+model QuizTopic {
+  quiz_id  Int
+  topic_id Int
+
+  quiz  Quiz  @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+
+  @@id([quiz_id, topic_id])
+  @@index([topic_id])
+  @@map("quiz_topics")
 }
 
 model QuizQuestion {
@@ -487,31 +502,46 @@ model QuizAttempt {
 }
 
 model TrainingResource {
-  id          Int      @id @default(autoincrement())
-  title       String   @db.VarChar(255)
-  url         String   @db.VarChar(500)
-  description String?  @db.Text
-  topic_id    Int?
-  is_active   Boolean  @default(true) @db.TinyInt
-  created_by  Int
-  created_at  DateTime @default(now()) @db.DateTime(0)
-  updated_at  DateTime @default(now()) @updatedAt @db.DateTime(0)
+  id             Int      @id @default(autoincrement())
+  title          String   @db.VarChar(255)
+  resource_type  String   @default("URL") @db.VarChar(50)
+  url            String?  @db.VarChar(500)
+  file_path      String?  @db.VarChar(500)
+  file_name      String?  @db.VarChar(255)
+  file_size      Int?
+  file_mime_type String?  @db.VarChar(100)
+  description    String?  @db.Text
+  is_active      Boolean  @default(true) @db.TinyInt
+  created_by     Int
+  created_at     DateTime @default(now()) @db.DateTime(0)
+  updated_at     DateTime @default(now()) @updatedAt @db.DateTime(0)
 
-  topic   Topic? @relation(fields: [topic_id], references: [id], onDelete: SetNull)
-  creator User   @relation(fields: [created_by], references: [id], onDelete: Cascade)
-
+  creator         User                    @relation(fields: [created_by], references: [id], onDelete: Cascade)
   coaching_sessions CoachingSession[]
+  resource_topics TrainingResourceTopic[]
 
-  @@index([topic_id])
   @@index([is_active])
   @@map("training_resources")
+}
+
+model TrainingResourceTopic {
+  resource_id Int
+  topic_id    Int
+
+  resource TrainingResource @relation(fields: [resource_id], references: [id], onDelete: Cascade)
+  topic    Topic            @relation(fields: [topic_id], references: [id], onDelete: Cascade)
+
+  @@id([resource_id, topic_id])
+  @@index([topic_id])
+  @@map("training_resource_topics")
 }
 
 model CoachingSession {
   id                   Int                   @id @default(autoincrement())
   csr_id               Int
   session_date         DateTime              @db.DateTime(0)
-  coaching_type        CoachingSessionType   @default(WEEKLY_COACHING)
+  coaching_purpose     CoachingPurpose       @default(WEEKLY)
+  coaching_format      CoachingFormat        @default(ONE_ON_ONE)
   notes                String?               @db.Text
   attachment_filename  String?               @db.VarChar(255)
   attachment_path      String?               @db.VarChar(500)
@@ -549,9 +579,10 @@ model CoachingSession {
 
   @@index([created_by])
   @@index([csr_id, created_by])
-  @@index([csr_id, coaching_type])
-  @@index([session_date, coaching_type])
-  @@index([coaching_type])
+  @@index([csr_id, coaching_purpose])
+  @@index([session_date, coaching_purpose])
+  @@index([coaching_purpose])
+  @@index([coaching_format])
   @@map("coaching_sessions")
 }
 
@@ -756,7 +787,8 @@ model Topic {
 
   coaching_session_topics CoachingSessionTopic[]
   quizzes                 Quiz[]
-  training_resources      TrainingResource[]
+  quiz_topics             QuizTopic[]
+  resource_topics         TrainingResourceTopic[]
 
   @@index([is_active])
   @@index([sort_order])
@@ -1192,17 +1224,21 @@ enum CoursePageContentType {
   PDF
 }
 
-enum CoachingSessionType {
-  WEEKLY_COACHING
-  PERFORMANCE_COACHING
-  ESCALATION
+enum CoachingPurpose {
+  WEEKLY
+  PERFORMANCE
+  ONBOARDING
+}
+
+enum CoachingFormat {
+  ONE_ON_ONE
   SIDE_BY_SIDE
   TEAM_SESSION
 }
 
 enum CoachingSessionStatus {
   SCHEDULED
-  DELIVERED
+  IN_PROCESS
   AWAITING_CSR_ACTION
   QUIZ_PENDING
   COMPLETED

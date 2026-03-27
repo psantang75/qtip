@@ -1,8 +1,8 @@
-import { useMemo } from 'react'
+﻿import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MessageSquare } from 'lucide-react'
-import trainingService, { type CoachingSession, type CoachingType } from '@/services/trainingService'
+import { Plus, MessageSquare, Eye } from 'lucide-react'
+import trainingService, { type CoachingSession, type CoachingPurpose, type CoachingFormat } from '@/services/trainingService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
@@ -13,55 +13,70 @@ import { TableErrorState } from '@/components/common/TableErrorState'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { ListPagination } from '@/components/common/ListPagination'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const COACHING_TYPE_MAP: Record<CoachingType, string> = {
-  WEEKLY_COACHING:      'Weekly',
-  PERFORMANCE_COACHING: 'Performance',
-  ESCALATION:           'Escalation',
-  SIDE_BY_SIDE:         'Side-by-Side',
-  TEAM_SESSION:         'Team',
+const PURPOSE_MAP: Record<CoachingPurpose, string> = {
+  WEEKLY:      'Weekly',
+  PERFORMANCE: 'Performance',
+  ONBOARDING:  'Onboarding',
+}
+const PURPOSE_STYLES: Record<CoachingPurpose, string> = {
+  WEEKLY:      'bg-blue-50  text-blue-700',
+  PERFORMANCE: 'bg-amber-50 text-amber-700',
+  ONBOARDING:  'bg-teal-50  text-teal-700',
 }
 
-const COACHING_TYPE_BY_LABEL = Object.fromEntries(
-  (Object.entries(COACHING_TYPE_MAP) as [CoachingType, string][]).map(([k, v]) => [v, k]),
-) as Record<string, CoachingType>
+const FORMAT_MAP: Record<CoachingFormat, string> = {
+  ONE_ON_ONE:   '1-on-1',
+  SIDE_BY_SIDE: 'Side-by-Side',
+  TEAM_SESSION: 'Team',
+}
+const FORMAT_STYLES: Record<CoachingFormat, string> = {
+  ONE_ON_ONE:   'bg-slate-100 text-slate-700',
+  SIDE_BY_SIDE: 'bg-indigo-50 text-indigo-700',
+  TEAM_SESSION: 'bg-purple-50 text-purple-700',
+}
 
 const STATUS_LABELS: Record<string, string> = {
-  SCHEDULED: 'Scheduled', DELIVERED: 'Delivered',
+  SCHEDULED: 'Scheduled', IN_PROCESS: 'In Process',
   AWAITING_CSR_ACTION: 'Awaiting CSR', QUIZ_PENDING: 'Quiz Pending',
   COMPLETED: 'Completed', FOLLOW_UP_REQUIRED: 'Follow-Up', CLOSED: 'Closed',
 }
 const ALL_STATUSES = Object.keys(STATUS_LABELS)
-const STATUS_BY_LABEL = Object.fromEntries(Object.entries(STATUS_LABELS).map(([k, v]) => [v, k]))
 
-// ── Exported helper components ────────────────────────────────────────────────
+// â”€â”€ Exported helper components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const TYPE_STYLES: Record<CoachingType, string> = {
-  WEEKLY_COACHING:      'bg-blue-50   text-blue-700',
-  PERFORMANCE_COACHING: 'bg-amber-50  text-amber-700',
-  ESCALATION:           'bg-red-50    text-red-700',
-  SIDE_BY_SIDE:         'bg-teal-50   text-teal-700',
-  TEAM_SESSION:         'bg-indigo-50 text-indigo-700',
-}
-
-export function CoachingTypeBadge({ type }: { type: CoachingType }) {
+export function CoachingPurposeBadge({ purpose }: { purpose: CoachingPurpose }) {
   return (
-    <span className={cn(
-      'inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
-      TYPE_STYLES[type] ?? 'bg-slate-100 text-slate-600',
-    )}>
-      {COACHING_TYPE_MAP[type] ?? type}
+    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
+      PURPOSE_STYLES[purpose] ?? 'bg-slate-100 text-slate-600')}>
+      {PURPOSE_MAP[purpose] ?? purpose}
     </span>
   )
+}
+
+export function CoachingFormatBadge({ format }: { format: CoachingFormat }) {
+  return (
+    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
+      FORMAT_STYLES[format] ?? 'bg-slate-100 text-slate-600')}>
+      {FORMAT_MAP[format] ?? format}
+    </span>
+  )
+}
+
+/** @deprecated kept for backward compat — use CoachingPurposeBadge */
+export function CoachingTypeBadge({ type }: { type: CoachingPurpose }) {
+  return <CoachingPurposeBadge purpose={type} />
 }
 
 export function TopicChips({ topics, max = 2 }: { topics: string[]; max?: number }) {
@@ -80,53 +95,49 @@ export function TopicChips({ topics, max = 2 }: { topics: string[]; max?: number
 }
 
 export function QuizStatusBadge({ session }: { session: CoachingSession }) {
-  if (!session.quiz_required) {
-    return <span className="text-[11px] text-slate-400">Not required</span>
-  }
-  if (session.status === 'QUIZ_PENDING') {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">Pending</span>
-  }
-  if (session.quiz_attempts?.some(a => a.passed)) {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">Passed ✓</span>
-  }
-  if (session.quiz_attempts?.length) {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-800">Failed ✗</span>
-  }
-  if (['COMPLETED', 'CLOSED'].includes(session.status) && session.quiz_required) {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">Passed ✓</span>
-  }
-  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-500">Not started</span>
+  if (!session.quiz_required)
+    return <span className="text-[13px] text-slate-300">&mdash;</span>
+  if (session.status === 'QUIZ_PENDING')
+    return <span className="text-[13px] text-amber-700">Pending</span>
+  if (session.quiz_attempts?.some(a => a.passed))
+    return <span className="text-[13px] text-emerald-700">Passed ✓</span>
+  if (session.quiz_attempts?.length)
+    return <span className="text-[13px] text-red-600">Failed ✗</span>
+  if (['COMPLETED', 'CLOSED'].includes(session.status))
+    return <span className="text-[13px] text-emerald-700">Passed ✓</span>
+  return <span className="text-[13px] text-slate-400">Not started</span>
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function CoachingSessionsPage() {
   const navigate = useNavigate()
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    csrs: '', statuses: '', types: '', topics: '', from: defaultFrom, to: defaultTo,
-    overdue: '', page: '1', size: '20',
+    csrs: '', statuses: '', purposes: '', formats: '', topics: '',
+    from: defaultFrom, to: defaultTo, overdue: '', page: '1', size: '20',
   })
 
-  const csrsParam    = get('csrs')
+  const csrsParam     = get('csrs')
   const statusesParam = get('statuses')
-  const typesParam   = get('types')
-  const topicsParam  = get('topics')
-  const dateFrom     = get('from')
-  const dateTo       = get('to')
-  const overdue      = get('overdue')
-  const page         = parseInt(get('page')) || 1
-  const pageSize     = parseInt(get('size')) || 20
+  const purposesParam = get('purposes')
+  const formatsParam  = get('formats')
+  const topicsParam   = get('topics')
+  const dateFrom      = get('from')
+  const dateTo        = get('to')
+  const overdue       = get('overdue')
+  const page          = parseInt(get('page')) || 1
+  const pageSize      = parseInt(get('size')) || 20
 
   const setPage     = (p: number) => set('page', String(p))
   const setPageSize = (s: number) => setMany({ size: String(s), page: '1' })
 
-  // Parsed multi-select values (stored as display labels in URL)
-  const selectedCsrs     = useMemo(() => csrsParam    ? csrsParam.split(',').filter(Boolean)    : [], [csrsParam])
-  const selectedStatuses = useMemo(() => statusesParam ? statusesParam.split(',').filter(Boolean) : [], [statusesParam])
-  const selectedTypes    = useMemo(() => typesParam   ? typesParam.split(',').filter(Boolean)   : [], [typesParam])
-  const selectedTopics   = useMemo(() => topicsParam  ? topicsParam.split(',').filter(Boolean)  : [], [topicsParam])
+  const selectedCsrs     = useMemo(() => csrsParam     ? csrsParam.split(',').filter(Boolean)     : [], [csrsParam])
+  const selectedStatuses = useMemo(() => statusesParam ? statusesParam.split(',').filter(Boolean)  : [], [statusesParam])
+  const selectedPurposes = useMemo(() => purposesParam ? purposesParam.split(',').filter(Boolean)  : [], [purposesParam])
+  const selectedFormats  = useMemo(() => formatsParam  ? formatsParam.split(',').filter(Boolean)   : [], [formatsParam])
+  const selectedTopics   = useMemo(() => topicsParam   ? topicsParam.split(',').filter(Boolean)    : [], [topicsParam])
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['coaching-sessions', page, pageSize, dateFrom, dateTo, overdue],
@@ -156,21 +167,22 @@ export default function CoachingSessionsPage() {
     return ALL_STATUSES.filter(s => present.has(s)).map(s => STATUS_LABELS[s])
   }, [data?.items])
 
-  const typeOptions = Object.values(COACHING_TYPE_MAP)
+  const purposeOptions = Object.values(PURPOSE_MAP)
+  const formatOptions  = Object.values(FORMAT_MAP)
 
-  // Client-side filtering for multi-select
   const clientFiltered = useMemo(() => {
     let items = data?.items ?? []
     if (selectedCsrs.length)     items = items.filter(s => selectedCsrs.includes(s.csr_name))
     if (selectedStatuses.length) items = items.filter(s => selectedStatuses.includes(STATUS_LABELS[s.status] ?? s.status))
-    if (selectedTypes.length)    items = items.filter(s => selectedTypes.includes(COACHING_TYPE_MAP[s.coaching_type] ?? s.coaching_type))
+    if (selectedPurposes.length) items = items.filter(s => selectedPurposes.includes(PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose))
+    if (selectedFormats.length)  items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
     if (selectedTopics.length)   items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
     return items
-  }, [data?.items, selectedCsrs, selectedStatuses, selectedTypes, selectedTopics])
+  }, [data?.items, selectedCsrs, selectedStatuses, selectedPurposes, selectedFormats, selectedTopics])
 
   const { sort, dir, toggle, sorted: sortedItems } = useListSort(clientFiltered)
 
-  const hasClientFilter = selectedCsrs.length > 0 || selectedStatuses.length > 0 || selectedTypes.length > 0 || selectedTopics.length > 0
+  const hasClientFilter = selectedCsrs.length > 0 || selectedStatuses.length > 0 || selectedPurposes.length > 0 || selectedFormats.length > 0 || selectedTopics.length > 0
   const displayTotal = hasClientFilter ? clientFiltered.length : (data?.total ?? 0)
 
   return (
@@ -192,12 +204,20 @@ export default function CoachingSessionsPage() {
         onReset={reset}
         resultCount={{ total: displayTotal }}
       >
+        {/* ── Row 1: CSRs · Topics · Status ── */}
         <StagedMultiSelect
           options={csrOptions}
           selected={selectedCsrs}
           onApply={v => setMany({ csrs: v.join(','), page: '1' })}
           placeholder="All CSRs"
-          width="w-[200px]"
+          width="w-[280px]"
+        />
+        <StagedMultiSelect
+          options={topicOptions}
+          selected={selectedTopics}
+          onApply={v => setMany({ topics: v.join(','), page: '1' })}
+          placeholder="All Topics"
+          width="w-[280px]"
         />
         <StagedMultiSelect
           options={statusOptions}
@@ -206,19 +226,24 @@ export default function CoachingSessionsPage() {
           placeholder="All Statuses"
           width="w-[180px]"
         />
+
+        {/* ── Row break ── */}
+        <div className="w-full" />
+
+        {/* ── Row 2: Purpose · Format · Date range · Overdue ── */}
         <StagedMultiSelect
-          options={typeOptions}
-          selected={selectedTypes}
-          onApply={v => setMany({ types: v.join(','), page: '1' })}
-          placeholder="All Types"
-          width="w-[200px]"
+          options={purposeOptions}
+          selected={selectedPurposes}
+          onApply={v => setMany({ purposes: v.join(','), page: '1' })}
+          placeholder="All Purposes"
+          width="w-[220px]"
         />
         <StagedMultiSelect
-          options={topicOptions}
-          selected={selectedTopics}
-          onApply={v => setMany({ topics: v.join(','), page: '1' })}
-          placeholder="All Topics"
-          width="w-[200px]"
+          options={formatOptions}
+          selected={selectedFormats}
+          onApply={v => setMany({ formats: v.join(','), page: '1' })}
+          placeholder="All Formats"
+          width="w-[220px]"
         />
         <DateRangeFilter
           value={{ start: dateFrom, end: dateTo }}
@@ -229,7 +254,7 @@ export default function CoachingSessionsPage() {
             type="checkbox"
             checked={overdue === 'true'}
             onChange={e => set('overdue', e.target.checked ? 'true' : '')}
-            className="rounded border-slate-300"
+            className="accent-primary h-4 w-4"
           />
           Overdue only
         </label>
@@ -243,21 +268,24 @@ export default function CoachingSessionsPage() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 border-b border-slate-200">
-                <SortableTableHead field="session_date" sort={sort} dir={dir} onSort={toggle}>Date</SortableTableHead>
-                <SortableTableHead field="csr_name"    sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>
-                <TableHead>Type</TableHead>
+              <StandardTableHeaderRow>
+                <TableHead className="w-8" />
+                <SortableTableHead field="session_date"  sort={sort} dir={dir} onSort={toggle}>Date</SortableTableHead>
+                <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
+                <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>
+                <TableHead>Purpose</TableHead>
+                <TableHead>Format</TableHead>
                 <TableHead>Topics</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Quiz</TableHead>
-                <TableHead>Due Date</TableHead>
-                <TableHead className="w-16" />
-              </TableRow>
+                <SortableTableHead field="due_date"       sort={sort} dir={dir} onSort={toggle}>Due Date</SortableTableHead>
+                <SortableTableHead field="follow_up_date" sort={sort} dir={dir} onSort={toggle}>Follow-Up Date</SortableTableHead>
+                <TableHead className="w-24" />
+              </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {sortedItems.length === 0 ? (
                 <TableEmptyState
-                  colSpan={8}
+                  colSpan={11}
                   icon={MessageSquare}
                   title="No coaching sessions found"
                   description="Create a new session to get started"
@@ -269,34 +297,76 @@ export default function CoachingSessionsPage() {
                   className="cursor-pointer hover:bg-slate-50/50"
                   onClick={() => navigate(`/app/training/coaching/${s.id}`)}
                 >
+                  <TableCell className="text-slate-400 text-base leading-none">&rsaquo;</TableCell>
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {formatQualityDate(s.session_date)}
                   </TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[s.status] ?? s.status}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] font-medium text-slate-900">{s.csr_name}</span>
                       {(s.repeat_topics?.length ?? 0) > 0 && (
-                        <span title={`Repeat topics: ${s.repeat_topics!.join(', ')}`} className="text-orange-500 text-xs cursor-help">
-                          🔥
-                        </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-orange-500 text-xs cursor-help select-none">🔥</span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                            <p className="text-[12px] font-semibold text-slate-700 mb-1">Repeat topics</p>
+                            <ul className="space-y-1">
+                              {s.repeat_topics!.map(t => (
+                                <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
+                                </li>
+                              ))}
+                            </ul>
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell><CoachingTypeBadge type={s.coaching_type} /></TableCell>
-                  <TableCell><TopicChips topics={s.topics} max={2} /></TableCell>
-                  <TableCell><StatusBadge status={s.status} /></TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}</TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{FORMAT_MAP[s.coaching_format] ?? s.coaching_format}</TableCell>
+                  <TableCell className="max-w-[180px]">
+                    {s.topics.length > 0 ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[13px] text-slate-500 truncate block max-w-[180px] cursor-default">
+                            {[...s.topics].sort().join(', ')}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                          <ul className="space-y-1">
+                            {[...s.topics].sort().map(t => (
+                              <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
+                              </li>
+                            ))}
+                          </ul>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <span className="text-[13px] text-slate-300">&mdash;</span>
+                    )}
+                  </TableCell>
                   <TableCell><QuizStatusBadge session={s} /></TableCell>
                   <TableCell className={cn('text-[13px] whitespace-nowrap', s.is_overdue ? 'text-red-600 font-medium' : 'text-slate-600')}>
-                    {s.due_date ? formatQualityDate(s.due_date) : '—'}{s.is_overdue ? ' ⚠' : ''}
+                    {s.due_date
+                      ? <>{formatQualityDate(s.due_date)}{s.is_overdue ? ' ⚠' : ''}</>
+                      : <span className="text-slate-300">&mdash;</span>}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
+                    {s.follow_up_date
+                      ? formatQualityDate(s.follow_up_date)
+                      : <span className="text-slate-300">&mdash;</span>}
+                  </TableCell>
+                  <TableCell onClick={e => e.stopPropagation()}>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 px-2 text-[12px]"
-                      onClick={e => { e.stopPropagation(); navigate(`/app/training/coaching/${s.id}`) }}
+                      className="h-7 px-2 text-[12px] text-slate-600 gap-1"
+                      onClick={() => navigate(`/app/training/coaching/${s.id}`)}
                     >
-                      View
+                      <Eye className="h-3.5 w-3.5" /> View
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -317,3 +387,5 @@ export default function CoachingSessionsPage() {
     </QualityListPage>
   )
 }
+
+

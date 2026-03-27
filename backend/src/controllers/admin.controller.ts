@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { serviceLogger } from '../config/logger';
@@ -575,7 +575,10 @@ export const exportCompletedForm = async (req: Request, res: Response): Promise<
 export const createAdminCoachingSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const adminId = req.user?.user_id;
-    let { csr_id, session_date, topic_ids, coaching_type, notes, status } = req.body;
+    let { csr_id, session_date, topic_ids, coaching_purpose, coaching_format, notes, status } = req.body;
+    coaching_purpose = coaching_purpose || 'WEEKLY';
+    coaching_format  = coaching_format  || 'ONE_ON_ONE';
+    const coaching_type = coaching_purpose; // alias for legacy raw SQL
     const attachment = req.file as Express.Multer.File | undefined;
 
     if (topic_ids !== undefined) {
@@ -593,10 +596,10 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
       return;
     }
 
-    if (!csr_id || !session_date || !coaching_type || !status) {
+    if (!csr_id || !session_date || !status) {
       res.status(400).json({
         success: false,
-        message: 'Missing required fields: csr_id, session_date, coaching_type, status'
+        message: 'Missing required fields: csr_id, session_date, status'
       });
       return;
     }
@@ -648,12 +651,6 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
       return;
     }
 
-    const validCoachingTypes = ['Classroom', 'Side-by-Side', 'Team Session', '1-on-1', 'PIP', 'Verbal Warning', 'Written Warning'];
-    if (!validCoachingTypes.includes(coaching_type)) {
-      res.status(400).json({ success: false, message: 'Invalid coaching type' });
-      return;
-    }
-
     let attachmentData: any = { filename: null, path: null, size: null, mime_type: null };
 
     if (attachment) {
@@ -689,7 +686,8 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
         data: {
           csr_id: parseInt(csr_id),
           session_date: new Date(session_date),
-          coaching_type,
+          coaching_purpose: coaching_purpose || 'WEEKLY',
+          coaching_format:  coaching_format  || 'ONE_ON_ONE',
           notes: notes || null,
           status,
           attachment_filename: attachmentData.filename,
@@ -1055,7 +1053,8 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
   try {
     const adminId = req.user?.user_id;
     const sessionId = parseInt(req.params.sessionId);
-    let { csr_id, session_date, topic_ids, coaching_type, notes, status } = req.body;
+    let { csr_id, session_date, topic_ids, coaching_purpose, coaching_format, notes, status } = req.body;
+    const coaching_type = coaching_purpose; // alias for legacy code
     const attachment = req.file as Express.Multer.File | undefined;
 
     if (topic_ids !== undefined) {
@@ -1219,7 +1218,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
 
     if (csr_id !== undefined) data.csr_id = parseInt(csr_id);
     if (session_date !== undefined) data.session_date = new Date(session_date);
-    if (coaching_type !== undefined) data.coaching_type = coaching_type;
+    if (coaching_purpose !== undefined) { data.coaching_purpose = coaching_purpose; data.coaching_format = coaching_format || 'ONE_ON_ONE'; }
     if (notes !== undefined) data.notes = notes || null;
     if (status !== undefined) data.status = status;
 
