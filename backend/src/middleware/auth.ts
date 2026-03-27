@@ -159,6 +159,23 @@ export const authorizeQA = (req: Request, res: Response, next: NextFunction): vo
 };
 
 /**
+ * Coaching access authorization — Admin, QA, Trainer, Manager (roleIds 1,2,4,5)
+ */
+export const authorizeCoachingUser = (req: Request, res: Response, next: NextFunction): void => {
+  if (!req.user) {
+    ApiErrors.unauthorized(res);
+    return;
+  }
+  const allowed = ['Admin', 'QA', 'Trainer', 'Manager'];
+  if (!allowed.includes(req.user.role)) {
+    securityLogger.accessDenied(req.ip || 'unknown', req.originalUrl, 'Insufficient permissions for coaching access', req.user.user_id);
+    ApiErrors.forbidden(res, 'Access denied. Admin, QA, Trainer, or Manager role required');
+    return;
+  }
+  next();
+};
+
+/**
  * Manager role authorization middleware
  */
 export const authorizeManager = (req: Request, res: Response, next: NextFunction): void => {
@@ -181,4 +198,4 @@ export const authorizeManager = (req: Request, res: Response, next: NextFunction
   next();
 };
 
-export default { authenticate, authorizeAdmin, authorizeTrainer, authorizeQA, authorizeQAOrTrainer, authorizeManager }; 
+export default { authenticate, authorizeAdmin, authorizeTrainer, authorizeQA, authorizeQAOrTrainer, authorizeManager, authorizeCoachingUser }; 

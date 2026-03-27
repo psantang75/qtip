@@ -27,13 +27,16 @@ const QualityAnalyticsPage  = React.lazy(() => import('./pages/quality/QualityAn
 const ReviewFormsPage         = React.lazy(() => import('./pages/quality/ReviewFormsPage'))
 const AuditFormPage           = React.lazy(() => import('./pages/quality/AuditFormPage'))
 const SubmissionDetailPage    = React.lazy(() => import('./pages/quality/SubmissionDetailPage'))
-const TrainingOverviewPage  = React.lazy(() => import('./pages/training/TrainingOverviewPage'))
-const CoursesPage           = React.lazy(() => import('./pages/training/CoursesPage'))
-const TrainingPathsPage     = React.lazy(() => import('./pages/training/TrainingPathsPage'))
-const EnrollmentsPage       = React.lazy(() => import('./pages/training/EnrollmentsPage'))
-const CoachingPage          = React.lazy(() => import('./pages/training/CoachingPage'))
-const CertificatesPage      = React.lazy(() => import('./pages/training/CertificatesPage'))
-const QuizzesPage           = React.lazy(() => import('./pages/training/QuizzesPage'))
+const TrainingOverviewPage      = React.lazy(() => import('./pages/training/TrainingOverviewPage'))
+const CoachingSessionsPage      = React.lazy(() => import('./pages/training/CoachingSessionsPage'))
+const CoachingSessionDetailPage = React.lazy(() => import('./pages/training/CoachingSessionDetailPage'))
+const CoachingSessionFormPage   = React.lazy(() => import('./pages/training/CoachingSessionFormPage'))
+const MyCoachingPage            = React.lazy(() => import('./pages/training/MyCoachingPage'))
+const MyCoachingDetailPage      = React.lazy(() => import('./pages/training/MyCoachingDetailPage'))
+const TrainingReportsPage       = React.lazy(() => import('./pages/training/TrainingReportsPage'))
+const LibraryTopicsPage         = React.lazy(() => import('./pages/training/LibraryTopicsPage'))
+const LibraryQuizzesPage        = React.lazy(() => import('./pages/training/LibraryQuizzesPage'))
+const LibraryResourcesPage      = React.lazy(() => import('./pages/training/LibraryResourcesPage'))
 
 const DashboardPage         = React.lazy(() => import('./pages/insights/DashboardPage'))
 const TeamDashboardPage     = React.lazy(() => import('./pages/insights/TeamDashboardPage'))
@@ -70,7 +73,7 @@ function RoleRedirect() {
       1: '/app/insights/dashboard',      // admin
       2: '/app/quality/submissions',     // qa
       3: '/app/quality/submissions',     // user/csr
-      4: '/app/training/courses',        // trainer
+      4: '/app/training/overview',       // trainer
       5: '/app/quality/submissions',     // manager
     }
     const dest = destinations[user.role_id] ?? '/app/quality/submissions'
@@ -140,14 +143,21 @@ export default function App() {
 
                 {/* Training */}
                 <Route path="/app/training">
-                  <Route index element={<Navigate to="courses" replace />} />
-                  <Route path="overview"     element={<Navigate to="/app/training/courses" replace />} />
-                  <Route path="courses"      element={<PageLoader><CoursesPage /></PageLoader>} />
-                  <Route path="paths"        element={<PageLoader><TrainingPathsPage /></PageLoader>} />
-                  <Route path="enrollments"  element={<PageLoader><EnrollmentsPage /></PageLoader>} />
-                  <Route path="coaching"     element={<PageLoader><CoachingPage /></PageLoader>} />
-                  <Route path="certificates" element={<PageLoader><CertificatesPage /></PageLoader>} />
-                  <Route path="quizzes"      element={<PageLoader><QuizzesPage /></PageLoader>} />
+                  <Route index element={<Navigate to="overview" replace />} />
+                  <Route path="overview"          element={<PageLoader><TrainingOverviewPage /></PageLoader>} />
+                  <Route path="coaching"          element={<PageLoader><CoachingSessionsPage /></PageLoader>} />
+                  <Route path="coaching/new"      element={<PageLoader><CoachingSessionFormPage /></PageLoader>} />
+                  <Route path="coaching/:id"      element={<PageLoader><CoachingSessionDetailPage /></PageLoader>} />
+                  <Route path="coaching/:id/edit" element={<PageLoader><CoachingSessionFormPage /></PageLoader>} />
+                  <Route path="my-coaching"       element={<PageLoader><MyCoachingPage /></PageLoader>} />
+                  <Route path="my-coaching/:id"   element={<PageLoader><MyCoachingDetailPage /></PageLoader>} />
+                  <Route path="reports"           element={<PageLoader><TrainingReportsPage /></PageLoader>} />
+                  <Route path="library">
+                    <Route index element={<Navigate to="topics" replace />} />
+                    <Route path="topics"    element={<PageLoader><LibraryTopicsPage /></PageLoader>} />
+                    <Route path="quizzes"   element={<PageLoader><LibraryQuizzesPage /></PageLoader>} />
+                    <Route path="resources" element={<PageLoader><LibraryResourcesPage /></PageLoader>} />
+                  </Route>
                 </Route>
 
                 {/* Insights */}

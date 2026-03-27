@@ -1,5 +1,5 @@
 import express, { RequestHandler } from 'express';
-import { 
+import {
   getPublishedCourses,
   getTrainingPaths,
   getAssignmentTargets
@@ -10,13 +10,6 @@ import {
   exportReport,
   getTrainingStats,
   getTraineeProgress,
-  getTrainerCoachingSessions,
-  getTrainerCoachingSessionDetails,
-  createTrainerCoachingSession,
-  updateTrainerCoachingSession,
-  completeTrainerCoachingSession,
-  reopenTrainerCoachingSession,
-  downloadTrainerCoachingSessionAttachment,
   getTrainerTeamCSRs,
   getTrainerDashboardStats,
   getTrainerCSRActivity,
@@ -24,272 +17,103 @@ import {
   getTrainerCompletedSubmissions,
   getTrainerSubmissionDetails
 } from '../controllers/trainer.controller';
-import { authenticate, authorizeTrainer } from '../middleware/auth';
+import {
+  getCoachingSessions,
+  getCoachingSessionDetail,
+  createCoachingSession,
+  updateCoachingSession,
+  deliverCoachingSession,
+  completeCoachingSession,
+  flagFollowUp,
+  closeCoachingSession,
+  downloadAttachment,
+  getCSRCoachingHistory
+} from '../controllers/coaching.controller';
+import {
+  getResources,
+  createResource,
+  updateResource,
+  toggleResourceStatus
+} from '../controllers/resource.controller';
+import {
+  getQuizLibrary,
+  createLibraryQuiz,
+  updateLibraryQuiz,
+  deleteLibraryQuiz
+} from '../controllers/quizLibrary.controller';
+import {
+  getReportsSummary,
+  getCSRCoachingList
+} from '../controllers/coachingReport.controller';
+import { authenticate, authorizeCoachingUser, authorizeTrainer } from '../middleware/auth';
 import multer from 'multer';
 
 const router = express.Router();
 
-// Health check endpoint (no auth required for monitoring)
-router.get('/health', getTrainerHealthCheck as unknown as RequestHandler);
-
-// Configure multer for coaching file uploads
-const storage = multer.memoryStorage();
-const upload = multer({ 
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-  fileFilter: (req, file, cb) => {
-    // Allow common file types
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/pdf', 'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-      'image/jpeg',
-      'image/png',
-      'image/gif'
+      'text/plain', 'image/jpeg', 'image/png', 'image/gif'
     ];
-    
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type'));
-    }
+    cb(null, allowed.includes(file.mimetype) ? true : (new Error('Invalid file type') as any));
   }
 });
 
-/**
- * @route GET /api/trainer/courses
- * @desc Get published courses for assignment
- * @access Private (Trainer)
- */
-router.get('/courses', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getPublishedCourses as unknown as RequestHandler
-);
+const auth = authenticate as unknown as RequestHandler;
+const coaching = authorizeCoachingUser as unknown as RequestHandler;
+const trainer = authorizeTrainer as unknown as RequestHandler;
 
-/**
- * @route GET /api/trainer/paths
- * @desc Get training paths for assignment
- * @access Private (Trainer)
- */
-router.get('/paths', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getTrainingPaths as unknown as RequestHandler
-);
+// Health check (no auth)
+router.get('/health', getTrainerHealthCheck as unknown as RequestHandler);
 
-/**
- * @route GET /api/trainer/targets
- * @desc Get CSRs and departments for assignment
- * @access Private (Trainer)
- */
-router.get('/targets', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getAssignmentTargets as unknown as RequestHandler
-);
+// ─── Training / Enrollment ───────────────────────────────────────────────────
+router.get('/courses', auth, trainer, getPublishedCourses as unknown as RequestHandler);
+router.get('/paths', auth, trainer, getTrainingPaths as unknown as RequestHandler);
+router.get('/targets', auth, trainer, getAssignmentTargets as unknown as RequestHandler);
+router.get('/filters', auth, trainer, getFilterOptions as unknown as RequestHandler);
+router.post('/reports', auth, trainer, generateReport as unknown as RequestHandler);
+router.get('/export/:report_id', auth, trainer, exportReport as unknown as RequestHandler);
+router.get('/export/current', auth, trainer, exportReport as unknown as RequestHandler);
+router.get('/stats', auth, trainer, getTrainingStats as unknown as RequestHandler);
+router.get('/enrollments', auth, trainer, getTraineeProgress as unknown as RequestHandler);
+router.get('/team-csrs', auth, coaching, getTrainerTeamCSRs as unknown as RequestHandler);
+router.get('/dashboard-stats', auth, coaching, getTrainerDashboardStats as unknown as RequestHandler);
+router.get('/csr-activity', auth, coaching, getTrainerCSRActivity as unknown as RequestHandler);
+router.get('/completed', auth, coaching, getTrainerCompletedSubmissions as unknown as RequestHandler);
+router.get('/completed/:id', auth, coaching, getTrainerSubmissionDetails as unknown as RequestHandler);
 
-/**
- * @route GET /api/trainer/filters
- * @desc Get filter options for trainer reports
- * @access Private (Trainer)
- */
-router.get('/filters', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getFilterOptions as unknown as RequestHandler
-);
+// ─── Coaching Sessions ───────────────────────────────────────────────────────
+router.get('/coaching-sessions', auth, coaching, getCoachingSessions as unknown as RequestHandler);
+router.get('/coaching-sessions/:id/attachment', auth, coaching, downloadAttachment as unknown as RequestHandler);
+router.get('/coaching-sessions/:id', auth, coaching, getCoachingSessionDetail as unknown as RequestHandler);
+router.post('/coaching-sessions', auth, coaching, upload.single('attachment'), createCoachingSession as unknown as RequestHandler);
+router.put('/coaching-sessions/:id', auth, coaching, upload.single('attachment'), updateCoachingSession as unknown as RequestHandler);
+router.patch('/coaching-sessions/:id/deliver', auth, coaching, deliverCoachingSession as unknown as RequestHandler);
+router.patch('/coaching-sessions/:id/complete', auth, coaching, completeCoachingSession as unknown as RequestHandler);
+router.patch('/coaching-sessions/:id/flag-followup', auth, coaching, flagFollowUp as unknown as RequestHandler);
+router.patch('/coaching-sessions/:id/close', auth, coaching, closeCoachingSession as unknown as RequestHandler);
 
-/**
- * @route POST /api/trainer/reports
- * @desc Generate trainer reports based on filters
- * @access Private (Trainer)
- */
-router.post('/reports', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  generateReport as unknown as RequestHandler
-);
+// ─── CSR Coaching History (sidebar) ─────────────────────────────────────────
+router.get('/csr-coaching-history/:csrId', auth, coaching, getCSRCoachingHistory as unknown as RequestHandler);
 
-/**
- * @route GET /api/trainer/export/:report_id
- * @desc Export trainer report as CSV or PDF
- * @access Private (Trainer)
- */
-router.get('/export/:report_id', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  exportReport as unknown as RequestHandler
-);
+// ─── KB Resources ────────────────────────────────────────────────────────────
+router.get('/resources', auth, coaching, getResources as unknown as RequestHandler);
+router.post('/resources', auth, coaching, createResource as unknown as RequestHandler);
+router.put('/resources/:id', auth, coaching, updateResource as unknown as RequestHandler);
+router.patch('/resources/:id/status', auth, coaching, toggleResourceStatus as unknown as RequestHandler);
 
-/**
- * @route GET /api/trainer/export/current
- * @desc Export current trainer report as CSV or PDF
- * @access Private (Trainer)
- */
-router.get('/export/current', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  exportReport as unknown as RequestHandler
-);
+// ─── Quiz Library ─────────────────────────────────────────────────────────────
+router.get('/quiz-library', auth, coaching, getQuizLibrary as unknown as RequestHandler);
+router.post('/quiz-library', auth, coaching, createLibraryQuiz as unknown as RequestHandler);
+router.put('/quiz-library/:id', auth, coaching, updateLibraryQuiz as unknown as RequestHandler);
+router.delete('/quiz-library/:id', auth, coaching, deleteLibraryQuiz as unknown as RequestHandler);
 
-/**
- * @route GET /api/trainer/stats
- * @desc Get training statistics for trainer dashboard
- * @access Private (Trainer)
- */
-router.get('/stats', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getTrainingStats as unknown as RequestHandler
-);
+// ─── Coaching Reports ─────────────────────────────────────────────────────────
+router.get('/reports/summary', auth, coaching, getReportsSummary as unknown as RequestHandler);
+router.get('/reports/csr-list', auth, coaching, getCSRCoachingList as unknown as RequestHandler);
 
-/**
- * @route GET /api/trainer/enrollments
- * @desc Get trainee progress with pagination
- * @access Private (Trainer)
- */
-router.get('/enrollments', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getTraineeProgress as unknown as RequestHandler
-);
-
-// COACHING SESSIONS ROUTES
-
-/**
- * @route GET /api/trainer/coaching-sessions
- * @desc Get coaching sessions for trainers
- * @access Private (Trainer)
- */
-router.get('/coaching-sessions', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getTrainerCoachingSessions as unknown as RequestHandler
-);
-
-/**
- * @route GET /api/trainer/coaching-sessions/:sessionId
- * @desc Get coaching session details by ID
- * @access Private (Trainer)
- */
-router.get('/coaching-sessions/:sessionId', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getTrainerCoachingSessionDetails as unknown as RequestHandler
-);
-
-/**
- * @route GET /api/trainer/coaching-sessions/:sessionId/attachment
- * @desc Download coaching session attachment
- * @access Private (Trainer)
- */
-router.get('/coaching-sessions/:sessionId/attachment', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  downloadTrainerCoachingSessionAttachment as unknown as RequestHandler
-);
-
-/**
- * @route POST /api/trainer/coaching-sessions
- * @desc Create new coaching session
- * @access Private (Trainer)
- */
-router.post('/coaching-sessions', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  upload.single('attachment'),
-  createTrainerCoachingSession as unknown as RequestHandler
-);
-
-/**
- * @route PUT /api/trainer/coaching-sessions/:sessionId
- * @desc Update coaching session
- * @access Private (Trainer)
- */
-router.put('/coaching-sessions/:sessionId', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  upload.single('attachment'),
-  updateTrainerCoachingSession as unknown as RequestHandler
-);
-
-/**
- * @route PATCH /api/trainer/coaching-sessions/:sessionId/complete
- * @desc Mark coaching session as completed
- * @access Private (Trainer)
- */
-router.patch('/coaching-sessions/:sessionId/complete', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  completeTrainerCoachingSession as unknown as RequestHandler
-);
-
-/**
- * @route PATCH /api/trainer/coaching-sessions/:sessionId/reopen
- * @desc Re-open a completed coaching session (change status back to SCHEDULED)
- * @access Private (Trainer)
- */
-router.patch('/coaching-sessions/:sessionId/reopen', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  reopenTrainerCoachingSession as unknown as RequestHandler
-);
-
-/**
- * @route GET /api/trainer/team-csrs
- * @desc Get all CSRs that trainers can coach
- * @access Private (Trainer)
- */
-router.get('/team-csrs', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getTrainerTeamCSRs as unknown as RequestHandler
-);
-
-/**
- * @route GET /api/trainer/dashboard-stats
- * @desc Get dashboard statistics for trainer dashboard (trainer-specific)
- * @access Private (Trainer)
- */
-router.get('/dashboard-stats', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getTrainerDashboardStats as unknown as RequestHandler
-);
-
-/**
- * @route GET /api/trainer/csr-activity
- * @desc Get CSR activity data for trainer dashboard (trainer-specific)
- * @access Private (Trainer)
- */
-router.get('/csr-activity', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getTrainerCSRActivity as unknown as RequestHandler
-);
-
-/**
- * @route GET /api/trainer/completed
- * @desc Get completed QA submissions for trainers
- * @access Private (Trainer)
- */
-router.get('/completed', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getTrainerCompletedSubmissions as unknown as RequestHandler
-);
-
-/**
- * @route GET /api/trainer/completed/:id
- * @desc Get detailed information for a specific completed submission
- * @access Private (Trainer)
- */
-router.get('/completed/:id', 
-  authenticate as unknown as RequestHandler, 
-  authorizeTrainer as unknown as RequestHandler,
-  getTrainerSubmissionDetails as unknown as RequestHandler
-);
-
-export default router; 
+export default router;

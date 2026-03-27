@@ -298,7 +298,7 @@ export const getCSRActivity = async (req: Request, res: Response): Promise<void>
  */
 export const getCSRStats = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
 
     const qaScoreResults = await prisma.$queryRaw<{avg_score: number, total_audits: bigint}[]>(
       Prisma.sql`
@@ -421,7 +421,7 @@ export const getCSRStats = async (req: Request, res: Response) => {
  */
 export const getCSRAudits = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const { page = 1, limit = 10, formName, startDate, endDate, status, searchTerm } = req.query;
     
     const offset = (Number(page) - 1) * Number(limit);
@@ -529,7 +529,7 @@ export const getCSRAudits = async (req: Request, res: Response) => {
  */
 export const getAuditDetails = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const auditId = req.params.id;
     
     const auditResults = await prisma.$queryRaw<any[]>(
@@ -657,7 +657,7 @@ export const getAuditDetails = async (req: Request, res: Response) => {
  */
 export const isAuditDisputable = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const submissionId = req.params.id;
     
     const auditResults = await prisma.$queryRaw<{id: number}[]>(
@@ -700,7 +700,7 @@ export const isAuditDisputable = async (req: Request, res: Response) => {
  */
 export const getTrainingCourses = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const { page = 1, pageSize = 10, status, dueDateOrder = 'asc' } = req.query;
     
     const offset = (Number(page) - 1) * Number(pageSize);
@@ -811,10 +811,10 @@ export const getTrainingCourses = async (req: Request, res: Response) => {
  */
 export const getCSRAuditDetails = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const submissionId = parseInt(req.params.id);
     
-    console.log(`\n🚀 CSR CONTROLLER: getCSRAuditDetails called for submission ${submissionId} by user ${userId}`);
+    console.log(`\nÃ°Å¸Å¡â‚¬ CSR CONTROLLER: getCSRAuditDetails called for submission ${submissionId} by user ${userId}`);
     
     const verifyRows = await prisma.$queryRaw<{id: number}[]>(
       Prisma.sql`
@@ -1092,7 +1092,7 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
  */
 export const getTrainingSummary = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
 
     const summaryResults = await prisma.$queryRaw<any[]>(
       Prisma.sql`
@@ -1123,7 +1123,7 @@ export const getTrainingSummary = async (req: Request, res: Response) => {
  */
 export const submitQuizAnswers = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const quizId = parseInt(req.params.quizId);
     const { answers } = req.body;
 
@@ -1184,7 +1184,7 @@ export const submitQuizAnswers = async (req: Request, res: Response) => {
  */
 export const updateCourseProgress = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const enrollmentId = parseInt(req.params.enrollmentId);
     const { pageId, completed } = req.body;
 
@@ -1258,7 +1258,7 @@ export const updateCourseProgress = async (req: Request, res: Response) => {
  */
 export const completeCourse = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const enrollmentId = parseInt(req.params.enrollmentId);
 
     const enrollmentCheck = await prisma.$queryRaw<any[]>(
@@ -1312,7 +1312,7 @@ export const completeCourse = async (req: Request, res: Response) => {
  */
 export const getCertificate = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const certificateId = parseInt(req.params.certificateId);
 
     const certificateResults = await prisma.$queryRaw<any[]>(
@@ -1357,7 +1357,7 @@ export const getCertificate = async (req: Request, res: Response) => {
  */
 export const getCourseContentForCSR = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     
     let courseId: number;
     let enrollmentId: number;
@@ -1539,7 +1539,7 @@ export const getCourseContentForCSR = async (req: Request, res: Response) => {
  */
 export const updateLastViewedPosition = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const enrollmentId = parseInt(req.params.enrollmentId);
     const { pageId, pageIndex } = req.body;
 
@@ -1580,7 +1580,7 @@ export const updateLastViewedPosition = async (req: Request, res: Response) => {
  */
 export const getLastViewedPosition = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const enrollmentId = parseInt(req.params.enrollmentId);
 
     const enrollmentCheck = await prisma.$queryRaw<{id: number, course_id: number}[]>(
@@ -1625,7 +1625,7 @@ export const getLastViewedPosition = async (req: Request, res: Response) => {
  */
 export const getCertificates = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const { 
       page = 1, 
       limit = 10,
@@ -1797,7 +1797,7 @@ export const finalizeSubmission = async (req: Request, res: Response): Promise<v
  */
 export const getCSRCoachingSessions = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const { page = 1, pageSize = 10, status, coaching_type, startDate, endDate, search } = req.query;
     
     const pageNum = Number(page);
@@ -1985,7 +1985,7 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
  */
 export const getCSRCoachingSessionDetails = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const sessionId = parseInt(req.params.sessionId);
 
     if (!sessionId || isNaN(sessionId) || sessionId <= 0) {
@@ -2006,21 +2006,18 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
 
     const sessionRows = await prisma.$queryRaw<any[]>(
       Prisma.sql`
-        SELECT 
-          cs.id,
-          cs.session_date,
-          cs.coaching_type,
-          cs.notes,
-          cs.status,
-          cs.attachment_filename,
-          cs.attachment_path,
-          cs.attachment_size,
-          cs.attachment_mime_type,
-          creator.username as manager_name,
-          creator.email as manager_email,
-          cs.created_at,
-          GROUP_CONCAT(t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topics,
-          GROUP_CONCAT(t.id ORDER BY t.id SEPARATOR ',') as topic_ids
+        SELECT cs.id, cs.session_date, cs.coaching_type, cs.source_type, cs.status,
+          cs.notes, cs.required_action,
+          cs.require_action_plan, cs.require_acknowledgment,
+          cs.quiz_required, cs.quiz_id,
+          cs.kb_resource_id, cs.kb_url,
+          cs.csr_action_plan, cs.csr_root_cause, cs.csr_support_needed, cs.csr_acknowledged_at,
+          cs.delivered_at, cs.completed_at,
+          cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
+          cs.follow_up_required, cs.follow_up_date, cs.created_at,
+          creator.username as created_by_name,
+          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics,
+          GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         LEFT JOIN users creator ON cs.created_by = creator.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
@@ -2039,16 +2036,40 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
     }
 
     const sessionData = sessionRows[0];
+
+    // Load quiz with questions if set
+    let quizData = null;
+    if (sessionData.quiz_id) {
+      const [quizRows, questionRows, attemptRows] = await Promise.all([
+        prisma.$queryRaw<any[]>(Prisma.sql`SELECT id, quiz_title, pass_score FROM quizzes WHERE id = ${sessionData.quiz_id}`),
+        prisma.$queryRaw<any[]>(Prisma.sql`SELECT id, question_text, options, correct_option FROM quiz_questions WHERE quiz_id = ${sessionData.quiz_id} ORDER BY id`),
+        prisma.$queryRaw<any[]>(Prisma.sql`SELECT id, attempt_number, score, passed, submitted_at FROM quiz_attempts WHERE quiz_id = ${sessionData.quiz_id} AND user_id = ${userId} AND coaching_session_id = ${sessionId} ORDER BY attempt_number`)
+      ]);
+      if (quizRows.length) {
+        quizData = {
+          ...quizRows[0],
+          questions: questionRows.map((q: any) => ({ ...q, options: JSON.parse(q.options || '[]') }))
+        };
+        sessionData.quiz_attempts = attemptRows;
+      }
+    }
+
+    // Load KB resource if set
+    let kbResource = null;
+    if (sessionData.kb_resource_id) {
+      const kbRows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id, title, url, description FROM training_resources WHERE id = ${sessionData.kb_resource_id}`);
+      if (kbRows.length) kbResource = kbRows[0];
+    }
+
     const responseData = {
       ...sessionData,
-      topics: sessionData.topics ? sessionData.topics.split(', ') : [],
-      topic_ids: sessionData.topic_ids ? sessionData.topic_ids.split(',').map((id: string) => parseInt(id)) : []
+      topics: sessionData.topics ? sessionData.topics.split(',') : [],
+      topic_ids: sessionData.topic_ids ? sessionData.topic_ids.split(',').map((id: string) => parseInt(id)) : [],
+      quiz: quizData,
+      kb_resource: kbResource,
     };
 
-    res.json({
-      success: true,
-      data: responseData
-    });
+    res.json({ success: true, data: responseData });
   } catch (error) {
     console.error('Error fetching CSR coaching session details:', error);
     
@@ -2072,7 +2093,7 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
  */
 export const downloadCSRCoachingAttachment = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
     const sessionId = parseInt(req.params.sessionId);
 
     if (!sessionId || isNaN(sessionId) || sessionId <= 0) {
@@ -2186,5 +2207,57 @@ export const downloadCSRCoachingAttachment = async (req: Request, res: Response)
     }
     
     res.status(500).json(errorResponse);
+  }
+};
+
+/**
+ * CSR submits their response to a delivered coaching session
+ */
+export const submitCSRResponse = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id ?? (req as any).user?.userId;
+    const sessionId = parseInt(req.params.id);
+    const { action_plan, root_cause, support_needed, acknowledged } = req.body;
+
+    if (!sessionId || isNaN(sessionId)) {
+      return res.status(400).json({ success: false, message: 'Invalid session ID' });
+    }
+
+    const rows = await prisma.$queryRaw<any[]>(
+      Prisma.sql`SELECT id, status, require_action_plan, require_acknowledgment, quiz_required FROM coaching_sessions WHERE id = ${sessionId} AND csr_id = ${userId}`
+    );
+
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
+
+    const session = rows[0];
+    if (!['DELIVERED', 'AWAITING_CSR_ACTION'].includes(session.status)) {
+      return res.status(400).json({ success: false, message: 'Session is not awaiting a CSR response' });
+    }
+
+    if (session.require_action_plan && (!action_plan || action_plan.length < 50)) {
+      return res.status(400).json({ success: false, message: 'Action plan must be at least 50 characters' });
+    }
+
+    if (session.require_acknowledgment && acknowledged !== true) {
+      return res.status(400).json({ success: false, message: 'Acknowledgment is required' });
+    }
+
+    const newStatus = session.quiz_required ? 'QUIZ_PENDING' : 'COMPLETED';
+
+    await prisma.$executeRaw(
+      Prisma.sql`UPDATE coaching_sessions SET
+        csr_action_plan = ${action_plan || null},
+        csr_root_cause = ${root_cause || null},
+        csr_support_needed = ${support_needed || null},
+        csr_acknowledged_at = ${acknowledged === true ? new Date() : null},
+        status = ${newStatus},
+        completed_at = ${newStatus === 'COMPLETED' ? new Date() : null}
+        WHERE id = ${sessionId}`
+    );
+
+    res.json({ success: true, message: 'Response submitted', data: { new_status: newStatus } });
+  } catch (error) {
+    console.error('[CSR] submitCSRResponse error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

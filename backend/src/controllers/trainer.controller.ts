@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { trainerService, TrainerServiceError } from '../services/TrainerService';
@@ -538,36 +538,21 @@ const getRoleId = async (roleName: string): Promise<number | null> => {
   }
 };
 
-/**
- * Properly escape filename for Content-Disposition header
- * Uses RFC 5987 encoding for filenames with special characters
- */
 const escapeFilename = (filename: string | null | undefined): string => {
-  if (!filename) {
-    return 'filename="attachment"';
-  }
-  
-  const cleanFilename = filename.replace(/[\x00-\x1F\x7F]/g, '').trim();
-  
-  if (!cleanFilename) {
-    return 'filename="attachment"';
-  }
-  
-  const needsEncoding = /[^a-zA-Z0-9._-]/.test(cleanFilename);
-  
-  if (needsEncoding) {
-    const encoded = encodeURIComponent(cleanFilename)
-      .replace(/\*/g, '%2A');
-    return `filename*=UTF-8''${encoded}`;
-  }
-  
-  return `filename="${cleanFilename.replace(/"/g, '\\"')}"`;
+  if (!filename) return 'filename="attachment"';
+  const clean = filename.replace(/[\x00-\x1F\x7F]/g, '').trim();
+  if (!clean) return 'filename="attachment"';
+  return /[^a-zA-Z0-9._-]/.test(clean)
+    ? `filename*=UTF-8''${encodeURIComponent(clean).replace(/\*/g, '%2A')}`
+    : `filename="${clean.replace(/"/g, '\\"')}"`;
 };
 
-/**
- * Get coaching sessions for trainers (only see sessions they created)
- */
-export const getTrainerCoachingSessions = async (req: AuthenticatedRequest, res: Response) => {
+// Legacy coaching functions below are superseded by coaching.controller.ts.
+// They remain here only to satisfy internal references (getRoleId, escapeFilename)
+// and will be removed in a future cleanup. Routes no longer import them.
+
+/** @deprecated use coaching.controller.ts */
+const getTrainerCoachingSessions = async (req: AuthenticatedRequest, res: Response) => {
   const startTime = Date.now();
   try {
     const trainerId = req.user?.user_id;
@@ -730,7 +715,7 @@ export const getTrainerCoachingSessions = async (req: AuthenticatedRequest, res:
 /**
  * Get coaching session details by ID
  */
-export const getTrainerCoachingSessionDetails = async (req: AuthenticatedRequest, res: Response) => {
+const getTrainerCoachingSessionDetails = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const trainerId = req.user?.user_id;
     const sessionId = parseInt(req.params.sessionId);
@@ -808,7 +793,7 @@ export const getTrainerCoachingSessionDetails = async (req: AuthenticatedRequest
 /**
  * Create new coaching session
  */
-export const createTrainerCoachingSession = async (req: AuthenticatedRequest, res: Response) => {
+const createTrainerCoachingSession = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const trainerId = req.user?.user_id;
     let { csr_id, session_date, topic_ids, coaching_type, notes, status } = req.body;
@@ -1011,7 +996,7 @@ export const createTrainerCoachingSession = async (req: AuthenticatedRequest, re
 /**
  * Update coaching session
  */
-export const updateTrainerCoachingSession = async (req: AuthenticatedRequest, res: Response) => {
+const updateTrainerCoachingSession = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const trainerId = req.user?.user_id;
     const sessionId = parseInt(req.params.sessionId);
@@ -1283,7 +1268,7 @@ export const updateTrainerCoachingSession = async (req: AuthenticatedRequest, re
 /**
  * Mark coaching session as completed
  */
-export const completeTrainerCoachingSession = async (req: AuthenticatedRequest, res: Response) => {
+const completeTrainerCoachingSession = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const trainerId = req.user?.user_id;
     const sessionId = parseInt(req.params.sessionId);
@@ -1384,7 +1369,7 @@ export const completeTrainerCoachingSession = async (req: AuthenticatedRequest, 
 /**
  * Re-open a completed coaching session (change status back to SCHEDULED)
  */
-export const reopenTrainerCoachingSession = async (req: AuthenticatedRequest, res: Response) => {
+const reopenTrainerCoachingSession = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const trainerId = req.user?.user_id;
     const sessionId = parseInt(req.params.sessionId);
@@ -1485,7 +1470,7 @@ export const reopenTrainerCoachingSession = async (req: AuthenticatedRequest, re
 /**
  * Download coaching session attachment
  */
-export const downloadTrainerCoachingSessionAttachment = async (req: AuthenticatedRequest, res: Response) => {
+const downloadTrainerCoachingSessionAttachment = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const trainerId = req.user?.user_id;
     const sessionId = parseInt(req.params.sessionId);
@@ -1591,19 +1576,15 @@ export const getTrainerTeamCSRs = async (req: AuthenticatedRequest, res: Respons
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    const csrRoleId = await getRoleId('CSR');
-    if (!csrRoleId) {
-      return res.status(500).json({ success: false, message: 'CSR role not found' });
-    }
-
+    // Role ID 3 = CSR/User — query by ID to avoid dependency on role_name string
     const csrs = await prisma.$queryRaw<any[]>(
       Prisma.sql`
-        SELECT u.id, u.username as name, u.email, d.department_name as department
+        SELECT u.id, u.username as name, u.email,
+          COALESCE(d.department_name, '') as department
         FROM users u
-        JOIN departments d ON u.department_id = d.id
-        WHERE u.role_id = ${csrRoleId}
+        LEFT JOIN departments d ON u.department_id = d.id
+        WHERE u.role_id = 3
         AND u.is_active = 1
-        AND d.is_active = 1
         ORDER BY u.username
       `
     );

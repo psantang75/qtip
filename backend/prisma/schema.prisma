@@ -90,6 +90,8 @@ model User {
   lead_source_raw                       LeadSourceRaw[]
   ticket_task_raw                       TicketTaskRaw[]
   email_stats_raw                       EmailStatsRaw[]
+  quiz_attempts                         QuizAttempt[]
+  training_resources                    TrainingResource[]
 
   @@index([last_login])
   @@map("users")
@@ -389,9 +391,13 @@ model Quiz {
   course_id  Int
   quiz_title String  @db.VarChar(100)
   pass_score Decimal @db.Decimal(5, 2)
+  topic_id   Int?
 
-  course         Course         @relation(fields: [course_id], references: [id], onDelete: Cascade)
-  quiz_questions QuizQuestion[]
+  course            Course            @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  topic             Topic?            @relation(fields: [topic_id], references: [id], onDelete: SetNull)
+  quiz_questions    QuizQuestion[]
+  coaching_sessions CoachingSession[] @relation("CoachingSessionQuiz")
+  quiz_attempts     QuizAttempt[]
 
   @@map("quizzes")
 }
@@ -460,11 +466,52 @@ model CoursePage {
   @@map("course_pages")
 }
 
+model QuizAttempt {
+  id                  Int              @id @default(autoincrement())
+  quiz_id             Int
+  user_id             Int
+  coaching_session_id Int?
+  answers_json        String           @db.Text
+  score               Decimal          @db.Decimal(5, 2)
+  passed              Boolean          @db.TinyInt
+  attempt_number      Int              @default(1)
+  submitted_at        DateTime         @default(now()) @db.DateTime(0)
+
+  quiz             Quiz             @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  coaching_session CoachingSession? @relation(fields: [coaching_session_id], references: [id], onDelete: SetNull)
+
+  @@index([quiz_id, user_id])
+  @@index([coaching_session_id])
+  @@map("quiz_attempts")
+}
+
+model TrainingResource {
+  id          Int      @id @default(autoincrement())
+  title       String   @db.VarChar(255)
+  url         String   @db.VarChar(500)
+  description String?  @db.Text
+  topic_id    Int?
+  is_active   Boolean  @default(true) @db.TinyInt
+  created_by  Int
+  created_at  DateTime @default(now()) @db.DateTime(0)
+  updated_at  DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  topic   Topic? @relation(fields: [topic_id], references: [id], onDelete: SetNull)
+  creator User   @relation(fields: [created_by], references: [id], onDelete: Cascade)
+
+  coaching_sessions CoachingSession[]
+
+  @@index([topic_id])
+  @@index([is_active])
+  @@map("training_resources")
+}
+
 model CoachingSession {
   id                   Int                   @id @default(autoincrement())
   csr_id               Int
   session_date         DateTime              @db.DateTime(0)
-  coaching_type        CoachingSessionType   @default(ONE_ON_ONE)
+  coaching_type        CoachingSessionType   @default(WEEKLY_COACHING)
   notes                String?               @db.Text
   attachment_filename  String?               @db.VarChar(255)
   attachment_path      String?               @db.VarChar(500)
@@ -474,10 +521,31 @@ model CoachingSession {
   created_at           DateTime              @default(now()) @db.DateTime(0)
   created_by           Int?
 
-  csr     User  @relation("CoachingCsr", fields: [csr_id], references: [id], onDelete: Cascade)
-  creator User? @relation("CoachingCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
+  source_type            CoachingSourceType   @default(OTHER)
+  qa_audit_id            Int?
+  required_action        String?              @db.Text
+  kb_resource_id         Int?
+  kb_url                 String?              @db.VarChar(500)
+  quiz_id                Int?
+  quiz_required          Boolean              @default(false) @db.TinyInt
+  require_acknowledgment Boolean              @default(true)  @db.TinyInt
+  require_action_plan    Boolean              @default(true)  @db.TinyInt
+  follow_up_required     Boolean              @default(false) @db.TinyInt
+  follow_up_date         DateTime?            @db.DateTime(0)
+  delivered_at           DateTime?            @db.DateTime(0)
+  completed_at           DateTime?            @db.DateTime(0)
+  csr_action_plan        String?              @db.Text
+  csr_root_cause         String?              @db.VarChar(255)
+  csr_support_needed     String?              @db.VarChar(255)
+  csr_acknowledged_at    DateTime?            @db.DateTime(0)
+
+  csr         User              @relation("CoachingCsr", fields: [csr_id], references: [id], onDelete: Cascade)
+  creator     User?             @relation("CoachingCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
+  kb_resource TrainingResource? @relation(fields: [kb_resource_id], references: [id], onDelete: SetNull)
+  quiz        Quiz?             @relation("CoachingSessionQuiz", fields: [quiz_id], references: [id], onDelete: SetNull)
 
   coaching_session_topics CoachingSessionTopic[]
+  quiz_attempts           QuizAttempt[]
 
   @@index([created_by])
   @@index([csr_id, created_by])
@@ -687,6 +755,8 @@ model Topic {
   updated_at DateTime @default(now()) @updatedAt @db.Timestamp(0)
 
   coaching_session_topics CoachingSessionTopic[]
+  quizzes                 Quiz[]
+  training_resources      TrainingResource[]
 
   @@index([is_active])
   @@index([sort_order])
@@ -1123,18 +1193,30 @@ enum CoursePageContentType {
 }
 
 enum CoachingSessionType {
-  Classroom
-  Side_by_Side    @map("Side-by-Side")
-  Team_Session    @map("Team Session")
-  ONE_ON_ONE      @map("1-on-1")
-  PIP
-  Verbal_Warning  @map("Verbal Warning")
-  Written_Warning @map("Written Warning")
+  WEEKLY_COACHING
+  PERFORMANCE_COACHING
+  ESCALATION
+  SIDE_BY_SIDE
+  TEAM_SESSION
 }
 
 enum CoachingSessionStatus {
   SCHEDULED
+  DELIVERED
+  AWAITING_CSR_ACTION
+  QUIZ_PENDING
   COMPLETED
+  FOLLOW_UP_REQUIRED
+  CLOSED
+}
+
+enum CoachingSourceType {
+  QA_AUDIT
+  MANAGER_OBSERVATION
+  TREND
+  DISPUTE
+  SCHEDULED
+  OTHER
 }
 
 enum SubmissionStatus {

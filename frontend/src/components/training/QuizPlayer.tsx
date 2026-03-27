@@ -1,0 +1,192 @@
+import { useState } from 'react'
+import { CheckCircle, XCircle, HelpCircle } from 'lucide-react'
+import trainingService, { type QuizQuestion, type QuizAttemptResult } from '@/services/trainingService'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
+interface QuizPlayerProps {
+  quiz: { id: number; quiz_title: string; pass_score: number; questions: QuizQuestion[] }
+  coachingSessionId: number
+  onPassed: () => void
+}
+
+type Phase = 'intro' | 'taking' | 'result'
+
+export function QuizPlayer({ quiz, coachingSessionId, onPassed }: QuizPlayerProps) {
+  const [phase, setPhase]                   = useState<Phase>('intro')
+  const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({})
+  const [result, setResult]                 = useState<QuizAttemptResult | null>(null)
+  const [isSubmitting, setIsSubmitting]     = useState(false)
+
+  const { questions } = quiz
+  const q = questions[currentQuestion]
+
+  const resetTaking = () => {
+    setCurrentQuestion(0)
+    setSelectedAnswers({})
+    setPhase('taking')
+  }
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true)
+    try {
+      const answers = questions.map(q => ({
+        question_id:     q.id,
+        selected_option: selectedAnswers[q.id] ?? -1,
+      }))
+      const r = await trainingService.submitQuizAttempt(quiz.id, {
+        coaching_session_id: coachingSessionId,
+        answers,
+      })
+      setResult(r)
+      setPhase('result')
+      if (r.passed) onPassed()
+    } catch (err) {
+      console.error('[QuizPlayer] submit error', err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // ── INTRO ─────────────────────────────────────────────────────────────────
+  if (phase === 'intro') {
+    return (
+      <div className="text-center py-4 space-y-4">
+        <HelpCircle className="h-10 w-10 text-primary mx-auto opacity-70" />
+        <div>
+          <p className="text-[15px] font-semibold text-slate-800">{quiz.quiz_title}</p>
+          <p className="text-[13px] text-slate-500 mt-1">
+            {questions.length} question{questions.length !== 1 ? 's' : ''} · Pass score: {quiz.pass_score}%
+          </p>
+        </div>
+        <Button className="bg-primary hover:bg-primary/90 text-white" onClick={resetTaking}>
+          Start Quiz
+        </Button>
+      </div>
+    )
+  }
+
+  // ── RESULT ────────────────────────────────────────────────────────────────
+  if (phase === 'result' && result) {
+    return (
+      <div className="space-y-4">
+        {/* Pass / Fail header */}
+        <div className={cn(
+          'rounded-xl border p-5 text-center',
+          result.passed ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200',
+        )}>
+          {result.passed
+            ? <CheckCircle className="h-12 w-12 text-emerald-500 mx-auto mb-2" />
+            : <XCircle    className="h-12 w-12 text-red-400    mx-auto mb-2" />
+          }
+          <p className={cn('text-lg font-bold', result.passed ? 'text-emerald-800' : 'text-red-700')}>
+            {result.passed ? 'Passed!' : 'Not Passed'}
+          </p>
+          <p className={cn('text-[13px] mt-1', result.passed ? 'text-emerald-700' : 'text-red-600')}>
+            Score: {Number(result.score).toFixed(0)}% &nbsp;·&nbsp; Required: {quiz.pass_score}%
+          </p>
+        </div>
+
+        {/* Question review */}
+        <div className="space-y-2">
+          {questions.map((qItem, idx) => {
+            const userIdx    = selectedAnswers[qItem.id] ?? -1
+            const isCorrect  = result.correct_answers.includes(qItem.id)
+            return (
+              <div key={qItem.id}
+                className={cn('rounded-xl border p-4', isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200')}>
+                <div className="flex items-start gap-2 mb-2">
+                  {isCorrect
+                    ? <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                    : <XCircle    className="h-4 w-4 text-red-500    shrink-0 mt-0.5" />
+                  }
+                  <p className="text-[13px] font-medium text-slate-800">{idx + 1}. {qItem.question_text}</p>
+                </div>
+                <p className="text-[12px] text-slate-600 ml-6">
+                  Your answer: {userIdx >= 0 ? qItem.options[userIdx] : <span className="text-slate-400">No answer</span>}
+                </p>
+                {!isCorrect && (
+                  <p className="text-[12px] text-emerald-700 font-medium ml-6 mt-0.5">
+                    Correct: {qItem.options[qItem.correct_option]}
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {!result.passed && (
+          <Button variant="outline" className="w-full" onClick={resetTaking}>
+            Retake Quiz
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  // ── TAKING ────────────────────────────────────────────────────────────────
+  const isLast     = currentQuestion === questions.length - 1
+  const hasAnswer  = selectedAnswers[q?.id] !== undefined
+  const progress   = (currentQuestion / questions.length) * 100
+
+  return (
+    <div className="space-y-4">
+      {/* Progress */}
+      <div>
+        <div className="flex justify-between text-[12px] text-slate-500 mb-1.5">
+          <span>Question {currentQuestion + 1} of {questions.length}</span>
+          <span>{Math.round(progress)}% complete</span>
+        </div>
+        <div className="h-1.5 bg-slate-100 rounded-full">
+          <div className="h-full bg-primary rounded-full transition-all"
+               style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+
+      {/* Question */}
+      {q && (
+        <div>
+          <p className="text-[15px] font-medium text-slate-800 mb-4">{q.question_text}</p>
+          {q.options.map((opt, idx) => (
+            <button key={idx}
+              onClick={() => setSelectedAnswers(p => ({ ...p, [q.id]: idx }))}
+              className={cn(
+                'w-full text-left p-4 rounded-xl border-2 text-[13px] transition-all mb-2',
+                selectedAnswers[q.id] === idx
+                  ? 'border-primary bg-blue-50 text-slate-900 font-medium'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+              )}>
+              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-slate-100 text-slate-600 text-[12px] font-bold mr-3">
+                {String.fromCharCode(65 + idx)}
+              </span>
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Navigation */}
+      <div className="flex justify-between pt-2">
+        <Button variant="outline" disabled={currentQuestion === 0}
+          onClick={() => setCurrentQuestion(c => c - 1)}>
+          ← Back
+        </Button>
+
+        {isLast ? (
+          <Button className="bg-primary hover:bg-primary/90 text-white"
+            disabled={!hasAnswer || isSubmitting}
+            onClick={handleSubmit}>
+            {isSubmitting ? 'Submitting…' : 'Submit Answers'}
+          </Button>
+        ) : (
+          <Button className="bg-primary hover:bg-primary/90 text-white"
+            disabled={!hasAnswer}
+            onClick={() => setCurrentQuestion(c => c + 1)}>
+            Next →
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}

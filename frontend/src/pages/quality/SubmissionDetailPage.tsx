@@ -126,7 +126,7 @@ export default function SubmissionDetailPage() {
         return { field_name: k, value: fmtMetaValue(k, val) }
       })
 
-  const metaValueMap = new Map(metaRows.map(r => [r.field_name.toLowerCase(), r.value]))
+  const metaValueMap = new Map(metaRows.map(r => [r.field_name.toLowerCase(), r.value] as [string, string]))
   const reviewDetailsFields = formData?.metadata_fields
     ? [...formData.metadata_fields]
         .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))

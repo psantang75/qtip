@@ -28,7 +28,8 @@ import {
 import { 
   getCSRCoachingSessions,
   getCSRCoachingSessionDetails,
-  downloadCSRCoachingAttachment
+  downloadCSRCoachingAttachment,
+  submitCSRResponse
 } from '../controllers/csr.controller';
 import { getDisputeHistory, submitDispute, downloadDisputeAttachment } from '../controllers/dispute.controller';
 import { authenticate } from '../middleware/auth';
@@ -168,5 +169,6 @@ router.get('/coaching-sessions/:sessionId/attachment',
   validateSchema(SessionIdSchema), 
   downloadCSRCoachingAttachment as unknown as RequestHandler
 );
+router.post('/coaching-sessions/:id/respond', submitCSRResponse as unknown as RequestHandler);
 
 export default router; 

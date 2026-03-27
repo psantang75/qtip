@@ -1,0 +1,360 @@
+import { api } from './authService'
+import { normalizePaginated, PaginatedResult } from './qaService'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type CoachingType =
+  | 'WEEKLY_COACHING'
+  | 'PERFORMANCE_COACHING'
+  | 'ESCALATION'
+  | 'SIDE_BY_SIDE'
+  | 'TEAM_SESSION'
+
+export type CoachingSourceType =
+  | 'QA_AUDIT'
+  | 'MANAGER_OBSERVATION'
+  | 'TREND'
+  | 'DISPUTE'
+  | 'SCHEDULED'
+  | 'OTHER'
+
+export type CoachingStatus =
+  | 'SCHEDULED'
+  | 'DELIVERED'
+  | 'AWAITING_CSR_ACTION'
+  | 'QUIZ_PENDING'
+  | 'COMPLETED'
+  | 'FOLLOW_UP_REQUIRED'
+  | 'CLOSED'
+
+export interface QuizQuestion {
+  id: number
+  question_text: string
+  options: string[]
+  correct_option: number
+}
+
+export interface QuizAttemptSummary {
+  id: number
+  score: number
+  passed: boolean
+  attempt_number: number
+  submitted_at: string
+}
+
+export interface QuizAttemptResult {
+  score: number
+  passed: boolean
+  pass_score: number
+  attempt_number: number
+  correct_answers: number[]
+}
+
+export interface RecentSession {
+  id: number
+  session_date: string
+  coaching_type: CoachingType
+  topics: string[]
+  status: CoachingStatus
+}
+
+export interface CoachingSession {
+  id: number
+  csr_id: number
+  csr_name: string
+  created_by: number
+  created_by_name: string
+  coaching_type: CoachingType
+  source_type: CoachingSourceType
+  qa_audit_id?: number
+  notes?: string
+  required_action?: string
+  kb_resource_id?: number
+  kb_resource?: { title: string; url: string; description?: string }
+  kb_url?: string
+  quiz_id?: number
+  quiz?: { id: number; quiz_title: string; pass_score: number; questions: QuizQuestion[] }
+  quiz_required: boolean
+  require_acknowledgment: boolean
+  require_action_plan: boolean
+  due_date?: string
+  follow_up_required: boolean
+  follow_up_date?: string
+  status: CoachingStatus
+  delivered_at?: string
+  completed_at?: string
+  csr_action_plan?: string
+  csr_root_cause?: string
+  csr_support_needed?: string
+  csr_acknowledged_at?: string
+  attachment_filename?: string
+  topics: string[]
+  topic_ids: number[]
+  session_date: string
+  created_at: string
+  is_overdue?: boolean
+  recent_sessions?: RecentSession[]
+  repeat_topics?: string[]
+  quiz_attempts?: QuizAttemptSummary[]
+}
+
+export interface TrainingResource {
+  id: number
+  title: string
+  url: string
+  description?: string
+  topic_id?: number
+  topic_name?: string
+  is_active: boolean
+  created_by: number
+  created_at: string
+}
+
+export interface LibraryQuiz {
+  id: number
+  quiz_title: string
+  pass_score: number
+  topic_id?: number
+  topic_name?: string
+  question_count: number
+  times_used: number
+}
+
+export interface CoachingStats {
+  sessionsThisMonth: number
+  awaitingCsrAction: number
+  overdueSessions: number
+  quizPassRate: number
+  completionRate: number
+}
+
+export interface CSRHistoryResponse {
+  sessions: RecentSession[]
+  repeat_topics: string[]
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Convert a raw backend paginated coaching response into PaginatedResult<CoachingSession> */
+function normalizeCoachingPage(raw: any): PaginatedResult<CoachingSession> {
+  const sessions: CoachingSession[] = raw?.data?.sessions ?? raw?.sessions ?? []
+  const totalCount = raw?.data?.totalCount ?? raw?.totalCount ?? sessions.length
+  const page       = raw?.data?.page  ?? raw?.page  ?? 1
+  const limit      = raw?.data?.limit ?? raw?.limit ?? sessions.length
+  return {
+    items:      sessions,
+    total:      Number(totalCount),
+    page:       Number(page),
+    limit:      Number(limit),
+    totalPages: limit > 0 ? Math.ceil(Number(totalCount) / Number(limit)) : 1,
+  }
+}
+
+// ── Coaching Sessions (trainer / manager / admin) ──────────────────────────────
+
+export const trainingService = {
+
+  async getCoachingSessions(params?: Record<string, any>): Promise<PaginatedResult<CoachingSession>> {
+    const { data } = await api.get('/trainer/coaching-sessions', { params })
+    return normalizeCoachingPage(data)
+  },
+
+  async getCoachingSessionDetail(id: number): Promise<CoachingSession> {
+    const { data } = await api.get(`/trainer/coaching-sessions/${id}`)
+    return data?.data ?? data
+  },
+
+  async createCoachingSession(formData: FormData): Promise<CoachingSession> {
+    const { data } = await api.post('/trainer/coaching-sessions', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data?.data ?? data
+  },
+
+  async updateCoachingSession(id: number, formData: FormData): Promise<CoachingSession> {
+    const { data } = await api.put(`/trainer/coaching-sessions/${id}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data?.data ?? data
+  },
+
+  async deliverSession(id: number): Promise<void> {
+    await api.patch(`/trainer/coaching-sessions/${id}/deliver`)
+  },
+
+  async completeSession(id: number): Promise<void> {
+    await api.patch(`/trainer/coaching-sessions/${id}/complete`)
+  },
+
+  async flagFollowUp(id: number, follow_up_date?: string): Promise<void> {
+    await api.patch(`/trainer/coaching-sessions/${id}/flag-followup`, { follow_up_date })
+  },
+
+  async closeSession(id: number): Promise<void> {
+    await api.patch(`/trainer/coaching-sessions/${id}/close`)
+  },
+
+  async downloadAttachment(id: number): Promise<Blob> {
+    const { data } = await api.get(`/trainer/coaching-sessions/${id}/attachment`, {
+      responseType: 'blob',
+    })
+    return data
+  },
+
+  async getCSRHistory(csrId: number): Promise<CSRHistoryResponse> {
+    const { data } = await api.get(`/trainer/csr-coaching-history/${csrId}`)
+    return data?.data ?? data
+  },
+
+  // ── CSR ────────────────────────────────────────────────────────────────────
+
+  async getMyCoachingSessions(params?: Record<string, any>): Promise<PaginatedResult<CoachingSession>> {
+    const { data } = await api.get('/csr/coaching-sessions', { params })
+    return normalizeCoachingPage(data)
+  },
+
+  async getMyCoachingDetail(id: number): Promise<CoachingSession> {
+    const { data } = await api.get(`/csr/coaching-sessions/${id}`)
+    return data?.data ?? data
+  },
+
+  async submitCSRResponse(
+    id: number,
+    payload: { action_plan: string; root_cause?: string; support_needed?: string; acknowledged: boolean },
+  ): Promise<void> {
+    await api.post(`/csr/coaching-sessions/${id}/respond`, payload)
+  },
+
+  // ── Quiz ──────────────────────────────────────────────────────────────────
+
+  async submitQuizAttempt(
+    quizId: number,
+    payload: { coaching_session_id?: number; answers: { question_id: number; selected_option: number }[] },
+  ): Promise<QuizAttemptResult> {
+    const { data } = await api.post(`/quizzes/${quizId}/attempt`, payload)
+    return data?.data ?? data
+  },
+
+  async getMyAttempts(quizId: number, sessionId?: number): Promise<QuizAttemptSummary[]> {
+    const { data } = await api.get(`/quizzes/${quizId}/attempts`, {
+      params: sessionId ? { coaching_session_id: sessionId } : undefined,
+    })
+    return data?.data ?? data ?? []
+  },
+
+  // ── Resources ─────────────────────────────────────────────────────────────
+
+  async getResources(params?: Record<string, any>): Promise<PaginatedResult<TrainingResource>> {
+    const { data } = await api.get('/trainer/resources', { params })
+    // Backend: { success: true, data: { resources: [...], totalCount, page, limit } }
+    const inner = data?.data ?? data
+    const items: TrainingResource[] = Array.isArray(inner?.resources)
+      ? inner.resources
+      : Array.isArray(inner) ? inner : []
+    return {
+      items,
+      total:      Number(inner?.totalCount ?? items.length),
+      page:       Number(inner?.page       ?? 1),
+      limit:      Number(inner?.limit      ?? items.length),
+      totalPages: inner?.limit > 0
+        ? Math.ceil(Number(inner?.totalCount ?? items.length) / Number(inner.limit))
+        : 1,
+    }
+  },
+
+  async createResource(payload: Partial<TrainingResource>): Promise<TrainingResource> {
+    const { data } = await api.post('/trainer/resources', payload)
+    return data?.data ?? data
+  },
+
+  async updateResource(id: number, payload: Partial<TrainingResource>): Promise<TrainingResource> {
+    const { data } = await api.put(`/trainer/resources/${id}`, payload)
+    return data?.data ?? data
+  },
+
+  async toggleResourceStatus(id: number, is_active: boolean): Promise<void> {
+    await api.patch(`/trainer/resources/${id}/status`, { is_active })
+  },
+
+  // ── Quiz Library ──────────────────────────────────────────────────────────
+
+  async getQuizLibrary(params?: Record<string, any>): Promise<PaginatedResult<LibraryQuiz>> {
+    const { data } = await api.get('/trainer/quiz-library', { params })
+    const items: LibraryQuiz[] = Array.isArray(data?.data) ? data.data : (data?.items ?? [])
+    return {
+      items,
+      total:      items.length,
+      page:       1,
+      limit:      items.length,
+      totalPages: 1,
+    }
+  },
+
+  async getLibraryQuizDetail(id: number): Promise<LibraryQuiz & { questions: QuizQuestion[] }> {
+    const { data } = await api.get(`/trainer/quiz-library/${id}`)
+    return data?.data ?? data
+  },
+
+  async createLibraryQuiz(
+    payload: { quiz_title: string; pass_score: number; topic_id?: number; course_id?: number; questions: Omit<QuizQuestion, 'id'>[] },
+  ): Promise<LibraryQuiz> {
+    const { data } = await api.post('/trainer/quiz-library', payload)
+    return data?.data ?? data
+  },
+
+  async updateLibraryQuiz(
+    id: number,
+    payload: { quiz_title?: string; pass_score?: number; topic_id?: number; questions?: Omit<QuizQuestion, 'id'>[] },
+  ): Promise<LibraryQuiz> {
+    const { data } = await api.put(`/trainer/quiz-library/${id}`, payload)
+    return data?.data ?? data
+  },
+
+  async deleteLibraryQuiz(id: number): Promise<void> {
+    await api.delete(`/trainer/quiz-library/${id}`)
+  },
+
+  // ── Team CSRs ─────────────────────────────────────────────────────────────
+
+  async getTeamCSRs(): Promise<Array<{ id: number; name: string; email: string; department: string }>> {
+    const { data } = await api.get('/trainer/team-csrs')
+    return data?.data ?? []
+  },
+
+  // ── Stats / Reports ────────────────────────────────────────────────────────
+
+  async getCoachingStats(): Promise<CoachingStats> {
+    const { data } = await api.get('/trainer/reports/summary')
+    const d = data?.data ?? data
+    return {
+      sessionsThisMonth: d?.total_sessions   ?? 0,
+      awaitingCsrAction: d?.awaiting_csr     ?? 0,
+      overdueSessions:   d?.overdue          ?? 0,
+      quizPassRate:      d?.quiz_pass_rate   ?? 0,
+      completionRate:    d?.completion_rate  ?? 0,
+    }
+  },
+
+  async getReportsSummary(params?: Record<string, any>): Promise<any> {
+    const { data } = await api.get('/trainer/reports/summary', { params })
+    return data?.data ?? data
+  },
+
+  async getCSRCoachingList(params?: Record<string, any>): Promise<PaginatedResult<any>> {
+    const { data } = await api.get('/trainer/reports/csr-list', { params })
+    // Backend: { success: true, data: { csrs: [...], totalCount, page, limit } }
+    const inner = data?.data ?? data
+    const items: any[] = Array.isArray(inner?.csrs) ? inner.csrs : (Array.isArray(inner) ? inner : [])
+    return {
+      items,
+      total:      Number(inner?.totalCount ?? items.length),
+      page:       Number(inner?.page       ?? 1),
+      limit:      Number(inner?.limit      ?? items.length),
+      totalPages: inner?.limit > 0
+        ? Math.ceil(Number(inner?.totalCount ?? items.length) / Number(inner.limit))
+        : 1,
+    }
+  },
+}
+
+export default trainingService
