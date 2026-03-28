@@ -27,7 +27,8 @@ import {
   flagFollowUp,
   closeCoachingSession,
   downloadAttachment,
-  getCSRCoachingHistory
+  getCSRCoachingHistory,
+  getEligibleCoaches,
 } from '../controllers/coaching.controller';
 import {
   getResources,
@@ -92,6 +93,7 @@ router.get('/completed', auth, coaching, getTrainerCompletedSubmissions as unkno
 router.get('/completed/:id', auth, coaching, getTrainerSubmissionDetails as unknown as RequestHandler);
 
 // ─── Coaching Sessions ───────────────────────────────────────────────────────
+router.get('/coaches', auth, coaching, getEligibleCoaches as unknown as RequestHandler);
 router.get('/coaching-sessions', auth, coaching, getCoachingSessions as unknown as RequestHandler);
 router.get('/coaching-sessions/:id/attachment', auth, coaching, downloadAttachment as unknown as RequestHandler);
 router.get('/coaching-sessions/:id', auth, coaching, getCoachingSessionDetail as unknown as RequestHandler);

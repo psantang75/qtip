@@ -77,12 +77,9 @@ export interface CoachingSession {
   qa_audit_id?: number
   notes?: string
   required_action?: string
-  kb_resource_id?: number
-  kb_resource?: { title: string; url: string; description?: string }
   kb_url?: string
-  quiz_id?: number
-  quiz?: { id: number; quiz_title: string; pass_score: number; questions: QuizQuestion[] }
-  quiz_required: boolean
+  kb_resources?: { id: number; title: string; url: string; description?: string }[]
+  quizzes?: { id: number; quiz_title: string; pass_score: number; questions: QuizQuestion[] }[]
   require_acknowledgment: boolean
   require_action_plan: boolean
   due_date?: string
@@ -366,6 +363,11 @@ export const trainingService = {
   },
 
   // ── Team CSRs ─────────────────────────────────────────────────────────────
+
+  async getCoaches(): Promise<Array<{ id: number; name: string }>> {
+    const { data } = await api.get('/trainer/coaches')
+    return data?.data ?? []
+  },
 
   async getTeamCSRs(): Promise<Array<{ id: number; name: string; email: string; department: string }>> {
     const { data } = await api.get('/trainer/team-csrs')

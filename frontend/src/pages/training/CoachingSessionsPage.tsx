@@ -1,4 +1,4 @@
-﻿import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, MessageSquare, Eye } from 'lucide-react'
@@ -7,7 +7,7 @@ import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
-import { DateRangeFilter } from '@/components/common/DateRangeFilter'
+import { DateFieldRangeFilter, type DateField } from '@/components/common/DateFieldRangeFilter'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 
 // â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const PURPOSE_MAP: Record<CoachingPurpose, string> = {
+export const PURPOSE_MAP: Record<CoachingPurpose, string> = {
   WEEKLY:      'Weekly',
   PERFORMANCE: 'Performance',
   ONBOARDING:  'Onboarding',
@@ -36,7 +36,7 @@ const PURPOSE_STYLES: Record<CoachingPurpose, string> = {
   ONBOARDING:  'bg-teal-50  text-teal-700',
 }
 
-const FORMAT_MAP: Record<CoachingFormat, string> = {
+export const FORMAT_MAP: Record<CoachingFormat, string> = {
   ONE_ON_ONE:   '1-on-1',
   SIDE_BY_SIDE: 'Side-by-Side',
   TEAM_SESSION: 'Team',
@@ -47,7 +47,7 @@ const FORMAT_STYLES: Record<CoachingFormat, string> = {
   TEAM_SESSION: 'bg-purple-50 text-purple-700',
 }
 
-const STATUS_LABELS: Record<string, string> = {
+export const STATUS_LABELS: Record<string, string> = {
   SCHEDULED: 'Scheduled', IN_PROCESS: 'In Process',
   AWAITING_CSR_ACTION: 'Awaiting CSR', QUIZ_PENDING: 'Quiz Pending',
   COMPLETED: 'Completed', FOLLOW_UP_REQUIRED: 'Follow-Up', CLOSED: 'Closed',
@@ -114,14 +114,15 @@ export default function CoachingSessionsPage() {
   const navigate = useNavigate()
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
+  const [dateField, setDateField] = useState<DateField>('session_date')
+
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    csrs: '', statuses: '', purposes: '', formats: '', topics: '',
+    csrs: '', statuses: '', formats: '', topics: '',
     from: defaultFrom, to: defaultTo, overdue: '', page: '1', size: '20',
   })
 
   const csrsParam     = get('csrs')
   const statusesParam = get('statuses')
-  const purposesParam = get('purposes')
   const formatsParam  = get('formats')
   const topicsParam   = get('topics')
   const dateFrom      = get('from')
@@ -135,17 +136,17 @@ export default function CoachingSessionsPage() {
 
   const selectedCsrs     = useMemo(() => csrsParam     ? csrsParam.split(',').filter(Boolean)     : [], [csrsParam])
   const selectedStatuses = useMemo(() => statusesParam ? statusesParam.split(',').filter(Boolean)  : [], [statusesParam])
-  const selectedPurposes = useMemo(() => purposesParam ? purposesParam.split(',').filter(Boolean)  : [], [purposesParam])
   const selectedFormats  = useMemo(() => formatsParam  ? formatsParam.split(',').filter(Boolean)   : [], [formatsParam])
   const selectedTopics   = useMemo(() => topicsParam   ? topicsParam.split(',').filter(Boolean)    : [], [topicsParam])
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['coaching-sessions', page, pageSize, dateFrom, dateTo, overdue],
+    queryKey: ['coaching-sessions', page, pageSize, dateField, dateFrom, dateTo, overdue],
     queryFn: () => trainingService.getCoachingSessions({
       page,
       limit: pageSize,
-      date_from: dateFrom || undefined,
-      date_to:   dateTo   || undefined,
+      // Only send date range to server when filtering by session_date; others are client-side
+      date_from:    dateField === 'session_date' ? (dateFrom || undefined) : undefined,
+      date_to:      dateField === 'session_date' ? (dateTo   || undefined) : undefined,
       overdue_only: overdue === 'true' ? true : undefined,
     }),
     placeholderData: (prev: any) => prev,
@@ -167,22 +168,31 @@ export default function CoachingSessionsPage() {
     return ALL_STATUSES.filter(s => present.has(s)).map(s => STATUS_LABELS[s])
   }, [data?.items])
 
-  const purposeOptions = Object.values(PURPOSE_MAP)
-  const formatOptions  = Object.values(FORMAT_MAP)
+  const formatOptions = Object.values(FORMAT_MAP)
 
   const clientFiltered = useMemo(() => {
     let items = data?.items ?? []
     if (selectedCsrs.length)     items = items.filter(s => selectedCsrs.includes(s.csr_name))
     if (selectedStatuses.length) items = items.filter(s => selectedStatuses.includes(STATUS_LABELS[s.status] ?? s.status))
-    if (selectedPurposes.length) items = items.filter(s => selectedPurposes.includes(PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose))
     if (selectedFormats.length)  items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
     if (selectedTopics.length)   items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
+    // Client-side date filtering for due_date and follow_up_date
+    if (dateField !== 'session_date' && (dateFrom || dateTo)) {
+      items = items.filter(s => {
+        const raw = dateField === 'due_date' ? s.due_date : s.follow_up_date
+        if (!raw) return false
+        const d = raw.slice(0, 10)
+        if (dateFrom && d < dateFrom) return false
+        if (dateTo   && d > dateTo)   return false
+        return true
+      })
+    }
     return items
-  }, [data?.items, selectedCsrs, selectedStatuses, selectedPurposes, selectedFormats, selectedTopics])
+  }, [data?.items, selectedCsrs, selectedStatuses, selectedFormats, selectedTopics, dateField, dateFrom, dateTo])
 
   const { sort, dir, toggle, sorted: sortedItems } = useListSort(clientFiltered)
 
-  const hasClientFilter = selectedCsrs.length > 0 || selectedStatuses.length > 0 || selectedPurposes.length > 0 || selectedFormats.length > 0 || selectedTopics.length > 0
+  const hasClientFilter = selectedCsrs.length > 0 || selectedStatuses.length > 0 || selectedFormats.length > 0 || selectedTopics.length > 0
   const displayTotal = hasClientFilter ? clientFiltered.length : (data?.total ?? 0)
 
   return (
@@ -230,14 +240,7 @@ export default function CoachingSessionsPage() {
         {/* ── Row break ── */}
         <div className="w-full" />
 
-        {/* ── Row 2: Purpose · Format · Date range · Overdue ── */}
-        <StagedMultiSelect
-          options={purposeOptions}
-          selected={selectedPurposes}
-          onApply={v => setMany({ purposes: v.join(','), page: '1' })}
-          placeholder="All Purposes"
-          width="w-[220px]"
-        />
+        {/* ── Row 2: Format · Date field range · Overdue ── */}
         <StagedMultiSelect
           options={formatOptions}
           selected={selectedFormats}
@@ -245,9 +248,12 @@ export default function CoachingSessionsPage() {
           placeholder="All Formats"
           width="w-[220px]"
         />
-        <DateRangeFilter
-          value={{ start: dateFrom, end: dateTo }}
-          onChange={v => setMany({ from: v.start, to: v.end, page: '1' })}
+        <DateFieldRangeFilter
+          field={dateField}
+          start={dateFrom}
+          end={dateTo}
+          onFieldChange={f => { setDateField(f); setMany({ from: '', to: '', page: '1' }) }}
+          onRangeChange={(s, e) => setMany({ from: s, to: e, page: '1' })}
         />
         <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
           <input
@@ -269,23 +275,22 @@ export default function CoachingSessionsPage() {
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
-                <TableHead className="w-8" />
-                <SortableTableHead field="session_date"  sort={sort} dir={dir} onSort={toggle}>Date</SortableTableHead>
-                <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
-                <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>
-                <TableHead>Purpose</TableHead>
-                <TableHead>Format</TableHead>
-                <TableHead>Topics</TableHead>
-                <TableHead>Quiz</TableHead>
-                <SortableTableHead field="due_date"       sort={sort} dir={dir} onSort={toggle}>Due Date</SortableTableHead>
-                <SortableTableHead field="follow_up_date" sort={sort} dir={dir} onSort={toggle}>Follow-Up Date</SortableTableHead>
+                <SortableTableHead field="session_date"  sort={sort} dir={dir} onSort={toggle} className="min-w-[110px]">Date</SortableTableHead>
+                <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle} className="min-w-[110px]">Status</SortableTableHead>
+                <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle} className="min-w-[200px]">CSR</SortableTableHead>
+                <TableHead className="min-w-[120px]">Purpose</TableHead>
+                <TableHead className="min-w-[120px]">Format</TableHead>
+                <TableHead className="min-w-[160px]">Topics</TableHead>
+                <TableHead className="min-w-[130px]">Quiz</TableHead>
+                <SortableTableHead field="due_date"       sort={sort} dir={dir} onSort={toggle} className="min-w-[130px] pl-6">Due Date</SortableTableHead>
+                <SortableTableHead field="follow_up_date" sort={sort} dir={dir} onSort={toggle} className="min-w-[150px] pl-6">Follow-Up Date</SortableTableHead>
                 <TableHead className="w-24" />
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {sortedItems.length === 0 ? (
                 <TableEmptyState
-                  colSpan={11}
+                  colSpan={10}
                   icon={MessageSquare}
                   title="No coaching sessions found"
                   description="Create a new session to get started"
@@ -297,7 +302,6 @@ export default function CoachingSessionsPage() {
                   className="cursor-pointer hover:bg-slate-50/50"
                   onClick={() => navigate(`/app/training/coaching/${s.id}`)}
                 >
-                  <TableCell className="text-slate-400 text-base leading-none">&rsaquo;</TableCell>
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {formatQualityDate(s.session_date)}
                   </TableCell>
@@ -349,12 +353,12 @@ export default function CoachingSessionsPage() {
                     )}
                   </TableCell>
                   <TableCell><QuizStatusBadge session={s} /></TableCell>
-                  <TableCell className={cn('text-[13px] whitespace-nowrap', s.is_overdue ? 'text-red-600 font-medium' : 'text-slate-600')}>
+                  <TableCell className={cn('pl-6 text-[13px] whitespace-nowrap', s.is_overdue ? 'text-red-600 font-medium' : 'text-slate-600')}>
                     {s.due_date
                       ? <>{formatQualityDate(s.due_date)}{s.is_overdue ? ' ⚠' : ''}</>
                       : <span className="text-slate-300">&mdash;</span>}
                   </TableCell>
-                  <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
+                  <TableCell className="pl-6 text-[13px] text-slate-600 whitespace-nowrap">
                     {s.follow_up_date
                       ? formatQualityDate(s.follow_up_date)
                       : <span className="text-slate-300">&mdash;</span>}

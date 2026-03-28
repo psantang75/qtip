@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Target, Download, CheckCircle } from 'lucide-react'
@@ -8,24 +9,17 @@ import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
-import { CoachingPurposeBadge, CoachingFormatBadge, TopicChips } from './CoachingSessionsPage'
+import { CoachingPurposeBadge, PURPOSE_MAP, FORMAT_MAP } from './CoachingSessionsPage'
 
 // ── Local helpers ─────────────────────────────────────────────────────────────
 
 const SOURCE_LABELS: Record<CoachingSourceType, string> = {
-  QA_AUDIT: 'QA Audit', MANAGER_OBSERVATION: 'Manager Obs.', TREND: 'Trend',
+  QA_AUDIT: 'QA Audit', MANAGER_OBSERVATION: 'Manager Observation', TREND: 'Trend',
   DISPUTE: 'Dispute', SCHEDULED: 'Scheduled', OTHER: 'Other',
-}
-
-function SourceBadge({ source }: { source: CoachingSourceType }) {
-  return (
-    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600">
-      {SOURCE_LABELS[source] ?? source}
-    </span>
-  )
 }
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -45,6 +39,10 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="text-sm font-semibold text-slate-700 mb-3">{children}</h3>
 }
 
+function SubLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">{children}</p>
+}
+
 // ── Right-panel helpers ───────────────────────────────────────────────────────
 
 function StatusRow({ label, content, muted }: { label: string; content: React.ReactNode; muted?: boolean }) {
@@ -57,7 +55,8 @@ function StatusRow({ label, content, muted }: { label: string; content: React.Re
 }
 
 function QuizStatus({ session }: { session: CoachingSession }) {
-  if (!session.quiz_required) return <span className="text-[13px] text-slate-400">— Not required</span>
+  const hasQuizzes = (session.quizzes?.length ?? 0) > 0
+  if (!hasQuizzes) return <span className="text-[13px] text-slate-400">— Not required</span>
   const attempts = session.quiz_attempts ?? []
   const passed = attempts.find(a => a.passed)
   if (passed) return <span className="text-[13px] text-emerald-700">✅ Passed {Number(passed.score).toFixed(0)}%</span>
@@ -76,11 +75,13 @@ export default function CoachingSessionDetailPage() {
   const navigate  = useNavigate()
   const qc        = useQueryClient()
   const { toast } = useToast()
+  const [showAllHistory, setShowAllHistory] = useState(false)
 
   const { data: session, isLoading, isError } = useQuery({
-    queryKey: ['coaching-session', id],
-    queryFn:  () => trainingService.getCoachingSessionDetail(Number(id)),
-    enabled:  !!id,
+    queryKey:  ['coaching-session', id],
+    queryFn:   () => trainingService.getCoachingSessionDetail(Number(id)),
+    enabled:   !!id,
+    staleTime: 0,
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['coaching-session', id] })
@@ -143,111 +144,139 @@ export default function CoachingSessionDetailPage() {
         {/* ── Left column ─────────────────────────────────────────────────── */}
         <div className="col-span-2 space-y-4">
 
-          {/* Session header */}
+          {/* Session header — InfoRow layout, no pills */}
           <Card>
-            <div className="flex flex-wrap items-center gap-2 mb-4">
-              <CoachingPurposeBadge purpose={session.coaching_purpose} />
-              <CoachingFormatBadge format={session.coaching_format} />
-              <SourceBadge source={session.source_type} />
-              <StatusBadge status={session.status} />
-              {!!session.is_overdue && <span className="text-[12px] font-semibold text-red-600">Overdue</span>}
-            </div>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
               <InfoRow label="CSR"          value={session.csr_name} />
               <InfoRow label="Coach"        value={session.created_by_name} />
               <InfoRow label="Session Date" value={formatQualityDate(session.session_date)} />
               <InfoRow label="Due Date"     value={session.due_date ? formatQualityDate(session.due_date) : '—'} />
+              <InfoRow label="Purpose"      value={PURPOSE_MAP[session.coaching_purpose] ?? session.coaching_purpose} />
+              <InfoRow label="Format"       value={FORMAT_MAP[session.coaching_format] ?? session.coaching_format} />
+              <InfoRow label="Status"       value={<StatusBadge status={session.status} />} />
+              {!!session.is_overdue && (
+                <InfoRow label="Overdue" value={<span className="text-red-600 font-semibold">⚠ Overdue</span>} />
+              )}
             </div>
           </Card>
 
-          {/* Notes */}
+          {/* Session Notes — Source + Notes + Topics */}
           <Card>
             <SectionTitle>Session Notes</SectionTitle>
-            <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">
-              {session.notes || <span className="text-slate-400">No notes provided</span>}
-            </p>
-            {session.qa_audit_id && (
-              <a href={`/app/quality/submissions/${session.qa_audit_id}`}
-                className="inline-flex items-center gap-1 text-primary text-[13px] mt-3 hover:underline">
-                View QA Audit →
-              </a>
-            )}
-          </Card>
-
-          {/* Required action */}
-          <div className="bg-white rounded-xl border-2 border-primary/20 p-5">
-            <h3 className="text-sm font-semibold text-primary mb-2 flex items-center gap-2">
-              <Target className="h-4 w-4" /> Required Action
-            </h3>
-            <p className="text-[13px] text-slate-700">{session.required_action || '—'}</p>
-          </div>
-
-          {/* Topics */}
-          <Card>
-            <SectionTitle>Topics</SectionTitle>
-            <TopicChips topics={session.topics} max={20} />
-          </Card>
-
-          {/* KB Resource */}
-          {(session.kb_resource || session.kb_url) && (
-            <Card>
-              <SectionTitle>Knowledge Base Resource</SectionTitle>
-              {session.kb_resource ? (
-                <div className="space-y-1">
-                  <a href={session.kb_resource.url} target="_blank" rel="noopener noreferrer"
-                    className="text-[13px] font-medium text-primary hover:underline flex items-center gap-1">
-                    {session.kb_resource.title} <ExternalLink className="h-3 w-3" />
+            <div className="space-y-4">
+              <div>
+                <SubLabel>Source</SubLabel>
+                <p className="text-[13px] text-slate-700">{SOURCE_LABELS[session.source_type] ?? session.source_type}</p>
+              </div>
+              <div>
+                <SubLabel>Notes</SubLabel>
+                <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">
+                  {session.notes || <span className="text-slate-400">No notes provided</span>}
+                </p>
+                {session.qa_audit_id && (
+                  <a href={`/app/quality/submissions/${session.qa_audit_id}`}
+                    className="inline-flex items-center gap-1 text-primary text-[13px] mt-2 hover:underline">
+                    View QA Audit →
                   </a>
-                  {session.kb_resource.description && (
-                    <p className="text-[12px] text-slate-500">{session.kb_resource.description}</p>
-                  )}
-                  <a href={session.kb_resource.url} target="_blank" rel="noopener noreferrer"
-                    className="text-[12px] text-primary hover:underline flex items-center gap-1 mt-2">
-                    Open Resource → <ExternalLink className="h-3 w-3" />
-                  </a>
+                )}
+              </div>
+              {session.topics.length > 0 && (
+                <div>
+                  <SubLabel>Topics</SubLabel>
+                  <p className="text-[13px] text-slate-700 leading-relaxed">
+                    {session.topics.join(' · ')}
+                  </p>
                 </div>
-              ) : (
-                <a href={session.kb_url} target="_blank" rel="noopener noreferrer"
-                  className="text-[13px] text-primary hover:underline flex items-center gap-1">
-                  {session.kb_url} <ExternalLink className="h-3 w-3" />
-                </a>
               )}
+            </div>
+          </Card>
+
+          {/* Required Action */}
+          {session.required_action && (
+            <div className="bg-white rounded-xl border-2 border-primary/20 p-5">
+              <h3 className="text-sm font-semibold text-primary mb-2 flex items-center gap-2">
+                <Target className="h-4 w-4" /> Required Action
+              </h3>
+              <p className="text-[13px] text-slate-700">{session.required_action}</p>
+            </div>
+          )}
+
+          {/* KB Resources */}
+          {((session.kb_resources?.length ?? 0) > 0 || session.kb_url) && (
+            <Card>
+              <SectionTitle>Knowledge Base Resources</SectionTitle>
+              <div className="space-y-3">
+                {(session.kb_resources ?? []).map(r => (
+                  <div key={r.id} className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
+                    <div className="min-w-0">
+                      <a href={r.url} target="_blank" rel="noopener noreferrer"
+                        className="text-[13px] font-medium text-primary hover:underline flex items-center gap-1 truncate">
+                        {r.title} <ExternalLink className="h-3 w-3 shrink-0" />
+                      </a>
+                      {r.description && <p className="text-[12px] text-slate-500 mt-0.5">{r.description}</p>}
+                    </div>
+                    <a href={r.url} target="_blank" rel="noopener noreferrer"
+                      className="text-[12px] text-primary hover:underline shrink-0">Open →</a>
+                  </div>
+                ))}
+                {session.kb_url && (
+                  <div className="pb-3 border-b border-slate-100 last:border-0 last:pb-0">
+                    <p className="text-[11px] text-slate-400 mb-0.5 uppercase tracking-wide">Custom URL</p>
+                    <a href={session.kb_url} target="_blank" rel="noopener noreferrer"
+                      className="text-[13px] text-primary hover:underline flex items-center gap-1">
+                      {session.kb_url} <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
+              </div>
             </Card>
           )}
 
-          {/* Quiz */}
-          {!!session.quiz_required && !!session.quiz && (
+          {/* Quizzes */}
+          {(session.quizzes?.length ?? 0) > 0 && (
             <Card>
-              <SectionTitle>Quiz — {session.quiz.quiz_title}</SectionTitle>
-              <p className="text-[12px] text-slate-500 mb-3">Pass score: {session.quiz.pass_score}%</p>
-              {(session.quiz_attempts?.length ?? 0) > 0 ? (
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="text-left text-[11px] text-slate-400 border-b border-slate-100">
-                      <th className="pb-2 font-medium">Attempt</th>
-                      <th className="pb-2 font-medium">Score</th>
-                      <th className="pb-2 font-medium">Result</th>
-                      <th className="pb-2 font-medium">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {session.quiz_attempts!.map(a => (
-                      <tr key={a.id} className={cn('border-b border-slate-50', a.passed ? 'bg-emerald-50/40' : 'bg-red-50/40')}>
-                        <td className="py-2">#{a.attempt_number}</td>
-                        <td className="py-2">{Number(a.score).toFixed(0)}%</td>
-                        <td className="py-2">
-                          <span className={cn('text-[11px] font-semibold', a.passed ? 'text-emerald-700' : 'text-red-700')}>
-                            {a.passed ? 'PASS ✓' : 'FAIL ✗'}
-                          </span>
-                        </td>
-                        <td className="py-2 text-slate-500">{formatQualityDate(a.submitted_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="text-[13px] text-slate-400">No attempts yet</p>
-              )}
+              <SectionTitle>Quizzes</SectionTitle>
+              <div className="space-y-4">
+                {(session.quizzes ?? []).map(quiz => {
+                  const attempts = (session.quiz_attempts ?? []).filter(a => (a as any).quiz_id === quiz.id)
+                  return (
+                    <div key={quiz.id} className="pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[13px] font-semibold text-slate-800">{quiz.quiz_title}</p>
+                        <span className="text-[11px] text-slate-400">Pass: {quiz.pass_score}%</span>
+                      </div>
+                      {attempts.length > 0 ? (
+                        <table className="w-full text-[13px]">
+                          <thead>
+                            <tr className="text-left text-[11px] text-slate-400 border-b border-slate-100">
+                              <th className="pb-1.5 font-medium">Attempt</th>
+                              <th className="pb-1.5 font-medium">Score</th>
+                              <th className="pb-1.5 font-medium">Result</th>
+                              <th className="pb-1.5 font-medium">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {attempts.map(a => (
+                              <tr key={a.id} className={cn('border-b border-slate-50', a.passed ? 'bg-emerald-50/40' : 'bg-red-50/40')}>
+                                <td className="py-1.5">#{a.attempt_number}</td>
+                                <td className="py-1.5">{Number(a.score).toFixed(0)}%</td>
+                                <td className="py-1.5">
+                                  <span className={cn('text-[11px] font-semibold', a.passed ? 'text-emerald-700' : 'text-red-700')}>
+                                    {a.passed ? 'PASS ✓' : 'FAIL ✗'}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 text-slate-500">{formatQualityDate(a.submitted_at)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <p className="text-[12px] text-slate-400">No attempts yet</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </Card>
           )}
 
@@ -317,7 +346,18 @@ export default function CoachingSessionDetailPage() {
 
           {/* Coaching History */}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <SectionTitle>Prior Sessions — {session.csr_name}</SectionTitle>
+            <div className="flex items-center justify-between mb-3">
+              <SectionTitle>Prior Sessions — {session.csr_name}</SectionTitle>
+              {recentSessions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllHistory(true)}
+                  className="text-[12px] text-primary hover:underline shrink-0 ml-2"
+                >
+                  View all →
+                </button>
+              )}
+            </div>
             {recentSessions.length === 0 ? (
               <p className="text-[13px] text-slate-400">First session with this CSR</p>
             ) : (
@@ -326,19 +366,17 @@ export default function CoachingSessionDetailPage() {
                   const hasRepeat = s.topics.some(t => repeatTopics.has(t))
                   return (
                     <div key={s.id} className="pb-3 border-b border-slate-100 last:border-0">
-                      <div className="flex items-center gap-2 mb-1.5">
+                      <div className="flex items-center gap-2 mb-1">
                         <span className="text-[12px] text-slate-500">{formatQualityDate(s.session_date)}</span>
                         {hasRepeat && <span className="h-2 w-2 rounded-full bg-orange-400 shrink-0" title="Repeat topic" />}
                         <CoachingPurposeBadge purpose={s.coaching_purpose} />
                       </div>
-                      <TopicChips topics={s.topics} max={3} />
+                      {s.topics.length > 0 && (
+                        <p className="text-[12px] text-slate-500">{s.topics.join(' · ')}</p>
+                      )}
                     </div>
                   )
                 })}
-                <a href={`/app/training/coaching?csrs=${session.csr_id}`}
-                  className="text-[12px] text-primary hover:underline">
-                  View all →
-                </a>
               </div>
             )}
           </div>
@@ -376,6 +414,60 @@ export default function CoachingSessionDetailPage() {
 
         </div>
       </div>
+
+      {/* ── View All History Modal ─────────────────────────────────────────── */}
+      <Dialog open={showAllHistory} onOpenChange={setShowAllHistory}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>All Sessions — {session.csr_name}</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 pr-1">
+            {recentSessions.length === 0 ? (
+              <p className="text-[13px] text-slate-400 py-4 text-center">No prior sessions</p>
+            ) : (
+              <div className="space-y-0">
+                {recentSessions.map(s => {
+                  const hasRepeat = s.topics.some(t => repeatTopics.has(t))
+                  return (
+                    <div key={s.id} className="py-3 border-b border-slate-100 last:border-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[13px] font-medium text-slate-700">{formatQualityDate(s.session_date)}</span>
+                        <div className="flex items-center gap-1.5">
+                          {hasRepeat && <span className="h-2 w-2 rounded-full bg-orange-400 shrink-0" title="Repeat topic" />}
+                          <CoachingPurposeBadge purpose={s.coaching_purpose} />
+                        </div>
+                      </div>
+                      {s.topics.length > 0 && (
+                        <p className="text-[12px] text-slate-500 mt-0.5">{s.topics.join(' · ')}</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {(session.repeat_topics?.length ?? 0) > 0 && (
+              <div className="mt-4 p-3 bg-orange-50 rounded-lg border border-orange-100">
+                <p className="text-[12px] font-semibold text-orange-700">
+                  🔥 Repeat topics: {session.repeat_topics!.join(', ')}
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="pt-3 border-t border-slate-100">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-[13px]"
+              onClick={() => {
+                setShowAllHistory(false)
+                navigate(`/app/training/coaching?csrs=${encodeURIComponent(session.csr_name)}`)
+              }}
+            >
+              Open Full Coaching List for {session.csr_name} →
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </QualityListPage>
   )
 }

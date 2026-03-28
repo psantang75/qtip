@@ -40,7 +40,7 @@ export const NAV_CONFIG: SectionConfig[] = [
     label: 'Training',
     icon: 'GraduationCap',
     color: '#00aeef',
-    defaultPath: '/app/training/coaching',
+    defaultPath: '/app/training',
     items: [
       { label: 'Coaching Sessions', path: '/app/training/coaching',          icon: 'MessageSquare',   roles: [1,2,4,5]   },
       { label: 'My Coaching',       path: '/app/training/my-coaching',       icon: 'BookOpen',        roles: [3]         },

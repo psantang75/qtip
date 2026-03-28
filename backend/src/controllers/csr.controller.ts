@@ -2248,7 +2248,14 @@ export const submitCSRResponse = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Acknowledgment is required' });
     }
 
-    const newStatus = session.quiz_required ? 'QUIZ_PENDING' : 'COMPLETED';
+    // If a quiz is required, check whether the CSR already passed it (they may have taken it before clicking Submit)
+    let newStatus = 'COMPLETED';
+    if (session.quiz_required) {
+      const passedAttempt = await prisma.$queryRaw<{ cnt: bigint }[]>(
+        Prisma.sql`SELECT COUNT(*) as cnt FROM quiz_attempts WHERE coaching_session_id = ${sessionId} AND user_id = ${userId} AND passed = 1`
+      );
+      newStatus = Number(passedAttempt[0]?.cnt ?? 0) > 0 ? 'COMPLETED' : 'QUIZ_PENDING';
+    }
 
     await prisma.$executeRaw(
       Prisma.sql`UPDATE coaching_sessions SET

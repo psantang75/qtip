@@ -1,6 +1,6 @@
-import React, { Suspense } from 'react'
+import React, { Suspense, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Toaster } from './components/ui/toaster'
@@ -100,6 +100,51 @@ function PageLoader({ children }: { children: React.ReactNode }) {
   )
 }
 
+// ── Cache reset on user switch ────────────────────────────────────────────────
+// Clears all stale TanStack Query data whenever a different user logs in,
+// so role-restricted data from a previous session never leaks through.
+
+function CacheResetGuard() {
+  const { user } = useAuth()
+  const qc       = useQueryClient()
+  const prevId   = useRef<number | null | undefined>(undefined)
+
+  useEffect(() => {
+    const currentId = user?.id ?? null
+    // undefined means "first render" — skip initial clear
+    if (prevId.current !== undefined && prevId.current !== currentId) {
+      qc.clear()
+    }
+    prevId.current = currentId
+  }, [user?.id, qc])
+
+  return null
+}
+
+// ── Role-aware training index redirect ────────────────────────────────────────
+
+function TrainingIndexRedirect() {
+  const { user } = useAuth()
+  return <Navigate to={user?.role_id === 3 ? 'my-coaching' : 'coaching'} replace />
+}
+
+// ── Role guard — redirects to a fallback if the user's role isn't allowed ─────
+
+function RequireRole({
+  allowed,
+  fallback,
+  children,
+}: {
+  allowed: number[]
+  fallback: string
+  children: React.ReactNode
+}) {
+  const { user } = useAuth()
+  if (!user) return null
+  if (!allowed.includes(user.role_id)) return <Navigate to={fallback} replace />
+  return <>{children}</>
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -107,6 +152,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={300}>
       <AuthProvider>
+        <CacheResetGuard />
         <BrowserRouter>
           <Routes>
 
@@ -145,11 +191,12 @@ export default function App() {
 
                 {/* Training */}
                 <Route path="/app/training">
-                  <Route index element={<Navigate to="coaching" replace />} />
-                  <Route path="coaching"          element={<PageLoader><CoachingSessionsPage /></PageLoader>} />
-                  <Route path="coaching/new"      element={<PageLoader><CoachingSessionFormPage /></PageLoader>} />
-                  <Route path="coaching/:id"      element={<PageLoader><CoachingSessionDetailPage /></PageLoader>} />
-                  <Route path="coaching/:id/edit" element={<PageLoader><CoachingSessionFormPage /></PageLoader>} />
+                  <Route index element={<TrainingIndexRedirect />} />
+                  {/* Trainer/manager/admin routes — CSRs are redirected to my-coaching */}
+                  <Route path="coaching" element={<RequireRole allowed={[1,2,4,5]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionsPage /></PageLoader></RequireRole>} />
+                  <Route path="coaching/new" element={<RequireRole allowed={[1,2,4,5]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequireRole>} />
+                  <Route path="coaching/:id" element={<RequireRole allowed={[1,2,4,5]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionDetailPage /></PageLoader></RequireRole>} />
+                  <Route path="coaching/:id/edit" element={<RequireRole allowed={[1,2,4,5]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequireRole>} />
                   <Route path="my-coaching"       element={<PageLoader><MyCoachingPage /></PageLoader>} />
                   <Route path="my-coaching/:id"   element={<PageLoader><MyCoachingDetailPage /></PageLoader>} />
                   <Route path="reports"           element={<PageLoader><TrainingReportsPage /></PageLoader>} />

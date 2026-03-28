@@ -111,8 +111,18 @@ export default function MyCoachingDetailPage() {
         </div>
       )}
       {isScheduled && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-[13px] text-slate-600">
-          ℹ️ This session has not been delivered yet. Check back soon.
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
+          <p className="text-[13px] font-medium text-slate-700">
+            ℹ️ This session has not been delivered yet — check back soon.
+          </p>
+          {(!!require_action_plan || !!require_acknowledgment || !!quiz_required) && (
+            <div className="text-[12px] text-slate-500 space-y-1 pt-1 border-t border-slate-200 mt-2">
+              <p className="font-medium text-slate-600">Once delivered, you will need to:</p>
+              {!!require_action_plan    && <p>→ Submit a written action plan (50+ characters)</p>}
+              {!!require_acknowledgment && <p>→ Acknowledge you have reviewed the session</p>}
+              {!!quiz_required          && <p>→ Complete the assigned quiz</p>}
+            </div>
+          )}
         </div>
       )}
 
