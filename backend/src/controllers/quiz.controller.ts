@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
+import { applyAutoAdvance } from '../utils/coachingAutoAdvance';
 
 interface AuthReq extends Request {
   user?: { user_id: number; role: string };
@@ -46,19 +47,16 @@ export const submitQuizAttempt = async (req: AuthReq, res: Response) => {
     );
     const attemptNumber = Number(attemptCountRows[0]?.cnt ?? 0) + 1;
 
-    await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw(
-        Prisma.sql`INSERT INTO quiz_attempts (quiz_id, user_id, coaching_session_id, answers_json, score, passed, attempt_number)
-          VALUES (${quizId}, ${userId}, ${sessionId}, ${JSON.stringify(answers)}, ${score}, ${passed ? 1 : 0}, ${attemptNumber})`
-      );
+    // Insert the attempt
+    await prisma.$executeRaw(
+      Prisma.sql`INSERT INTO quiz_attempts (quiz_id, user_id, coaching_session_id, answers_json, score, passed, attempt_number)
+        VALUES (${quizId}, ${userId}, ${sessionId}, ${JSON.stringify(answers)}, ${score}, ${passed ? 1 : 0}, ${attemptNumber})`
+    );
 
-      if (passed && sessionId) {
-        const csRows = await tx.$queryRaw<any[]>(Prisma.sql`SELECT status FROM coaching_sessions WHERE id = ${sessionId}`);
-        if (csRows.length && csRows[0].status === 'QUIZ_PENDING') {
-          await tx.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'COMPLETED', completed_at = NOW() WHERE id = ${sessionId}`);
-        }
-      }
-    });
+    // Auto-advance if this was a pass and the session is awaiting CSR action
+    if (passed && sessionId) {
+      await applyAutoAdvance(sessionId, userId);
+    }
 
     res.json({
       success: true,

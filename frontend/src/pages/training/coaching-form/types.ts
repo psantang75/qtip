@@ -17,6 +17,9 @@ export interface CoachingFormState {
   due_date: string
   follow_up_required: boolean
   follow_up_date: string
+  follow_up_notes: string
+  internal_notes: string
+  behavior_flags: string[]
   attachment_file: File | null
 }
 
@@ -40,6 +43,9 @@ export function emptyForm(): CoachingFormState {
     due_date: '',
     follow_up_required: false,
     follow_up_date: '',
+    follow_up_notes: '',
+    internal_notes: '',
+    behavior_flags: [],
     attachment_file: null,
   }
 }

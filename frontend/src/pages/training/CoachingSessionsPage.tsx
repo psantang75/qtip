@@ -110,6 +110,17 @@ export function QuizStatusBadge({ session }: { session: CoachingSession }) {
 
 // â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+// ── Date urgency helper ───────────────────────────────────────────────────────
+
+export function dateUrgency(dateStr?: string | null): { label: string; cls: string } | null {
+  if (!dateStr) return null
+  const today = new Date().toISOString().slice(0, 10)
+  const d     = dateStr.slice(0, 10)
+  if (d === today) return { label: 'Today',                      cls: 'text-amber-600 font-semibold' }
+  if (d  < today)  return { label: `${formatQualityDate(dateStr)} ⚠`, cls: 'text-red-600 font-semibold' }
+  return               { label: formatQualityDate(dateStr),       cls: 'text-slate-600' }
+}
+
 export default function CoachingSessionsPage() {
   const navigate = useNavigate()
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
@@ -118,7 +129,7 @@ export default function CoachingSessionsPage() {
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
     csrs: '', statuses: '', formats: '', topics: '',
-    from: defaultFrom, to: defaultTo, overdue: '', page: '1', size: '20',
+    from: defaultFrom, to: defaultTo, overdue: '', dueToday: '', page: '1', size: '20',
   })
 
   const csrsParam     = get('csrs')
@@ -128,6 +139,7 @@ export default function CoachingSessionsPage() {
   const dateFrom      = get('from')
   const dateTo        = get('to')
   const overdue       = get('overdue')
+  const dueToday      = get('dueToday')
   const page          = parseInt(get('page')) || 1
   const pageSize      = parseInt(get('size')) || 20
 
@@ -140,14 +152,14 @@ export default function CoachingSessionsPage() {
   const selectedTopics   = useMemo(() => topicsParam   ? topicsParam.split(',').filter(Boolean)    : [], [topicsParam])
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['coaching-sessions', page, pageSize, dateField, dateFrom, dateTo, overdue],
+    queryKey: ['coaching-sessions', page, pageSize, dateField, dateFrom, dateTo, overdue, dueToday],
     queryFn: () => trainingService.getCoachingSessions({
       page,
       limit: pageSize,
-      // Only send date range to server when filtering by session_date; others are client-side
       date_from:    dateField === 'session_date' ? (dateFrom || undefined) : undefined,
       date_to:      dateField === 'session_date' ? (dateTo   || undefined) : undefined,
-      overdue_only: overdue === 'true' ? true : undefined,
+      overdue_only: overdue   === 'true' ? true : undefined,
+      due_today:    dueToday  === 'true' ? true : undefined,
     }),
     placeholderData: (prev: any) => prev,
   })
@@ -256,13 +268,16 @@ export default function CoachingSessionsPage() {
           onRangeChange={(s, e) => setMany({ from: s, to: e, page: '1' })}
         />
         <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={overdue === 'true'}
-            onChange={e => set('overdue', e.target.checked ? 'true' : '')}
-            className="accent-primary h-4 w-4"
-          />
-          Overdue only
+          <input type="checkbox" checked={dueToday === 'true'}
+            onChange={e => setMany({ dueToday: e.target.checked ? 'true' : '', overdue: '', page: '1' })}
+            className="accent-primary h-4 w-4" />
+          Due Today
+        </label>
+        <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
+          <input type="checkbox" checked={overdue === 'true'}
+            onChange={e => setMany({ overdue: e.target.checked ? 'true' : '', dueToday: '', page: '1' })}
+            className="accent-primary h-4 w-4" />
+          Overdue
         </label>
       </QualityFilterBar>
 
@@ -353,15 +368,11 @@ export default function CoachingSessionsPage() {
                     )}
                   </TableCell>
                   <TableCell><QuizStatusBadge session={s} /></TableCell>
-                  <TableCell className={cn('pl-6 text-[13px] whitespace-nowrap', s.is_overdue ? 'text-red-600 font-medium' : 'text-slate-600')}>
-                    {s.due_date
-                      ? <>{formatQualityDate(s.due_date)}{s.is_overdue ? ' ⚠' : ''}</>
-                      : <span className="text-slate-300">&mdash;</span>}
+                  <TableCell className="pl-6 text-[13px] whitespace-nowrap">
+                    {(() => { const u = dateUrgency(s.due_date); return u ? <span className={u.cls}>{u.label}</span> : <span className="text-slate-300">&mdash;</span> })()}
                   </TableCell>
-                  <TableCell className="pl-6 text-[13px] text-slate-600 whitespace-nowrap">
-                    {s.follow_up_date
-                      ? formatQualityDate(s.follow_up_date)
-                      : <span className="text-slate-300">&mdash;</span>}
+                  <TableCell className="pl-6 text-[13px] whitespace-nowrap">
+                    {(() => { const u = dateUrgency(s.follow_up_date); return u ? <span className={u.cls}>{u.label}</span> : <span className="text-slate-300">&mdash;</span> })()}
                   </TableCell>
                   <TableCell onClick={e => e.stopPropagation()}>
                     <Button

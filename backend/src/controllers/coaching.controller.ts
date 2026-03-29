@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
+import { hasCsrRequirements } from '../utils/coachingAutoAdvance';
 const fs = require('fs').promises;
 const path = require('path');
 const { createReadStream } = require('fs');
@@ -29,7 +30,7 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
     const offset = (page - 1) * limit;
-    const { csr_id, status, coaching_purpose, coaching_format, topic_ids, date_from, date_to, overdue_only } = req.query;
+    const { csr_id, status, coaching_purpose, coaching_format, topic_ids, date_from, date_to, overdue_only, due_today } = req.query;
 
     const conditions: Prisma.Sql[] = [Prisma.sql`u.is_active = 1`, roleCondition(role, userId)];
 
@@ -40,7 +41,17 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
     if (date_from) conditions.push(Prisma.sql`DATE(cs.session_date) >= ${date_from}`);
     if (date_to) conditions.push(Prisma.sql`DATE(cs.session_date) <= ${date_to}`);
     if (overdue_only === 'true') {
-      conditions.push(Prisma.sql`(cs.due_date IS NOT NULL AND cs.due_date < NOW() AND cs.status NOT IN ('COMPLETED','CLOSED'))`);
+      conditions.push(Prisma.sql`(
+        (cs.due_date IS NOT NULL AND DATE(cs.due_date) < CURDATE() AND cs.status NOT IN ('COMPLETED','CLOSED'))
+        OR (cs.follow_up_date IS NOT NULL AND DATE(cs.follow_up_date) < CURDATE() AND cs.status = 'FOLLOW_UP_REQUIRED')
+      )`);
+    }
+    if (due_today === 'true') {
+      conditions.push(Prisma.sql`(
+        DATE(cs.session_date) = CURDATE()
+        OR (cs.due_date IS NOT NULL AND DATE(cs.due_date) = CURDATE())
+        OR (cs.follow_up_date IS NOT NULL AND DATE(cs.follow_up_date) = CURDATE())
+      )`);
     }
     if (topic_ids) {
       const ids = (topic_ids as string).split(',').map(Number).filter(Boolean);
@@ -192,6 +203,8 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
     if (typeof topic_ids    === 'string') topic_ids    = topic_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean);
     if (!Array.isArray(topic_ids)) topic_ids = topic_ids ? [parseInt(topic_ids)] : [];
 
+    const { follow_up_notes: follow_up_notes_create, internal_notes: internal_notes_create, behavior_flags: behavior_flags_create } = req.body;
+
     const parsedResourceIds: number[] = typeof resource_ids === 'string'
       ? resource_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean)
       : [];
@@ -232,7 +245,8 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
       await tx.$executeRaw(
         Prisma.sql`INSERT INTO coaching_sessions
           (csr_id, session_date, coaching_purpose, coaching_format, source_type, notes, status, required_action, kb_url,
-           require_acknowledgment, require_action_plan, due_date, follow_up_required, follow_up_date,
+           require_acknowledgment, require_action_plan, due_date, follow_up_required, follow_up_date, follow_up_notes,
+           internal_notes, behavior_flags,
            attachment_filename, attachment_path, attachment_size, attachment_mime_type, created_by)
           VALUES
           (${parseInt(csr_id)}, ${session_date}, ${coaching_purpose}, ${coaching_format}, ${source_type}, ${notes || null}, 'SCHEDULED',
@@ -241,7 +255,9 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
            ${require_action_plan === 'false' || require_action_plan === false ? 0 : 1},
            ${due_date || null},
            ${follow_up_required === 'true' || follow_up_required === true ? 1 : 0},
-           ${follow_up_date || null}, ${attFilename}, ${attPath}, ${attSize}, ${attMime}, ${resolvedCoachId})`
+           ${follow_up_date || null}, ${follow_up_notes_create || null},
+           ${internal_notes_create || null}, ${behavior_flags_create || null},
+           ${attFilename}, ${attPath}, ${attSize}, ${attMime}, ${resolvedCoachId})`
       );
       const [{ id }] = await tx.$queryRaw<{ id: bigint }[]>(Prisma.sql`SELECT LAST_INSERT_ID() as id`);
       const sessionId = Number(id);
@@ -275,7 +291,9 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
     let { session_date, coaching_purpose, coaching_format, source_type, notes, topic_ids,
           required_action, resource_ids, kb_url, quiz_ids,
           require_acknowledgment, require_action_plan, due_date,
-          follow_up_required, follow_up_date, coach_id } = req.body;
+          follow_up_required, follow_up_date, follow_up_notes,
+          internal_notes, behavior_flags,
+          coach_id } = req.body;
 
     if (typeof topic_ids === 'string') topic_ids = topic_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean);
 
@@ -291,7 +309,7 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
 
     const existing = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.id, cs.status FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
     if (!existing.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
-    if (['COMPLETED', 'CLOSED'].includes(existing[0].status)) return res.status(400).json({ success: false, message: 'Cannot edit a completed or closed session' });
+    if (existing[0].status === 'CLOSED') return res.status(400).json({ success: false, message: 'Cannot edit a closed session' });
 
     const parts: Prisma.Sql[] = [];
     if (session_date     !== undefined) parts.push(Prisma.sql`session_date = ${session_date}`);
@@ -306,6 +324,9 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
     if (due_date           !== undefined) parts.push(Prisma.sql`due_date = ${due_date || null}`);
     if (follow_up_required !== undefined) parts.push(Prisma.sql`follow_up_required = ${follow_up_required === 'true' || follow_up_required === true ? 1 : 0}`);
     if (follow_up_date     !== undefined) parts.push(Prisma.sql`follow_up_date = ${follow_up_date || null}`);
+    if (follow_up_notes    !== undefined) parts.push(Prisma.sql`follow_up_notes = ${follow_up_notes || null}`);
+    if (internal_notes     !== undefined) parts.push(Prisma.sql`internal_notes = ${internal_notes || null}`);
+    if (behavior_flags     !== undefined) parts.push(Prisma.sql`behavior_flags = ${behavior_flags || null}`);
 
     if (attachment) {
       const uploadsDir = path.join(process.cwd(), 'uploads', 'coaching');
@@ -366,11 +387,15 @@ export const deliverCoachingSession = async (req: AuthReq, res: Response) => {
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.id, cs.status FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
 
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
-    if (rows[0].status !== 'SCHEDULED') return res.status(400).json({ success: false, message: 'Can only mark in-process a SCHEDULED session' });
+    if (rows[0].status !== 'SCHEDULED') return res.status(400).json({ success: false, message: 'Can only deliver a SCHEDULED session' });
 
-    await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'IN_PROCESS', delivered_at = NOW() WHERE id = ${sessionId}`);
-    await prisma.auditLog.create({ data: { user_id: userId, action: 'IN_PROCESS', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
-    res.json({ success: true, message: 'Session marked as in-process' });
+    // Auto-advance: if session has CSR requirements, go straight to AWAITING_CSR_ACTION
+    const needsCSR = await hasCsrRequirements(sessionId);
+    const deliveredStatus = needsCSR ? 'AWAITING_CSR_ACTION' : 'IN_PROCESS';
+
+    await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = ${deliveredStatus}, delivered_at = NOW() WHERE id = ${sessionId}`);
+    await prisma.auditLog.create({ data: { user_id: userId, action: 'DELIVERED', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ status: deliveredStatus }) } });
+    res.json({ success: true, message: `Session delivered — status: ${deliveredStatus}` });
   } catch (error) {
     console.error('[COACHING] deliverCoachingSession error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
@@ -472,6 +497,50 @@ export const downloadAttachment = async (req: AuthReq, res: Response) => {
     stream.pipe(res);
   } catch (error) {
     console.error('[COACHING] downloadAttachment error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+export const setSessionStatus = async (req: AuthReq, res: Response) => {
+  try {
+    const userId    = req.user!.user_id;
+    const role      = req.user!.role;
+    const sessionId = parseInt(req.params.id);
+    const { status } = req.body as { status: string };
+
+    const validStatuses = ['SCHEDULED', 'IN_PROCESS', 'AWAITING_CSR_ACTION', 'QUIZ_PENDING', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+
+    const conditions: Prisma.Sql[] = [Prisma.sql`cs.id = ${sessionId}`, Prisma.sql`u.is_active = 1`, roleCondition(role, userId)];
+    const rows = await prisma.$queryRaw<any[]>(
+      Prisma.sql`SELECT cs.id, cs.status FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id WHERE ${Prisma.join(conditions, ' AND ')}`
+    );
+
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
+
+    const current = rows[0].status;
+    if (current === 'CLOSED') {
+      return res.status(400).json({ success: false, message: 'Closed sessions cannot be reopened' });
+    }
+    if (status === current) {
+      return res.json({ success: true, message: 'Status unchanged' });
+    }
+
+    const parts: Prisma.Sql[] = [Prisma.sql`status = ${status}`];
+    if (status === 'IN_PROCESS') parts.push(Prisma.sql`delivered_at = COALESCE(delivered_at, NOW())`);
+    if (status === 'COMPLETED')  parts.push(Prisma.sql`completed_at = COALESCE(completed_at, NOW())`);
+
+    await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET ${Prisma.join(parts, ', ')} WHERE id = ${sessionId}`);
+    await prisma.auditLog.create({
+      data: { user_id: userId, action: 'STATUS_CHANGE', target_id: sessionId, target_type: 'coaching_session',
+              details: JSON.stringify({ from: current, to: status }) },
+    });
+
+    res.json({ success: true, message: `Status changed to ${status}` });
+  } catch (error) {
+    console.error('[COACHING] setSessionStatus error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

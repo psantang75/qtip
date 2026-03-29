@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { authenticate } from '../middleware/auth';
+import { applyAutoAdvance } from '../utils/coachingAutoAdvance';
 
 /**
  * Properly escape filename for Content-Disposition header
@@ -2248,27 +2249,20 @@ export const submitCSRResponse = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Acknowledgment is required' });
     }
 
-    // If a quiz is required, check whether the CSR already passed it (they may have taken it before clicking Submit)
-    let newStatus = 'COMPLETED';
-    if (session.quiz_required) {
-      const passedAttempt = await prisma.$queryRaw<{ cnt: bigint }[]>(
-        Prisma.sql`SELECT COUNT(*) as cnt FROM quiz_attempts WHERE coaching_session_id = ${sessionId} AND user_id = ${userId} AND passed = 1`
-      );
-      newStatus = Number(passedAttempt[0]?.cnt ?? 0) > 0 ? 'COMPLETED' : 'QUIZ_PENDING';
-    }
-
+    // Save the CSR response (do not touch status yet)
     await prisma.$executeRaw(
       Prisma.sql`UPDATE coaching_sessions SET
-        csr_action_plan = ${action_plan || null},
-        csr_root_cause = ${root_cause || null},
-        csr_support_needed = ${support_needed || null},
-        csr_acknowledged_at = ${acknowledged === true ? new Date() : null},
-        status = ${newStatus},
-        completed_at = ${newStatus === 'COMPLETED' ? new Date() : null}
+        csr_action_plan     = ${action_plan    || null},
+        csr_root_cause      = ${root_cause     || null},
+        csr_support_needed  = ${support_needed || null},
+        csr_acknowledged_at = ${acknowledged === true ? new Date() : null}
         WHERE id = ${sessionId}`
     );
 
-    res.json({ success: true, message: 'Response submitted', data: { new_status: newStatus } });
+    // Auto-advance: check if ALL CSR requirements are now satisfied
+    const advancedTo = await applyAutoAdvance(sessionId, userId);
+
+    res.json({ success: true, message: 'Response submitted', data: { new_status: advancedTo ?? session.status } });
   } catch (error) {
     console.error('[CSR] submitCSRResponse error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });

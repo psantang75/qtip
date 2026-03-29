@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { formatQualityDate } from '@/utils/dateFormat'
 import {
-  SessionSection, RequiredActionsSection, AttachmentSection,
+  SessionSection, RequiredActionsSection, AccountabilitySection, InternalNotesSection, AttachmentSection,
 } from './coaching-form/CoachingFormSections'
 import { emptyForm, type CoachingFormState, type CoachingFormErrors } from './coaching-form/types'
 
@@ -100,8 +100,11 @@ export default function CoachingSessionFormPage() {
       require_acknowledgment: s.require_acknowledgment !== undefined ? !!s.require_acknowledgment : true,
       require_action_plan:    s.require_action_plan    !== undefined ? !!s.require_action_plan    : true,
       due_date:               s.due_date?.slice(0, 10)       ?? '',
-      follow_up_required:     !!s.follow_up_required,
+      follow_up_required:     !!s.follow_up_required || !!s.follow_up_date,
       follow_up_date:         s.follow_up_date?.slice(0, 10) ?? '',
+      follow_up_notes:        s.follow_up_notes ?? '',
+      internal_notes:         s.internal_notes ?? '',
+      behavior_flags:         s.behavior_flags ? s.behavior_flags.split(',').filter(Boolean) : [],
       attachment_file:      null,
     })
     setExistingFilename(s.attachment_filename ?? undefined)
@@ -150,9 +153,12 @@ export default function CoachingSessionFormPage() {
       fd.append('quiz_ids',               form.quiz_ids.join(','))
       fd.append('require_acknowledgment', String(form.require_acknowledgment))
       fd.append('require_action_plan',    String(form.require_action_plan))
-      fd.append('follow_up_required',     String(form.follow_up_required))
-      fd.append('due_date',       form.due_date       || '')
-      fd.append('follow_up_date', form.follow_up_date || '')
+      fd.append('follow_up_required',  String(form.follow_up_required))
+      fd.append('due_date',            form.due_date             || '')
+      fd.append('follow_up_date',      form.follow_up_date       || '')
+      fd.append('follow_up_notes',     form.follow_up_notes      || '')
+      fd.append('internal_notes',      form.internal_notes       || '')
+      fd.append('behavior_flags',      form.behavior_flags.join(','))
       if (form.attachment_file)  fd.append('attachment',      form.attachment_file)
 
       if (isEdit) {
@@ -195,6 +201,10 @@ export default function CoachingSessionFormPage() {
             form={form} errors={errors} resources={resources}
             quizzes={quizzes} update={update}
           />
+          <AccountabilitySection form={form} update={update} />
+          {[1, 4, 5].includes(user?.role_id ?? 0) && (
+            <InternalNotesSection form={form} update={update} />
+          )}
           <AttachmentSection
             form={form} update={update}
             existingFilename={existingFilename}

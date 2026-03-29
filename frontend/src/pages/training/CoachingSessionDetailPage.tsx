@@ -1,71 +1,113 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Target, Download, CheckCircle } from 'lucide-react'
+import { ExternalLink, Download, Paperclip, BookOpen, HelpCircle } from 'lucide-react'
 import trainingService, { type CoachingSession, type CoachingSourceType } from '@/services/trainingService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
-import { CoachingPurposeBadge, PURPOSE_MAP, FORMAT_MAP } from './CoachingSessionsPage'
+import { PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './CoachingSessionsPage'
+import { BEHAVIOR_FLAG_GROUPS } from './coaching-form/CoachingFormSections'
 
-// ── Local helpers ─────────────────────────────────────────────────────────────
+// ── Source labels ─────────────────────────────────────────────────────────────
 
 const SOURCE_LABELS: Record<CoachingSourceType, string> = {
   QA_AUDIT: 'QA Audit', MANAGER_OBSERVATION: 'Manager Observation', TREND: 'Trend',
   DISPUTE: 'Dispute', SCHEDULED: 'Scheduled', OTHER: 'Other',
 }
 
+// ── Layout primitives — mirrors CoachingFormSections exactly ─────────────────
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">{title}</h3>
+      {children}
+    </div>
+  )
+}
+
+function Sub({ title, icon: Icon, children }: {
+  title: string
+  icon?: React.ComponentType<{ className?: string }>
+  children: React.ReactNode
+}) {
+  return (
+    <div className="pt-4 mt-4 border-t border-slate-100">
+      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+        {Icon && <Icon className="h-3 w-3" />}{title}
+      </p>
+      {children}
+    </div>
+  )
+}
+
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
-      <p className="text-[13px] text-slate-800 font-medium">{value ?? '—'}</p>
+      <div className="text-[13px] text-slate-800 font-medium">{value ?? '—'}</div>
     </div>
   )
 }
 
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('bg-white rounded-xl border border-slate-200 p-5', className)}>{children}</div>
+function SideCard({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn('bg-white rounded-xl border border-slate-200 p-4', className)}>{children}</div>
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-sm font-semibold text-slate-700 mb-3">{children}</h3>
+function SideTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2.5 mb-3">{children}</h3>
 }
 
-function SubLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">{children}</p>
-}
-
-// ── Right-panel helpers ───────────────────────────────────────────────────────
-
-function StatusRow({ label, content, muted }: { label: string; content: React.ReactNode; muted?: boolean }) {
+function ResponseRow({ label, value, muted }: { label: string; value: React.ReactNode; muted?: boolean }) {
   return (
-    <div className="flex items-start justify-between gap-2">
-      <span className={cn('text-[13px]', muted ? 'text-slate-400' : 'text-slate-600')}>{label}</span>
-      <span className={cn('text-[13px] text-right', muted ? 'text-slate-400' : 'text-slate-700')}>{content}</span>
+    <div className="flex items-start justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
+      <span className={cn('text-[12px] font-medium', muted ? 'text-slate-400' : 'text-slate-500')}>{label}</span>
+      <span className={cn('text-[12px] text-right shrink-0', muted ? 'text-slate-400' : 'text-slate-700')}>{value}</span>
     </div>
   )
 }
 
-function QuizStatus({ session }: { session: CoachingSession }) {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function NoteBlock({ text, placeholder }: { text?: string | null; placeholder: string }) {
+  return text
+    ? <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">{text}</p>
+    : <p className="text-[13px] text-slate-400 italic">{placeholder}</p>
+}
+
+function TopicList({ topics }: { topics: string[] }) {
+  if (!topics.length) return <span className="text-[13px] text-slate-400">None</span>
+  return (
+    <ul className="space-y-1">
+      {topics.map(t => (
+        <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function QuizSummary({ session }: { session: CoachingSession }) {
   const hasQuizzes = (session.quizzes?.length ?? 0) > 0
-  if (!hasQuizzes) return <span className="text-[13px] text-slate-400">— Not required</span>
+  if (!hasQuizzes) return <span className="text-[12px] text-slate-400">Not assigned</span>
   const attempts = session.quiz_attempts ?? []
-  const passed = attempts.find(a => a.passed)
-  if (passed) return <span className="text-[13px] text-emerald-700">✅ Passed {Number(passed.score).toFixed(0)}%</span>
+  const passed   = attempts.find(a => a.passed)
+  if (passed) return <span className="text-[12px] text-emerald-700">Passed {Number(passed.score).toFixed(0)}%</span>
   if (attempts.length) {
     const best = Math.max(...attempts.map(a => Number(a.score)))
-    return <span className="text-[13px] text-amber-700">⚠️ Failed {best.toFixed(0)}% — {attempts.length} attempt{attempts.length > 1 ? 's' : ''}</span>
+    return <span className="text-[12px] text-amber-700">Failed — best {best.toFixed(0)}% ({attempts.length} attempt{attempts.length > 1 ? 's' : ''})</span>
   }
-  if (session.status === 'QUIZ_PENDING') return <span className="text-[13px] text-amber-600">⏳ Not started</span>
-  return <span className="text-[13px] text-slate-400">—</span>
+  if (session.status === 'QUIZ_PENDING') return <span className="text-[12px] text-amber-600">Not started</span>
+  return <span className="text-[12px] text-slate-400">Pending</span>
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -75,7 +117,10 @@ export default function CoachingSessionDetailPage() {
   const navigate  = useNavigate()
   const qc        = useQueryClient()
   const { toast } = useToast()
-  const [showAllHistory, setShowAllHistory] = useState(false)
+  const { user }  = useAuth()
+  const canSeeInternal = [1, 4, 5].includes(user?.role_id ?? 0)
+  const [showHistory,    setShowHistory]    = useState(false)
+  const [pendingStatus,  setPendingStatus]  = useState('')
 
   const { data: session, isLoading, isError } = useQuery({
     queryKey:  ['coaching-session', id],
@@ -86,21 +131,14 @@ export default function CoachingSessionDetailPage() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['coaching-session', id] })
 
-  const deliverMut = useMutation({
-    mutationFn: () => trainingService.deliverSession(Number(id)),
-    onSuccess: () => { toast({ title: 'Session delivered' });      invalidate() },
-    onError:   () => toast({ title: 'Error', description: 'Could not mark as delivered.', variant: 'destructive' }),
+  useEffect(() => { if (session) setPendingStatus(session.status) }, [session?.status])
+
+  const statusMut = useMutation({
+    mutationFn: (status: string) => trainingService.setSessionStatus(Number(id), status),
+    onSuccess: (_d, status) => { toast({ title: `Status updated to ${STATUS_LABELS[status] ?? status}` }); invalidate() },
+    onError: () => toast({ title: 'Error', description: 'Could not update status.', variant: 'destructive' }),
   })
-  const followMut = useMutation({
-    mutationFn: () => trainingService.flagFollowUp(Number(id)),
-    onSuccess: () => { toast({ title: 'Follow-up flagged' });      invalidate() },
-    onError:   () => toast({ title: 'Error', description: 'Could not flag follow-up.', variant: 'destructive' }),
-  })
-  const closeMut = useMutation({
-    mutationFn: () => trainingService.closeSession(Number(id)),
-    onSuccess: () => { toast({ title: 'Session closed' });         invalidate() },
-    onError:   () => toast({ title: 'Error', description: 'Could not close session.', variant: 'destructive' }),
-  })
+
 
   const handleDownload = async () => {
     if (!session?.attachment_filename) return
@@ -111,18 +149,18 @@ export default function CoachingSessionDetailPage() {
     } catch { toast({ title: 'Download failed', variant: 'destructive' }) }
   }
 
-  const canEdit = session && !['COMPLETED', 'CLOSED'].includes(session.status)
-  const isAnyPending = deliverMut.isPending || followMut.isPending || closeMut.isPending
-
   if (isLoading) return <QualityListPage><TableLoadingSkeleton rows={10} /></QualityListPage>
   if (isError || !session) return (
     <QualityListPage>
-      <TableErrorState message="Failed to load session." onRetry={() => qc.invalidateQueries({ queryKey: ['coaching-session', id] })} />
+      <TableErrorState message="Failed to load session."
+        onRetry={() => qc.invalidateQueries({ queryKey: ['coaching-session', id] })} />
     </QualityListPage>
   )
 
+  const canEdit        = session.status !== 'CLOSED'
   const recentSessions = session.recent_sessions ?? []
   const repeatTopics   = new Set(session.repeat_topics ?? [])
+
 
   return (
     <QualityListPage>
@@ -144,279 +182,406 @@ export default function CoachingSessionDetailPage() {
         {/* ── Left column ─────────────────────────────────────────────────── */}
         <div className="col-span-2 space-y-4">
 
-          {/* Session header — InfoRow layout, no pills */}
-          <Card>
+          {/* ── Section 1: Session ──────────────────────────────────────── */}
+          <Section title="Session">
             <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-              <InfoRow label="CSR"          value={session.csr_name} />
-              <InfoRow label="Coach"        value={session.created_by_name} />
-              <InfoRow label="Session Date" value={formatQualityDate(session.session_date)} />
-              <InfoRow label="Due Date"     value={session.due_date ? formatQualityDate(session.due_date) : '—'} />
-              <InfoRow label="Purpose"      value={PURPOSE_MAP[session.coaching_purpose] ?? session.coaching_purpose} />
-              <InfoRow label="Format"       value={FORMAT_MAP[session.coaching_format] ?? session.coaching_format} />
-              <InfoRow label="Status"       value={<StatusBadge status={session.status} />} />
+              <InfoRow label="CSR"              value={session.csr_name} />
+              <InfoRow label="Coach"            value={session.created_by_name} />
+              <InfoRow label="Session Date"     value={formatQualityDate(session.session_date)} />
+              <InfoRow label="Coaching Format"  value={FORMAT_MAP[session.coaching_format] ?? session.coaching_format} />
+              <InfoRow label="Coaching Purpose" value={PURPOSE_MAP[session.coaching_purpose] ?? session.coaching_purpose} />
+              <InfoRow label="Coaching Source"  value={SOURCE_LABELS[session.source_type] ?? session.source_type} />
+              <InfoRow label="Created"          value={formatQualityDate(session.created_at)} />
               {!!session.is_overdue && (
-                <InfoRow label="Overdue" value={<span className="text-red-600 font-semibold">⚠ Overdue</span>} />
+                <InfoRow label="Overdue" value={<span className="text-[13px] font-semibold text-red-600">⚠ Overdue</span>} />
               )}
             </div>
-          </Card>
 
-          {/* Session Notes — Source + Notes + Topics */}
-          <Card>
-            <SectionTitle>Session Notes</SectionTitle>
-            <div className="space-y-4">
-              <div>
-                <SubLabel>Source</SubLabel>
-                <p className="text-[13px] text-slate-700">{SOURCE_LABELS[session.source_type] ?? session.source_type}</p>
+            {/* Topics */}
+            <div className="border-t border-slate-100 pt-4 mt-4">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Topics</p>
+              <TopicList topics={session.topics} />
+            </div>
+
+            {/* Notes */}
+            <div className="border-t border-slate-100 pt-4 mt-4">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Notes</p>
+              <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">
+                {session.notes || <span className="text-slate-400">No notes provided</span>}
+              </p>
+              {session.qa_audit_id && (
+                <a href={`/app/quality/submissions/${session.qa_audit_id}`}
+                  className="inline-flex items-center gap-1 text-primary text-[13px] mt-2 hover:underline">
+                  View QA Audit →
+                </a>
+              )}
+            </div>
+          </Section>
+
+          {/* ── Section 2: Required Actions ─────────────────────────────── */}
+          <Section title="Required Actions">
+
+            {/* Required Action Notes */}
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Required Action Notes</p>
+            <NoteBlock text={session.required_action} placeholder="No required action specified" />
+
+            {/* Knowledge Base */}
+            <Sub title="Knowledge Base Assignment" icon={BookOpen}>
+              {(session.kb_resources?.length ?? 0) > 0 ? (
+                <div className="space-y-2">
+                  {session.kb_resources!.map(r => (
+                    <div key={r.id} className="flex items-start justify-between gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-slate-800 truncate">{r.title}</p>
+                        {r.description && <p className="text-[12px] text-slate-500 mt-0.5">{r.description}</p>}
+                      </div>
+                      <a href={r.url} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline shrink-0">
+                        Open <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[13px] text-slate-400 italic">No resources assigned</p>
+              )}
+            </Sub>
+
+            {/* Quizzes */}
+            <Sub title="Quiz Assignment" icon={HelpCircle}>
+              {(session.quizzes?.length ?? 0) > 0 ? (
+                <div className="space-y-4">
+                  {session.quizzes!.map(quiz => {
+                    const attempts = (session.quiz_attempts ?? []).filter(a => (a as any).quiz_id === quiz.id)
+                    const passed   = attempts.find(a => a.passed)
+                    return (
+                      <div key={quiz.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[13px] font-semibold text-slate-800">{quiz.quiz_title}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-slate-400">Pass: {quiz.pass_score}%</span>
+                            {passed ? (
+                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                Passed {Number(passed.score).toFixed(0)}%
+                              </span>
+                            ) : attempts.length > 0 ? (
+                              <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                                Failed
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                                Not started
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {attempts.length > 0 && (
+                          <table className="w-full text-[12px] mt-2">
+                            <thead>
+                              <tr className="text-left text-[11px] text-slate-400 border-b border-slate-200">
+                                <th className="pb-1.5 font-medium">Attempt</th>
+                                <th className="pb-1.5 font-medium">Score</th>
+                                <th className="pb-1.5 font-medium">Result</th>
+                                <th className="pb-1.5 font-medium">Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {attempts.map(a => (
+                                <tr key={a.id} className={cn('border-b border-slate-100 last:border-0', a.passed ? 'bg-emerald-50/30' : 'bg-red-50/30')}>
+                                  <td className="py-1.5 text-slate-600">#{a.attempt_number}</td>
+                                  <td className="py-1.5 text-slate-600">{Number(a.score).toFixed(0)}%</td>
+                                  <td className="py-1.5">
+                                    <span className={cn('text-[11px] font-semibold', a.passed ? 'text-emerald-700' : 'text-red-600')}>
+                                      {a.passed ? 'PASS ✓' : 'FAIL ✗'}
+                                    </span>
+                                  </td>
+                                  <td className="py-1.5 text-slate-400">{formatQualityDate(a.submitted_at)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-[13px] text-slate-400 italic">No quizzes assigned</p>
+              )}
+            </Sub>
+
+
+            {/* Timing */}
+            <Sub title="Timing">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Due Date</p>
+                  {session.due_date ? (
+                    <p className={cn('text-[13px] font-medium', session.is_overdue ? 'text-red-600' : 'text-slate-800')}>
+                      {formatQualityDate(session.due_date)}{session.is_overdue ? ' ⚠' : ''}
+                    </p>
+                  ) : (
+                    <p className="text-[13px] text-slate-400">Not set</p>
+                  )}
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Follow-Up Date</p>
+                  {session.follow_up_date ? (
+                    <p className="text-[13px] font-medium text-slate-800">{formatQualityDate(session.follow_up_date)}</p>
+                  ) : (
+                    <p className="text-[13px] text-slate-400">Not set</p>
+                  )}
+                </div>
               </div>
-              <div>
-                <SubLabel>Notes</SubLabel>
-                <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">
-                  {session.notes || <span className="text-slate-400">No notes provided</span>}
-                </p>
-                {session.qa_audit_id && (
-                  <a href={`/app/quality/submissions/${session.qa_audit_id}`}
-                    className="inline-flex items-center gap-1 text-primary text-[13px] mt-2 hover:underline">
-                    View QA Audit →
-                  </a>
-                )}
-              </div>
-              {session.topics.length > 0 && (
-                <div>
-                  <SubLabel>Topics</SubLabel>
-                  <p className="text-[13px] text-slate-700 leading-relaxed">
-                    {session.topics.join(' · ')}
-                  </p>
+              {(session.follow_up_required || !!session.follow_up_date) && (
+                <div className="mt-3 border-t border-slate-100 pt-3">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Follow-Up Notes</p>
+                  <NoteBlock text={session.follow_up_notes} placeholder="No follow-up notes yet" />
                 </div>
               )}
-            </div>
-          </Card>
+            </Sub>
 
-          {/* Required Action */}
-          {session.required_action && (
-            <div className="bg-white rounded-xl border-2 border-primary/20 p-5">
-              <h3 className="text-sm font-semibold text-primary mb-2 flex items-center gap-2">
-                <Target className="h-4 w-4" /> Required Action
-              </h3>
-              <p className="text-[13px] text-slate-700">{session.required_action}</p>
-            </div>
-          )}
+          </Section>
 
-          {/* KB Resources */}
-          {((session.kb_resources?.length ?? 0) > 0 || session.kb_url) && (
-            <Card>
-              <SectionTitle>Knowledge Base Resources</SectionTitle>
-              <div className="space-y-3">
-                {(session.kb_resources ?? []).map(r => (
-                  <div key={r.id} className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
-                    <div className="min-w-0">
-                      <a href={r.url} target="_blank" rel="noopener noreferrer"
-                        className="text-[13px] font-medium text-primary hover:underline flex items-center gap-1 truncate">
-                        {r.title} <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                      {r.description && <p className="text-[12px] text-slate-500 mt-0.5">{r.description}</p>}
-                    </div>
-                    <a href={r.url} target="_blank" rel="noopener noreferrer"
-                      className="text-[12px] text-primary hover:underline shrink-0">Open →</a>
-                  </div>
-                ))}
-                {session.kb_url && (
-                  <div className="pb-3 border-b border-slate-100 last:border-0 last:pb-0">
-                    <p className="text-[11px] text-slate-400 mb-0.5 uppercase tracking-wide">Custom URL</p>
-                    <a href={session.kb_url} target="_blank" rel="noopener noreferrer"
-                      className="text-[13px] text-primary hover:underline flex items-center gap-1">
-                      {session.kb_url} <ExternalLink className="h-3 w-3" />
-                    </a>
+          {/* ── Section 3: CSR Accountability ───────────────────────────── */}
+          <Section title="CSR Accountability">
+
+            {/* Action Plan */}
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Action Plan</p>
+            {session.require_action_plan ? (
+              <>
+                <NoteBlock text={session.csr_action_plan} placeholder="Pending" />
+                {session.csr_action_plan && (
+                  <div className="mt-3 space-y-1">
+                    {session.csr_root_cause && (
+                      <p className="text-[12px] text-slate-500">
+                        <span className="font-medium text-slate-600">Root cause:</span> {session.csr_root_cause}
+                      </p>
+                    )}
+                    {session.csr_support_needed && (
+                      <p className="text-[12px] text-slate-500">
+                        <span className="font-medium text-slate-600">Support needed:</span> {session.csr_support_needed}
+                      </p>
+                    )}
                   </div>
                 )}
-              </div>
-            </Card>
-          )}
+              </>
+            ) : (
+              <p className="text-[13px] text-slate-400">Not required</p>
+            )}
 
-          {/* Quizzes */}
-          {(session.quizzes?.length ?? 0) > 0 && (
-            <Card>
-              <SectionTitle>Quizzes</SectionTitle>
-              <div className="space-y-4">
-                {(session.quizzes ?? []).map(quiz => {
-                  const attempts = (session.quiz_attempts ?? []).filter(a => (a as any).quiz_id === quiz.id)
+            {/* Acknowledgment — same format as action plan */}
+            <div className="border-t border-slate-100 pt-4 mt-4">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Acknowledgment</p>
+              {session.require_acknowledgment ? (
+                <NoteBlock
+                  text={session.csr_acknowledged_at ? formatQualityDate(session.csr_acknowledged_at) : null}
+                  placeholder="Pending"
+                />
+              ) : (
+                <p className="text-[13px] text-slate-400">Not required</p>
+              )}
+            </div>
+
+          </Section>
+
+          {/* ── Internal Notes (trainer/manager/admin only) ──────────────── */}
+          {canSeeInternal && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
+                <h3 className="text-sm font-semibold text-slate-700">Internal Notes</h3>
+                <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-full">Private — Not visible to CSR</span>
+              </div>
+              <div className="p-5 space-y-5">
+                {/* Behavior flags — first */}
+                {(() => {
+                  const flags = session.behavior_flags
+                    ? session.behavior_flags.split(',').filter(Boolean)
+                    : []
+                  const allFlatFlags = BEHAVIOR_FLAG_GROUPS.flatMap(g => g.flags)
+                  const selectedGroups = BEHAVIOR_FLAG_GROUPS
+                    .map(g => ({ ...g, flags: g.flags.filter(f => flags.includes(f.value)) }))
+                    .filter(g => g.flags.length > 0)
                   return (
-                    <div key={quiz.id} className="pb-4 border-b border-slate-100 last:border-0 last:pb-0">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-[13px] font-semibold text-slate-800">{quiz.quiz_title}</p>
-                        <span className="text-[11px] text-slate-400">Pass: {quiz.pass_score}%</span>
-                      </div>
-                      {attempts.length > 0 ? (
-                        <table className="w-full text-[13px]">
-                          <thead>
-                            <tr className="text-left text-[11px] text-slate-400 border-b border-slate-100">
-                              <th className="pb-1.5 font-medium">Attempt</th>
-                              <th className="pb-1.5 font-medium">Score</th>
-                              <th className="pb-1.5 font-medium">Result</th>
-                              <th className="pb-1.5 font-medium">Date</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {attempts.map(a => (
-                              <tr key={a.id} className={cn('border-b border-slate-50', a.passed ? 'bg-emerald-50/40' : 'bg-red-50/40')}>
-                                <td className="py-1.5">#{a.attempt_number}</td>
-                                <td className="py-1.5">{Number(a.score).toFixed(0)}%</td>
-                                <td className="py-1.5">
-                                  <span className={cn('text-[11px] font-semibold', a.passed ? 'text-emerald-700' : 'text-red-700')}>
-                                    {a.passed ? 'PASS ✓' : 'FAIL ✗'}
-                                  </span>
-                                </td>
-                                <td className="py-1.5 text-slate-500">{formatQualityDate(a.submitted_at)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                    <div>
+                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Behavior Flags</p>
+                      {selectedGroups.length === 0 ? (
+                        <p className="text-[13px] text-slate-400 italic">No flags recorded</p>
                       ) : (
-                        <p className="text-[12px] text-slate-400">No attempts yet</p>
+                        <div className="space-y-3">
+                          {selectedGroups.map(g => (
+                            <div key={g.label}>
+                              <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1.5">{g.label}</p>
+                              <ul className="space-y-1">
+                                {g.flags.map(f => (
+                                  <li key={f.value} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                                    {f.text}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {flags.length > 0 && (
+                        <p className="text-[11px] text-primary mt-3 font-medium">{flags.length} flag{flags.length !== 1 ? 's' : ''} recorded</p>
                       )}
                     </div>
                   )
-                })}
+                })()}
+
+                {/* Internal notes text — second */}
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Internal Notes</p>
+                  <NoteBlock text={session.internal_notes} placeholder="No internal notes recorded" />
+                </div>
               </div>
-            </Card>
+            </div>
           )}
 
-          {/* Attachment */}
+          {/* ── Section 4: Attachment ────────────────────────────────────── */}
           {session.attachment_filename && (
-            <Card>
-              <SectionTitle>Attachment</SectionTitle>
-              <div className="flex items-center justify-between">
-                <p className="text-[13px] text-slate-700 truncate mr-3">{session.attachment_filename}</p>
-                <Button variant="outline" size="sm" onClick={handleDownload}>
-                  <Download className="h-4 w-4 mr-1" /> Download
-                </Button>
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="h-4 w-4 text-slate-400" />
+                  <span className="text-sm font-semibold text-slate-700">Attachment</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[13px] text-slate-600 truncate max-w-[240px]">{session.attachment_filename}</span>
+                  <Button variant="outline" size="sm" onClick={handleDownload}>
+                    <Download className="h-3.5 w-3.5 mr-1.5" /> Download
+                  </Button>
+                </div>
               </div>
-            </Card>
+            </div>
           )}
+
 
         </div>
 
         {/* ── Right column ────────────────────────────────────────────────── */}
         <div className="col-span-1 space-y-4">
 
-          {/* CSR Response Status */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <SectionTitle>CSR Response</SectionTitle>
-            <div className="space-y-3">
-              <StatusRow label="Delivered"
-                content={session.delivered_at ? formatQualityDate(session.delivered_at) : <span className="text-amber-600">⏳ Not yet</span>} />
-              <StatusRow label="Action Plan"
-                content={session.csr_action_plan
-                  ? <span className="text-emerald-700">✅ Submitted</span>
-                  : <span className={session.require_action_plan ? 'text-amber-600' : 'text-slate-400'}>
-                      {session.require_action_plan ? '⏳ Pending' : '— Not required'}
-                    </span>} />
-              <StatusRow label="Acknowledged"
-                content={session.csr_acknowledged_at
-                  ? <span className="text-emerald-700">✅ {formatQualityDate(session.csr_acknowledged_at)}</span>
-                  : <span className={session.require_acknowledgment ? 'text-amber-600' : 'text-slate-400'}>
-                      {session.require_acknowledgment ? '⏳ Not yet' : '— Not required'}
-                    </span>} />
-              <StatusRow label="Quiz" content={<QuizStatus session={session} />} />
-              {session.due_date && (
-                <StatusRow label="Due"
-                  content={<span className={session.is_overdue ? 'text-red-600 font-medium' : ''}>
-                    {formatQualityDate(session.due_date)}{session.is_overdue ? ' ⚠' : ''}
-                  </span>} />
-              )}
-            </div>
-
-            {session.csr_action_plan && (
-              <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
-                <p className="text-[12px] font-semibold text-slate-500 uppercase tracking-wide">Action Plan</p>
-                <p className="text-[13px] text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3 leading-relaxed">
-                  {session.csr_action_plan}
-                </p>
-                {session.csr_root_cause && (
-                  <p className="text-[12px] text-slate-500">Root cause: {session.csr_root_cause}</p>
-                )}
-                {session.csr_support_needed && (
-                  <p className="text-[12px] text-slate-500">Support needed: {session.csr_support_needed}</p>
-                )}
-                {session.csr_acknowledged_at && (
-                  <p className="text-[11px] text-slate-400">Submitted {formatQualityDate(session.csr_acknowledged_at)}</p>
-                )}
+          {/* Status panel */}
+          <SideCard>
+            <SideTitle>Status</SideTitle>
+            {session.status === 'CLOSED' ? (
+              <p className="text-[12px] text-slate-400 italic">This session is closed and archived.</p>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Current</p>
+                  <p className="text-[13px] font-semibold text-slate-800">{STATUS_LABELS[session.status] ?? session.status}</p>
+                </div>
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide">Change to</p>
+                  <select
+                    className="w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    value={pendingStatus}
+                    onChange={e => setPendingStatus(e.target.value)}
+                  >
+                    {(['SCHEDULED', 'IN_PROCESS', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED'] as const).map(s => (
+                      <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1 bg-primary hover:bg-primary/90 text-white h-8 text-[12px]"
+                      disabled={pendingStatus === session.status || statusMut.isPending}
+                      onClick={() => statusMut.mutate(pendingStatus)}
+                    >
+                      {statusMut.isPending ? 'Updating…' : 'Update Status'}
+                    </Button>
+                    <button type="button"
+                      className="text-[12px] text-slate-400 hover:text-red-600 px-2 transition-colors"
+                      disabled={statusMut.isPending}
+                      onClick={() => statusMut.mutate('CLOSED')}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
-          </div>
+          </SideCard>
 
-          {/* Coaching History */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <SectionTitle>Prior Sessions — {session.csr_name}</SectionTitle>
+          {/* CSR Response summary */}
+          <SideCard>
+            <SideTitle>CSR Response</SideTitle>
+            <ResponseRow label="Delivered to CSR"
+              value={session.delivered_at
+                ? formatQualityDate(session.delivered_at)
+                : <span className="text-slate-400">—</span>} />
+            <ResponseRow label="Action Plan"
+              muted={!session.require_action_plan}
+              value={session.csr_action_plan
+                ? <span className="text-emerald-700">Submitted</span>
+                : <span className={session.require_action_plan ? 'text-amber-600' : 'text-slate-400'}>
+                    {session.require_action_plan ? 'Pending' : 'Not required'}
+                  </span>} />
+            <ResponseRow label="Acknowledged"
+              muted={!session.require_acknowledgment}
+              value={session.csr_acknowledged_at
+                ? <span className="text-emerald-700">{formatQualityDate(session.csr_acknowledged_at)}</span>
+                : <span className={session.require_acknowledgment ? 'text-amber-600' : 'text-slate-400'}>
+                    {session.require_acknowledgment ? 'Pending' : 'Not required'}
+                  </span>} />
+            <ResponseRow label="Quiz" value={<QuizSummary session={session} />} />
+          </SideCard>
+
+          {/* Prior Sessions */}
+          <SideCard>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700">Prior Sessions</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">{session.csr_name}</p>
+              </div>
               {recentSessions.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllHistory(true)}
-                  className="text-[12px] text-primary hover:underline shrink-0 ml-2"
-                >
+                <button type="button" onClick={() => setShowHistory(true)}
+                  className="text-[12px] text-primary hover:underline shrink-0">
                   View all →
                 </button>
               )}
             </div>
+
             {recentSessions.length === 0 ? (
               <p className="text-[13px] text-slate-400">First session with this CSR</p>
             ) : (
-              <div className="space-y-3">
-                {recentSessions.map(s => {
-                  const hasRepeat = s.topics.some(t => repeatTopics.has(t))
-                  return (
-                    <div key={s.id} className="pb-3 border-b border-slate-100 last:border-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[12px] text-slate-500">{formatQualityDate(s.session_date)}</span>
-                        {hasRepeat && <span className="h-2 w-2 rounded-full bg-orange-400 shrink-0" title="Repeat topic" />}
-                        <CoachingPurposeBadge purpose={s.coaching_purpose} />
-                      </div>
-                      {s.topics.length > 0 && (
-                        <p className="text-[12px] text-slate-500">{s.topics.join(' · ')}</p>
-                      )}
-                    </div>
-                  )
-                })}
+              <div className="space-y-0">
+                {recentSessions.map(s => (
+                  <div key={s.id} className="grid grid-cols-[80px_1fr] gap-4 py-3 border-b border-slate-100 last:border-0 items-start">
+                    <span className="text-[11px] text-slate-400 pt-0.5 whitespace-nowrap">
+                      {formatQualityDate(s.session_date)}
+                    </span>
+                    <TopicList topics={s.topics} />
+                  </div>
+                ))}
               </div>
             )}
-          </div>
 
-          {/* Actions */}
-          {['SCHEDULED', 'COMPLETED', 'FOLLOW_UP_REQUIRED'].includes(session.status) && (
-            <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-2">
-              <SectionTitle>Actions</SectionTitle>
-              {session.status === 'SCHEDULED' && (
-                <Button className="w-full bg-primary hover:bg-primary/90 text-white"
-                  onClick={() => deliverMut.mutate()} disabled={isAnyPending}>
-                  {deliverMut.isPending ? 'Updating…' : 'Mark In Process'}
-                </Button>
-              )}
-              {session.status === 'COMPLETED' && (
-                <Button variant="outline" className="w-full"
-                  onClick={() => followMut.mutate()} disabled={isAnyPending}>
-                  {followMut.isPending ? 'Updating…' : 'Flag for Follow-Up'}
-                </Button>
-              )}
-              {session.status === 'FOLLOW_UP_REQUIRED' && (
-                <>
-                  <Button variant="outline" className="w-full"
-                    onClick={() => followMut.mutate()} disabled={isAnyPending}>
-                    {followMut.isPending ? 'Updating…' : 'Re-flag Follow-Up'}
-                  </Button>
-                  <Button variant="outline" className="w-full border-slate-300"
-                    onClick={() => closeMut.mutate()} disabled={isAnyPending}>
-                    {closeMut.isPending ? 'Closing…' : 'Close Session'}
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
+            {(session.repeat_topics?.length ?? 0) > 0 && (
+              <div className="mt-3 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  Coached 2+ times in 90 days
+                </p>
+                <ul className="space-y-1 pl-3">
+                  {session.repeat_topics!.map(t => (
+                    <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </SideCard>
 
         </div>
       </div>
 
-      {/* ── View All History Modal ─────────────────────────────────────────── */}
-      <Dialog open={showAllHistory} onOpenChange={setShowAllHistory}>
+      {/* ── Prior Sessions Modal ───────────────────────────────────────────── */}
+      <Dialog open={showHistory} onOpenChange={setShowHistory}>
         <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>All Sessions — {session.csr_name}</DialogTitle>
@@ -426,43 +591,34 @@ export default function CoachingSessionDetailPage() {
               <p className="text-[13px] text-slate-400 py-4 text-center">No prior sessions</p>
             ) : (
               <div className="space-y-0">
-                {recentSessions.map(s => {
-                  const hasRepeat = s.topics.some(t => repeatTopics.has(t))
-                  return (
-                    <div key={s.id} className="py-3 border-b border-slate-100 last:border-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[13px] font-medium text-slate-700">{formatQualityDate(s.session_date)}</span>
-                        <div className="flex items-center gap-1.5">
-                          {hasRepeat && <span className="h-2 w-2 rounded-full bg-orange-400 shrink-0" title="Repeat topic" />}
-                          <CoachingPurposeBadge purpose={s.coaching_purpose} />
-                        </div>
-                      </div>
-                      {s.topics.length > 0 && (
-                        <p className="text-[12px] text-slate-500 mt-0.5">{s.topics.join(' · ')}</p>
-                      )}
-                    </div>
-                  )
-                })}
+                {recentSessions.map(s => (
+                  <div key={s.id} className="grid grid-cols-[90px_1fr] gap-6 py-3 border-b border-slate-100 last:border-0 items-start">
+                    <span className="text-[11px] text-slate-400 pt-0.5 whitespace-nowrap">
+                      {formatQualityDate(s.session_date)}
+                    </span>
+                    <TopicList topics={s.topics} />
+                  </div>
+                ))}
               </div>
             )}
             {(session.repeat_topics?.length ?? 0) > 0 && (
-              <div className="mt-4 p-3 bg-orange-50 rounded-lg border border-orange-100">
-                <p className="text-[12px] font-semibold text-orange-700">
-                  🔥 Repeat topics: {session.repeat_topics!.join(', ')}
+              <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  Coached 2+ times in 90 days
                 </p>
+                <ul className="space-y-1 pl-3">
+                  {session.repeat_topics!.map(t => (
+                    <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
           <div className="pt-3 border-t border-slate-100">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full text-[13px]"
-              onClick={() => {
-                setShowAllHistory(false)
-                navigate(`/app/training/coaching?csrs=${encodeURIComponent(session.csr_name)}`)
-              }}
-            >
+            <Button variant="outline" size="sm" className="w-full text-[13px]"
+              onClick={() => { setShowHistory(false); navigate(`/app/training/coaching?csrs=${encodeURIComponent(session.csr_name)}`) }}>
               Open Full Coaching List for {session.csr_name} →
             </Button>
           </div>

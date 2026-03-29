@@ -78,6 +78,9 @@ export interface CoachingSession {
   notes?: string
   required_action?: string
   kb_url?: string
+  follow_up_notes?: string
+  internal_notes?: string
+  behavior_flags?: string
   kb_resources?: { id: number; title: string; url: string; description?: string }[]
   quizzes?: { id: number; quiz_title: string; pass_score: number; questions: QuizQuestion[] }[]
   require_acknowledgment: boolean

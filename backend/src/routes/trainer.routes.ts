@@ -29,6 +29,7 @@ import {
   downloadAttachment,
   getCSRCoachingHistory,
   getEligibleCoaches,
+  setSessionStatus,
 } from '../controllers/coaching.controller';
 import {
   getResources,
@@ -99,6 +100,7 @@ router.get('/coaching-sessions/:id/attachment', auth, coaching, downloadAttachme
 router.get('/coaching-sessions/:id', auth, coaching, getCoachingSessionDetail as unknown as RequestHandler);
 router.post('/coaching-sessions', auth, coaching, upload.single('attachment'), createCoachingSession as unknown as RequestHandler);
 router.put('/coaching-sessions/:id', auth, coaching, upload.single('attachment'), updateCoachingSession as unknown as RequestHandler);
+router.patch('/coaching-sessions/:id/status', auth, coaching, setSessionStatus as unknown as RequestHandler);
 router.patch('/coaching-sessions/:id/deliver', auth, coaching, deliverCoachingSession as unknown as RequestHandler);
 router.patch('/coaching-sessions/:id/complete', auth, coaching, completeCoachingSession as unknown as RequestHandler);
 router.patch('/coaching-sessions/:id/flag-followup', auth, coaching, flagFollowUp as unknown as RequestHandler);

@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, Search, Paperclip } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu'
 import type {
   CoachingPurpose, CoachingFormat, CoachingSourceType, TrainingResource, LibraryQuiz,
@@ -397,24 +398,6 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, updat
         />
       </SubSection>
 
-      {/* Accountability */}
-      <SubSection title="CSR Accountability">
-        <div className="space-y-3">
-          {([
-            ['require_action_plan',    'Require Action Plan',    'CSR must write a response before completing'],
-            ['require_acknowledgment', 'Require Acknowledgment', 'CSR must check acknowledgment box'],
-          ] as const).map(([key, label, helper]) => (
-            <div key={key} className="flex items-start gap-3">
-              <Switch checked={form[key]} onCheckedChange={v => update(key, v)} className="mt-0.5" />
-              <div>
-                <p className="text-[13px] font-medium text-slate-700">{label}</p>
-                <p className="text-[12px] text-slate-400">{helper}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </SubSection>
-
       {/* Timing */}
       <SubSection title="Timing">
         <div className="grid grid-cols-2 gap-4">
@@ -431,12 +414,208 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, updat
             </Field>
           )}
         </div>
+        {form.follow_up_required && (
+          <div className="mt-4">
+            <Field label="Follow-Up Notes">
+              <textarea
+                className={tex} rows={4} maxLength={3000} value={form.follow_up_notes}
+                placeholder="Document notes from the follow-up meeting…"
+                onChange={e => update('follow_up_notes', e.target.value)}
+              />
+              <p className="text-[11px] text-slate-400 mt-1 text-right">{form.follow_up_notes.length}/3000</p>
+            </Field>
+          </div>
+        )}
       </SubSection>
     </FormSection>
   )
 }
 
-// ── Section 4: Attachment (optional) ─────────────────────────────────────────
+// ── Section 4: CSR Accountability ────────────────────────────────────────────
+
+interface S4Props { form: CoachingFormState; update: (k: keyof CoachingFormState, v: any) => void }
+
+export function AccountabilitySection({ form, update }: S4Props) {
+  return (
+    <FormSection title="CSR Accountability">
+      <div className="space-y-4">
+        {([
+          ['require_action_plan',    'Require Action Plan',    'CSR must write a response before completing'],
+          ['require_acknowledgment', 'Require Acknowledgment', 'CSR must check the acknowledgment box'],
+        ] as const).map(([key, label, helper]) => (
+          <div key={key} className="flex items-start gap-3">
+            <Switch checked={form[key]} onCheckedChange={v => update(key, v)} className="mt-0.5" />
+            <div>
+              <p className="text-[13px] font-medium text-slate-700">{label}</p>
+              <p className="text-[12px] text-slate-400">{helper}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </FormSection>
+  )
+}
+
+// ── Behavior flags definition ─────────────────────────────────────────────────
+
+export const BEHAVIOR_FLAG_GROUPS: { label: string; flags: { value: string; text: string }[] }[] = [
+  {
+    label: 'Risk Signals',
+    flags: [
+      { value: 'RESISTANCE_TO_FEEDBACK',    text: 'Resistance to Feedback' },
+      { value: 'LACK_OF_ACCOUNTABILITY',    text: 'Lack of Accountability' },
+      { value: 'BLAMING_EXTERNAL_FACTORS',  text: 'Blaming External Factors' },
+      { value: 'LOW_ENGAGEMENT',            text: 'Low Engagement' },
+      { value: 'REPEATED_ISSUE',            text: 'Repeated Issue (Same Topic)' },
+      { value: 'COACHING_NOT_TAKEN_SERIOUSLY', text: 'Coaching Not Taken Seriously' },
+    ],
+  },
+  {
+    label: 'Observational',
+    flags: [
+      { value: 'NEEDS_ADDITIONAL_SUPPORT', text: 'Needs Additional Support' },
+      { value: 'PROCESS_CONFUSION',        text: 'Process Confusion' },
+      { value: 'SYSTEM_KNOWLEDGE_GAP',     text: 'System Knowledge Gap' },
+    ],
+  },
+  {
+    label: 'Positive',
+    flags: [
+      { value: 'STRONG_IMPROVEMENT', text: 'Strong Improvement' },
+      { value: 'HIGHLY_ENGAGED',     text: 'Highly Engaged' },
+      { value: 'TOOK_OWNERSHIP',     text: 'Took Ownership' },
+    ],
+  },
+]
+
+// ── Behavior flag multi-select dropdown ───────────────────────────────────────
+
+function BehaviorFlagSelect({ selected, onToggle }: {
+  selected: string[]; onToggle: (v: string) => void
+}) {
+  const [open, setOpen]     = useState(false)
+  const [search, setSearch] = useState('')
+
+  const allFlat = BEHAVIOR_FLAG_GROUPS.flatMap(g => g.flags)
+  const selectedFlags = allFlat.filter(f => selected.includes(f.value))
+  const label = selectedFlags.length === 0
+    ? 'Select behavior flags…'
+    : `${selectedFlags.length} flag${selectedFlags.length !== 1 ? 's' : ''} selected`
+
+  return (
+    <div>
+      <DropdownMenu open={open} onOpenChange={o => { setOpen(o); if (o) setSearch('') }}>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className={`${sel} flex items-center justify-between`}>
+            <span className={selectedFlags.length === 0 ? 'text-slate-400' : 'text-slate-700'}>{label}</span>
+            <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-[380px] p-0" onCloseAutoFocus={e => e.preventDefault()}>
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
+            <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+            <input
+              className="flex-1 text-[13px] focus:outline-none placeholder:text-slate-400"
+              placeholder="Search flags…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.stopPropagation()}
+            />
+          </div>
+          <div className="max-h-[280px] overflow-y-auto py-1">
+            {BEHAVIOR_FLAG_GROUPS.map((group, gi) => {
+              const filtered = group.flags.filter(f =>
+                !search || f.text.toLowerCase().includes(search.toLowerCase())
+              )
+              if (!filtered.length) return null
+              return (
+                <DropdownMenuGroup key={group.label}>
+                  {gi > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuLabel className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
+                    {group.label}
+                  </DropdownMenuLabel>
+                  {filtered.map(f => (
+                    <DropdownMenuCheckboxItem
+                      key={f.value}
+                      checked={selected.includes(f.value)}
+                      onCheckedChange={() => onToggle(f.value)}
+                      onSelect={e => e.preventDefault()}
+                    >
+                      {f.text}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuGroup>
+              )
+            })}
+          </div>
+          {selectedFlags.length > 0 && (
+            <div className="border-t border-slate-100 px-3 py-2">
+              <p className="text-[11px] text-primary font-medium">{selectedFlags.length} selected</p>
+            </div>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {selectedFlags.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {selectedFlags.map(f => (
+            <span key={f.value}
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 text-[13px] rounded-md border border-slate-200">
+              {f.text}
+              <button type="button" onClick={() => onToggle(f.value)}
+                className="text-slate-400 hover:text-slate-600 leading-none">×</button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Section 5: Internal Notes (trainer/manager/admin only) ───────────────────
+
+interface S5InternalProps {
+  form: CoachingFormState
+  update: (k: keyof CoachingFormState, v: any) => void
+}
+
+export function InternalNotesSection({ form, update }: S5InternalProps) {
+  const allFlags = form.behavior_flags ?? []
+
+  const toggleFlag = (value: string) => {
+    update(
+      'behavior_flags',
+      allFlags.includes(value) ? allFlags.filter(f => f !== value) : [...allFlags, value]
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
+        <h3 className="text-sm font-semibold text-slate-700">Internal Notes</h3>
+        <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-full">Private — Not visible to CSR</span>
+      </div>
+      <div className="p-5 space-y-4">
+        {/* Behavior flags dropdown — first */}
+        <Field label="Behavior Flags">
+          <BehaviorFlagSelect selected={allFlags} onToggle={toggleFlag} />
+        </Field>
+
+        {/* Internal notes text — second */}
+        <Field label="Internal Notes">
+          <textarea
+            className={tex} rows={4} maxLength={3000} value={form.internal_notes}
+            placeholder="Context, observations, concerns (e.g. CSR was defensive, blamed system, appears disengaged)…"
+            onChange={e => update('internal_notes', e.target.value)}
+          />
+          <p className="text-[11px] text-slate-400 mt-1 text-right">{form.internal_notes.length}/3000</p>
+        </Field>
+      </div>
+    </div>
+  )
+}
+
+// ── Section 6: Attachment (optional) ─────────────────────────────────────────
 
 interface S4Props {
   form: CoachingFormState; update: (k: keyof CoachingFormState, v: any) => void
