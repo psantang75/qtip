@@ -19,6 +19,7 @@ import AdminUsersPage       from './pages/admin/AdminUsersPage'
 import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage'
 import AdminRolesPage       from './pages/admin/AdminRolesPage'
 import ProfilePage          from './pages/admin/ProfilePage'
+import ListManagementPage   from './pages/admin/ListManagementPage'
 
 // Lazy-loaded page components
 const FormsPage             = React.lazy(() => import('./pages/quality/FormsPage'))
@@ -164,9 +165,10 @@ export default function App() {
 
               {/* Admin area — own layout, no SectionNav */}
               <Route path="/app/admin" element={<AdminLayout />}>
-                <Route path="users"       element={<AdminUsersPage />} />
-                <Route path="departments" element={<AdminDepartmentsPage />} />
-                <Route path="roles"       element={<AdminRolesPage />} />
+                <Route path="users"            element={<AdminUsersPage />} />
+                <Route path="departments"      element={<AdminDepartmentsPage />} />
+                <Route path="roles"            element={<AdminRolesPage />} />
+                <Route path="list-management"  element={<ListManagementPage />} />
               </Route>
 
               <Route element={<AppShell />}>

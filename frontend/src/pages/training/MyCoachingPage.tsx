@@ -18,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
-import { QuizStatusBadge, PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS, dateUrgency } from './CoachingSessionsPage'
+import { QuizStatusBadge, PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './CoachingSessionsPage'
 
 
 const SORT_PRIORITY: Record<string, number> = { IN_PROCESS: 0, AWAITING_CSR_ACTION: 0 }
@@ -225,11 +225,11 @@ export default function MyCoachingPage() {
                   <TableCell><QuizStatusBadge session={s} /></TableCell>
 
                   <TableCell className="pl-6 text-[13px] whitespace-nowrap">
-                    {(() => { const u = dateUrgency(s.due_date); return u ? <span className={u.cls}>{u.label}</span> : <span className="text-slate-300">&mdash;</span> })()}
+                    {s.due_date ? formatQualityDate(s.due_date) : <span className="text-slate-300">&mdash;</span>}
                   </TableCell>
 
-                  <TableCell className="pl-6 text-[13px] whitespace-nowrap">
-                    {(() => { const u = dateUrgency(s.follow_up_date); return u ? <span className={u.cls}>{u.label}</span> : <span className="text-slate-300">&mdash;</span> })()}
+                  <TableCell className="pl-6 text-[13px] text-slate-600 whitespace-nowrap">
+                    {s.follow_up_date ? formatQualityDate(s.follow_up_date) : <span className="text-slate-300">&mdash;</span>}
                   </TableCell>
 
                   <TableCell onClick={e => e.stopPropagation()}>

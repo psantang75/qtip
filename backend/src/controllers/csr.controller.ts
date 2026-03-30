@@ -2071,7 +2071,7 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
 
     // Load all quiz attempts for this session (with quiz_id for multi-quiz support)
     const allAttempts = await prisma.$queryRaw<any[]>(
-      Prisma.sql`SELECT id, quiz_id, attempt_number, score, passed, submitted_at
+      Prisma.sql`SELECT id, quiz_id, attempt_number, score, passed, submitted_at, answers_json
                  FROM quiz_attempts
                  WHERE coaching_session_id = ${sessionId} AND user_id = ${userId}
                  ORDER BY quiz_id, attempt_number`

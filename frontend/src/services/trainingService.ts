@@ -66,6 +66,7 @@ export interface RecentSession {
 
 export interface CoachingSession {
   id: number
+  batch_id?: string
   csr_id: number
   csr_name: string
   created_by: number
@@ -180,7 +181,7 @@ export const trainingService = {
     return data?.data ?? data
   },
 
-  async createCoachingSession(formData: FormData): Promise<CoachingSession> {
+  async createCoachingSession(formData: FormData): Promise<{ id?: number; ids?: number[]; batch_id?: string; count?: number }> {
     const { data } = await api.post('/trainer/coaching-sessions', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })

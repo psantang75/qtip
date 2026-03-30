@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { randomUUID } from 'crypto';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { hasCsrRequirements, applyAutoAdvance } from '../utils/coachingAutoAdvance';
@@ -66,7 +67,7 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
       ),
       prisma.$queryRaw<any[]>(
         Prisma.sql`
-          SELECT cs.id, cs.csr_id, u.username as csr_name, cs.coaching_purpose, cs.coaching_format, cs.source_type,
+          SELECT cs.id, cs.batch_id, cs.csr_id, u.username as csr_name, cs.coaching_purpose, cs.coaching_format, cs.source_type,
             cs.status, cs.session_date, cs.due_date, cs.follow_up_date, cs.follow_up_required,
             cs.created_at, cb.username as created_by_name, cs.attachment_filename,
             GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics,
@@ -205,29 +206,35 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
   try {
     const userId = req.user!.user_id;
     const attachment = req.file;
-    let { csr_id, session_date, coaching_purpose, coaching_format, source_type, notes, topic_ids,
+    let { csr_id, csr_ids, session_date, coaching_purpose, coaching_format, source_type, notes, topic_ids,
           required_action, resource_ids, kb_url, quiz_ids,
           require_acknowledgment, require_action_plan, due_date,
           follow_up_required, follow_up_date, coach_id } = req.body;
 
-    if (typeof topic_ids    === 'string') topic_ids    = topic_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean);
+    if (typeof topic_ids === 'string') topic_ids = topic_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean);
     if (!Array.isArray(topic_ids)) topic_ids = topic_ids ? [parseInt(topic_ids)] : [];
 
     const { follow_up_notes: follow_up_notes_create, internal_notes: internal_notes_create, behavior_flags: behavior_flags_create } = req.body;
 
-    const parsedResourceIds: number[] = typeof resource_ids === 'string'
-      ? resource_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean)
-      : [];
-    const parsedQuizIds: number[] = typeof quiz_ids === 'string'
-      ? quiz_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean)
-      : [];
+    // Support both csr_ids (multi-select) and csr_id (legacy single)
+    let csrIdList: number[] = [];
+    if (csr_ids) {
+      csrIdList = (typeof csr_ids === 'string' ? csr_ids.split(',') : [String(csr_ids)])
+        .map(Number).filter(Boolean);
+    } else if (csr_id) {
+      csrIdList = [parseInt(csr_id)];
+    }
 
-    if (!csr_id || !session_date || !coaching_purpose || !coaching_format || !source_type) {
-      return res.status(400).json({ success: false, message: 'Required: csr_id, session_date, coaching_purpose, coaching_format, source_type' });
+    const parsedResourceIds: number[] = typeof resource_ids === 'string'
+      ? resource_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean) : [];
+    const parsedQuizIds: number[] = typeof quiz_ids === 'string'
+      ? quiz_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean) : [];
+
+    if (!csrIdList.length || !session_date || !coaching_purpose || !coaching_format || !source_type) {
+      return res.status(400).json({ success: false, message: 'Required: csr_ids, session_date, coaching_purpose, coaching_format, source_type' });
     }
     if (!topic_ids.length) return res.status(400).json({ success: false, message: 'At least one topic is required' });
 
-    // Resolve the coach: use provided coach_id if valid, otherwise fall back to the authenticated user
     const resolvedCoachId = coach_id ? parseInt(coach_id) : userId;
     if (coach_id && parseInt(coach_id) !== userId) {
       const coachCheck = await prisma.$queryRaw<any[]>(
@@ -236,8 +243,11 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
       if (!coachCheck.length) return res.status(400).json({ success: false, message: 'Invalid or ineligible coach' });
     }
 
-    const csrCheck = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM users WHERE id = ${parseInt(csr_id)} AND role_id = 3 AND is_active = 1`);
-    if (!csrCheck.length) return res.status(403).json({ success: false, message: 'CSR not found or inactive' });
+    // Validate all CSRs
+    for (const csrId of csrIdList) {
+      const csrCheck = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM users WHERE id = ${csrId} AND role_id = 3 AND is_active = 1`);
+      if (!csrCheck.length) return res.status(403).json({ success: false, message: `CSR ${csrId} not found or inactive` });
+    }
 
     const topicCheck = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM topics WHERE id IN (${Prisma.join(topic_ids)}) AND is_active = 1`);
     if (topicCheck.length !== topic_ids.length) return res.status(400).json({ success: false, message: 'One or more topics are invalid or inactive' });
@@ -251,40 +261,51 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
       attFilename = attachment.originalname; attPath = `uploads/coaching/${filename}`; attSize = attachment.size; attMime = attachment.mimetype;
     }
 
-    const newId = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw(
-        Prisma.sql`INSERT INTO coaching_sessions
-          (csr_id, session_date, coaching_purpose, coaching_format, source_type, notes, status, required_action, kb_url,
-           require_acknowledgment, require_action_plan, due_date, follow_up_required, follow_up_date, follow_up_notes,
-           internal_notes, behavior_flags,
-           attachment_filename, attachment_path, attachment_size, attachment_mime_type, created_by)
-          VALUES
-          (${parseInt(csr_id)}, ${session_date}, ${coaching_purpose}, ${coaching_format}, ${source_type}, ${notes || null}, 'SCHEDULED',
-           ${required_action || null}, ${kb_url || null},
-           ${require_acknowledgment === 'false' || require_acknowledgment === false ? 0 : 1},
-           ${require_action_plan === 'false' || require_action_plan === false ? 0 : 1},
-           ${due_date || null},
-           ${follow_up_required === 'true' || follow_up_required === true ? 1 : 0},
-           ${follow_up_date || null}, ${follow_up_notes_create || null},
-           ${internal_notes_create || null}, ${behavior_flags_create || null},
-           ${attFilename}, ${attPath}, ${attSize}, ${attMime}, ${resolvedCoachId})`
-      );
-      const [{ id }] = await tx.$queryRaw<{ id: bigint }[]>(Prisma.sql`SELECT LAST_INSERT_ID() as id`);
-      const sessionId = Number(id);
-      for (const topicId of topic_ids) {
-        await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sessionId}, ${topicId})`);
-      }
-      for (const resourceId of parsedResourceIds) {
-        await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_resources (coaching_session_id, resource_id) VALUES (${sessionId}, ${resourceId})`);
-      }
-      for (const quizId of parsedQuizIds) {
-        await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_quizzes (coaching_session_id, quiz_id) VALUES (${sessionId}, ${quizId})`);
-      }
-      await tx.auditLog.create({ data: { user_id: userId, action: 'CREATE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ csr_id, coaching_purpose, coaching_format, topic_ids }) } });
-      return sessionId;
-    });
+    // Generate batch_id when creating for multiple CSRs
+    const batchId = csrIdList.length > 1 ? randomUUID() : null;
 
-    res.status(201).json({ success: true, data: { id: newId }, message: 'Coaching session created successfully' });
+    const createdIds: number[] = [];
+    for (const csrId of csrIdList) {
+      const newId = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw(
+          Prisma.sql`INSERT INTO coaching_sessions
+            (batch_id, csr_id, session_date, coaching_purpose, coaching_format, source_type, notes, status, required_action, kb_url,
+             require_acknowledgment, require_action_plan, due_date, follow_up_required, follow_up_date, follow_up_notes,
+             internal_notes, behavior_flags,
+             attachment_filename, attachment_path, attachment_size, attachment_mime_type, created_by)
+            VALUES
+            (${batchId}, ${csrId}, ${session_date}, ${coaching_purpose}, ${coaching_format}, ${source_type}, ${notes || null}, 'SCHEDULED',
+             ${required_action || null}, ${kb_url || null},
+             ${require_acknowledgment === 'false' || require_acknowledgment === false ? 0 : 1},
+             ${require_action_plan === 'false' || require_action_plan === false ? 0 : 1},
+             ${due_date || null},
+             ${follow_up_required === 'true' || follow_up_required === true ? 1 : 0},
+             ${follow_up_date || null}, ${follow_up_notes_create || null},
+             ${internal_notes_create || null}, ${behavior_flags_create || null},
+             ${attFilename}, ${attPath}, ${attSize}, ${attMime}, ${resolvedCoachId})`
+        );
+        const [{ id }] = await tx.$queryRaw<{ id: bigint }[]>(Prisma.sql`SELECT LAST_INSERT_ID() as id`);
+        const sessionId = Number(id);
+        for (const topicId of topic_ids) {
+          await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sessionId}, ${topicId})`);
+        }
+        for (const resourceId of parsedResourceIds) {
+          await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_resources (coaching_session_id, resource_id) VALUES (${sessionId}, ${resourceId})`);
+        }
+        for (const quizId of parsedQuizIds) {
+          await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_quizzes (coaching_session_id, quiz_id) VALUES (${sessionId}, ${quizId})`);
+        }
+        await tx.auditLog.create({ data: { user_id: userId, action: 'CREATE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ csr_id: csrId, coaching_purpose, coaching_format, topic_ids, batch_id: batchId }) } });
+        return sessionId;
+      });
+      createdIds.push(newId);
+    }
+
+    if (createdIds.length === 1) {
+      res.status(201).json({ success: true, data: { id: createdIds[0] }, message: 'Coaching session created successfully' });
+    } else {
+      res.status(201).json({ success: true, data: { ids: createdIds, batch_id: batchId, count: createdIds.length }, message: `${createdIds.length} coaching sessions created` });
+    }
   } catch (error) {
     console.error('[COACHING] createCoachingSession error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
@@ -362,21 +383,38 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
       return res.status(400).json({ success: false, message: 'No fields to update' });
     }
 
+    // Optional: apply same content changes to all sessions in the same batch
+    const { apply_to_batch } = req.body;
+    let batchSessionIds: number[] = [sessionId];
+    if (apply_to_batch === 'true' || apply_to_batch === true) {
+      const batchRows = await prisma.$queryRaw<{ id: number; batch_id: string }[]>(
+        Prisma.sql`SELECT id, batch_id FROM coaching_sessions WHERE id = ${sessionId}`
+      );
+      if (batchRows[0]?.batch_id) {
+        const siblingRows = await prisma.$queryRaw<{ id: number }[]>(
+          Prisma.sql`SELECT id FROM coaching_sessions WHERE batch_id = ${batchRows[0].batch_id} AND id != ${sessionId} AND status != 'CLOSED'`
+        );
+        batchSessionIds = [sessionId, ...siblingRows.map(r => r.id)];
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
-      if (parts.length) await tx.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET ${Prisma.join(parts, ', ')} WHERE id = ${sessionId}`);
+      for (const sid of batchSessionIds) {
+      if (parts.length) await tx.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET ${Prisma.join(parts, ', ')} WHERE id = ${sid}`);
       if (Array.isArray(topic_ids) && topic_ids.length) {
-        await tx.coachingSessionTopic.deleteMany({ where: { coaching_session_id: sessionId } });
-        for (const tid of topic_ids) await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sessionId}, ${tid})`);
+        await tx.coachingSessionTopic.deleteMany({ where: { coaching_session_id: sid } });
+        for (const tid of topic_ids) await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sid}, ${tid})`);
       }
       if (updateResourceIds !== undefined) {
-        await tx.$executeRaw(Prisma.sql`DELETE FROM coaching_session_resources WHERE coaching_session_id = ${sessionId}`);
-        for (const rid of updateResourceIds) await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_resources (coaching_session_id, resource_id) VALUES (${sessionId}, ${rid})`);
+        await tx.$executeRaw(Prisma.sql`DELETE FROM coaching_session_resources WHERE coaching_session_id = ${sid}`);
+        for (const rid of updateResourceIds) await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_resources (coaching_session_id, resource_id) VALUES (${sid}, ${rid})`);
       }
       if (updateQuizIds !== undefined) {
-        await tx.$executeRaw(Prisma.sql`DELETE FROM coaching_session_quizzes WHERE coaching_session_id = ${sessionId}`);
-        for (const qid of updateQuizIds) await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_quizzes (coaching_session_id, quiz_id) VALUES (${sessionId}, ${qid})`);
+        await tx.$executeRaw(Prisma.sql`DELETE FROM coaching_session_quizzes WHERE coaching_session_id = ${sid}`);
+        for (const qid of updateQuizIds) await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_quizzes (coaching_session_id, quiz_id) VALUES (${sid}, ${qid})`);
       }
-      await tx.auditLog.create({ data: { user_id: userId, action: 'UPDATE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify(req.body) } });
+      await tx.auditLog.create({ data: { user_id: userId, action: sid === sessionId ? 'UPDATE' : 'BATCH_UPDATE', target_id: sid, target_type: 'coaching_session', details: JSON.stringify({ batch_applied: sid !== sessionId }) } });
+      } // end batchSessionIds loop
     });
 
     // ── Re-evaluate status after edit ─────────────────────────────────────────

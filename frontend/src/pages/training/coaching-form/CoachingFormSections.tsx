@@ -148,21 +148,74 @@ interface S1Props {
   csrs: { id: number; name: string; department: string }[]
   coaches: { id: number; name: string }[]
   topics: Topic[]
+  isEdit?: boolean
   update: (k: keyof CoachingFormState, v: any) => void
   toggleTopic: (id: number) => void
 }
 
-export function SessionSection({ form, errors, csrs, coaches, topics, update, toggleTopic }: S1Props) {
+export function SessionSection({ form, errors, csrs, coaches, topics, isEdit, update, toggleTopic }: S1Props) {
+  const toggleCsr = (csrId: number) => {
+    const next = form.csr_ids.includes(csrId)
+      ? form.csr_ids.filter(x => x !== csrId)
+      : [...form.csr_ids, csrId]
+    update('csr_ids', next)
+  }
+  const selectedCsrs = csrs.filter(c => form.csr_ids.includes(c.id))
+
   return (
     <FormSection title="Session">
       {/* Scheduling fields */}
       <div className="grid grid-cols-2 gap-4">
-        <Field label="CSR" required error={errors.csr_id}>
-          <select className={sel} value={form.csr_id || ''} onChange={e => update('csr_id', Number(e.target.value))}>
-            <option value="">Select CSR…</option>
-            {csrs.map(c => <option key={c.id} value={c.id}>{c.name} — {c.department}</option>)}
-          </select>
-        </Field>
+        {isEdit ? (
+          /* Editing: show CSR as read-only */
+          <div>
+            <p className="text-[13px] font-medium text-slate-700 mb-1">CSR</p>
+            <p className="text-[13px] text-slate-600 h-9 flex items-center">
+              {selectedCsrs.map(c => c.name).join(', ') || csrs.find(c => form.csr_ids.includes(c.id))?.name || '—'}
+            </p>
+          </div>
+        ) : (
+          /* Creating: multi-select CSRs */
+          <Field label="CSR(s)" required error={(errors as any).csr_ids}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className={`${sel} flex items-center justify-between`}>
+                  <span className={form.csr_ids.length === 0 ? 'text-slate-400' : 'text-slate-700'}>
+                    {form.csr_ids.length === 0 ? 'Select CSR(s)…'
+                      : form.csr_ids.length === 1 ? selectedCsrs[0]?.name
+                      : `${form.csr_ids.length} CSRs selected`}
+                  </span>
+                  <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[340px] max-h-[280px] overflow-y-auto py-1" onCloseAutoFocus={e => e.preventDefault()}>
+                {csrs.map(c => (
+                  <DropdownMenuCheckboxItem
+                    key={c.id}
+                    checked={form.csr_ids.includes(c.id)}
+                    onCheckedChange={() => toggleCsr(c.id)}
+                    onSelect={e => e.preventDefault()}
+                  >
+                    {c.name} — {c.department}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {selectedCsrs.length > 1 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {selectedCsrs.map(c => (
+                  <span key={c.id} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-slate-100 text-slate-700 text-[12px] rounded-md border border-slate-200">
+                    {c.name}
+                    <button type="button" onClick={() => toggleCsr(c.id)} className="text-slate-400 hover:text-slate-600">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {selectedCsrs.length > 1 && (
+              <p className="text-[11px] text-primary mt-1">{selectedCsrs.length} sessions will be created</p>
+            )}
+          </Field>
+        )}
         <Field label="Session Date" required error={errors.session_date}>
           <input type="datetime-local" className={inp} value={form.session_date}
             onChange={e => update('session_date', e.target.value)} />

@@ -1,12 +1,13 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Users, Building2, ShieldCheck } from 'lucide-react'
+import { Users, Building2, ShieldCheck, List } from 'lucide-react'
 import TopBar from './TopBar'
 import { cn } from '@/lib/utils'
 
 const ADMIN_NAV = [
-  { label: 'Users',       path: '/app/admin/users',       icon: Users },
-  { label: 'Departments', path: '/app/admin/departments',  icon: Building2 },
-  { label: 'Roles',       path: '/app/admin/roles',        icon: ShieldCheck },
+  { label: 'Users',           path: '/app/admin/users',           icon: Users },
+  { label: 'Departments',     path: '/app/admin/departments',      icon: Building2 },
+  { label: 'Roles',           path: '/app/admin/roles',            icon: ShieldCheck },
+  { label: 'List Management', path: '/app/admin/list-management',  icon: List },
 ]
 
 const ACTIVE   = 'border-l-[3px] border-l-[#00aeef] bg-[#00aeef]/8 text-[#00aeef] font-semibold'

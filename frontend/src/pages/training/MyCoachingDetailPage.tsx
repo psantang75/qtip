@@ -332,44 +332,71 @@ export default function MyCoachingDetailPage() {
                               </div>
                             )}
 
-                            {/* Questions & correct answers review */}
-                            {quiz.questions?.length > 0 && (
-                              <div>
-                                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Questions & Correct Answers</p>
-                                <div className="space-y-4">
-                                  {quiz.questions.map((q, qi) => (
-                                    <div key={q.id}>
-                                      <p className="text-[13px] font-medium text-slate-700 mb-2">
-                                        {qi + 1}. {q.question_text}
-                                      </p>
-                                      <div className="space-y-1 pl-3">
-                                        {q.options.map((opt: string, oi: number) => {
-                                          const isCorrect = oi === q.correct_option
-                                          return (
-                                            <div key={oi} className={cn(
-                                              'flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px]',
-                                              isCorrect ? 'bg-emerald-50 text-emerald-800 font-medium' : 'text-slate-600'
-                                            )}>
-                                              {isCorrect
-                                                ? <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                                                : <span className="h-3.5 w-3.5 shrink-0" />
-                                              }
-                                              <span>{String.fromCharCode(65 + oi)}. {opt}</span>
-                                            </div>
-                                          )
-                                        })}
-                                      </div>
-                                    </div>
-                                  ))}
+                            {/* Review — only shown after at least one attempt */}
+                            {hasAttempts && quiz.questions?.length > 0 && (() => {
+                              // Use the most recent attempt's answers
+                              const lastAttempt = attempts[attempts.length - 1]
+                              const answerMap = new Map<number, number>()
+                              try {
+                                const parsed = JSON.parse(lastAttempt?.answers_json ?? '[]')
+                                parsed.forEach((a: { question_id: number; selected_option: number }) =>
+                                  answerMap.set(a.question_id, a.selected_option)
+                                )
+                              } catch { /* ignore parse errors */ }
+                              return (
+                                <div>
+                                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">
+                                    Your Answers — Attempt #{lastAttempt.attempt_number}
+                                  </p>
+                                  <div className="space-y-4">
+                                    {quiz.questions.map((q: any, qi: number) => {
+                                      const userAnswer = answerMap.get(q.id)
+                                      const answeredCorrectly = userAnswer === q.correct_option
+                                      return (
+                                        <div key={q.id}>
+                                          <p className="text-[13px] font-medium text-slate-700 mb-2">
+                                            {qi + 1}. {q.question_text}
+                                          </p>
+                                          <div className="space-y-1 pl-3">
+                                            {q.options.map((opt: string, oi: number) => {
+                                              const isUserAnswer  = oi === userAnswer
+                                              const isCorrect     = oi === q.correct_option
+                                              // Show: user's answer (right or wrong) + correct answer if user was wrong
+                                              const show = isUserAnswer || (!answeredCorrectly && isCorrect)
+                                              if (!show && userAnswer !== undefined) return null
+                                              return (
+                                                <div key={oi} className={cn(
+                                                  'flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px]',
+                                                  isUserAnswer && answeredCorrectly ? 'bg-emerald-50 text-emerald-800 font-medium' :
+                                                  isUserAnswer && !answeredCorrectly ? 'bg-red-50 text-red-800 font-medium' :
+                                                  isCorrect ? 'bg-slate-50 text-slate-600 font-medium' : 'text-slate-500'
+                                                )}>
+                                                  <span className="text-[11px] shrink-0 w-4">
+                                                    {isUserAnswer && answeredCorrectly ? '✓' :
+                                                     isUserAnswer && !answeredCorrectly ? '✗' :
+                                                     isCorrect ? '→' : ''}
+                                                  </span>
+                                                  <span>{String.fromCharCode(65 + oi)}. {opt}</span>
+                                                  {isCorrect && !answeredCorrectly && (
+                                                    <span className="text-[11px] text-slate-400 ml-1">(correct)</span>
+                                                  )}
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )
+                            })()}
 
-                            {/* QuizPlayer if not yet passed */}
-                            {!quizPassed && !isReadOnly && (
+                            {/* Take Quiz / Retake if score < 100% */}
+                            {!isReadOnly && (bestScore === null || bestScore < 100) && (
                               <div className="border-t border-slate-100 pt-4">
                                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">
-                                  {attempts.length > 0 ? 'Try Again' : 'Take Quiz'}
+                                  {attempts.length === 0 ? 'Take Quiz' : 'Retake Quiz'}
                                 </p>
                                 <QuizPlayer
                                   quiz={quiz}

@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MessageSquare, Eye } from 'lucide-react'
+import { Plus, MessageSquare, Eye, ChevronRight, ChevronDown } from 'lucide-react'
 import trainingService, { type CoachingSession, type CoachingPurpose, type CoachingFormat } from '@/services/trainingService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
@@ -128,13 +128,21 @@ export function dateUrgency(dateStr?: string | null): { label: string; cls: stri
 export default function CoachingSessionsPage() {
   const navigate = useNavigate()
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
-
   const [dateField, setDateField] = useState<DateField>('session_date')
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
     csrs: '', statuses: '', formats: '', topics: '',
     from: defaultFrom, to: defaultTo, overdue: '', dueToday: '', page: '1', size: '20',
+    expanded: '',
   })
+
+  const expandedParam    = get('expanded')
+  const expandedBatches  = useMemo(() => new Set(expandedParam ? expandedParam.split(',').filter(Boolean) : []), [expandedParam])
+  const toggleBatch = (batchId: string) => {
+    const next = new Set(expandedBatches)
+    next.has(batchId) ? next.delete(batchId) : next.add(batchId)
+    set('expanded', [...next].join(','))
+  }
 
   const csrsParam     = get('csrs')
   const statusesParam = get('statuses')
@@ -207,6 +215,28 @@ export default function CoachingSessionsPage() {
   }, [data?.items, selectedCsrs, selectedStatuses, selectedFormats, selectedTopics, dateField, dateFrom, dateTo])
 
   const { sort, dir, toggle, sorted: sortedItems } = useListSort(clientFiltered)
+
+  // Group sessions by batch_id — batched sessions collapse into one summary row
+  const { rows: listRows, batchMap } = useMemo(() => {
+    const batchMap = new Map<string, typeof sortedItems>()
+    const standalone: typeof sortedItems = []
+    for (const s of sortedItems) {
+      if (s.batch_id) {
+        const group = batchMap.get(s.batch_id) ?? []
+        group.push(s)
+        batchMap.set(s.batch_id, group)
+      } else {
+        standalone.push(s)
+      }
+    }
+    // Rows: one entry per standalone session OR one entry per batch (representative = first session)
+    const rows = sortedItems.reduce<{ key: string; batchId?: string; session: typeof sortedItems[0] }[]>((acc, s) => {
+      if (!s.batch_id) { acc.push({ key: String(s.id), session: s }); return acc }
+      if (!acc.some(r => r.batchId === s.batch_id)) acc.push({ key: s.batch_id, batchId: s.batch_id, session: s })
+      return acc
+    }, [])
+    return { rows, batchMap }
+  }, [sortedItems])
 
   const hasClientFilter = selectedCsrs.length > 0 || selectedStatuses.length > 0 || selectedFormats.length > 0 || selectedTopics.length > 0
   const displayTotal = hasClientFilter ? clientFiltered.length : (data?.total ?? 0)
@@ -307,7 +337,7 @@ export default function CoachingSessionsPage() {
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
-              {sortedItems.length === 0 ? (
+              {listRows.length === 0 ? (
                 <TableEmptyState
                   colSpan={10}
                   icon={MessageSquare}
@@ -315,16 +345,30 @@ export default function CoachingSessionsPage() {
                   description="Create a new session to get started"
                   action={{ label: 'New Session', onClick: () => navigate('/app/training/coaching/new') }}
                 />
-              ) : sortedItems.map(s => (
+              ) : listRows.map(({ key, batchId, session: s }) => {
+                const batchSessions = batchId ? (batchMap.get(batchId) ?? [s]) : null
+                const isExpanded = batchId ? expandedBatches.has(batchId) : false
+                const isBatch = !!batchId && (batchSessions?.length ?? 0) > 1
+
+                return (
+                <React.Fragment key={key}>
                 <TableRow
-                  key={s.id}
-                  className="cursor-pointer hover:bg-slate-50/50"
-                  onClick={() => navigate(`/app/training/coaching/${s.id}`)}
+                  className={cn('hover:bg-slate-50/50', !isBatch && 'cursor-pointer')}
+                  onClick={isBatch ? () => toggleBatch(batchId!) : () => navigate(`/app/training/coaching/${s.id}`)}
                 >
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
-                    {formatQualityDate(s.session_date)}
+                    <div className="flex items-center gap-1.5">
+                      {isBatch && (isExpanded
+                        ? <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        : <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      )}
+                      {formatQualityDate(s.session_date)}
+                    </div>
                   </TableCell>
-                  <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[s.status] ?? s.status}</TableCell>
+                  <TableCell className="text-[13px] text-slate-600">
+                    {isBatch
+                      ? <span className="text-primary font-medium">{batchSessions!.length} CSRs</span>
+                      : STATUS_LABELS[s.status] ?? s.status}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] font-medium text-slate-900">{s.csr_name}</span>
@@ -373,23 +417,53 @@ export default function CoachingSessionsPage() {
                   </TableCell>
                   <TableCell><QuizStatusBadge session={s} /></TableCell>
                   <TableCell className="pl-6 text-[13px] whitespace-nowrap">
-                    {(() => { const u = dateUrgency(s.due_date); return u ? <span className={u.cls}>{u.label}</span> : <span className="text-slate-300">&mdash;</span> })()}
+                    {s.due_date ? formatQualityDate(s.due_date) : <span className="text-slate-300">&mdash;</span>}
                   </TableCell>
-                  <TableCell className="pl-6 text-[13px] whitespace-nowrap">
-                    {(() => { const u = dateUrgency(s.follow_up_date); return u ? <span className={u.cls}>{u.label}</span> : <span className="text-slate-300">&mdash;</span> })()}
+                  <TableCell className="pl-6 text-[13px] text-slate-600 whitespace-nowrap">
+                    {s.follow_up_date ? formatQualityDate(s.follow_up_date) : <span className="text-slate-300">&mdash;</span>}
                   </TableCell>
                   <TableCell onClick={e => e.stopPropagation()}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-[12px] text-slate-600 gap-1"
-                      onClick={() => navigate(`/app/training/coaching/${s.id}`)}
-                    >
-                      <Eye className="h-3.5 w-3.5" /> View
-                    </Button>
+                    {!isBatch && (
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
+                        onClick={() => navigate(`/app/training/coaching/${s.id}`)}>
+                        <Eye className="h-3.5 w-3.5" /> View
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
-              ))}
+
+                {/* ── Expanded batch rows ── */}
+                {isBatch && isExpanded && batchSessions!.map(bs => (
+                  <TableRow key={bs.id} className="cursor-pointer hover:bg-primary/5 bg-slate-50/50"
+                    onClick={() => navigate(`/app/training/coaching/${bs.id}`)}>
+                    <TableCell className="text-[13px] text-slate-500 whitespace-nowrap pl-8">
+                      {formatQualityDate(bs.session_date)}
+                    </TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[bs.status] ?? bs.status}</TableCell>
+                    <TableCell>
+                      <span className="text-[13px] font-medium text-slate-800">{bs.csr_name}</span>
+                    </TableCell>
+                    <TableCell className="text-[13px] text-slate-500">{PURPOSE_MAP[bs.coaching_purpose] ?? bs.coaching_purpose}</TableCell>
+                    <TableCell className="text-[13px] text-slate-500">{FORMAT_MAP[bs.coaching_format] ?? bs.coaching_format}</TableCell>
+                    <TableCell><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
+                    <TableCell><QuizStatusBadge session={bs} /></TableCell>
+                    <TableCell className="pl-6 text-[13px] text-slate-500 whitespace-nowrap">
+                      {bs.due_date ? formatQualityDate(bs.due_date) : <span className="text-slate-300">&mdash;</span>}
+                    </TableCell>
+                    <TableCell className="pl-6 text-[13px] text-slate-500 whitespace-nowrap">
+                      {bs.follow_up_date ? formatQualityDate(bs.follow_up_date) : <span className="text-slate-300">&mdash;</span>}
+                    </TableCell>
+                    <TableCell onClick={e => e.stopPropagation()}>
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
+                        onClick={() => navigate(`/app/training/coaching/${bs.id}`)}>
+                        <Eye className="h-3.5 w-3.5" /> View
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                </React.Fragment>
+                )
+              })}
             </TableBody>
           </Table>
         )}

@@ -1,7 +1,7 @@
 import type { CoachingPurpose, CoachingFormat, CoachingSourceType } from '@/services/trainingService'
 
 export interface CoachingFormState {
-  csr_id: number
+  csr_ids: number[]   // multi-select for create; [csr_id] for edit
   coach_id: number
   session_date: string
   coaching_purpose: CoachingPurpose | ''
@@ -27,7 +27,7 @@ export type CoachingFormErrors = Partial<Record<keyof CoachingFormState | 'root'
 
 export function emptyForm(): CoachingFormState {
   return {
-    csr_id: 0,
+    csr_ids: [],
     coach_id: 0,
     session_date: new Date().toISOString().slice(0, 16),
     coaching_purpose: '',

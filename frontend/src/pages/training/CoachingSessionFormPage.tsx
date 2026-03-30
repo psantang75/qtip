@@ -65,7 +65,7 @@ export default function CoachingSessionFormPage() {
   const resources = resourcesData?.items ?? []
   const quizzes   = quizLibrary?.items   ?? []
 
-  const csrId = form.csr_id
+  const csrId = form.csr_ids[0] ?? 0
   const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ['csr-coaching-history', csrId],
     queryFn:  () => trainingService.getCSRHistory(csrId),
@@ -86,7 +86,7 @@ export default function CoachingSessionFormPage() {
     if (!existing) return
     const s = existing
     setForm({
-      csr_id:               s.csr_id,
+      csr_ids:              [s.csr_id],
       coach_id:             s.created_by   ?? user?.id ?? 0,
       session_date:         s.session_date?.slice(0, 16) ?? new Date().toISOString().slice(0, 16),
       coaching_purpose:     s.coaching_purpose,
@@ -114,7 +114,7 @@ export default function CoachingSessionFormPage() {
 
   const validate = (): boolean => {
     const e: CoachingFormErrors = {}
-    if (!form.csr_id)           e.csr_id           = 'Select a CSR'
+    if (!form.csr_ids.length)   (e as any).csr_ids = 'Select at least one CSR'
     if (!form.session_date)     e.session_date      = 'Date is required'
     if (!form.coaching_purpose) e.coaching_purpose  = 'Select a coaching purpose'
     if (!form.coaching_format)  e.coaching_format   = 'Select a coaching format'
@@ -130,7 +130,12 @@ export default function CoachingSessionFormPage() {
 
   const buildFormData = (): FormData => {
     const fd = new FormData()
-    fd.append('csr_id',                 String(form.csr_id))
+    // For edit: send single csr_id; for create: send csr_ids (supports multi)
+    if (isEdit) {
+      fd.append('csr_id', String(form.csr_ids[0] || ''))
+    } else {
+      fd.append('csr_ids', form.csr_ids.join(','))
+    }
     fd.append('coach_id',               String(form.coach_id || user?.id || ''))
     fd.append('session_date',           form.session_date)
     fd.append('coaching_purpose',       form.coaching_purpose)
@@ -165,9 +170,10 @@ export default function CoachingSessionFormPage() {
         qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
         toast({ title: 'Session saved' })
       } else {
-        await trainingService.createCoachingSession(buildFormData())
+        const result = await trainingService.createCoachingSession(buildFormData())
         qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
-        toast({ title: 'Draft saved' })
+        const count = result.count ?? 1
+        toast({ title: count > 1 ? `${count} draft sessions created` : 'Draft saved' })
       }
       navigate('/app/training/coaching')
     } catch (err: any) {
@@ -194,8 +200,16 @@ export default function CoachingSessionFormPage() {
       } else {
         const created = await trainingService.createCoachingSession(buildFormData())
         qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
-        toast({ title: 'Session scheduled — CSR will see it as Upcoming' })
-        navigate(`/app/training/coaching/${created.id}`)
+        if (created.ids && created.ids.length > 1) {
+          await Promise.all(created.ids.map((sid: number) => trainingService.deliverSession(sid)))
+          toast({ title: `${created.ids.length} sessions scheduled` })
+          navigate('/app/training/coaching')
+        } else {
+          const singleId = created.id ?? created.ids?.[0]
+          if (singleId) await trainingService.deliverSession(singleId)
+          toast({ title: 'Session scheduled' })
+          navigate(singleId ? `/app/training/coaching/${singleId}` : '/app/training/coaching')
+        }
       }
     } catch (err: any) {
       toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
@@ -219,7 +233,7 @@ export default function CoachingSessionFormPage() {
         <div className="col-span-2 space-y-4">
           <SessionSection
             form={form} errors={errors} csrs={csrs}
-            coaches={coaches} topics={topics}
+            coaches={coaches} topics={topics} isEdit={isEdit}
             update={update} toggleTopic={toggleTopic}
           />
           <RequiredActionsSection

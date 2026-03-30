@@ -12,6 +12,22 @@ const DISPLAY_OPTIONS: Intl.DateTimeFormatOptions = {
 /** Formats an ISO date string (or Date) for display: "Mar 24, 2026" */
 export function formatQualityDate(value: string | Date | null | undefined): string {
   if (!value) return '—'
+  if (typeof value === 'string') {
+    // Date-only strings (YYYY-MM-DD) must be parsed as local time to avoid UTC midnight shift
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    const dateWithOffset = /^\d{4}-\d{2}-\d{2}T/.test(value)
+    if (dateOnly) {
+      const [y, m, d] = value.split('-')
+      const date = new Date(Number(y), Number(m) - 1, Number(d))
+      return date.toLocaleDateString('en-US', DISPLAY_OPTIONS)
+    }
+    if (dateWithOffset) {
+      // Datetime strings — strip time and parse date part only to avoid shift
+      const datePart = value.slice(0, 10)
+      const [y, m, d] = datePart.split('-')
+      return new Date(Number(y), Number(m) - 1, Number(d)).toLocaleDateString('en-US', DISPLAY_OPTIONS)
+    }
+  }
   const date = typeof value === 'string' ? new Date(value) : value
   if (isNaN(date.getTime())) return '—'
   return date.toLocaleDateString('en-US', DISPLAY_OPTIONS)
