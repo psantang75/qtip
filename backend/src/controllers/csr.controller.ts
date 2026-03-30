@@ -1864,7 +1864,10 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
     const offset = (pageNum - 1) * pageSizeNum;
     const limit = pageSizeNum;
 
-    const conditions: Prisma.Sql[] = [Prisma.sql`cs.csr_id = ${userId}`];
+    // CSR sees SCHEDULED sessions as "Upcoming" — coach delivers after the meeting
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`cs.csr_id = ${userId}`,
+    ];
 
     if (status && status !== 'all') {
       conditions.push(Prisma.sql`cs.status = ${status}`);
@@ -1928,26 +1931,29 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
           cs.status,
           cs.attachment_filename,
           cs.attachment_path,
+          cs.due_date,
+          cs.follow_up_date,
           creator.username as manager_name,
           cs.created_at,
           GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topics,
-          GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids
+          GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids,
+          (SELECT COUNT(*) FROM coaching_session_quizzes WHERE coaching_session_id = cs.id) as quiz_count,
+          (SELECT COUNT(DISTINCT csq2.quiz_id) FROM coaching_session_quizzes csq2
+           WHERE csq2.coaching_session_id = cs.id
+           AND EXISTS (
+             SELECT 1 FROM quiz_attempts qa
+             WHERE qa.coaching_session_id = cs.id AND qa.quiz_id = csq2.quiz_id
+               AND qa.user_id = ${userId} AND qa.passed = 1
+           )) as quiz_passed_count
         FROM coaching_sessions cs
         LEFT JOIN users creator ON cs.created_by = creator.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
         LEFT JOIN topics t ON cst.topic_id = t.id
         ${whereClause}
         GROUP BY 
-          cs.id,
-          cs.session_date,
-          cs.coaching_purpose,
-          cs.coaching_format,
-          cs.notes,
-          cs.status,
-          cs.attachment_filename,
-          cs.attachment_path,
-          creator.username,
-          cs.created_at
+          cs.id, cs.session_date, cs.coaching_purpose, cs.coaching_format,
+          cs.notes, cs.status, cs.attachment_filename, cs.attachment_path,
+          cs.due_date, cs.follow_up_date, creator.username, cs.created_at
         ORDER BY cs.session_date DESC
         LIMIT ${limit} OFFSET ${offset}
       `
@@ -1956,7 +1962,9 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
     const transformedSessions = (sessions || []).map((session: any) => ({
       ...session,
       topics: session.topics ? session.topics.split(', ') : [],
-      topic_ids: session.topic_ids ? session.topic_ids.split(',').map((id: string) => parseInt(id)) : []
+      topic_ids: session.topic_ids ? session.topic_ids.split(',').map((id: string) => parseInt(id)) : [],
+      quiz_count: Number(session.quiz_count ?? 0),
+      quiz_passed_count: Number(session.quiz_passed_count ?? 0),
     }));
     
     res.json({
@@ -2021,7 +2029,7 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
           cs.csr_action_plan, cs.csr_root_cause, cs.csr_support_needed, cs.csr_acknowledged_at,
           cs.delivered_at, cs.completed_at,
           cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
-          cs.follow_up_required, cs.follow_up_date, cs.created_at,
+          cs.due_date, cs.follow_up_required, cs.follow_up_date, cs.created_at,
           creator.username as created_by_name,
           GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics,
           GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids
@@ -2044,36 +2052,45 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
 
     const sessionData = sessionRows[0];
 
-    // Load quiz with questions if set
-    let quizData = null;
-    if (sessionData.quiz_id) {
-      const [quizRows, questionRows, attemptRows] = await Promise.all([
-        prisma.$queryRaw<any[]>(Prisma.sql`SELECT id, quiz_title, pass_score FROM quizzes WHERE id = ${sessionData.quiz_id}`),
-        prisma.$queryRaw<any[]>(Prisma.sql`SELECT id, question_text, options, correct_option FROM quiz_questions WHERE quiz_id = ${sessionData.quiz_id} ORDER BY id`),
-        prisma.$queryRaw<any[]>(Prisma.sql`SELECT id, attempt_number, score, passed, submitted_at FROM quiz_attempts WHERE quiz_id = ${sessionData.quiz_id} AND user_id = ${userId} AND coaching_session_id = ${sessionId} ORDER BY attempt_number`)
-      ]);
-      if (quizRows.length) {
-        quizData = {
-          ...quizRows[0],
-          questions: questionRows.map((q: any) => ({ ...q, options: JSON.parse(q.options || '[]') }))
-        };
-        sessionData.quiz_attempts = attemptRows;
-      }
-    }
+    // Load quizzes from junction table (new multi-quiz approach)
+    const quizJunctionRows = await prisma.$queryRaw<any[]>(
+      Prisma.sql`SELECT q.id, q.quiz_title, q.pass_score FROM coaching_session_quizzes csq
+                 JOIN quizzes q ON csq.quiz_id = q.id
+                 WHERE csq.coaching_session_id = ${sessionId}`
+    );
 
-    // Load KB resource if set
-    let kbResource = null;
-    if (sessionData.kb_resource_id) {
-      const kbRows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id, title, url, description FROM training_resources WHERE id = ${sessionData.kb_resource_id}`);
-      if (kbRows.length) kbResource = kbRows[0];
-    }
+    // Load questions for each assigned quiz
+    const quizzesWithQuestions = await Promise.all(
+      quizJunctionRows.map(async (qr: any) => {
+        const questionRows = await prisma.$queryRaw<any[]>(
+          Prisma.sql`SELECT id, question_text, options, correct_option FROM quiz_questions WHERE quiz_id = ${qr.id} ORDER BY id`
+        );
+        return { ...qr, questions: questionRows.map((q: any) => ({ ...q, options: JSON.parse(q.options || '[]') })) };
+      })
+    );
+
+    // Load all quiz attempts for this session (with quiz_id for multi-quiz support)
+    const allAttempts = await prisma.$queryRaw<any[]>(
+      Prisma.sql`SELECT id, quiz_id, attempt_number, score, passed, submitted_at
+                 FROM quiz_attempts
+                 WHERE coaching_session_id = ${sessionId} AND user_id = ${userId}
+                 ORDER BY quiz_id, attempt_number`
+    );
+
+    // Load KB resources from junction table
+    const kbResources = await prisma.$queryRaw<any[]>(
+      Prisma.sql`SELECT r.id, r.title, r.resource_type, r.url, r.file_name, r.description FROM coaching_session_resources csr2
+                 JOIN training_resources r ON csr2.resource_id = r.id
+                 WHERE csr2.coaching_session_id = ${sessionId}`
+    );
 
     const responseData = {
       ...sessionData,
       topics: sessionData.topics ? sessionData.topics.split(',') : [],
       topic_ids: sessionData.topic_ids ? sessionData.topic_ids.split(',').map((id: string) => parseInt(id)) : [],
-      quiz: quizData,
-      kb_resource: kbResource,
+      quizzes: quizzesWithQuestions,
+      quiz_attempts: allAttempts,
+      kb_resources: kbResources,
     };
 
     res.json({ success: true, data: responseData });
@@ -2098,6 +2115,50 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
 /**
  * Download coaching session attachment for CSR
  */
+/**
+ * Serve a resource file for a CSR — validates the resource is assigned to one of their sessions
+ */
+export const getCSRResourceFile = async (req: Request, res: Response) => {
+  try {
+    const userId     = (req as any).user?.user_id ?? (req as any).user?.userId;
+    const resourceId = parseInt(req.params.resourceId);
+    const fs         = require('fs').promises;
+    const path       = require('path');
+
+    const rows = await prisma.$queryRaw<any[]>(
+      Prisma.sql`SELECT r.file_path, r.file_mime_type, r.file_name
+                 FROM training_resources r
+                 WHERE r.id = ${resourceId}
+                   AND r.file_path IS NOT NULL
+                   AND EXISTS (
+                     SELECT 1 FROM coaching_session_resources csr2
+                     JOIN coaching_sessions cs ON csr2.coaching_session_id = cs.id
+                     WHERE csr2.resource_id = ${resourceId} AND cs.csr_id = ${userId}
+                   )`
+    );
+
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Resource not found or access denied' });
+
+    const { file_path, file_mime_type, file_name } = rows[0];
+    const filePath = path.join(process.cwd(), file_path);
+
+    try { await fs.access(filePath); } catch { return res.status(404).json({ success: false, message: 'File not found on server' }); }
+
+    const stats = await fs.stat(filePath);
+    res.setHeader('Content-Type', file_mime_type || 'application/octet-stream');
+    res.setHeader('Content-Length', stats.size);
+    res.setHeader('Content-Disposition', `inline; filename="${(file_name || 'file').replace(/"/g, '\\"')}"`);
+
+    const { createReadStream } = require('fs');
+    const stream = createReadStream(filePath);
+    stream.on('error', () => { if (!res.headersSent) res.status(500).json({ success: false, message: 'Error reading file' }); });
+    stream.pipe(res);
+  } catch (error) {
+    console.error('[CSR] getCSRResourceFile error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
 export const downloadCSRCoachingAttachment = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.user_id ?? (req as any).user?.userId;

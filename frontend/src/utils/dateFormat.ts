@@ -24,9 +24,11 @@ export function formatQualityDate(value: string | Date | null | undefined): stri
 export function defaultDateRange90(): { start: string; end: string } {
   const today = new Date()
   const start = new Date(today)
+  const end   = new Date(today)
   start.setDate(today.getDate() - 90)
+  end.setDate(today.getDate() + 30)
   const fmt = (d: Date) => d.toISOString().split('T')[0]
-  return { start: fmt(start), end: fmt(today) }
+  return { start: fmt(start), end: fmt(end) }
 }
 
 /**

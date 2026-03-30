@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
-import { hasCsrRequirements } from '../utils/coachingAutoAdvance';
+import { hasCsrRequirements, applyAutoAdvance } from '../utils/coachingAutoAdvance';
 const fs = require('fs').promises;
 const path = require('path');
 const { createReadStream } = require('fs');
@@ -67,11 +67,19 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
       prisma.$queryRaw<any[]>(
         Prisma.sql`
           SELECT cs.id, cs.csr_id, u.username as csr_name, cs.coaching_purpose, cs.coaching_format, cs.source_type,
-            cs.status, cs.quiz_required, cs.quiz_id, cs.session_date, cs.due_date, cs.follow_up_date, cs.follow_up_required,
+            cs.status, cs.session_date, cs.due_date, cs.follow_up_date, cs.follow_up_required,
             cs.created_at, cb.username as created_by_name, cs.attachment_filename,
             GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics,
             GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids,
-            CASE WHEN cs.due_date IS NOT NULL AND cs.due_date < NOW() AND cs.status NOT IN ('COMPLETED','CLOSED') THEN 1 ELSE 0 END as is_overdue
+            CASE WHEN cs.due_date IS NOT NULL AND cs.due_date < NOW() AND cs.status NOT IN ('COMPLETED','CLOSED') THEN 1 ELSE 0 END as is_overdue,
+            (SELECT COUNT(*) FROM coaching_session_quizzes WHERE coaching_session_id = cs.id) as quiz_count,
+            (SELECT COUNT(DISTINCT csq2.quiz_id) FROM coaching_session_quizzes csq2
+             WHERE csq2.coaching_session_id = cs.id
+             AND EXISTS (
+               SELECT 1 FROM quiz_attempts qa
+               WHERE qa.coaching_session_id = cs.id AND qa.quiz_id = csq2.quiz_id
+                 AND qa.user_id = cs.csr_id AND qa.passed = 1
+             )) as quiz_passed_count
           FROM coaching_sessions cs
           JOIN users u ON cs.csr_id = u.id
           LEFT JOIN users cb ON cs.created_by = cb.id
@@ -89,6 +97,8 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
       topics: s.topics ? s.topics.split(',') : [],
       topic_ids: s.topic_ids ? s.topic_ids.split(',').map(Number) : [],
       is_overdue: !!s.is_overdue,
+      quiz_count: Number(s.quiz_count ?? 0),
+      quiz_passed_count: Number(s.quiz_passed_count ?? 0),
     }));
 
     res.json({ success: true, data: { sessions: data, totalCount: Number(countRows[0]?.total ?? 0), page, limit } });
@@ -138,7 +148,7 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
 
     const [kbRows, quizRows, quizAttempts, recentRows] = await Promise.all([
       prisma.$queryRaw<any[]>(
-        Prisma.sql`SELECT r.id, r.title, r.url, r.description FROM coaching_session_resources csr2
+        Prisma.sql`SELECT r.id, r.title, r.resource_type, r.url, r.file_name, r.description FROM coaching_session_resources csr2
           JOIN training_resources r ON csr2.resource_id = r.id WHERE csr2.coaching_session_id = ${sessionId}`
       ),
       prisma.$queryRaw<any[]>(
@@ -369,6 +379,30 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
       await tx.auditLog.create({ data: { user_id: userId, action: 'UPDATE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify(req.body) } });
     });
 
+    // ── Re-evaluate status after edit ─────────────────────────────────────────
+    // If the session is in an active delivery state, check whether requirements
+    // have changed and auto-adjust to the correct status.
+    const [statusRow] = await prisma.$queryRaw<{ status: string }[]>(
+      Prisma.sql`SELECT status FROM coaching_sessions WHERE id = ${sessionId}`
+    );
+    const currentStatus = statusRow?.status;
+    if (['IN_PROCESS', 'AWAITING_CSR_ACTION'].includes(currentStatus)) {
+      const needsCSR = await hasCsrRequirements(sessionId);
+
+      if (needsCSR && currentStatus === 'IN_PROCESS') {
+        // Requirements added — escalate to Awaiting CSR Action
+        await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'AWAITING_CSR_ACTION' WHERE id = ${sessionId}`);
+        await prisma.auditLog.create({ data: { user_id: userId, action: 'AUTO_STATUS_ADVANCE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ from: 'IN_PROCESS', to: 'AWAITING_CSR_ACTION', reason: 'requirements_added_on_edit' }) } });
+      } else if (!needsCSR && currentStatus === 'AWAITING_CSR_ACTION') {
+        // Requirements removed — revert to In Process
+        await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'IN_PROCESS' WHERE id = ${sessionId}`);
+        await prisma.auditLog.create({ data: { user_id: userId, action: 'AUTO_STATUS_REVERT', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ from: 'AWAITING_CSR_ACTION', to: 'IN_PROCESS', reason: 'requirements_removed_on_edit' }) } });
+      } else if (needsCSR) {
+        // Requirements still exist — check if all complete (e.g. CSR already responded)
+        await applyAutoAdvance(sessionId, userId);
+      }
+    }
+
     res.json({ success: true, message: 'Session updated successfully' });
   } catch (error) {
     console.error('[COACHING] updateCoachingSession error:', error);
@@ -508,7 +542,7 @@ export const setSessionStatus = async (req: AuthReq, res: Response) => {
     const sessionId = parseInt(req.params.id);
     const { status } = req.body as { status: string };
 
-    const validStatuses = ['SCHEDULED', 'IN_PROCESS', 'AWAITING_CSR_ACTION', 'QUIZ_PENDING', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED'];
+    const validStatuses = ['SCHEDULED', 'IN_PROCESS', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }

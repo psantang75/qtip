@@ -81,7 +81,7 @@ function CSRView() {
 
   const sessions = sessionsPage?.items ?? []
   const awaitingCount = useMemo(
-    () => sessions.filter(s => ['IN_PROCESS', 'AWAITING_CSR_ACTION', 'QUIZ_PENDING'].includes(s.status)).length,
+    () => sessions.filter(s => ['IN_PROCESS', 'AWAITING_CSR_ACTION'].includes(s.status)).length,
     [sessions],
   )
   const completedCount = useMemo(

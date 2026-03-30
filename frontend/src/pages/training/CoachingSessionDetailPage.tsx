@@ -18,6 +18,13 @@ import { BEHAVIOR_FLAG_GROUPS } from './coaching-form/CoachingFormSections'
 
 // ── Source labels ─────────────────────────────────────────────────────────────
 
+/** Returns the correct href for a resource — URL type uses the url field; uploaded files use the API. */
+function resourceHref(r: { id: number; resource_type?: string; url?: string }, forCSR = false): string {
+  if (r.resource_type === 'URL' && r.url) return r.url
+  if (r.url) return r.url
+  return forCSR ? `/api/csr/resources/${r.id}/file` : `/api/trainer/resources/${r.id}/file`
+}
+
 const SOURCE_LABELS: Record<CoachingSourceType, string> = {
   QA_AUDIT: 'QA Audit', MANAGER_OBSERVATION: 'Manager Observation', TREND: 'Trend',
   DISPUTE: 'Dispute', SCHEDULED: 'Scheduled', OTHER: 'Other',
@@ -101,12 +108,11 @@ function QuizSummary({ session }: { session: CoachingSession }) {
   if (!hasQuizzes) return <span className="text-[12px] text-slate-400">Not assigned</span>
   const attempts = session.quiz_attempts ?? []
   const passed   = attempts.find(a => a.passed)
-  if (passed) return <span className="text-[12px] text-emerald-700">Passed {Number(passed.score).toFixed(0)}%</span>
+  if (passed) return <span className="text-[12px] text-slate-700">{formatQualityDate(passed.submitted_at)}</span>
   if (attempts.length) {
     const best = Math.max(...attempts.map(a => Number(a.score)))
-    return <span className="text-[12px] text-amber-700">Failed — best {best.toFixed(0)}% ({attempts.length} attempt{attempts.length > 1 ? 's' : ''})</span>
+    return <span className="text-[12px] text-amber-700">Failed — best {best.toFixed(0)}%</span>
   }
-  if (session.status === 'QUIZ_PENDING') return <span className="text-[12px] text-amber-600">Not started</span>
   return <span className="text-[12px] text-slate-400">Pending</span>
 }
 
@@ -137,6 +143,12 @@ export default function CoachingSessionDetailPage() {
     mutationFn: (status: string) => trainingService.setSessionStatus(Number(id), status),
     onSuccess: (_d, status) => { toast({ title: `Status updated to ${STATUS_LABELS[status] ?? status}` }); invalidate() },
     onError: () => toast({ title: 'Error', description: 'Could not update status.', variant: 'destructive' }),
+  })
+
+  const deliverMut = useMutation({
+    mutationFn: () => trainingService.deliverSession(Number(id)),
+    onSuccess: () => { toast({ title: 'Coaching session scheduled' }); invalidate() },
+    onError: () => toast({ title: 'Error', description: 'Could not deliver session.', variant: 'destructive' }),
   })
 
 
@@ -225,8 +237,8 @@ export default function CoachingSessionDetailPage() {
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Required Action Notes</p>
             <NoteBlock text={session.required_action} placeholder="No required action specified" />
 
-            {/* Knowledge Base */}
-            <Sub title="Knowledge Base Assignment" icon={BookOpen}>
+            {/* Reference Materials */}
+            <Sub title="Reference Materials" icon={BookOpen}>
               {(session.kb_resources?.length ?? 0) > 0 ? (
                 <div className="space-y-2">
                   {session.kb_resources!.map(r => (
@@ -235,7 +247,7 @@ export default function CoachingSessionDetailPage() {
                         <p className="text-[13px] font-medium text-slate-800 truncate">{r.title}</p>
                         {r.description && <p className="text-[12px] text-slate-500 mt-0.5">{r.description}</p>}
                       </div>
-                      <a href={r.url} target="_blank" rel="noopener noreferrer"
+                      <a href={resourceHref(r)} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline shrink-0">
                         Open <ExternalLink className="h-3 w-3" />
                       </a>
@@ -311,36 +323,6 @@ export default function CoachingSessionDetailPage() {
             </Sub>
 
 
-            {/* Timing */}
-            <Sub title="Timing">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Due Date</p>
-                  {session.due_date ? (
-                    <p className={cn('text-[13px] font-medium', session.is_overdue ? 'text-red-600' : 'text-slate-800')}>
-                      {formatQualityDate(session.due_date)}{session.is_overdue ? ' ⚠' : ''}
-                    </p>
-                  ) : (
-                    <p className="text-[13px] text-slate-400">Not set</p>
-                  )}
-                </div>
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Follow-Up Date</p>
-                  {session.follow_up_date ? (
-                    <p className="text-[13px] font-medium text-slate-800">{formatQualityDate(session.follow_up_date)}</p>
-                  ) : (
-                    <p className="text-[13px] text-slate-400">Not set</p>
-                  )}
-                </div>
-              </div>
-              {(session.follow_up_required || !!session.follow_up_date) && (
-                <div className="mt-3 border-t border-slate-100 pt-3">
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Follow-Up Notes</p>
-                  <NoteBlock text={session.follow_up_notes} placeholder="No follow-up notes yet" />
-                </div>
-              )}
-            </Sub>
-
           </Section>
 
           {/* ── Section 3: CSR Accountability ───────────────────────────── */}
@@ -370,7 +352,7 @@ export default function CoachingSessionDetailPage() {
               <p className="text-[13px] text-slate-400">Not required</p>
             )}
 
-            {/* Acknowledgment — same format as action plan */}
+            {/* Acknowledgment */}
             <div className="border-t border-slate-100 pt-4 mt-4">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Acknowledgment</p>
               {session.require_acknowledgment ? (
@@ -382,6 +364,36 @@ export default function CoachingSessionDetailPage() {
                 <p className="text-[13px] text-slate-400">Not required</p>
               )}
             </div>
+
+            {/* Timing — due dates govern when CSR must complete their work */}
+            <Sub title="Timing">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Due Date</p>
+                  {session.due_date ? (
+                    <p className={cn('text-[13px] font-medium', session.is_overdue ? 'text-red-600' : 'text-slate-800')}>
+                      {formatQualityDate(session.due_date)}{session.is_overdue ? ' ⚠' : ''}
+                    </p>
+                  ) : (
+                    <p className="text-[13px] text-slate-400">Not set</p>
+                  )}
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Follow-Up Date</p>
+                  {session.follow_up_date ? (
+                    <p className="text-[13px] font-medium text-slate-800">{formatQualityDate(session.follow_up_date)}</p>
+                  ) : (
+                    <p className="text-[13px] text-slate-400">Not set</p>
+                  )}
+                </div>
+              </div>
+              {(session.follow_up_required || !!session.follow_up_date) && (
+                <div className="mt-3 border-t border-slate-100 pt-3">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Follow-Up Notes</p>
+                  <NoteBlock text={session.follow_up_notes} placeholder="No follow-up notes yet" />
+                </div>
+              )}
+            </Sub>
 
           </Section>
 
@@ -423,9 +435,6 @@ export default function CoachingSessionDetailPage() {
                             </div>
                           ))}
                         </div>
-                      )}
-                      {flags.length > 0 && (
-                        <p className="text-[11px] text-primary mt-3 font-medium">{flags.length} flag{flags.length !== 1 ? 's' : ''} recorded</p>
                       )}
                     </div>
                   )
@@ -475,33 +484,47 @@ export default function CoachingSessionDetailPage() {
                   <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Current</p>
                   <p className="text-[13px] font-semibold text-slate-800">{STATUS_LABELS[session.status] ?? session.status}</p>
                 </div>
-                <div className="border-t border-slate-100 pt-3 space-y-2">
+                {/* Schedule — only when DRAFT, triggers CSR visibility + auto-status */}
+                {session.status === 'SCHEDULED' && (
+                  <div className="border-t border-slate-100 pt-3">
+                    <p className="text-[12px] text-slate-500 mb-2 leading-snug">
+                      Ready to proceed? Scheduling the session makes it active. The system will determine whether it moves to In Process or Awaiting CSR Action.
+                    </p>
+                    <Button
+                      className="w-full bg-primary hover:bg-primary/90 text-white h-9 text-[13px] font-semibold"
+                      onClick={() => deliverMut.mutate()}
+                      disabled={deliverMut.isPending || statusMut.isPending}
+                    >
+                      {deliverMut.isPending ? 'Scheduling…' : 'Schedule Coaching Session'}
+                    </Button>
+                  </div>
+                )}
+
+              <div className="border-t border-slate-100 pt-3 space-y-2">
                   <p className="text-[11px] text-slate-400 uppercase tracking-wide">Change to</p>
                   <select
                     className="w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-primary/40"
                     value={pendingStatus}
                     onChange={e => setPendingStatus(e.target.value)}
                   >
-                    {(['SCHEDULED', 'IN_PROCESS', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED'] as const).map(s => (
-                      <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                    {(['SCHEDULED', 'IN_PROCESS', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED'] as const).map(s => (
+                      <option key={s} value={s}>{STATUS_LABELS[s]}{s === 'CLOSED' ? ' (Final)' : ''}</option>
                     ))}
                   </select>
-                  <div className="flex gap-2">
-                    <Button
-                      className="flex-1 bg-primary hover:bg-primary/90 text-white h-8 text-[12px]"
-                      disabled={pendingStatus === session.status || statusMut.isPending}
-                      onClick={() => statusMut.mutate(pendingStatus)}
-                    >
-                      {statusMut.isPending ? 'Updating…' : 'Update Status'}
-                    </Button>
-                    <button type="button"
-                      className="text-[12px] text-slate-400 hover:text-red-600 px-2 transition-colors"
-                      disabled={statusMut.isPending}
-                      onClick={() => statusMut.mutate('CLOSED')}
-                    >
-                      Close
-                    </button>
-                  </div>
+                  <Button
+                    className={cn(
+                      'w-full h-8 text-[12px]',
+                      pendingStatus === 'CLOSED'
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : 'bg-primary hover:bg-primary/90 text-white'
+                    )}
+                    disabled={pendingStatus === session.status || statusMut.isPending}
+                    onClick={() => statusMut.mutate(pendingStatus)}
+                  >
+                    {statusMut.isPending ? 'Updating…'
+                      : pendingStatus === 'CLOSED' ? 'Close Session'
+                      : 'Update Status'}
+                  </Button>
                 </div>
               </div>
             )}
@@ -510,25 +533,29 @@ export default function CoachingSessionDetailPage() {
           {/* CSR Response summary */}
           <SideCard>
             <SideTitle>CSR Response</SideTitle>
-            <ResponseRow label="Delivered to CSR"
+            <ResponseRow label="Session Scheduled"
               value={session.delivered_at
                 ? formatQualityDate(session.delivered_at)
                 : <span className="text-slate-400">—</span>} />
             <ResponseRow label="Action Plan"
               muted={!session.require_action_plan}
               value={session.csr_action_plan
-                ? <span className="text-emerald-700">Submitted</span>
+                ? <span className="text-slate-700">
+                    {session.csr_acknowledged_at
+                      ? formatQualityDate(session.csr_acknowledged_at)
+                      : 'Submitted'}
+                  </span>
                 : <span className={session.require_action_plan ? 'text-amber-600' : 'text-slate-400'}>
                     {session.require_action_plan ? 'Pending' : 'Not required'}
                   </span>} />
             <ResponseRow label="Acknowledged"
               muted={!session.require_acknowledgment}
               value={session.csr_acknowledged_at
-                ? <span className="text-emerald-700">{formatQualityDate(session.csr_acknowledged_at)}</span>
+                ? <span className="text-slate-700">{formatQualityDate(session.csr_acknowledged_at)}</span>
                 : <span className={session.require_acknowledgment ? 'text-amber-600' : 'text-slate-400'}>
                     {session.require_acknowledgment ? 'Pending' : 'Not required'}
                   </span>} />
-            <ResponseRow label="Quiz" value={<QuizSummary session={session} />} />
+            <ResponseRow label="Quiz Passed" value={<QuizSummary session={session} />} />
           </SideCard>
 
           {/* Prior Sessions */}

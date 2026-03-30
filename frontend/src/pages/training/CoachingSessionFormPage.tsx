@@ -114,64 +114,89 @@ export default function CoachingSessionFormPage() {
 
   const validate = (): boolean => {
     const e: CoachingFormErrors = {}
-    if (!form.csr_id)          e.csr_id         = 'Select a CSR'
-    if (!form.session_date)    e.session_date    = 'Date is required'
-    if (!form.coaching_purpose) e.coaching_purpose = 'Select a coaching purpose'
-    if (!form.coaching_format)  e.coaching_format  = 'Select a coaching format'
-    if (!form.source_type)     e.source_type     = 'Select a source'
-    if (!form.notes.trim())    e.notes           = 'Notes are required'
-    if (!form.topic_ids.length) e.topic_ids      = 'Select at least one topic'
-    if (form.quiz_required && !form.quiz_id) e.quiz_id = 'Select a quiz'
+    if (!form.csr_id)           e.csr_id           = 'Select a CSR'
+    if (!form.session_date)     e.session_date      = 'Date is required'
+    if (!form.coaching_purpose) e.coaching_purpose  = 'Select a coaching purpose'
+    if (!form.coaching_format)  e.coaching_format   = 'Select a coaching format'
+    if (!form.source_type)      e.source_type       = 'Select a source'
+    if (!form.notes.trim())     e.notes             = 'Notes are required'
+    if (!form.topic_ids.length) e.topic_ids         = 'Select at least one topic'
     if (form.follow_up_required && !form.follow_up_date) e.follow_up_date = 'Follow-up date is required'
     setErrors(e)
     return Object.keys(e).length === 0
   }
 
-  // ── Save ────────────────────────────────────────────────────────────────────
+  // ── Build FormData ───────────────────────────────────────────────────────────
 
-  const handleSave = async (saveStatus: 'SCHEDULED' | 'IN_PROCESS' | 'COMPLETED') => {
+  const buildFormData = (): FormData => {
+    const fd = new FormData()
+    fd.append('csr_id',                 String(form.csr_id))
+    fd.append('coach_id',               String(form.coach_id || user?.id || ''))
+    fd.append('session_date',           form.session_date)
+    fd.append('coaching_purpose',       form.coaching_purpose)
+    fd.append('coaching_format',        form.coaching_format)
+    fd.append('source_type',            form.source_type)
+    fd.append('notes',                  form.notes)
+    fd.append('topic_ids',              form.topic_ids.join(','))
+    fd.append('required_action',        form.required_action)
+    fd.append('resource_ids',           form.kb_resource_ids.join(','))
+    fd.append('quiz_ids',               form.quiz_ids.join(','))
+    fd.append('require_acknowledgment', String(form.require_acknowledgment))
+    fd.append('require_action_plan',    String(form.require_action_plan))
+    fd.append('follow_up_required',     String(form.follow_up_required))
+    fd.append('due_date',               form.due_date         || '')
+    fd.append('follow_up_date',         form.follow_up_date   || '')
+    fd.append('follow_up_notes',        form.follow_up_notes  || '')
+    fd.append('internal_notes',         form.internal_notes   || '')
+    fd.append('behavior_flags',         form.behavior_flags.join(','))
+    if (form.attachment_file) fd.append('attachment', form.attachment_file)
+    return fd
+  }
+
+  // ── Save (create as SCHEDULED, or update content without touching status) ───
+
+  const handleSave = async () => {
     if (!validate()) return
-    if (saveStatus === 'COMPLETED') {
-      toast({ title: 'Saving as Completed…', description: 'Marking this session complete.' })
-      await new Promise(r => setTimeout(r, 1000))
-    }
-
     setSaving(true)
     try {
-      const fd = new FormData()
-      fd.append('csr_id',               String(form.csr_id))
-      fd.append('coach_id',             String(form.coach_id || user?.id || ''))
-      fd.append('session_date',         form.session_date)
-      fd.append('coaching_purpose',     form.coaching_purpose)
-      fd.append('coaching_format',      form.coaching_format)
-      fd.append('source_type',          form.source_type)
-      fd.append('notes',                form.notes)
-      fd.append('topic_ids',            form.topic_ids.join(','))
-      fd.append('status',               saveStatus)
-      fd.append('required_action',        form.required_action)
-      fd.append('resource_ids',           form.kb_resource_ids.join(','))
-      fd.append('quiz_ids',               form.quiz_ids.join(','))
-      fd.append('require_acknowledgment', String(form.require_acknowledgment))
-      fd.append('require_action_plan',    String(form.require_action_plan))
-      fd.append('follow_up_required',  String(form.follow_up_required))
-      fd.append('due_date',            form.due_date             || '')
-      fd.append('follow_up_date',      form.follow_up_date       || '')
-      fd.append('follow_up_notes',     form.follow_up_notes      || '')
-      fd.append('internal_notes',      form.internal_notes       || '')
-      fd.append('behavior_flags',      form.behavior_flags.join(','))
-      if (form.attachment_file)  fd.append('attachment',      form.attachment_file)
-
       if (isEdit) {
-        await trainingService.updateCoachingSession(Number(id), fd)
+        await trainingService.updateCoachingSession(Number(id), buildFormData())
         qc.invalidateQueries({ queryKey: ['coaching-session', id] })
         qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
-        toast({ title: 'Session updated' })
+        toast({ title: 'Session saved' })
       } else {
-        await trainingService.createCoachingSession(fd)
+        await trainingService.createCoachingSession(buildFormData())
         qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
-        toast({ title: 'Session created' })
+        toast({ title: 'Draft saved' })
       }
       navigate('/app/training/coaching')
+    } catch (err: any) {
+      toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── Schedule Session (save as SCHEDULED — CSR sees it as Upcoming) ────────
+  // The coach delivers it to the CSR from the detail page after the meeting,
+  // at which point the system auto-determines IN_PROCESS vs AWAITING_CSR_ACTION.
+
+  const handleSaveAndDeliver = async () => {
+    if (!validate()) return
+    setSaving(true)
+    try {
+      if (isEdit) {
+        await trainingService.updateCoachingSession(Number(id), buildFormData())
+        qc.invalidateQueries({ queryKey: ['coaching-session', id] })
+        qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
+        toast({ title: 'Session scheduled — CSR will see it as Upcoming' })
+        navigate(`/app/training/coaching/${id}`)
+      } else {
+        const created = await trainingService.createCoachingSession(buildFormData())
+        qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
+        toast({ title: 'Session scheduled — CSR will see it as Upcoming' })
+        navigate(`/app/training/coaching/${created.id}`)
+      }
     } catch (err: any) {
       toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
     } finally {
@@ -201,7 +226,7 @@ export default function CoachingSessionFormPage() {
             form={form} errors={errors} resources={resources}
             quizzes={quizzes} update={update}
           />
-          <AccountabilitySection form={form} update={update} />
+          <AccountabilitySection form={form} errors={errors} update={update} />
           {[1, 4, 5].includes(user?.role_id ?? 0) && (
             <InternalNotesSection form={form} update={update} />
           )}
@@ -287,18 +312,31 @@ export default function CoachingSessionFormPage() {
       {/* ── Bottom Action Bar ─────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between mt-2">
         <Button variant="outline" onClick={() => navigate(-1)} disabled={saving}>Cancel</Button>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => handleSave('SCHEDULED')} disabled={saving}>
-            Save as Scheduled
-          </Button>
-          <Button variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50"
-            onClick={() => handleSave('IN_PROCESS')} disabled={saving}>
-            Save as In Process
-          </Button>
-          <Button className="bg-primary hover:bg-primary/90 text-white"
-            onClick={() => handleSave('COMPLETED')} disabled={saving}>
-            {saving ? 'Saving…' : 'Save as Completed'}
-          </Button>
+        <div className="flex items-center gap-3">
+          {/* Show both buttons when creating OR editing a draft */}
+          {(!isEdit || existing?.status === 'SCHEDULED') ? (
+            <>
+              <Button variant="outline" onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving…' : isEdit ? 'Save Draft' : 'Save as Draft'}
+              </Button>
+              <Button
+                className="bg-primary hover:bg-primary/90 text-white"
+                onClick={handleSaveAndDeliver}
+                disabled={saving}
+              >
+                {saving ? 'Saving…' : 'Schedule Session'}
+              </Button>
+            </>
+          ) : (
+            /* Editing a non-draft session — just save content */
+            <Button
+              className="bg-primary hover:bg-primary/90 text-white"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? 'Saving…' : 'Save Changes'}
+            </Button>
+          )}
         </div>
       </div>
 

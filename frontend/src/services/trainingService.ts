@@ -28,7 +28,6 @@ export type CoachingStatus =
   | 'SCHEDULED'
   | 'IN_PROCESS'
   | 'AWAITING_CSR_ACTION'
-  | 'QUIZ_PENDING'
   | 'COMPLETED'
   | 'FOLLOW_UP_REQUIRED'
   | 'CLOSED'
@@ -81,7 +80,7 @@ export interface CoachingSession {
   follow_up_notes?: string
   internal_notes?: string
   behavior_flags?: string
-  kb_resources?: { id: number; title: string; url: string; description?: string }[]
+  kb_resources?: { id: number; title: string; resource_type?: string; url?: string; file_name?: string; description?: string }[]
   quizzes?: { id: number; quiz_title: string; pass_score: number; questions: QuizQuestion[] }[]
   require_acknowledgment: boolean
   require_action_plan: boolean
@@ -193,6 +192,10 @@ export const trainingService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     return data?.data ?? data
+  },
+
+  async setSessionStatus(id: number, status: string): Promise<void> {
+    await api.patch(`/trainer/coaching-sessions/${id}/status`, { status })
   },
 
   async deliverSession(id: number): Promise<void> {

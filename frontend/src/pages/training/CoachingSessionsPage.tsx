@@ -48,8 +48,8 @@ const FORMAT_STYLES: Record<CoachingFormat, string> = {
 }
 
 export const STATUS_LABELS: Record<string, string> = {
-  SCHEDULED: 'Scheduled', IN_PROCESS: 'In Process',
-  AWAITING_CSR_ACTION: 'Awaiting CSR', QUIZ_PENDING: 'Quiz Pending',
+  SCHEDULED: 'Draft', IN_PROCESS: 'In Process',
+  AWAITING_CSR_ACTION: 'Awaiting CSR',
   COMPLETED: 'Completed', FOLLOW_UP_REQUIRED: 'Follow-Up', CLOSED: 'Closed',
 }
 const ALL_STATUSES = Object.keys(STATUS_LABELS)
@@ -95,17 +95,21 @@ export function TopicChips({ topics, max = 2 }: { topics: string[]; max?: number
 }
 
 export function QuizStatusBadge({ session }: { session: CoachingSession }) {
-  if (!session.quiz_required)
+  const quizCount   = Number((session as any).quiz_count  ?? session.quizzes?.length ?? 0)
+  const passedCount = Number((session as any).quiz_passed_count ?? 0)
+  const attempts    = session.quiz_attempts ?? []
+
+  if (quizCount === 0 && !session.quizzes?.length)
     return <span className="text-[13px] text-slate-300">&mdash;</span>
-  if (session.status === 'QUIZ_PENDING')
-    return <span className="text-[13px] text-amber-700">Pending</span>
-  if (session.quiz_attempts?.some(a => a.passed))
-    return <span className="text-[13px] text-emerald-700">Passed ✓</span>
-  if (session.quiz_attempts?.length)
-    return <span className="text-[13px] text-red-600">Failed ✗</span>
-  if (['COMPLETED', 'CLOSED'].includes(session.status))
-    return <span className="text-[13px] text-emerald-700">Passed ✓</span>
-  return <span className="text-[13px] text-slate-400">Not started</span>
+
+  const allPassed = quizCount > 0
+    ? passedCount >= quizCount
+    : attempts.some(a => a.passed)
+
+  if (allPassed || ['COMPLETED', 'CLOSED'].includes(session.status))
+    return <span className="text-[13px] text-slate-500">Passed</span>
+
+  return <span className="text-[13px] text-slate-500">Assigned</span>
 }
 
 // â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

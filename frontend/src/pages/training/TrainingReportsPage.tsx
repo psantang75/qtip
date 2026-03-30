@@ -29,7 +29,7 @@ const TYPE_COLORS: Record<string, string> = {
 }
 const STATUS_COLORS: Record<string, string> = {
   SCHEDULED: '#94a3b8', IN_PROCESS: '#3b82f6', AWAITING_CSR_ACTION: '#f59e0b',
-  QUIZ_PENDING: '#a855f7', COMPLETED: '#10b981', FOLLOW_UP_REQUIRED: '#f97316', CLOSED: '#64748b',
+  COMPLETED: '#10b981', FOLLOW_UP_REQUIRED: '#f97316', CLOSED: '#64748b',
 }
 const typeLabel = (t: string) => t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 

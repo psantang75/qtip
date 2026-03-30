@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, BookOpen, Eye } from 'lucide-react'
+import { BookOpen, Eye } from 'lucide-react'
 import trainingService from '@/services/trainingService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
@@ -17,24 +17,11 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useListSort } from '@/hooks/useListSort'
-import { formatQualityDate } from '@/utils/dateFormat'
-import { cn } from '@/lib/utils'
+import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 import { QuizStatusBadge, PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS, dateUrgency } from './CoachingSessionsPage'
 
-// ── CSR-friendly status labels ────────────────────────────────────────────────
 
-const CSR_STATUS: Record<string, string> = {
-  SCHEDULED:           'Upcoming',
-  IN_PROCESS:          'Needs Your Response',
-  AWAITING_CSR_ACTION: 'Needs Your Response',
-  QUIZ_PENDING:        'Quiz Required',
-  COMPLETED:           'Completed',
-  FOLLOW_UP_REQUIRED:  'Completed',
-  CLOSED:              'Closed',
-}
-
-const NEEDS_RESPONSE = new Set(['IN_PROCESS', 'AWAITING_CSR_ACTION', 'QUIZ_PENDING'])
-const SORT_PRIORITY: Record<string, number> = { IN_PROCESS: 0, AWAITING_CSR_ACTION: 0, QUIZ_PENDING: 1 }
+const SORT_PRIORITY: Record<string, number> = { IN_PROCESS: 0, AWAITING_CSR_ACTION: 0 }
 
 export default function MyCoachingPage() {
   const navigate = useNavigate()
@@ -42,8 +29,9 @@ export default function MyCoachingPage() {
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [topicFilter,  setTopicFilter]  = useState<string[]>([])
   const [dateField,    setDateField]    = useState<DateField>('session_date')
-  const [dateFrom,     setDateFrom]     = useState('')
-  const [dateTo,       setDateTo]       = useState('')
+  const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
+  const [dateFrom,     setDateFrom]     = useState(defaultFrom)
+  const [dateTo,       setDateTo]       = useState(defaultTo)
   const [overdueOnly,  setOverdueOnly]  = useState(false)
   const [dueTodayOnly, setDueTodayOnly] = useState(false)
   const [page,         setPage]         = useState(1)
@@ -58,14 +46,13 @@ export default function MyCoachingPage() {
   })
 
   const allSessions = data?.items ?? []
-  const needsAction = allSessions.filter(s => NEEDS_RESPONSE.has(s.status)).length
 
   // Base filter (search only) — used to derive available filter options
   const baseFiltered = useMemo(() => allSessions, [allSessions])
 
   const filtered = useMemo(() => {
     let items = baseFiltered
-    if (statusFilter.length) items = items.filter(s => statusFilter.includes(CSR_STATUS[s.status] ?? s.status))
+    if (statusFilter.length) items = items.filter(s => statusFilter.includes(STATUS_LABELS[s.status] ?? s.status))
     if (topicFilter.length)  items = items.filter(s => topicFilter.some(t => s.topics.includes(t)))
     if (dateFrom || dateTo) {
       items = items.filter(s => {
@@ -109,7 +96,7 @@ export default function MyCoachingPage() {
   const sessions   = sorted.slice((page - 1) * pageSize, page * pageSize)
 
   // Filter option lists derived from base-filtered results
-  const statusOptions = useMemo(() => [...new Set(baseFiltered.map(s => CSR_STATUS[s.status] ?? s.status))].sort(), [baseFiltered])
+  const statusOptions = useMemo(() => [...new Set(baseFiltered.map(s => STATUS_LABELS[s.status] ?? s.status))].sort(), [baseFiltered])
   const topicOptions  = useMemo(() => {
     const all = baseFiltered.flatMap(s => s.topics)
     return [...new Set(all)].sort()
@@ -121,18 +108,10 @@ export default function MyCoachingPage() {
     <QualityListPage>
       <QualityPageHeader title="My Coaching" />
 
-      {needsAction > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
-          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
-          <span className="text-sm font-medium text-amber-800">
-            You have {needsAction} session{needsAction > 1 ? 's' : ''} awaiting your response.
-          </span>
-        </div>
-      )}
 
       <QualityFilterBar
         hasFilters={hasFilters}
-        onReset={() => { setStatusFilter([]); setTopicFilter([]); setDateFrom(''); setDateTo(''); setOverdueOnly(false); setDueTodayOnly(false); setPage(1) }}
+        onReset={() => { setStatusFilter([]); setTopicFilter([]); setDateFrom(defaultFrom); setDateTo(defaultTo); setOverdueOnly(false); setDueTodayOnly(false); setPage(1) }}
         resultCount={{ filtered: sorted.length, total: allSessions.length }}
       >
         {/* ── Row 1: Status · Topics ── */}
@@ -186,15 +165,17 @@ export default function MyCoachingPage() {
                 <SortableTableHead field="session_date" sort={sort} dir={dir} onSort={toggle} className="min-w-[110px]">Session Date</SortableTableHead>
                 <SortableTableHead field="status"       sort={sort} dir={dir} onSort={toggle} className="min-w-[160px]">Status</SortableTableHead>
                 <TableHead className="min-w-[120px]">Purpose</TableHead>
+                <TableHead className="min-w-[120px]">Format</TableHead>
                 <TableHead className="min-w-[160px]">Topics</TableHead>
                 <TableHead className="min-w-[120px]">Quiz</TableHead>
-                <SortableTableHead field="due_date" sort={sort} dir={dir} onSort={toggle} className="min-w-[130px] pl-6">Due Date</SortableTableHead>
+                <SortableTableHead field="due_date"       sort={sort} dir={dir} onSort={toggle} className="min-w-[130px] pl-6">Due Date</SortableTableHead>
+                <SortableTableHead field="follow_up_date" sort={sort} dir={dir} onSort={toggle} className="min-w-[140px] pl-6">Follow-Up Date</SortableTableHead>
                 <TableHead className="w-24" />
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {sessions.length === 0 ? (
-                <TableEmptyState colSpan={7} icon={BookOpen}
+                <TableEmptyState colSpan={9} icon={BookOpen}
                   title="No coaching sessions found"
                   description={hasFilters ? 'Try adjusting your filters' : 'Your sessions will appear here'} />
               ) : sessions.map(s => (
@@ -202,17 +183,19 @@ export default function MyCoachingPage() {
                   onClick={() => navigate(`/app/training/my-coaching/${s.id}`)}>
 
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
-                    {(() => { const u = dateUrgency(s.session_date); return u ? <span className={u.cls}>{u.label}</span> : '—' })()}
+                    {formatQualityDate(s.session_date)}
                   </TableCell>
 
-                  <TableCell>
-                    <span className={cn('text-[13px]', NEEDS_RESPONSE.has(s.status) ? 'text-amber-700 font-semibold' : 'text-slate-600')}>
-                      {CSR_STATUS[s.status] ?? s.status}
-                    </span>
+                  <TableCell className="text-[13px] text-slate-600">
+                    {STATUS_LABELS[s.status] ?? s.status}
                   </TableCell>
 
                   <TableCell className="text-[13px] text-slate-600">
                     {PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}
+                  </TableCell>
+
+                  <TableCell className="text-[13px] text-slate-600">
+                    {FORMAT_MAP[s.coaching_format] ?? s.coaching_format}
                   </TableCell>
 
                   {/* Topics with tooltip */}
@@ -243,6 +226,10 @@ export default function MyCoachingPage() {
 
                   <TableCell className="pl-6 text-[13px] whitespace-nowrap">
                     {(() => { const u = dateUrgency(s.due_date); return u ? <span className={u.cls}>{u.label}</span> : <span className="text-slate-300">&mdash;</span> })()}
+                  </TableCell>
+
+                  <TableCell className="pl-6 text-[13px] whitespace-nowrap">
+                    {(() => { const u = dateUrgency(s.follow_up_date); return u ? <span className={u.cls}>{u.label}</span> : <span className="text-slate-300">&mdash;</span> })()}
                   </TableCell>
 
                   <TableCell onClick={e => e.stopPropagation()}>

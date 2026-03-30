@@ -81,22 +81,49 @@ export async function resolveNextStatus(sessionId: number): Promise<string | nul
  */
 export async function applyAutoAdvance(sessionId: number, userId: number): Promise<string | null> {
   const nextStatus = await resolveNextStatus(sessionId);
-  if (!nextStatus) return null;
 
-  const completedAt = nextStatus === 'COMPLETED' ? new Date() : null;
-  await prisma.$executeRaw(
-    Prisma.sql`UPDATE coaching_sessions
-               SET status = ${nextStatus}, completed_at = COALESCE(completed_at, ${completedAt})
-               WHERE id = ${sessionId}`
+  if (nextStatus) {
+    // All CSR requirements complete — advance to COMPLETED or FOLLOW_UP_REQUIRED
+    const completedAt = nextStatus === 'COMPLETED' ? new Date() : null;
+    await prisma.$executeRaw(
+      Prisma.sql`UPDATE coaching_sessions
+                 SET status = ${nextStatus}, completed_at = COALESCE(completed_at, ${completedAt})
+                 WHERE id = ${sessionId}`
+    );
+    await prisma.auditLog.create({
+      data: {
+        user_id: userId,
+        action: 'AUTO_STATUS_ADVANCE',
+        target_id: sessionId,
+        target_type: 'coaching_session',
+        details: JSON.stringify({ to: nextStatus }),
+      },
+    });
+    return nextStatus;
+  }
+
+  // Not fully complete — if still IN_PROCESS but requirements exist, escalate to AWAITING_CSR_ACTION
+  const rows = await prisma.$queryRaw<{ status: string }[]>(
+    Prisma.sql`SELECT status FROM coaching_sessions WHERE id = ${sessionId}`
   );
-  await prisma.auditLog.create({
-    data: {
-      user_id: userId,
-      action: 'AUTO_STATUS_ADVANCE',
-      target_id: sessionId,
-      target_type: 'coaching_session',
-      details: JSON.stringify({ to: nextStatus }),
-    },
-  });
-  return nextStatus;
+  if (rows[0]?.status === 'IN_PROCESS') {
+    const needsCSR = await hasCsrRequirements(sessionId);
+    if (needsCSR) {
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE coaching_sessions SET status = 'AWAITING_CSR_ACTION' WHERE id = ${sessionId}`
+      );
+      await prisma.auditLog.create({
+        data: {
+          user_id: userId,
+          action: 'AUTO_STATUS_ADVANCE',
+          target_id: sessionId,
+          target_type: 'coaching_session',
+          details: JSON.stringify({ to: 'AWAITING_CSR_ACTION', reason: 'pending_requirements' }),
+        },
+      });
+      return 'AWAITING_CSR_ACTION';
+    }
+  }
+
+  return null;
 }

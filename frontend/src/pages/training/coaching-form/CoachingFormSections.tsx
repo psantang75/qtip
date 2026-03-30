@@ -350,8 +350,6 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, updat
     update('quiz_ids', next)
   }
 
-  const noTopicsSelected = topicSet.size === 0
-
   return (
     <FormSection title="Required Actions">
       {/* Required Action Notes */}
@@ -366,16 +364,13 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, updat
         </p>
       </Field>
 
-      {/* Knowledge Base */}
-      <SubSection title="Knowledge Base Assignment">
-        {noTopicsSelected && (
-          <p className="text-[12px] text-amber-600 mb-2">Select topics above to filter available resources.</p>
-        )}
+      {/* Reference Materials */}
+      <SubSection title="Reference Materials">
         <AssignmentMultiSelect
           items={resourceItems}
           selectedIds={form.kb_resource_ids}
           onToggle={toggleResource}
-          placeholder="Assign knowledge base resources…"
+          placeholder="Assign Reference Materials…"
           noTopicsMsg="No resources linked to the selected topics."
           search={kbSearch}
           setSearch={setKbSearch}
@@ -384,9 +379,6 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, updat
 
       {/* Quiz */}
       <SubSection title="Quiz Assignment">
-        {noTopicsSelected && (
-          <p className="text-[12px] text-amber-600 mb-2">Select topics above to filter available quizzes.</p>
-        )}
         <AssignmentMultiSelect
           items={quizItems}
           selectedIds={form.quiz_ids}
@@ -398,7 +390,38 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, updat
         />
       </SubSection>
 
-      {/* Timing */}
+    </FormSection>
+  )
+}
+
+// ── Section 4: CSR Accountability (with Timing) ──────────────────────────────
+
+interface S4Props {
+  form: CoachingFormState
+  errors: CoachingFormErrors
+  update: (k: keyof CoachingFormState, v: any) => void
+}
+
+export function AccountabilitySection({ form, errors, update }: S4Props) {
+  return (
+    <FormSection title="CSR Accountability">
+      {/* Accountability toggles */}
+      <div className="space-y-4">
+        {([
+          ['require_action_plan',    'Require Action Plan',    'CSR must write a response before completing'],
+          ['require_acknowledgment', 'Require Acknowledgment', 'CSR must check the acknowledgment box'],
+        ] as const).map(([key, label, helper]) => (
+          <div key={key} className="flex items-start gap-3">
+            <Switch checked={form[key]} onCheckedChange={v => update(key, v)} className="mt-0.5" />
+            <div>
+              <p className="text-[13px] font-medium text-slate-700">{label}</p>
+              <p className="text-[12px] text-slate-400">{helper}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Timing — due dates govern when the CSR must complete their work */}
       <SubSection title="Timing">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Due Date">
@@ -427,31 +450,6 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, updat
           </div>
         )}
       </SubSection>
-    </FormSection>
-  )
-}
-
-// ── Section 4: CSR Accountability ────────────────────────────────────────────
-
-interface S4Props { form: CoachingFormState; update: (k: keyof CoachingFormState, v: any) => void }
-
-export function AccountabilitySection({ form, update }: S4Props) {
-  return (
-    <FormSection title="CSR Accountability">
-      <div className="space-y-4">
-        {([
-          ['require_action_plan',    'Require Action Plan',    'CSR must write a response before completing'],
-          ['require_acknowledgment', 'Require Acknowledgment', 'CSR must check the acknowledgment box'],
-        ] as const).map(([key, label, helper]) => (
-          <div key={key} className="flex items-start gap-3">
-            <Switch checked={form[key]} onCheckedChange={v => update(key, v)} className="mt-0.5" />
-            <div>
-              <p className="text-[13px] font-medium text-slate-700">{label}</p>
-              <p className="text-[12px] text-slate-400">{helper}</p>
-            </div>
-          </div>
-        ))}
-      </div>
     </FormSection>
   )
 }
