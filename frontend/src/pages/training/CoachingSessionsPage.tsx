@@ -7,11 +7,9 @@ import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
-import { DateFieldRangeFilter, type DateField } from '@/components/common/DateFieldRangeFilter'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { ListPagination } from '@/components/common/ListPagination'
@@ -125,10 +123,20 @@ export function dateUrgency(dateStr?: string | null): { label: string; cls: stri
   return               { label: formatQualityDate(dateStr),       cls: 'text-slate-600' }
 }
 
+/** Returns the most actionable upcoming date for a session, with a type label. */
+function nextDue(s: CoachingSession): { date: string | null; type: 'D' | 'F' | null } {
+  const due = s.due_date ?? null
+  const fu  = s.follow_up_date ?? null
+  if (s.status === 'FOLLOW_UP_REQUIRED' && fu) return { date: fu, type: 'F' }
+  if (due && fu) return due <= fu ? { date: due, type: 'D' } : { date: fu, type: 'F' }
+  if (due) return { date: due, type: 'D' }
+  if (fu)  return { date: fu,  type: 'F' }
+  return { date: null, type: null }
+}
+
 export default function CoachingSessionsPage() {
   const navigate = useNavigate()
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
-  const [dateField, setDateField] = useState<DateField>('session_date')
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
     csrs: '', statuses: '', formats: '', topics: '',
@@ -164,12 +172,12 @@ export default function CoachingSessionsPage() {
   const selectedTopics   = useMemo(() => topicsParam   ? topicsParam.split(',').filter(Boolean)    : [], [topicsParam])
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['coaching-sessions', page, pageSize, dateField, dateFrom, dateTo, overdue, dueToday],
+    queryKey: ['coaching-sessions', page, pageSize, dateFrom, dateTo, overdue, dueToday],
     queryFn: () => trainingService.getCoachingSessions({
       page,
       limit: pageSize,
-      date_from:    dateField === 'session_date' ? (dateFrom || undefined) : undefined,
-      date_to:      dateField === 'session_date' ? (dateTo   || undefined) : undefined,
+      date_from:    dateFrom || undefined,
+      date_to:      dateTo   || undefined,
       overdue_only: overdue   === 'true' ? true : undefined,
       due_today:    dueToday  === 'true' ? true : undefined,
     }),
@@ -203,23 +211,12 @@ export default function CoachingSessionsPage() {
 
   const clientFiltered = useMemo(() => {
     let items = data?.items ?? []
-    if (selectedCsrs.length)                   items = items.filter(s => selectedCsrs.includes(s.csr_name))
-    if (effectiveSelectedStatuses.length)       items = items.filter(s => effectiveSelectedStatuses.includes(STATUS_LABELS[s.status] ?? s.status))
-    if (selectedFormats.length)                 items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
-    if (selectedTopics.length)                  items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
-    // Client-side date filtering for due_date and follow_up_date
-    if (dateField !== 'session_date' && (dateFrom || dateTo)) {
-      items = items.filter(s => {
-        const raw = dateField === 'due_date' ? s.due_date : s.follow_up_date
-        if (!raw) return false
-        const d = raw.slice(0, 10)
-        if (dateFrom && d < dateFrom) return false
-        if (dateTo   && d > dateTo)   return false
-        return true
-      })
-    }
+    if (selectedCsrs.length)             items = items.filter(s => selectedCsrs.includes(s.csr_name))
+    if (effectiveSelectedStatuses.length) items = items.filter(s => effectiveSelectedStatuses.includes(STATUS_LABELS[s.status] ?? s.status))
+    if (selectedFormats.length)          items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
+    if (selectedTopics.length)           items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
     return items
-  }, [data?.items, selectedCsrs, effectiveSelectedStatuses, selectedFormats, selectedTopics, dateField, dateFrom, dateTo])
+  }, [data?.items, selectedCsrs, effectiveSelectedStatuses, selectedFormats, selectedTopics])
 
   const { sort, dir, toggle, sorted: sortedItems } = useListSort(clientFiltered)
 
@@ -267,7 +264,17 @@ export default function CoachingSessionsPage() {
         onReset={reset}
         resultCount={{ total: displayTotal }}
       >
-        {/* ── Row 1: CSRs · Topics · Status ── */}
+        {/* ── Row 1: Session Date · CSRs · Topics · Status ── */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] text-slate-500 shrink-0">Session</span>
+          <input type="date" value={dateFrom} max={dateTo || undefined}
+            onChange={e => setMany({ from: e.target.value, page: '1' })}
+            className="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/40 w-[140px]" />
+          <span className="text-[12px] text-slate-400">–</span>
+          <input type="date" value={dateTo} min={dateFrom || undefined}
+            onChange={e => setMany({ to: e.target.value, page: '1' })}
+            className="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/40 w-[140px]" />
+        </div>
         <StagedMultiSelect
           options={csrOptions}
           selected={selectedCsrs}
@@ -296,20 +303,13 @@ export default function CoachingSessionsPage() {
         {/* ── Row break ── */}
         <div className="w-full" />
 
-        {/* ── Row 2: Format · Date field range · Overdue ── */}
+        {/* ── Row 2: Format · Overdue ── */}
         <StagedMultiSelect
           options={formatOptions}
           selected={selectedFormats}
           onApply={v => setMany({ formats: v.join(','), page: '1' })}
           placeholder="All Formats"
           width="w-[220px]"
-        />
-        <DateFieldRangeFilter
-          field={dateField}
-          start={dateFrom}
-          end={dateTo}
-          onFieldChange={f => { setDateField(f); setMany({ from: '', to: '', page: '1' }) }}
-          onRangeChange={(s, e) => setMany({ from: s, to: e, page: '1' })}
         />
         <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
           <input type="checkbox" checked={dueToday === 'true'}
@@ -334,6 +334,7 @@ export default function CoachingSessionsPage() {
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
+                <TableHead className="w-[60px] text-slate-400">#</TableHead>
                 <SortableTableHead field="session_date"  sort={sort} dir={dir} onSort={toggle} className="min-w-[110px]">Date</SortableTableHead>
                 <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle} className="min-w-[110px]">Status</SortableTableHead>
                 <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle} className="min-w-[200px]">CSR</SortableTableHead>
@@ -341,8 +342,7 @@ export default function CoachingSessionsPage() {
                 <TableHead className="min-w-[120px]">Format</TableHead>
                 <TableHead className="min-w-[160px]">Topics</TableHead>
                 <TableHead className="min-w-[130px]">Quiz</TableHead>
-                <SortableTableHead field="due_date"       sort={sort} dir={dir} onSort={toggle} className="min-w-[130px] pl-6">Due Date</SortableTableHead>
-                <SortableTableHead field="follow_up_date" sort={sort} dir={dir} onSort={toggle} className="min-w-[150px] pl-6">Follow-Up Date</SortableTableHead>
+                <SortableTableHead field="due_date" sort={sort} dir={dir} onSort={toggle} className="min-w-[130px]">Next Due</SortableTableHead>
                 <TableHead className="w-24" />
               </StandardTableHeaderRow>
             </TableHeader>
@@ -366,6 +366,7 @@ export default function CoachingSessionsPage() {
                 {/* ── Batch parent row ── */}
                 {isBatch ? (
                   <TableRow className="bg-slate-50 border-l-4 border-l-primary hover:bg-slate-100/60">
+                    <TableCell className="text-[11px] text-slate-300 font-mono">&mdash;</TableCell>
                     <TableCell className="text-[13px] text-slate-600 whitespace-nowrap font-medium">
                       {formatQualityDate(s.session_date)}
                     </TableCell>
@@ -401,8 +402,7 @@ export default function CoachingSessionsPage() {
                       )}
                     </TableCell>
                     <TableCell><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
-                    <TableCell className="pl-6"><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
-                    <TableCell className="pl-6"><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
+                    <TableCell><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm"
                         className="h-7 px-2 text-[12px] text-primary gap-1 hover:text-primary hover:bg-primary/10"
@@ -420,6 +420,7 @@ export default function CoachingSessionsPage() {
                     className="cursor-pointer hover:bg-slate-50/50"
                     onClick={() => navigate(`/app/training/coaching/${s.id}`)}
                   >
+                    <TableCell className="text-[11px] text-slate-400 font-mono">#{s.id}</TableCell>
                     <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                       {formatQualityDate(s.session_date)}
                     </TableCell>
@@ -471,11 +472,27 @@ export default function CoachingSessionsPage() {
                       )}
                     </TableCell>
                     <TableCell><QuizStatusBadge session={s} /></TableCell>
-                    <TableCell className="pl-6 text-[13px] whitespace-nowrap">
-                      {s.due_date ? formatQualityDate(s.due_date) : <span className="text-slate-300">&mdash;</span>}
-                    </TableCell>
-                    <TableCell className="pl-6 text-[13px] text-slate-600 whitespace-nowrap">
-                      {s.follow_up_date ? formatQualityDate(s.follow_up_date) : <span className="text-slate-300">&mdash;</span>}
+                    <TableCell className="text-[13px] whitespace-nowrap">
+                      {(() => {
+                        const nd = nextDue(s)
+                        if (!nd.date) return <span className="text-slate-300">&mdash;</span>
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-default text-slate-600">
+                                {formatQualityDate(nd.date)}
+                                <span className="ml-1 text-[10px] text-slate-400 font-medium">{nd.type}</span>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                              <div className="space-y-1 text-[12px]">
+                                <div className="flex gap-3"><span className="text-slate-400 w-20">Due Date</span><span className="text-slate-700">{s.due_date ? formatQualityDate(s.due_date) : '—'}</span></div>
+                                <div className="flex gap-3"><span className="text-slate-400 w-20">Follow-Up</span><span className="text-slate-700">{s.follow_up_date ? formatQualityDate(s.follow_up_date) : '—'}</span></div>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell onClick={e => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
@@ -490,7 +507,8 @@ export default function CoachingSessionsPage() {
                 {isBatch && isExpanded && batchSessions!.map(bs => (
                   <TableRow key={bs.id} className="cursor-pointer hover:bg-primary/5 bg-blue-50/30 border-l-4 border-l-primary/30"
                     onClick={() => navigate(`/app/training/coaching/${bs.id}`)}>
-                    <TableCell className="text-[13px] text-slate-500 whitespace-nowrap pl-8">
+                    <TableCell className="text-[11px] text-slate-400 font-mono pl-8">#{bs.id}</TableCell>
+                    <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">
                       {formatQualityDate(bs.session_date)}
                     </TableCell>
                     <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[bs.status] ?? bs.status}</TableCell>
@@ -501,11 +519,17 @@ export default function CoachingSessionsPage() {
                     <TableCell className="text-[13px] text-slate-500">{FORMAT_MAP[bs.coaching_format] ?? bs.coaching_format}</TableCell>
                     <TableCell><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
                     <TableCell><QuizStatusBadge session={bs} /></TableCell>
-                    <TableCell className="pl-6 text-[13px] text-slate-500 whitespace-nowrap">
-                      {bs.due_date ? formatQualityDate(bs.due_date) : <span className="text-slate-300">&mdash;</span>}
-                    </TableCell>
-                    <TableCell className="pl-6 text-[13px] text-slate-500 whitespace-nowrap">
-                      {bs.follow_up_date ? formatQualityDate(bs.follow_up_date) : <span className="text-slate-300">&mdash;</span>}
+                    <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">
+                      {(() => {
+                        const nd = nextDue(bs)
+                        if (!nd.date) return <span className="text-slate-300">&mdash;</span>
+                        return (
+                          <span>
+                            {formatQualityDate(nd.date)}
+                            <span className="ml-1 text-[10px] text-slate-400 font-medium">{nd.type}</span>
+                          </span>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell onClick={e => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"

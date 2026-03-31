@@ -2,21 +2,17 @@ import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, ChevronDown, Pencil } from 'lucide-react'
 import trainingService from '@/services/trainingService'
-import listService from '@/services/listService'
+import listService, { type ListItem } from '@/services/listService'
 import { ResourceLink } from '@/components/training/ResourceLink'
 import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
-import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
-import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
-import { cn } from '@/lib/utils'
 
 interface TopicForm {
   linkedResourceIds: number[]
@@ -167,6 +163,92 @@ export default function LibraryTopicsPage() {
     saveMut.mutate({ ...form, id: editingTopic.id, fkTopicId })
   }
 
+  // Group filtered topics by category for card-based rendering
+  const groupedFiltered = useMemo(() => {
+    const catOrder: string[] = []
+    for (const t of filtered) {
+      if (t.category && !catOrder.includes(t.category)) catOrder.push(t.category)
+    }
+    const byCategory = new Map<string, ListItem[]>()
+    catOrder.forEach(c => byCategory.set(c, []))
+    const uncategorized: ListItem[] = []
+    for (const t of filtered) {
+      if (t.category) byCategory.get(t.category)!.push(t)
+      else uncategorized.push(t)
+    }
+    return { catOrder, byCategory, uncategorized }
+  }, [filtered])
+
+  const renderTopicRow = (topic: ListItem) => {
+    const isOpen = expanded.has(topic.id)
+    const fkId   = topic.item_key ? parseInt(topic.item_key) : 0
+    const topicResources = resourcesByTopic.get(fkId) ?? []
+    const topicQuizzes   = quizzesByTopic.get(fkId) ?? []
+    return (
+      <React.Fragment key={topic.id}>
+        <div
+          className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/60 cursor-pointer group"
+          onClick={() => toggleExpanded(topic.id)}
+        >
+          <span className="text-slate-300 shrink-0">
+            {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </span>
+          <span className="flex-1 text-[13px] text-slate-700">{topic.label}</span>
+          <span className="text-[11px] text-slate-400 shrink-0 w-20 text-right">
+            {topicResources.length > 0 ? `${topicResources.length} resource${topicResources.length !== 1 ? 's' : ''}` : ''}
+          </span>
+          <span className="text-[11px] text-slate-400 shrink-0 w-16 text-right">
+            {topicQuizzes.length > 0 ? `${topicQuizzes.length} quiz${topicQuizzes.length !== 1 ? 'zes' : ''}` : ''}
+          </span>
+          <div onClick={e => e.stopPropagation()}>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-500 gap-1 opacity-0 group-hover:opacity-100"
+              onClick={() => openEdit(topic)}>
+              <Pencil className="h-3 w-3" /> Edit
+            </Button>
+          </div>
+        </div>
+
+        {isOpen && (
+          <div className="mx-3 mb-2 rounded-lg border border-slate-100 bg-slate-50/60 p-3 space-y-3">
+            <div>
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Resources</p>
+              {topicResources.length === 0 ? (
+                <p className="text-[12px] text-slate-400">No resources linked</p>
+              ) : (
+                <div className="space-y-1">
+                  {topicResources.map((r: any) => (
+                    <div key={r.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-200">
+                      <ResourceLink resource={r} maxWidth="max-w-none flex-1" />
+                      <span className="text-[11px] text-slate-400 shrink-0">{r.resource_type}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Quizzes</p>
+              {topicQuizzes.length === 0 ? (
+                <p className="text-[12px] text-slate-400">No quizzes linked</p>
+              ) : (
+                <div className="space-y-1">
+                  {topicQuizzes.map((q: any) => (
+                    <div key={q.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-200">
+                      <button onClick={e => openPreview(q.id, e)}
+                        className="flex-1 text-[13px] font-medium text-primary hover:underline truncate text-left">
+                        {q.quiz_title}
+                      </button>
+                      <span className="text-[11px] text-slate-500 shrink-0">{q.question_count}Q · Pass: {q.pass_score}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </React.Fragment>
+    )
+  }
+
   return (
     <QualityListPage>
       <QualityPageHeader title="Training Topics" />
@@ -180,131 +262,47 @@ export default function LibraryTopicsPage() {
         resultCount={{ filtered: filtered.length, total: allTopics.length }}
       />
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        {isLoading ? <TableLoadingSkeleton rows={6} /> : (
-          <Table>
-            <TableHeader>
-              <StandardTableHeaderRow>
-                <TableHead className="w-8" />
-                <TableHead>Topic Name</TableHead>
-                <TableHead className="text-center">Resources</TableHead>
-                <TableHead className="text-center">Quizzes</TableHead>
-                <TableHead className="w-24" />
-              </StandardTableHeaderRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableEmptyState colSpan={5} title="No topics found" description="Try adjusting your search" />
-              ) : (() => {
-                let lastCat: string | null = undefined as any
-                return filtered.map((topic: any) => {
-                const isOpen    = expanded.has(topic.id)
-                const fkId      = topic.item_key ? parseInt(topic.item_key) : 0
-                const topicResources = resourcesByTopic.get(fkId) ?? []
-                const topicQuizzes   = quizzesByTopic.get(fkId) ?? []
-                const showHeader = topic.category !== lastCat
-                lastCat = topic.category
+      {isLoading ? (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <TableLoadingSkeleton rows={6} />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+          <p className="text-[13px] text-slate-400">No topics found. Try adjusting your search.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* ── Categorised blocks ── */}
+          {groupedFiltered.catOrder.map(cat => (
+            <div key={cat} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">{cat}</p>
+                  <span className="text-[10px] text-slate-400">{groupedFiltered.byCategory.get(cat)!.length}</span>
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {groupedFiltered.byCategory.get(cat)!.map(renderTopicRow)}
+              </div>
+            </div>
+          ))}
 
-                return (
-                  <React.Fragment key={topic.id}>
-                    {showHeader && topic.category && (
-                      <TableRow className="bg-slate-50/80 pointer-events-none">
-                        <TableCell colSpan={5} className="py-1.5 px-4">
-                          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
-                            {topic.category}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                    <TableRow
-                      className="cursor-pointer hover:bg-slate-50/50"
-                      onClick={() => toggleExpanded(topic.id)}
-                    >
-                      <TableCell>
-                        {isOpen
-                          ? <ChevronDown  className="h-4 w-4 text-slate-400" />
-                          : <ChevronRight className="h-4 w-4 text-slate-400" />}
-                      </TableCell>
-                      <TableCell className="text-[13px] font-medium text-slate-900">
-                        {topic.label}
-                      </TableCell>
-                      <TableCell className="text-center text-[13px] text-slate-500">
-                        {topicResources.length}
-                      </TableCell>
-                      <TableCell className="text-center text-[13px] text-slate-500">
-                        {topicQuizzes.length}
-                      </TableCell>
-                      <TableCell onClick={e => e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-[12px] text-slate-600 gap-1"
-                          onClick={() => openEdit(topic)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" /> Edit
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-
-                    {isOpen && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="p-0 bg-slate-50/60">
-                          <div className="p-4 space-y-4 border-t border-slate-100">
-
-                            <div>
-                              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                Resources
-                              </p>
-                              {topicResources.length === 0 ? (
-                                <p className="text-[13px] text-slate-400">No resources linked</p>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {topicResources.map((r: any) => (
-                                    <div key={r.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-200"
-                                      onClick={e => e.stopPropagation()}>
-                                      <ResourceLink resource={r} maxWidth="max-w-none flex-1" />
-                                      <span className="text-[12px] text-slate-400 shrink-0">{r.resource_type}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            <div>
-                              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                Quizzes
-                              </p>
-                              {topicQuizzes.length === 0 ? (
-                                <p className="text-[13px] text-slate-400">No quizzes linked</p>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {topicQuizzes.map((q: any) => (
-                                    <div key={q.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-200">
-                                      <button
-                                        onClick={e => openPreview(q.id, e)}
-                                        className="flex-1 text-[13px] font-medium text-primary hover:underline truncate text-left"
-                                      >
-                                        {q.quiz_title}
-                                      </button>
-                                      <span className="text-[12px] text-slate-500 shrink-0">{q.question_count}Q · Pass: {q.pass_score}%</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </React.Fragment>
-                )
-              })
-              })()}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+          {/* ── Uncategorised block ── */}
+          {groupedFiltered.uncategorized.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 border-dashed overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/50 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Uncategorized</p>
+                  <span className="text-[10px] text-slate-400">{groupedFiltered.uncategorized.length}</span>
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {groupedFiltered.uncategorized.map(renderTopicRow)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <QuizPreviewModal
         quiz={previewQuiz}

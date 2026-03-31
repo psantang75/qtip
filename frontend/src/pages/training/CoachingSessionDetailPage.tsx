@@ -327,7 +327,7 @@ export default function CoachingSessionDetailPage() {
   return (
     <QualityListPage>
       <QualityPageHeader
-        title="Coaching Session"
+        title={`Coaching Session #${id}`}
         subtitle={`${session.csr_name} — ${formatQualityDate(session.session_date)}`}
         actions={
           <div className="flex gap-2">
