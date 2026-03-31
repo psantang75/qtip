@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MessageSquare, Eye, ChevronRight, ChevronDown } from 'lucide-react'
+import { Plus, MessageSquare, Eye, ChevronDown, ChevronUp, Users } from 'lucide-react'
 import trainingService, { type CoachingSession, type CoachingPurpose, type CoachingFormat } from '@/services/trainingService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
@@ -192,14 +192,21 @@ export default function CoachingSessionsPage() {
     return ALL_STATUSES.filter(s => present.has(s)).map(s => STATUS_LABELS[s])
   }, [data?.items])
 
+  // Default: all visible statuses except Closed. When user explicitly selects, use that instead.
+  const allExceptClosed = useMemo(() => statusOptions.filter(s => s !== 'Closed'), [statusOptions])
+  const effectiveSelectedStatuses = useMemo(
+    () => selectedStatuses.length === 0 ? allExceptClosed : selectedStatuses,
+    [selectedStatuses, allExceptClosed],
+  )
+
   const formatOptions = Object.values(FORMAT_MAP)
 
   const clientFiltered = useMemo(() => {
     let items = data?.items ?? []
-    if (selectedCsrs.length)     items = items.filter(s => selectedCsrs.includes(s.csr_name))
-    if (selectedStatuses.length) items = items.filter(s => selectedStatuses.includes(STATUS_LABELS[s.status] ?? s.status))
-    if (selectedFormats.length)  items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
-    if (selectedTopics.length)   items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
+    if (selectedCsrs.length)                   items = items.filter(s => selectedCsrs.includes(s.csr_name))
+    if (effectiveSelectedStatuses.length)       items = items.filter(s => effectiveSelectedStatuses.includes(STATUS_LABELS[s.status] ?? s.status))
+    if (selectedFormats.length)                 items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
+    if (selectedTopics.length)                  items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
     // Client-side date filtering for due_date and follow_up_date
     if (dateField !== 'session_date' && (dateFrom || dateTo)) {
       items = items.filter(s => {
@@ -212,7 +219,7 @@ export default function CoachingSessionsPage() {
       })
     }
     return items
-  }, [data?.items, selectedCsrs, selectedStatuses, selectedFormats, selectedTopics, dateField, dateFrom, dateTo])
+  }, [data?.items, selectedCsrs, effectiveSelectedStatuses, selectedFormats, selectedTopics, dateField, dateFrom, dateTo])
 
   const { sort, dir, toggle, sorted: sortedItems } = useListSort(clientFiltered)
 
@@ -277,8 +284,11 @@ export default function CoachingSessionsPage() {
         />
         <StagedMultiSelect
           options={statusOptions}
-          selected={selectedStatuses}
-          onApply={v => setMany({ statuses: v.join(','), page: '1' })}
+          selected={effectiveSelectedStatuses}
+          onApply={v => {
+            const isDefault = v.length === allExceptClosed.length && allExceptClosed.every(s => v.includes(s))
+            setMany({ statuses: isDefault ? '' : v.join(','), page: '1' })
+          }}
           placeholder="All Statuses"
           width="w-[180px]"
         />
@@ -352,35 +362,33 @@ export default function CoachingSessionsPage() {
 
                 return (
                 <React.Fragment key={key}>
-                <TableRow
-                  className={cn('hover:bg-slate-50/50', !isBatch && 'cursor-pointer')}
-                  onClick={isBatch ? () => toggleBatch(batchId!) : () => navigate(`/app/training/coaching/${s.id}`)}
-                >
-                  <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
-                      {isBatch && (isExpanded
-                        ? <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        : <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      )}
+
+                {/* ── Batch parent row ── */}
+                {isBatch ? (
+                  <TableRow className="bg-slate-50 border-l-4 border-l-primary hover:bg-slate-100/60">
+                    <TableCell className="text-[13px] text-slate-600 whitespace-nowrap font-medium">
                       {formatQualityDate(s.session_date)}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-[13px] text-slate-600">
-                    {isBatch
-                      ? <span className="text-primary font-medium">{batchSessions!.length} CSRs</span>
-                      : STATUS_LABELS[s.status] ?? s.status}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-medium text-slate-900">{s.csr_name}</span>
-                      {(s.repeat_topics?.length ?? 0) > 0 && (
+                    </TableCell>
+                    <TableCell><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2 text-[13px] text-slate-500">
+                        <Users className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span>{batchSessions!.length} CSRs</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}</TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{FORMAT_MAP[s.coaching_format] ?? s.coaching_format}</TableCell>
+                    <TableCell className="max-w-[180px]">
+                      {s.topics.length > 0 ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="text-orange-500 text-xs cursor-help select-none">🔥</span>
+                            <span className="text-[13px] text-slate-500 truncate block max-w-[180px] cursor-default">
+                              {[...s.topics].sort().join(', ')}
+                            </span>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
-                            <p className="text-[12px] font-semibold text-slate-700 mb-1">Repeat topics</p>
                             <ul className="space-y-1">
-                              {s.repeat_topics!.map(t => (
+                              {[...s.topics].sort().map(t => (
                                 <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
                                   <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
                                 </li>
@@ -388,53 +396,99 @@ export default function CoachingSessionsPage() {
                             </ul>
                           </TooltipContent>
                         </Tooltip>
+                      ) : (
+                        <span className="text-[13px] text-slate-300">&mdash;</span>
                       )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-[13px] text-slate-600">{PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}</TableCell>
-                  <TableCell className="text-[13px] text-slate-600">{FORMAT_MAP[s.coaching_format] ?? s.coaching_format}</TableCell>
-                  <TableCell className="max-w-[180px]">
-                    {s.topics.length > 0 ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="text-[13px] text-slate-500 truncate block max-w-[180px] cursor-default">
-                            {[...s.topics].sort().join(', ')}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
-                          <ul className="space-y-1">
-                            {[...s.topics].sort().map(t => (
-                              <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
-                              </li>
-                            ))}
-                          </ul>
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span className="text-[13px] text-slate-300">&mdash;</span>
-                    )}
-                  </TableCell>
-                  <TableCell><QuizStatusBadge session={s} /></TableCell>
-                  <TableCell className="pl-6 text-[13px] whitespace-nowrap">
-                    {s.due_date ? formatQualityDate(s.due_date) : <span className="text-slate-300">&mdash;</span>}
-                  </TableCell>
-                  <TableCell className="pl-6 text-[13px] text-slate-600 whitespace-nowrap">
-                    {s.follow_up_date ? formatQualityDate(s.follow_up_date) : <span className="text-slate-300">&mdash;</span>}
-                  </TableCell>
-                  <TableCell onClick={e => e.stopPropagation()}>
-                    {!isBatch && (
+                    </TableCell>
+                    <TableCell><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
+                    <TableCell className="pl-6"><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
+                    <TableCell className="pl-6"><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm"
+                        className="h-7 px-2 text-[12px] text-primary gap-1 hover:text-primary hover:bg-primary/10"
+                        onClick={() => toggleBatch(batchId!)}>
+                        {isExpanded
+                          ? <><ChevronUp className="h-3.5 w-3.5" /> Collapse</>
+                          : <><ChevronDown className="h-3.5 w-3.5" /> Expand</>
+                        }
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  /* ── Individual session row ── */
+                  <TableRow
+                    className="cursor-pointer hover:bg-slate-50/50"
+                    onClick={() => navigate(`/app/training/coaching/${s.id}`)}
+                  >
+                    <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
+                      {formatQualityDate(s.session_date)}
+                    </TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[s.status] ?? s.status}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] font-medium text-slate-900">{s.csr_name}</span>
+                        {(s.repeat_topics?.length ?? 0) > 0 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-orange-500 text-xs cursor-help select-none">🔥</span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                              <p className="text-[12px] font-semibold text-slate-700 mb-1">Repeat topics</p>
+                              <ul className="space-y-1">
+                                {s.repeat_topics!.map(t => (
+                                  <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
+                                  </li>
+                                ))}
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}</TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{FORMAT_MAP[s.coaching_format] ?? s.coaching_format}</TableCell>
+                    <TableCell className="max-w-[180px]">
+                      {s.topics.length > 0 ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-[13px] text-slate-500 truncate block max-w-[180px] cursor-default">
+                              {[...s.topics].sort().join(', ')}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                            <ul className="space-y-1">
+                              {[...s.topics].sort().map(t => (
+                                <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
+                                </li>
+                              ))}
+                            </ul>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="text-[13px] text-slate-300">&mdash;</span>
+                      )}
+                    </TableCell>
+                    <TableCell><QuizStatusBadge session={s} /></TableCell>
+                    <TableCell className="pl-6 text-[13px] whitespace-nowrap">
+                      {s.due_date ? formatQualityDate(s.due_date) : <span className="text-slate-300">&mdash;</span>}
+                    </TableCell>
+                    <TableCell className="pl-6 text-[13px] text-slate-600 whitespace-nowrap">
+                      {s.follow_up_date ? formatQualityDate(s.follow_up_date) : <span className="text-slate-300">&mdash;</span>}
+                    </TableCell>
+                    <TableCell onClick={e => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
                         onClick={() => navigate(`/app/training/coaching/${s.id}`)}>
                         <Eye className="h-3.5 w-3.5" /> View
                       </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
+                    </TableCell>
+                  </TableRow>
+                )}
 
-                {/* ── Expanded batch rows ── */}
+                {/* ── Expanded batch sub-rows ── */}
                 {isBatch && isExpanded && batchSessions!.map(bs => (
-                  <TableRow key={bs.id} className="cursor-pointer hover:bg-primary/5 bg-slate-50/50"
+                  <TableRow key={bs.id} className="cursor-pointer hover:bg-primary/5 bg-blue-50/30 border-l-4 border-l-primary/30"
                     onClick={() => navigate(`/app/training/coaching/${bs.id}`)}>
                     <TableCell className="text-[13px] text-slate-500 whitespace-nowrap pl-8">
                       {formatQualityDate(bs.session_date)}

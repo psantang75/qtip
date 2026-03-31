@@ -80,7 +80,9 @@ export interface CoachingSession {
   kb_url?: string
   follow_up_notes?: string
   internal_notes?: string
-  behavior_flags?: string
+  behavior_flags?: string           // legacy VARCHAR (kept for backward compat display)
+  behavior_flag_ids?: number[]      // IDs from list_items (new)
+  behavior_flag_items?: { id: number; category?: string; label: string; sort_order: number }[]
   kb_resources?: { id: number; title: string; resource_type?: string; url?: string; file_name?: string; description?: string }[]
   quizzes?: { id: number; quiz_title: string; pass_score: number; questions: QuizQuestion[] }[]
   require_acknowledgment: boolean

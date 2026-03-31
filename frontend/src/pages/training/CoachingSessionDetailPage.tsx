@@ -16,9 +16,9 @@ import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 import { PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './CoachingSessionsPage'
 import {
-  BEHAVIOR_FLAG_GROUPS,
   SessionSection, RequiredActionsSection, AccountabilitySection, InternalNotesSection,
 } from './coaching-form/CoachingFormSections'
+import listService from '@/services/listService'
 import { emptyForm, type CoachingFormState } from './coaching-form/types'
 
 // ── Source labels ─────────────────────────────────────────────────────────────
@@ -177,6 +177,10 @@ export default function CoachingSessionDetailPage() {
   })
 
   // ── Reference data (cached — needed for inline editing) ───────────────────
+  const { data: flagItems = [] }    = useQuery({ queryKey: ['list-items', 'behavior_flag'],    queryFn: () => listService.getItems('behavior_flag') })
+  const { data: purposeItems = [] } = useQuery({ queryKey: ['list-items', 'coaching_purpose'], queryFn: () => listService.getItems('coaching_purpose') })
+  const { data: formatItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_format'],  queryFn: () => listService.getItems('coaching_format') })
+  const { data: sourceItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_source'],  queryFn: () => listService.getItems('coaching_source') })
   const { data: csrs = [] }    = useQuery({ queryKey: ['team-csrs'],    queryFn: () => trainingService.getTeamCSRs() })
   const { data: coaches = [] } = useQuery({ queryKey: ['eligible-coaches'], queryFn: () => trainingService.getCoaches() })
   const { data: topicsData }   = useQuery({ queryKey: ['topics-active'], queryFn: () => topicService.getTopics(1, 200, { is_active: true }) })
@@ -227,7 +231,7 @@ export default function CoachingSessionDetailPage() {
       follow_up_date:         session.follow_up_date?.slice(0, 10) ?? '',
       follow_up_notes:        session.follow_up_notes ?? '',
       internal_notes:         session.internal_notes ?? '',
-      behavior_flags:         session.behavior_flags ? session.behavior_flags.split(',').filter(Boolean) : [],
+      behavior_flag_ids:      session.behavior_flag_ids ?? [],
       attachment_file:        null,
     })
     setEditSection(section)
@@ -256,7 +260,7 @@ export default function CoachingSessionDetailPage() {
       fd.append('follow_up_date',       formDraft.follow_up_date || '')
       fd.append('follow_up_notes',      formDraft.follow_up_notes || '')
       fd.append('internal_notes',       formDraft.internal_notes || '')
-      fd.append('behavior_flags',       formDraft.behavior_flags.join(','))
+      fd.append('behavior_flag_ids',     formDraft.behavior_flag_ids.join(','))
       if (applyToBatch) fd.append('apply_to_batch', 'true')
       return trainingService.updateCoachingSession(Number(id), fd)
     },
@@ -347,7 +351,9 @@ export default function CoachingSessionDetailPage() {
           {editSection === 'session' ? (
             <>
               <SessionSection form={formDraft} errors={{}} csrs={csrs} coaches={coaches}
-                topics={topics} update={updateDraft} toggleTopic={toggleDraftTopic} />
+                topics={topics} isEdit
+                purposeItems={purposeItems} formatItems={formatItems} sourceItems={sourceItems}
+                update={updateDraft} toggleTopic={toggleDraftTopic} />
               <SectionEditBar onSave={() => sectionSaveMut.mutate()} onCancel={cancelEdit} saving={sectionSaveMut.isPending} showBatch={!!session?.batch_id} applyToBatch={applyToBatch} onToggleBatch={() => setApplyToBatch(v => !v)} />
             </>
           ) : null}
@@ -356,9 +362,9 @@ export default function CoachingSessionDetailPage() {
               <InfoRow label="CSR"              value={session.csr_name} />
               <InfoRow label="Coach"            value={session.created_by_name} />
               <InfoRow label="Session Date"     value={formatQualityDate(session.session_date)} />
-              <InfoRow label="Coaching Format"  value={FORMAT_MAP[session.coaching_format] ?? session.coaching_format} />
-              <InfoRow label="Coaching Purpose" value={PURPOSE_MAP[session.coaching_purpose] ?? session.coaching_purpose} />
-              <InfoRow label="Coaching Source"  value={SOURCE_LABELS[session.source_type] ?? session.source_type} />
+              <InfoRow label="Coaching Format"  value={formatItems.find(i => i.item_key === session.coaching_format)?.label ?? FORMAT_MAP[session.coaching_format as any] ?? session.coaching_format} />
+              <InfoRow label="Coaching Purpose" value={purposeItems.find(i => i.item_key === session.coaching_purpose)?.label ?? PURPOSE_MAP[session.coaching_purpose as any] ?? session.coaching_purpose} />
+              <InfoRow label="Coaching Source"  value={sourceItems.find(i => i.item_key === session.source_type)?.label ?? SOURCE_LABELS[session.source_type as any] ?? session.source_type} />
               <InfoRow label="Created"          value={formatQualityDate(session.created_at)} />
               {!!session.is_overdue && (
                 <InfoRow label="Overdue" value={<span className="text-[13px] font-semibold text-red-600">⚠ Overdue</span>} />
@@ -565,7 +571,7 @@ export default function CoachingSessionDetailPage() {
           {/* ── Section 4: Internal Notes (trainer/manager/admin only) ───── */}
           {canSeeInternal && editSection === 'internal' && (
             <>
-              <InternalNotesSection form={formDraft} update={updateDraft} />
+              <InternalNotesSection form={formDraft} flagItems={flagItems} update={updateDraft} />
               <SectionEditBar onSave={() => sectionSaveMut.mutate()} onCancel={cancelEdit} saving={sectionSaveMut.isPending} showBatch={!!session?.batch_id} applyToBatch={applyToBatch} onToggleBatch={() => setApplyToBatch(v => !v)} />
             </>
           )}
@@ -584,30 +590,25 @@ export default function CoachingSessionDetailPage() {
                 )}
               </div>
               <div className="p-5 space-y-5">
-                {/* Behavior flags — first */}
+                {/* Behavior flags — uses junction table data */}
                 {(() => {
-                  const flags = session.behavior_flags
-                    ? session.behavior_flags.split(',').filter(Boolean)
-                    : []
-                  const allFlatFlags = BEHAVIOR_FLAG_GROUPS.flatMap(g => g.flags)
-                  const selectedGroups = BEHAVIOR_FLAG_GROUPS
-                    .map(g => ({ ...g, flags: g.flags.filter(f => flags.includes(f.value)) }))
-                    .filter(g => g.flags.length > 0)
+                  const items = session.behavior_flag_items ?? []
+                  const categories = [...new Set(items.map(f => f.category ?? 'Other'))]
                   return (
                     <div>
                       <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Behavior Flags</p>
-                      {selectedGroups.length === 0 ? (
+                      {items.length === 0 ? (
                         <p className="text-[13px] text-slate-400 italic">No flags recorded</p>
                       ) : (
                         <div className="space-y-3">
-                          {selectedGroups.map(g => (
-                            <div key={g.label}>
-                              <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1.5">{g.label}</p>
+                          {categories.map(cat => (
+                            <div key={cat}>
+                              <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1.5">{cat}</p>
                               <ul className="space-y-1">
-                                {g.flags.map(f => (
-                                  <li key={f.value} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                {items.filter(f => (f.category ?? 'Other') === cat).map(f => (
+                                  <li key={f.id} className="flex items-center gap-2 text-[13px] text-slate-700">
                                     <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-                                    {f.text}
+                                    {f.label}
                                   </li>
                                 ))}
                               </ul>

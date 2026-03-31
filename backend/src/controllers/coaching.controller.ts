@@ -24,6 +24,27 @@ const roleCondition = (role: string, userId: number): Prisma.Sql => {
   return Prisma.sql`cs.created_by = ${userId}`;
 };
 
+// ── Topic ID bridge: list_items.id ↔ topics.id via item_key ──────────────────
+
+/** Convert list_items.id values → topics.id values for FK storage. */
+async function listItemIdsToTopicIds(listItemIds: number[]): Promise<number[]> {
+  if (!listItemIds.length) return [];
+  const rows = await prisma.$queryRaw<{ item_key: string }[]>(
+    Prisma.sql`SELECT item_key FROM list_items WHERE id IN (${Prisma.join(listItemIds.map(id => Prisma.sql`${id}`))}) AND list_type = 'training_topic' AND item_key IS NOT NULL`
+  );
+  return rows.map(r => parseInt(r.item_key)).filter(n => !isNaN(n));
+}
+
+/** Convert topics.id values → list_items.id values for frontend consumption. */
+async function topicIdsToListItemIds(topicIds: number[]): Promise<number[]> {
+  if (!topicIds.length) return [];
+  const topicIdStrs = topicIds.map(String);
+  const rows = await prisma.$queryRaw<{ id: number }[]>(
+    Prisma.sql`SELECT id FROM list_items WHERE item_key IN (${Prisma.join(topicIdStrs.map(s => Prisma.sql`${s}`))}) AND list_type = 'training_topic'`
+  );
+  return rows.map(r => r.id);
+}
+
 export const getCoachingSessions = async (req: AuthReq, res: Response) => {
   try {
     const userId = req.user!.user_id;
@@ -93,13 +114,28 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
       ),
     ]);
 
-    const data = sessions.map((s: any) => ({
+    const rawData = sessions.map((s: any) => ({
       ...s,
       topics: s.topics ? s.topics.split(',') : [],
       topic_ids: s.topic_ids ? s.topic_ids.split(',').map(Number) : [],
       is_overdue: !!s.is_overdue,
       quiz_count: Number(s.quiz_count ?? 0),
       quiz_passed_count: Number(s.quiz_passed_count ?? 0),
+    }));
+
+    // Convert topics.id → list_items.id for frontend
+    const allTopicIds = [...new Set(rawData.flatMap(s => s.topic_ids))];
+    const topicIdToListItemId = new Map<number, number>();
+    if (allTopicIds.length) {
+      const rows = await prisma.$queryRaw<{ id: number; item_key: string }[]>(
+        Prisma.sql`SELECT id, item_key FROM list_items WHERE item_key IN (${Prisma.join(allTopicIds.map(String).map(s => Prisma.sql`${s}`))}) AND list_type = 'training_topic'`
+      );
+      rows.forEach(r => topicIdToListItemId.set(parseInt(r.item_key), r.id));
+    }
+
+    const data = rawData.map(s => ({
+      ...s,
+      topic_ids: s.topic_ids.map((tid: number) => topicIdToListItemId.get(tid) ?? tid),
     }));
 
     res.json({ success: true, data: { sessions: data, totalCount: Number(countRows[0]?.total ?? 0), page, limit } });
@@ -138,14 +174,25 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
 
     if (!rows?.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
 
+    const rawTopicIds: number[] = rows[0].topic_ids ? rows[0].topic_ids.split(',').map(Number) : [];
+    const listItemTopicIds = await topicIdsToListItemIds(rawTopicIds);
+
     const session = {
       ...rows[0],
       require_acknowledgment: Boolean(Number(rows[0].require_acknowledgment)),
       require_action_plan:    Boolean(Number(rows[0].require_action_plan)),
       follow_up_required:     Boolean(Number(rows[0].follow_up_required)),
       topics:    rows[0].topics    ? rows[0].topics.split(',')            : [],
-      topic_ids: rows[0].topic_ids ? rows[0].topic_ids.split(',').map(Number) : [],
+      topic_ids: listItemTopicIds,
     };
+
+    const behaviorFlagRows = await prisma.$queryRaw<any[]>(
+      Prisma.sql`SELECT li.id, li.category, li.label, li.sort_order
+                 FROM coaching_session_behavior_flags cbf
+                 JOIN list_items li ON cbf.list_item_id = li.id
+                 WHERE cbf.coaching_session_id = ${sessionId}
+                 ORDER BY li.sort_order ASC`
+    );
 
     const [kbRows, quizRows, quizAttempts, recentRows] = await Promise.all([
       prisma.$queryRaw<any[]>(
@@ -194,6 +241,8 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
         quiz_attempts: quizAttempts,
         recent_sessions: recentSessions,
         repeat_topics: repeatTopics,
+        behavior_flag_items: behaviorFlagRows,
+        behavior_flag_ids: behaviorFlagRows.map((r: any) => r.id),
       },
     });
   } catch (error) {
@@ -214,7 +263,10 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
     if (typeof topic_ids === 'string') topic_ids = topic_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean);
     if (!Array.isArray(topic_ids)) topic_ids = topic_ids ? [parseInt(topic_ids)] : [];
 
-    const { follow_up_notes: follow_up_notes_create, internal_notes: internal_notes_create, behavior_flags: behavior_flags_create } = req.body;
+    const { follow_up_notes: follow_up_notes_create, internal_notes: internal_notes_create } = req.body;
+    const behavior_flag_ids_create: number[] = req.body.behavior_flag_ids
+      ? String(req.body.behavior_flag_ids).split(',').map(Number).filter(Boolean)
+      : [];
 
     // Support both csr_ids (multi-select) and csr_id (legacy single)
     let csrIdList: number[] = [];
@@ -281,12 +333,13 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
              ${due_date || null},
              ${follow_up_required === 'true' || follow_up_required === true ? 1 : 0},
              ${follow_up_date || null}, ${follow_up_notes_create || null},
-             ${internal_notes_create || null}, ${behavior_flags_create || null},
+             ${internal_notes_create || null}, NULL,
              ${attFilename}, ${attPath}, ${attSize}, ${attMime}, ${resolvedCoachId})`
         );
         const [{ id }] = await tx.$queryRaw<{ id: bigint }[]>(Prisma.sql`SELECT LAST_INSERT_ID() as id`);
         const sessionId = Number(id);
-        for (const topicId of topic_ids) {
+        const fkTopicIds = await listItemIdsToTopicIds(topic_ids);
+        for (const topicId of fkTopicIds) {
           await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sessionId}, ${topicId})`);
         }
         for (const resourceId of parsedResourceIds) {
@@ -294,6 +347,9 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
         }
         for (const quizId of parsedQuizIds) {
           await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_quizzes (coaching_session_id, quiz_id) VALUES (${sessionId}, ${quizId})`);
+        }
+        for (const flagId of behavior_flag_ids_create) {
+          await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_behavior_flags (coaching_session_id, list_item_id) VALUES (${sessionId}, ${flagId})`);
         }
         await tx.auditLog.create({ data: { user_id: userId, action: 'CREATE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ csr_id: csrId, coaching_purpose, coaching_format, topic_ids, batch_id: batchId }) } });
         return sessionId;
@@ -323,8 +379,12 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
           required_action, resource_ids, kb_url, quiz_ids,
           require_acknowledgment, require_action_plan, due_date,
           follow_up_required, follow_up_date, follow_up_notes,
-          internal_notes, behavior_flags,
+          internal_notes, behavior_flag_ids,
           coach_id } = req.body;
+
+    const updateBehaviorFlagIds: number[] | undefined = behavior_flag_ids !== undefined
+      ? String(behavior_flag_ids).split(',').map(Number).filter(Boolean)
+      : undefined;
 
     if (typeof topic_ids === 'string') topic_ids = topic_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean);
 
@@ -357,7 +417,7 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
     if (follow_up_date     !== undefined) parts.push(Prisma.sql`follow_up_date = ${follow_up_date || null}`);
     if (follow_up_notes    !== undefined) parts.push(Prisma.sql`follow_up_notes = ${follow_up_notes || null}`);
     if (internal_notes     !== undefined) parts.push(Prisma.sql`internal_notes = ${internal_notes || null}`);
-    if (behavior_flags     !== undefined) parts.push(Prisma.sql`behavior_flags = ${behavior_flags || null}`);
+    // behavior_flags legacy column — no longer written; use junction table below
 
     if (attachment) {
       const uploadsDir = path.join(process.cwd(), 'uploads', 'coaching');
@@ -402,8 +462,9 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
       for (const sid of batchSessionIds) {
       if (parts.length) await tx.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET ${Prisma.join(parts, ', ')} WHERE id = ${sid}`);
       if (Array.isArray(topic_ids) && topic_ids.length) {
+        const fkTopicIds = await listItemIdsToTopicIds(topic_ids);
         await tx.coachingSessionTopic.deleteMany({ where: { coaching_session_id: sid } });
-        for (const tid of topic_ids) await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sid}, ${tid})`);
+        for (const tid of fkTopicIds) await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sid}, ${tid})`);
       }
       if (updateResourceIds !== undefined) {
         await tx.$executeRaw(Prisma.sql`DELETE FROM coaching_session_resources WHERE coaching_session_id = ${sid}`);
@@ -412,6 +473,10 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
       if (updateQuizIds !== undefined) {
         await tx.$executeRaw(Prisma.sql`DELETE FROM coaching_session_quizzes WHERE coaching_session_id = ${sid}`);
         for (const qid of updateQuizIds) await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_quizzes (coaching_session_id, quiz_id) VALUES (${sid}, ${qid})`);
+      }
+      if (updateBehaviorFlagIds !== undefined) {
+        await tx.$executeRaw(Prisma.sql`DELETE FROM coaching_session_behavior_flags WHERE coaching_session_id = ${sid}`);
+        for (const fid of updateBehaviorFlagIds) await tx.$executeRaw(Prisma.sql`INSERT IGNORE INTO coaching_session_behavior_flags (coaching_session_id, list_item_id) VALUES (${sid}, ${fid})`);
       }
       await tx.auditLog.create({ data: { user_id: userId, action: sid === sessionId ? 'UPDATE' : 'BATCH_UPDATE', target_id: sid, target_type: 'coaching_session', details: JSON.stringify({ batch_applied: sid !== sessionId }) } });
       } // end batchSessionIds loop

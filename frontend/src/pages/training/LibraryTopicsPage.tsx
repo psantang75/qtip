@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, ChevronRight, ChevronDown, Pencil } from 'lucide-react'
-import topicService from '@/services/topicService'
+import { ChevronRight, ChevronDown, Pencil } from 'lucide-react'
 import trainingService from '@/services/trainingService'
+import listService from '@/services/listService'
 import { ResourceLink } from '@/components/training/ResourceLink'
 import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
 import { QualityListPage } from '@/components/common/QualityListPage'
@@ -13,25 +13,17 @@ import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
-
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
-type StatusFilter = 'all' | 'active' | 'inactive'
-
 interface TopicForm {
-  name: string
-  is_active: boolean
   linkedResourceIds: number[]
   linkedQuizIds: number[]
 }
 
-const EMPTY_FORM: TopicForm = { name: '', is_active: true, linkedResourceIds: [], linkedQuizIds: [] }
+const EMPTY_FORM: TopicForm = { linkedResourceIds: [], linkedQuizIds: [] }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -39,35 +31,49 @@ export default function LibraryTopicsPage() {
   const qc        = useQueryClient()
   const { toast } = useToast()
 
-  const [expanded,      setExpanded]      = useState<Set<number>>(new Set())
-  const [search,        setSearch]        = useState('')
-  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('active')
-  const [modalOpen,     setModalOpen]     = useState(false)
-  const [editingTopic,  setEditingTopic]  = useState<any | null>(null)
-  const [form,          setForm]          = useState<TopicForm>(EMPTY_FORM)
-  const [nameError,     setNameError]     = useState('')
-  const [previewQuiz,   setPreviewQuiz]   = useState<any | null>(null)
-  const [previewOpen,   setPreviewOpen]   = useState(false)
+  const [expanded,     setExpanded]     = useState<Set<number>>(new Set())
+  const [search,       setSearch]       = useState('')
+  const [modalOpen,    setModalOpen]    = useState(false)
+  const [editingTopic, setEditingTopic] = useState<any | null>(null)
+  const [form,         setForm]         = useState<TopicForm>(EMPTY_FORM)
+  const [previewQuiz,  setPreviewQuiz]  = useState<any | null>(null)
+  const [previewOpen,  setPreviewOpen]  = useState(false)
 
-  const { data: topicsData, isLoading } = useQuery({ queryKey: ['topics'], queryFn: () => topicService.getTopics(1, 200) })
-  const { data: resourcesData }         = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 200 }) })
-  const { data: quizData }              = useQuery({ queryKey: ['quiz-library-all'], queryFn: () => trainingService.getQuizLibrary({ limit: 200 }) })
+  const { data: topicItems = [], isLoading } = useQuery({
+    queryKey: ['list-items', 'training_topic', 'all'],
+    queryFn:  () => listService.getItems('training_topic', true),
+  })
+  const { data: resourcesData } = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 200 }) })
+  const { data: quizData }      = useQuery({ queryKey: ['quiz-library-all'], queryFn: () => trainingService.getQuizLibrary({ limit: 200 }) })
 
-  const allTopics   = (topicsData as any)?.items ?? []
   const allResources = (resourcesData?.items ?? []).filter((r: any) => r.is_active)
   const allQuizzes   = (quizData?.items ?? []).filter((q: any) => q.is_active)
 
+  // Mirror List Management order: categories in first-appearance (sort_order) order,
+  // items within each category in sort_order, uncategorized block at the bottom.
+  const allTopics = useMemo(() => {
+    const catOrder: string[] = []
+    for (const t of topicItems) {
+      if (t.category && !catOrder.includes(t.category)) catOrder.push(t.category)
+    }
+    const byCategory = new Map<string, typeof topicItems>()
+    catOrder.forEach(c => byCategory.set(c, []))
+    const uncategorized: typeof topicItems = []
+    for (const t of topicItems) {
+      if (t.category) byCategory.get(t.category)!.push(t)
+      else uncategorized.push(t)
+    }
+    return [...catOrder.flatMap(c => byCategory.get(c)!), ...uncategorized]
+  }, [topicItems])
+
   const filtered = useMemo(() => {
-    let items = allTopics
-    if (search.trim()) items = items.filter((t: any) => t.topic_name.toLowerCase().includes(search.toLowerCase()))
-    if (statusFilter === 'active')   items = items.filter((t: any) => t.is_active)
-    if (statusFilter === 'inactive') items = items.filter((t: any) => !t.is_active)
-    return items
-  }, [allTopics, search, statusFilter])
+    const q = search.trim().toLowerCase()
+    return q ? allTopics.filter(t => t.label.toLowerCase().includes(q)) : allTopics
+  }, [allTopics, search])
 
-  const hasFilters = search.trim().length > 0 || statusFilter !== 'active'
+  const hasFilters = search.trim().length > 0
 
-  // Build lookup maps for expanded rows
+  // Build resource/quiz maps keyed by topics.id (from item_key) for FK alignment
   const resourcesByTopic = useMemo(() => {
     const map = new Map<number, any[]>()
     for (const r of allResources) {
@@ -91,7 +97,7 @@ export default function LibraryTopicsPage() {
   }, [allQuizzes])
 
   const invalidateAll = () => {
-    qc.invalidateQueries({ queryKey: ['topics'] })
+    qc.invalidateQueries({ queryKey: ['list-items', 'training_topic'] })
     qc.invalidateQueries({ queryKey: ['resources-all'] })
     qc.invalidateQueries({ queryKey: ['quiz-library-all'] })
   }
@@ -113,106 +119,66 @@ export default function LibraryTopicsPage() {
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const saveMut = useMutation({
-    mutationFn: async (f: TopicForm & { id?: number }) => {
-      // 1. Create or update the topic
-      const topicId = f.id
-        ? (await topicService.updateTopic(f.id, { topic_name: f.name, is_active: f.is_active }), f.id)
-        : (await topicService.createTopic({ topic_name: f.name, is_active: f.is_active })).id
+    mutationFn: async (f: TopicForm & { id: number; fkTopicId: number }) => {
+      const fkTopicId = f.fkTopicId   // topics.id for FK references
 
-      // 2. Sync resource links: compare original vs new
-      const origResIds = f.id ? (resourcesByTopic.get(f.id)?.map((r: any) => r.id) ?? []) : []
+      // Sync resource links
+      const origResIds = resourcesByTopic.get(fkTopicId)?.map((r: any) => r.id) ?? []
       const toLink   = f.linkedResourceIds.filter(id => !origResIds.includes(id))
       const toUnlink = origResIds.filter(id => !f.linkedResourceIds.includes(id))
       for (const rid of toLink) {
         const res = (resourcesData?.items ?? []).find((r: any) => r.id === rid)
-        if (res) await trainingService.updateResource(rid, { topic_ids: [...(res.topic_ids ?? []), topicId] } as any)
+        if (res) await trainingService.updateResource(rid, { topic_ids: [...(res.topic_ids ?? []), fkTopicId] } as any)
       }
       for (const rid of toUnlink) {
         const res = (resourcesData?.items ?? []).find((r: any) => r.id === rid)
-        if (res) await trainingService.updateResource(rid, { topic_ids: (res.topic_ids ?? []).filter((x: number) => x !== topicId) } as any)
+        if (res) await trainingService.updateResource(rid, { topic_ids: (res.topic_ids ?? []).filter((x: number) => x !== fkTopicId) } as any)
       }
 
-      // 3. Sync quiz links
-      const origQuizIds = f.id ? (quizzesByTopic.get(f.id)?.map((q: any) => q.id) ?? []) : []
+      // Sync quiz links
+      const origQuizIds = quizzesByTopic.get(fkTopicId)?.map((q: any) => q.id) ?? []
       const toLinkQ   = f.linkedQuizIds.filter(id => !origQuizIds.includes(id))
       const toUnlinkQ = origQuizIds.filter(id => !f.linkedQuizIds.includes(id))
       for (const qid of toLinkQ) {
         const quiz = allQuizzes.find((q: any) => q.id === qid)
-        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: [...(quiz.topic_ids ?? []), topicId] })
+        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: [...(quiz.topic_ids ?? []), fkTopicId] })
       }
       for (const qid of toUnlinkQ) {
         const quiz = allQuizzes.find((q: any) => q.id === qid)
-        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: (quiz.topic_ids ?? []).filter((x: number) => x !== topicId) })
+        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: (quiz.topic_ids ?? []).filter((x: number) => x !== fkTopicId) })
       }
     },
-    onSuccess: () => {
-      invalidateAll()
-      setModalOpen(false)
-      toast({ title: editingTopic ? 'Topic updated' : 'Topic created' })
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.message ?? 'Failed to save topic'
-      if (msg.toLowerCase().includes('name') || msg.toLowerCase().includes('duplicate')) setNameError(msg)
-      else toast({ title: msg, variant: 'destructive' })
-    },
+    onSuccess: () => { invalidateAll(); setModalOpen(false); toast({ title: 'Topic updated' }) },
+    onError:   () => toast({ title: 'Failed to save topic', variant: 'destructive' }),
   })
-
-  // ── Modal helpers ──────────────────────────────────────────────────────────
-
-  const openAdd = () => {
-    setEditingTopic(null)
-    setForm(EMPTY_FORM)
-    setNameError('')
-    setModalOpen(true)
-  }
 
   const openEdit = (topic: any) => {
     setEditingTopic(topic)
+    const fkId = topic.item_key ? parseInt(topic.item_key) : 0
     setForm({
-      name:              topic.topic_name,
-      is_active:         !!topic.is_active,
-      linkedResourceIds: resourcesByTopic.get(topic.id)?.map((r: any) => r.id) ?? [],
-      linkedQuizIds:     quizzesByTopic.get(topic.id)?.map((q: any) => q.id) ?? [],
+      linkedResourceIds: resourcesByTopic.get(fkId)?.map((r: any) => r.id) ?? [],
+      linkedQuizIds:     quizzesByTopic.get(fkId)?.map((q: any) => q.id) ?? [],
     })
-    setNameError('')
     setModalOpen(true)
   }
 
   const handleSave = () => {
-    if (!form.name.trim()) { setNameError('Topic name is required'); return }
-    setNameError('')
-    saveMut.mutate({ ...form, id: editingTopic?.id })
+    const fkTopicId = editingTopic.item_key ? parseInt(editingTopic.item_key) : 0
+    saveMut.mutate({ ...form, id: editingTopic.id, fkTopicId })
   }
 
   return (
     <QualityListPage>
-      <QualityPageHeader title="Training Topics"
-        actions={
-          <Button className="bg-primary hover:bg-primary/90 text-white" onClick={openAdd}>
-            <Plus className="h-4 w-4 mr-1" /> Add Topic
-          </Button>
-        }
-      />
+      <QualityPageHeader title="Training Topics" />
 
       <QualityFilterBar
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search topics…"
         hasFilters={hasFilters}
-        onReset={() => { setSearch(''); setStatusFilter('active') }}
+        onReset={() => setSearch('')}
         resultCount={{ filtered: filtered.length, total: allTopics.length }}
-      >
-        <Select value={statusFilter} onValueChange={v => setStatusFilter(v as StatusFilter)}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="All Statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-      </QualityFilterBar>
+      />
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? <TableLoadingSkeleton rows={6} /> : (
@@ -223,20 +189,33 @@ export default function LibraryTopicsPage() {
                 <TableHead>Topic Name</TableHead>
                 <TableHead className="text-center">Resources</TableHead>
                 <TableHead className="text-center">Quizzes</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead className="w-24" />
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableEmptyState colSpan={6} title="No topics found" description="Try adjusting your filters or add a new topic" />
-              ) : filtered.map((topic: any) => {
-                const isOpen         = expanded.has(topic.id)
-                const topicResources = resourcesByTopic.get(topic.id) ?? []
-                const topicQuizzes   = quizzesByTopic.get(topic.id) ?? []
+                <TableEmptyState colSpan={5} title="No topics found" description="Try adjusting your search" />
+              ) : (() => {
+                let lastCat: string | null = undefined as any
+                return filtered.map((topic: any) => {
+                const isOpen    = expanded.has(topic.id)
+                const fkId      = topic.item_key ? parseInt(topic.item_key) : 0
+                const topicResources = resourcesByTopic.get(fkId) ?? []
+                const topicQuizzes   = quizzesByTopic.get(fkId) ?? []
+                const showHeader = topic.category !== lastCat
+                lastCat = topic.category
 
                 return (
                   <React.Fragment key={topic.id}>
+                    {showHeader && topic.category && (
+                      <TableRow className="bg-slate-50/80 pointer-events-none">
+                        <TableCell colSpan={5} className="py-1.5 px-4">
+                          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
+                            {topic.category}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    )}
                     <TableRow
                       className="cursor-pointer hover:bg-slate-50/50"
                       onClick={() => toggleExpanded(topic.id)}
@@ -247,16 +226,13 @@ export default function LibraryTopicsPage() {
                           : <ChevronRight className="h-4 w-4 text-slate-400" />}
                       </TableCell>
                       <TableCell className="text-[13px] font-medium text-slate-900">
-                        {topic.topic_name}
+                        {topic.label}
                       </TableCell>
                       <TableCell className="text-center text-[13px] text-slate-500">
                         {topicResources.length}
                       </TableCell>
                       <TableCell className="text-center text-[13px] text-slate-500">
                         {topicQuizzes.length}
-                      </TableCell>
-                      <TableCell className="text-[13px] text-slate-600">
-                        {topic.is_active ? 'Active' : 'Inactive'}
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
                         <Button
@@ -272,7 +248,7 @@ export default function LibraryTopicsPage() {
 
                     {isOpen && (
                       <TableRow>
-                        <TableCell colSpan={6} className="p-0 bg-slate-50/60">
+                        <TableCell colSpan={5} className="p-0 bg-slate-50/60">
                           <div className="p-4 space-y-4 border-t border-slate-100">
 
                             <div>
@@ -323,7 +299,8 @@ export default function LibraryTopicsPage() {
                     )}
                   </React.Fragment>
                 )
-              })}
+              })
+              })()}
             </TableBody>
           </Table>
         )}
@@ -339,39 +316,15 @@ export default function LibraryTopicsPage() {
       <Dialog open={modalOpen} onOpenChange={open => { if (!open) setModalOpen(false) }}>
         <DialogContent aria-describedby={undefined} className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingTopic ? 'Edit Topic' : 'Add Topic'}</DialogTitle>
+            <DialogTitle>Link Resources &amp; Quizzes</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-5 pt-1">
 
-            {/* Topic name */}
-            <div>
-              <label className="text-[12px] font-medium text-slate-700 block mb-1">
-                Topic Name <span className="text-red-500">*</span>
-              </label>
-              <Input
-                value={form.name}
-                onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setNameError('') }}
-                placeholder="e.g. Call Handling"
-                className="text-[13px]"
-                autoFocus
-              />
-              {nameError && <p className="text-[12px] text-red-600 mt-1">{nameError}</p>}
-            </div>
-
-            {/* Active / inactive */}
-            <div className="flex items-center justify-between py-3 border-y border-slate-100">
-              <div>
-                <p className="text-[13px] font-medium text-slate-700">Status</p>
-                <p className="text-[12px] text-slate-400">Inactive topics are hidden from quizzes and resources</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] text-slate-500">{form.is_active ? 'Active' : 'Inactive'}</span>
-                <Switch
-                  checked={form.is_active}
-                  onCheckedChange={v => setForm(f => ({ ...f, is_active: v }))}
-                />
-              </div>
+            {/* Topic name — read-only for trainers */}
+            <div className="pb-4 border-b border-slate-100">
+              <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Topic</p>
+              <p className="text-[15px] font-semibold text-slate-800">{editingTopic?.label}</p>
             </div>
 
             {/* Linked resources */}
@@ -406,12 +359,9 @@ export default function LibraryTopicsPage() {
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 mt-2">
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button
-              className="bg-primary hover:bg-primary/90 text-white"
-              onClick={handleSave}
-              disabled={saveMut.isPending}
-            >
-              {saveMut.isPending ? 'Saving…' : editingTopic ? 'Save Changes' : 'Add Topic'}
+            <Button className="bg-primary hover:bg-primary/90 text-white"
+              onClick={handleSave} disabled={saveMut.isPending}>
+              {saveMut.isPending ? 'Saving…' : 'Save Changes'}
             </Button>
           </div>
         </DialogContent>

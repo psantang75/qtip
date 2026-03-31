@@ -6,6 +6,7 @@ export interface Topic {
   topic_name: string;
   is_active: boolean;
   sort_order: number;
+  category?: string;
   created_at: string;
   updated_at: string;
 }
@@ -14,12 +15,14 @@ export interface TopicCreateDTO {
   topic_name: string;
   is_active?: boolean;
   sort_order?: number;
+  category?: string;
 }
 
 export interface TopicUpdateDTO {
   topic_name?: string;
   is_active?: boolean;
   sort_order?: number;
+  category?: string;
 }
 
 export interface TopicFilters {

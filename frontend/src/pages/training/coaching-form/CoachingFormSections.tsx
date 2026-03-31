@@ -12,7 +12,7 @@ import {
 import type {
   CoachingPurpose, CoachingFormat, CoachingSourceType, TrainingResource, LibraryQuiz,
 } from '@/services/trainingService'
-import type { Topic } from '@/services/topicService'
+import type { ListItem } from '@/services/listService'
 import type { CoachingFormState, CoachingFormErrors } from './types'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
@@ -55,26 +55,27 @@ function SubSection({ title, children }: { title: string; children: React.ReactN
 
 // ── Topic multi-select ────────────────────────────────────────────────────────
 
-function TopicMultiSelect({ topics, selectedIds, onToggle, error }: {
-  topics: Topic[]; selectedIds: number[]; onToggle: (id: number) => void; error?: string
+function TopicMultiSelect({ topicItems, selectedIds, onToggle, error }: {
+  topicItems: ListItem[]; selectedIds: number[]; onToggle: (id: number) => void; error?: string
 }) {
   const [search, setSearch] = useState('')
   const [open, setOpen]     = useState(false)
 
-  const filtered       = topics.filter(t => t.topic_name.toLowerCase().includes(search.toLowerCase()))
-  const selectedTopics = topics.filter(t => selectedIds.includes(t.id))
+  const selectedTopics = topicItems.filter(t => selectedIds.includes(t.id))
   const label = selectedTopics.length === 0
     ? 'Select topics…'
     : `${selectedTopics.length} topic${selectedTopics.length !== 1 ? 's' : ''} selected`
+
+  const hasCategories = topicItems.some(t => t.category)
+  const categories    = hasCategories ? [...new Set(topicItems.map(t => t.category ?? 'General'))] : []
+  const matchesSearch = (t: ListItem) => !search || t.label.toLowerCase().includes(search.toLowerCase())
 
   return (
     <div>
       <DropdownMenu open={open} onOpenChange={o => { setOpen(o); if (o) setSearch('') }}>
         <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className={`${sel} flex items-center justify-between ${error ? 'border-red-400' : ''}`}
-          >
+          <button type="button"
+            className={`${sel} flex items-center justify-between ${error ? 'border-red-400' : ''}`}>
             <span className={selectedIds.length === 0 ? 'text-slate-400' : 'text-slate-700'}>{label}</span>
             <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
           </button>
@@ -82,28 +83,41 @@ function TopicMultiSelect({ topics, selectedIds, onToggle, error }: {
         <DropdownMenuContent className="w-[380px] p-0" onCloseAutoFocus={e => e.preventDefault()}>
           <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
             <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <input
-              className="flex-1 text-[13px] focus:outline-none placeholder:text-slate-400"
-              placeholder="Search topics…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              onKeyDown={e => e.stopPropagation()}
-            />
+            <input className="flex-1 text-[13px] focus:outline-none placeholder:text-slate-400"
+              placeholder="Search topics…" value={search}
+              onChange={e => setSearch(e.target.value)} onKeyDown={e => e.stopPropagation()} />
           </div>
-          <div className="max-h-[220px] overflow-y-auto py-1">
-            {filtered.length === 0 && (
+          <div className="max-h-[280px] overflow-y-auto py-1">
+            {hasCategories ? (
+              categories.map((cat, ci) => {
+                const items = topicItems.filter(t => (t.category ?? 'General') === cat && matchesSearch(t))
+                if (!items.length) return null
+                return (
+                  <DropdownMenuGroup key={cat}>
+                    {ci > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuLabel className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
+                      {cat}
+                    </DropdownMenuLabel>
+                    {items.map(t => (
+                      <DropdownMenuCheckboxItem key={t.id} checked={selectedIds.includes(t.id)}
+                        onCheckedChange={() => onToggle(t.id)} onSelect={e => e.preventDefault()}>
+                        {t.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuGroup>
+                )
+              })
+            ) : (
+              topicItems.filter(matchesSearch).map(t => (
+                <DropdownMenuCheckboxItem key={t.id} checked={selectedIds.includes(t.id)}
+                  onCheckedChange={() => onToggle(t.id)} onSelect={e => e.preventDefault()}>
+                  {t.label}
+                </DropdownMenuCheckboxItem>
+              ))
+            )}
+            {topicItems.filter(matchesSearch).length === 0 && (
               <p className="px-3 py-2 text-[12px] text-slate-400">No topics match</p>
             )}
-            {filtered.map(t => (
-              <DropdownMenuCheckboxItem
-                key={t.id}
-                checked={selectedIds.includes(t.id)}
-                onCheckedChange={() => onToggle(t.id)}
-                onSelect={e => e.preventDefault()}
-              >
-                {t.topic_name}
-              </DropdownMenuCheckboxItem>
-            ))}
           </div>
           {selectedTopics.length > 0 && (
             <div className="border-t border-slate-100 px-3 py-2">
@@ -116,16 +130,12 @@ function TopicMultiSelect({ topics, selectedIds, onToggle, error }: {
       {selectedTopics.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {selectedTopics.map(t => (
-            <span
-              key={t.id}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 text-[13px] rounded-md border border-slate-200"
-            >
-              {t.topic_name}
-              <button
-                type="button"
-                onClick={() => onToggle(t.id)}
-                className="text-slate-400 hover:text-slate-600 leading-none"
-              >×</button>
+            <span key={t.id}
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 text-[13px] rounded-md border border-slate-200">
+              {t.category && <span className="text-[10px] text-slate-400 font-medium">{t.category} ·</span>}
+              {t.label}
+              <button type="button" onClick={() => onToggle(t.id)}
+                className="text-slate-400 hover:text-slate-600 leading-none">×</button>
             </span>
           ))}
         </div>
@@ -147,13 +157,41 @@ interface S1Props {
   form: CoachingFormState; errors: CoachingFormErrors
   csrs: { id: number; name: string; department: string }[]
   coaches: { id: number; name: string }[]
-  topics: Topic[]
+  topicItems: ListItem[]
+  purposeItems?: { item_key?: string; label: string }[]
+  formatItems?:  { item_key?: string; label: string }[]
+  sourceItems?:  { item_key?: string; label: string }[]
   isEdit?: boolean
   update: (k: keyof CoachingFormState, v: any) => void
   toggleTopic: (id: number) => void
 }
 
-export function SessionSection({ form, errors, csrs, coaches, topics, isEdit, update, toggleTopic }: S1Props) {
+// Fallback hardcoded options (used until API loads or if API unavailable)
+const DEFAULT_PURPOSES = [
+  { item_key: 'WEEKLY', label: 'Weekly' },
+  { item_key: 'PERFORMANCE', label: 'Performance' },
+  { item_key: 'ONBOARDING', label: 'Onboarding' },
+]
+const DEFAULT_FORMATS = [
+  { item_key: 'ONE_ON_ONE',   label: '1-on-1' },
+  { item_key: 'SIDE_BY_SIDE', label: 'Side-by-Side' },
+  { item_key: 'TEAM_SESSION', label: 'Team Session' },
+]
+const DEFAULT_SOURCES = [
+  { item_key: 'SCHEDULED',           label: 'Scheduled' },
+  { item_key: 'QA_AUDIT',            label: 'QA Audit' },
+  { item_key: 'MANAGER_OBSERVATION', label: 'Manager Observation' },
+  { item_key: 'TREND',               label: 'Trend' },
+  { item_key: 'DISPUTE',             label: 'Dispute' },
+  { item_key: 'OTHER',               label: 'Other' },
+]
+
+export function SessionSection({ form, errors, csrs, coaches, topicItems,
+  purposeItems, formatItems, sourceItems,
+  isEdit, update, toggleTopic }: S1Props) {
+  const purposes = (purposeItems?.length ? purposeItems : DEFAULT_PURPOSES)
+  const formats  = (formatItems?.length  ? formatItems  : DEFAULT_FORMATS)
+  const sources  = (sourceItems?.length  ? sourceItems  : DEFAULT_SOURCES)
   const toggleCsr = (csrId: number) => {
     const next = form.csr_ids.includes(csrId)
       ? form.csr_ids.filter(x => x !== csrId)
@@ -221,30 +259,21 @@ export function SessionSection({ form, errors, csrs, coaches, topics, isEdit, up
             onChange={e => update('session_date', e.target.value)} />
         </Field>
         <Field label="Coaching Purpose" required error={errors.coaching_purpose}>
-          <select className={sel} value={form.coaching_purpose} onChange={e => update('coaching_purpose', e.target.value as CoachingPurpose)}>
+          <select className={sel} value={form.coaching_purpose} onChange={e => update('coaching_purpose', e.target.value)}>
             <option value="">Select purpose…</option>
-            <option value="WEEKLY">Weekly Performance</option>
-            <option value="PERFORMANCE">Performance</option>
-            <option value="ONBOARDING">Onboarding</option>
+            {purposes.map(p => <option key={p.item_key} value={p.item_key}>{p.label}</option>)}
           </select>
         </Field>
         <Field label="Source" required error={errors.source_type}>
-          <select className={sel} value={form.source_type} onChange={e => update('source_type', e.target.value as CoachingSourceType)}>
+          <select className={sel} value={form.source_type} onChange={e => update('source_type', e.target.value)}>
             <option value="">Select source…</option>
-            <option value="SCHEDULED">Scheduled</option>
-            <option value="QA_AUDIT">QA Audit</option>
-            <option value="MANAGER_OBSERVATION">Manager Observation</option>
-            <option value="TREND">Trend</option>
-            <option value="DISPUTE">Dispute</option>
-            <option value="OTHER">Other</option>
+            {sources.map(s => <option key={s.item_key} value={s.item_key}>{s.label}</option>)}
           </select>
         </Field>
         <Field label="Coaching Format" required error={errors.coaching_format}>
-          <select className={sel} value={form.coaching_format} onChange={e => update('coaching_format', e.target.value as CoachingFormat)}>
+          <select className={sel} value={form.coaching_format} onChange={e => update('coaching_format', e.target.value)}>
             <option value="">Select format…</option>
-            <option value="ONE_ON_ONE">1-on-1</option>
-            <option value="SIDE_BY_SIDE">Side-by-Side</option>
-            <option value="TEAM_SESSION">Team Session</option>
+            {formats.map(f => <option key={f.item_key} value={f.item_key}>{f.label}</option>)}
           </select>
         </Field>
         <Field label="Coach">
@@ -263,7 +292,7 @@ export function SessionSection({ form, errors, csrs, coaches, topics, isEdit, up
       <div className="border-t border-slate-100 pt-4 mt-4 space-y-4">
         <Field label="Topics" required>
           <TopicMultiSelect
-            topics={topics}
+            topicItems={topicItems}
             selectedIds={form.topic_ids}
             onToggle={toggleTopic}
             error={errors.topic_ids}
@@ -363,20 +392,23 @@ interface S3Props {
   form: CoachingFormState; errors: CoachingFormErrors
   resources: TrainingResource[]
   quizzes: LibraryQuiz[]
+  topicIdMap: Map<number, number>
   update: (k: keyof CoachingFormState, v: any) => void
 }
 
-export function RequiredActionsSection({ form, errors, resources, quizzes, update }: S3Props) {
+export function RequiredActionsSection({ form, errors, resources, quizzes, topicIdMap, update }: S3Props) {
   const [kbSearch,   setKbSearch]   = useState('')
   const [quizSearch, setQuizSearch] = useState('')
 
-  // Filter resources and quizzes to those linked to the session's selected topics
-  const topicSet = new Set(form.topic_ids)
+  // Convert selected list_items.id → topics.id for resource/quiz FK filtering
+  const topicFKSet = new Set(
+    form.topic_ids.map(lid => topicIdMap.get(lid)).filter((x): x is number => x !== undefined)
+  )
   const filteredResources = resources.filter(r =>
-    topicSet.size === 0 || r.topic_ids.some(tid => topicSet.has(tid))
+    topicFKSet.size === 0 || r.topic_ids.some(tid => topicFKSet.has(tid))
   )
   const filteredQuizzes = quizzes.filter(q =>
-    topicSet.size === 0 || q.topic_ids.some(tid => topicSet.has(tid))
+    topicFKSet.size === 0 || q.topic_ids.some(tid => topicFKSet.has(tid))
   )
 
   const resourceItems = filteredResources.map(r => ({
@@ -507,58 +539,28 @@ export function AccountabilitySection({ form, errors, update }: S4Props) {
   )
 }
 
-// ── Behavior flags definition ─────────────────────────────────────────────────
+// ── Dynamic behavior flag multi-select (ID-based) ────────────────────────────
 
-export const BEHAVIOR_FLAG_GROUPS: { label: string; flags: { value: string; text: string }[] }[] = [
-  {
-    label: 'Risk Signals',
-    flags: [
-      { value: 'RESISTANCE_TO_FEEDBACK',    text: 'Resistance to Feedback' },
-      { value: 'LACK_OF_ACCOUNTABILITY',    text: 'Lack of Accountability' },
-      { value: 'BLAMING_EXTERNAL_FACTORS',  text: 'Blaming External Factors' },
-      { value: 'LOW_ENGAGEMENT',            text: 'Low Engagement' },
-      { value: 'REPEATED_ISSUE',            text: 'Repeated Issue (Same Topic)' },
-      { value: 'COACHING_NOT_TAKEN_SERIOUSLY', text: 'Coaching Not Taken Seriously' },
-    ],
-  },
-  {
-    label: 'Observational',
-    flags: [
-      { value: 'NEEDS_ADDITIONAL_SUPPORT', text: 'Needs Additional Support' },
-      { value: 'PROCESS_CONFUSION',        text: 'Process Confusion' },
-      { value: 'SYSTEM_KNOWLEDGE_GAP',     text: 'System Knowledge Gap' },
-    ],
-  },
-  {
-    label: 'Positive',
-    flags: [
-      { value: 'STRONG_IMPROVEMENT', text: 'Strong Improvement' },
-      { value: 'HIGHLY_ENGAGED',     text: 'Highly Engaged' },
-      { value: 'TOOK_OWNERSHIP',     text: 'Took Ownership' },
-    ],
-  },
-]
-
-// ── Behavior flag multi-select dropdown ───────────────────────────────────────
-
-function BehaviorFlagSelect({ selected, onToggle }: {
-  selected: string[]; onToggle: (v: string) => void
+function BehaviorFlagSelect({ flagItems, selectedIds, onToggle }: {
+  flagItems: ListItem[]; selectedIds: number[]; onToggle: (id: number) => void
 }) {
   const [open, setOpen]     = useState(false)
   const [search, setSearch] = useState('')
 
-  const allFlat = BEHAVIOR_FLAG_GROUPS.flatMap(g => g.flags)
-  const selectedFlags = allFlat.filter(f => selected.includes(f.value))
-  const label = selectedFlags.length === 0
+  const selectedItems = flagItems.filter(f => selectedIds.includes(f.id))
+  const label = selectedItems.length === 0
     ? 'Select behavior flags…'
-    : `${selectedFlags.length} flag${selectedFlags.length !== 1 ? 's' : ''} selected`
+    : `${selectedItems.length} flag${selectedItems.length !== 1 ? 's' : ''} selected`
+
+  // Group items by category
+  const categories = [...new Set(flagItems.map(f => f.category ?? 'Other'))]
 
   return (
     <div>
       <DropdownMenu open={open} onOpenChange={o => { setOpen(o); if (o) setSearch('') }}>
         <DropdownMenuTrigger asChild>
           <button type="button" className={`${sel} flex items-center justify-between`}>
-            <span className={selectedFlags.length === 0 ? 'text-slate-400' : 'text-slate-700'}>{label}</span>
+            <span className={selectedItems.length === 0 ? 'text-slate-400' : 'text-slate-700'}>{label}</span>
             <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
           </button>
         </DropdownMenuTrigger>
@@ -574,46 +576,50 @@ function BehaviorFlagSelect({ selected, onToggle }: {
             />
           </div>
           <div className="max-h-[280px] overflow-y-auto py-1">
-            {BEHAVIOR_FLAG_GROUPS.map((group, gi) => {
-              const filtered = group.flags.filter(f =>
-                !search || f.text.toLowerCase().includes(search.toLowerCase())
+            {categories.map((cat, ci) => {
+              const items = flagItems.filter(f =>
+                (f.category ?? 'Other') === cat &&
+                (!search || f.label.toLowerCase().includes(search.toLowerCase()))
               )
-              if (!filtered.length) return null
+              if (!items.length) return null
               return (
-                <DropdownMenuGroup key={group.label}>
-                  {gi > 0 && <DropdownMenuSeparator />}
+                <DropdownMenuGroup key={cat}>
+                  {ci > 0 && <DropdownMenuSeparator />}
                   <DropdownMenuLabel className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
-                    {group.label}
+                    {cat}
                   </DropdownMenuLabel>
-                  {filtered.map(f => (
+                  {items.map(f => (
                     <DropdownMenuCheckboxItem
-                      key={f.value}
-                      checked={selected.includes(f.value)}
-                      onCheckedChange={() => onToggle(f.value)}
+                      key={f.id}
+                      checked={selectedIds.includes(f.id)}
+                      onCheckedChange={() => onToggle(f.id)}
                       onSelect={e => e.preventDefault()}
                     >
-                      {f.text}
+                      {f.label}
                     </DropdownMenuCheckboxItem>
                   ))}
                 </DropdownMenuGroup>
               )
             })}
+            {flagItems.length === 0 && (
+              <p className="px-3 py-2 text-[12px] text-slate-400 italic">No behavior flags configured</p>
+            )}
           </div>
-          {selectedFlags.length > 0 && (
+          {selectedItems.length > 0 && (
             <div className="border-t border-slate-100 px-3 py-2">
-              <p className="text-[11px] text-primary font-medium">{selectedFlags.length} selected</p>
+              <p className="text-[11px] text-primary font-medium">{selectedItems.length} selected</p>
             </div>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {selectedFlags.length > 0 && (
+      {selectedItems.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {selectedFlags.map(f => (
-            <span key={f.value}
+          {selectedItems.map(f => (
+            <span key={f.id}
               className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 text-[13px] rounded-md border border-slate-200">
-              {f.text}
-              <button type="button" onClick={() => onToggle(f.value)}
+              {f.label}
+              <button type="button" onClick={() => onToggle(f.id)}
                 className="text-slate-400 hover:text-slate-600 leading-none">×</button>
             </span>
           ))}
@@ -627,16 +633,17 @@ function BehaviorFlagSelect({ selected, onToggle }: {
 
 interface S5InternalProps {
   form: CoachingFormState
+  flagItems: ListItem[]
   update: (k: keyof CoachingFormState, v: any) => void
 }
 
-export function InternalNotesSection({ form, update }: S5InternalProps) {
-  const allFlags = form.behavior_flags ?? []
+export function InternalNotesSection({ form, flagItems, update }: S5InternalProps) {
+  const selectedIds = form.behavior_flag_ids ?? []
 
-  const toggleFlag = (value: string) => {
+  const toggleFlag = (id: number) => {
     update(
-      'behavior_flags',
-      allFlags.includes(value) ? allFlags.filter(f => f !== value) : [...allFlags, value]
+      'behavior_flag_ids',
+      selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id]
     )
   }
 
@@ -647,16 +654,13 @@ export function InternalNotesSection({ form, update }: S5InternalProps) {
         <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-full">Private — Not visible to CSR</span>
       </div>
       <div className="p-5 space-y-4">
-        {/* Behavior flags dropdown — first */}
         <Field label="Behavior Flags">
-          <BehaviorFlagSelect selected={allFlags} onToggle={toggleFlag} />
+          <BehaviorFlagSelect flagItems={flagItems} selectedIds={selectedIds} onToggle={toggleFlag} />
         </Field>
-
-        {/* Internal notes text — second */}
         <Field label="Internal Notes">
           <textarea
             className={tex} rows={4} maxLength={3000} value={form.internal_notes}
-            placeholder="Context, observations, concerns (e.g. CSR was defensive, blamed system, appears disengaged)…"
+            placeholder="Context, observations, concerns…"
             onChange={e => update('internal_notes', e.target.value)}
           />
           <p className="text-[11px] text-slate-400 mt-1 text-right">{form.internal_notes.length}/3000</p>

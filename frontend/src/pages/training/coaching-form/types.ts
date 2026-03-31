@@ -19,7 +19,7 @@ export interface CoachingFormState {
   follow_up_date: string
   follow_up_notes: string
   internal_notes: string
-  behavior_flags: string[]
+  behavior_flag_ids: number[]
   attachment_file: File | null
 }
 
@@ -45,7 +45,7 @@ export function emptyForm(): CoachingFormState {
     follow_up_date: '',
     follow_up_notes: '',
     internal_notes: '',
-    behavior_flags: [],
+    behavior_flag_ids: [],
     attachment_file: null,
   }
 }

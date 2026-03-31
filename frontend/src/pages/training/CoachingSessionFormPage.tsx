@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import trainingService from '@/services/trainingService'
-import topicService from '@/services/topicService'
+import listService from '@/services/listService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { Button } from '@/components/ui/button'
@@ -57,13 +57,21 @@ export default function CoachingSessionFormPage() {
 
   const { data: csrs = [] }     = useQuery({ queryKey: ['team-csrs'],    queryFn: () => trainingService.getTeamCSRs() })
   const { data: coaches = [] }  = useQuery({ queryKey: ['eligible-coaches'], queryFn: () => trainingService.getCoaches() })
-  const { data: topicsData }    = useQuery({ queryKey: ['topics-active'], queryFn: () => topicService.getTopics(1, 200, { is_active: true }) })
-  const { data: resourcesData } = useQuery({ queryKey: ['resources'],     queryFn: () => trainingService.getResources({ is_active: true, limit: 200 }) })
-  const { data: quizLibrary }   = useQuery({ queryKey: ['quiz-library'],  queryFn: () => trainingService.getQuizLibrary({ limit: 200 }) })
+  const { data: topicItems = [] }   = useQuery({ queryKey: ['list-items', 'training_topic'],   queryFn: () => listService.getItems('training_topic') })
+  const { data: resourcesData }     = useQuery({ queryKey: ['resources'],                       queryFn: () => trainingService.getResources({ is_active: true, limit: 200 }) })
+  const { data: quizLibrary }       = useQuery({ queryKey: ['quiz-library'],                    queryFn: () => trainingService.getQuizLibrary({ limit: 200 }) })
+  const { data: flagItems = [] }    = useQuery({ queryKey: ['list-items', 'behavior_flag'],    queryFn: () => listService.getItems('behavior_flag') })
+  const { data: purposeItems = [] } = useQuery({ queryKey: ['list-items', 'coaching_purpose'], queryFn: () => listService.getItems('coaching_purpose') })
+  const { data: formatItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_format'],  queryFn: () => listService.getItems('coaching_format') })
+  const { data: sourceItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_source'],  queryFn: () => listService.getItems('coaching_source') })
 
-  const topics    = topicsData?.items    ?? []
   const resources = resourcesData?.items ?? []
   const quizzes   = quizLibrary?.items   ?? []
+
+  // Map list_items.id → topics.id (item_key) for resource/quiz topic filtering
+  const topicIdMap = new Map<number, number>(
+    topicItems.filter(t => t.item_key).map(t => [t.id, parseInt(t.item_key!)])
+  )
 
   const csrId = form.csr_ids[0] ?? 0
   const { data: history, isLoading: historyLoading } = useQuery({
@@ -104,7 +112,7 @@ export default function CoachingSessionFormPage() {
       follow_up_date:         s.follow_up_date?.slice(0, 10) ?? '',
       follow_up_notes:        s.follow_up_notes ?? '',
       internal_notes:         s.internal_notes ?? '',
-      behavior_flags:         s.behavior_flags ? s.behavior_flags.split(',').filter(Boolean) : [],
+      behavior_flag_ids:      s.behavior_flag_ids ?? [],
       attachment_file:      null,
     })
     setExistingFilename(s.attachment_filename ?? undefined)
@@ -152,8 +160,8 @@ export default function CoachingSessionFormPage() {
     fd.append('due_date',               form.due_date         || '')
     fd.append('follow_up_date',         form.follow_up_date   || '')
     fd.append('follow_up_notes',        form.follow_up_notes  || '')
-    fd.append('internal_notes',         form.internal_notes   || '')
-    fd.append('behavior_flags',         form.behavior_flags.join(','))
+    fd.append('internal_notes',         form.internal_notes          || '')
+    fd.append('behavior_flag_ids',      form.behavior_flag_ids.join(','))
     if (form.attachment_file) fd.append('attachment', form.attachment_file)
     return fd
   }
@@ -233,16 +241,17 @@ export default function CoachingSessionFormPage() {
         <div className="col-span-2 space-y-4">
           <SessionSection
             form={form} errors={errors} csrs={csrs}
-            coaches={coaches} topics={topics} isEdit={isEdit}
+            coaches={coaches} topicItems={topicItems} isEdit={isEdit}
+            purposeItems={purposeItems} formatItems={formatItems} sourceItems={sourceItems}
             update={update} toggleTopic={toggleTopic}
           />
           <RequiredActionsSection
             form={form} errors={errors} resources={resources}
-            quizzes={quizzes} update={update}
+            quizzes={quizzes} topicIdMap={topicIdMap} update={update}
           />
           <AccountabilitySection form={form} errors={errors} update={update} />
           {[1, 4, 5].includes(user?.role_id ?? 0) && (
-            <InternalNotesSection form={form} update={update} />
+            <InternalNotesSection form={form} flagItems={flagItems} update={update} />
           )}
           <AttachmentSection
             form={form} update={update}
