@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import trainingService from '@/services/trainingService'
-import topicService from '@/services/topicService'
+import listService from '@/services/listService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QuizBuilder, validateQuizBuilder, type QuizBuilderData, type QuizBuilderErrors } from '@/components/training/QuizBuilder'
@@ -26,15 +27,16 @@ export default function LibraryQuizFormPage() {
   const { toast }    = useToast()
   const qc           = useQueryClient()
 
-  const [formData,    setFormData]    = useState<QuizBuilderData>(EMPTY_QUIZ)
-  const [errors,      setErrors]      = useState<QuizBuilderErrors>({})
-  const [initialized, setInitialized] = useState(false)
+  const [builderErrors, setBuilderErrors] = useState<QuizBuilderErrors>({})
 
-  const { data: topicsData } = useQuery({
-    queryKey: ['topics-active'],
-    queryFn:  () => topicService.getTopics(1, 200, { is_active: true }),
+  const { setValue, watch, reset } = useForm<QuizBuilderData>({ defaultValues: EMPTY_QUIZ })
+  const formData = watch()
+
+  // ── Fetch topic list items for the quiz builder ────────────────────────────
+  const { data: topicItems = [] } = useQuery({
+    queryKey: ['list-items', 'training_topic'],
+    queryFn:  () => listService.getItems('training_topic'),
   })
-  const topics = (topicsData as any)?.items ?? []
 
   const { data: existingDetail } = useQuery({
     queryKey: ['quiz-detail', id],
@@ -43,10 +45,10 @@ export default function LibraryQuizFormPage() {
     staleTime: 0,
   })
 
-  // Populate form once both the quiz detail and topics list have loaded
+  // ── Populate form on edit ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!isEdit || initialized || !existingDetail || topics.length === 0) return
-    setFormData({
+    if (!existingDetail || !isEdit) return
+    reset({
       quiz_title: existingDetail.quiz_title,
       pass_score: Number(existingDetail.pass_score),
       is_active:  existingDetail.is_active !== false,
@@ -58,11 +60,11 @@ export default function LibraryQuizFormPage() {
         correct_option: Number(q.correct_option),
       })),
     })
-    setInitialized(true)
-  }, [existingDetail, topics, isEdit, initialized])
+  }, [existingDetail, isEdit, reset])
 
+  // ── Save mutation ─────────────────────────────────────────────────────────
   const saveMut = useMutation({
-    mutationFn: async (data: QuizBuilderData) => {
+    mutationFn: (data: QuizBuilderData) => {
       const payload = {
         quiz_title: data.quiz_title,
         pass_score: data.pass_score,
@@ -90,8 +92,8 @@ export default function LibraryQuizFormPage() {
 
   const handleSave = () => {
     const errs = validateQuizBuilder(formData)
-    if (Object.keys(errs).length) { setErrors(errs); return }
-    setErrors({})
+    if (Object.keys(errs).length) { setBuilderErrors(errs); return }
+    setBuilderErrors({})
     saveMut.mutate(formData)
   }
 
@@ -110,9 +112,11 @@ export default function LibraryQuizFormPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <QuizBuilder
             value={formData}
-            onChange={setFormData}
-            errors={errors}
-            topics={topics}
+            onChange={v => {
+              (Object.keys(v) as (keyof QuizBuilderData)[]).forEach(k => setValue(k, v[k] as any))
+            }}
+            errors={builderErrors}
+            topics={topicItems.map(t => ({ id: t.id, topic_name: t.label, is_active: t.is_active, sort_order: t.sort_order, category: t.category ?? undefined, created_at: '', updated_at: '' }))}
           />
 
           {/* Active / Inactive toggle */}
@@ -125,7 +129,7 @@ export default function LibraryQuizFormPage() {
               <span className="text-[13px] text-slate-500">{formData.is_active !== false ? 'Active' : 'Inactive'}</span>
               <Switch
                 checked={formData.is_active !== false}
-                onCheckedChange={v => setFormData(d => ({ ...d, is_active: v }))}
+                onCheckedChange={v => setValue('is_active', v)}
               />
             </div>
           </div>

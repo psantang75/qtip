@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, FileText, Image, FileSpreadsheet, Film, Link, File } from 'lucide-react'
 import trainingService, { type TrainingResource, type ResourceType } from '@/services/trainingService'
 import { ResourceLink } from '@/components/training/ResourceLink'
-import topicService from '@/services/topicService'
+import topicService, { type Topic } from '@/services/topicService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
@@ -120,7 +120,7 @@ export default function LibraryResourcesPage() {
   const onSort = (field: string) => { toggle(field); setPage(1) }
 
   // All active topics — used in the add/edit dialog checkbox list
-  const topics = (topicsData as any)?.items ?? []
+  const topics: Topic[] = topicsData?.items ?? []
 
   // Topic options: only topics present in the current search+status results
   const topicOptions = useMemo(() => {
@@ -146,16 +146,18 @@ export default function LibraryResourcesPage() {
 
   const saveMut = useMutation({
     mutationFn: async (f: ResourceForm) => {
-      const payload: any = { title: f.title, resource_type: f.resource_type,
-        description: f.description || undefined, topic_ids: f.topic_ids, is_active: f.is_active }
-      if (f.resource_type === 'URL') payload.url = f.url
-      if (f.file) payload.file = f.file
+      const payload: Partial<TrainingResource> & { file?: File } = {
+        title: f.title, resource_type: f.resource_type,
+        description: f.description || undefined, topic_ids: f.topic_ids, is_active: f.is_active,
+        ...(f.resource_type === 'URL' ? { url: f.url } : {}),
+        ...(f.file ? { file: f.file } : {}),
+      }
       return editingRes
         ? trainingService.updateResource(editingRes.id, payload)
         : trainingService.createResource(payload)
     },
     onSuccess: () => { invalidate(); setEditing(null); toast({ title: editingRes ? 'Resource updated' : 'Resource added' }) },
-    onError: (err: any) => toast({ title: 'Save failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Save failed', description: err?.message, variant: 'destructive' }),
   })
 
   const handleSave = () => {
@@ -357,7 +359,7 @@ export default function LibraryResourcesPage() {
                 Topics <span className="text-slate-400 font-normal">(optional)</span>
               </label>
               <SearchableMultiSelect
-                items={topics.map((t: any) => ({ id: t.id, label: t.topic_name }))}
+                items={topics.map(t => ({ id: t.id, label: t.topic_name }))}
                 selectedIds={form.topic_ids}
                 onChange={ids => setForm(f => ({ ...f, topic_ids: ids }))}
                 placeholder="No topics selected"

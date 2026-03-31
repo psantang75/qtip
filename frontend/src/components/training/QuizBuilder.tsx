@@ -53,7 +53,7 @@ export function QuizBuilder({ value, onChange, errors, topics }: QuizBuilderProp
   const removeQuestion = (idx: number) =>
     update({ questions: value.questions.filter((_, i) => i !== idx) })
 
-  const updateQuestion = (idx: number, field: keyof BuilderQuestion, val: any) => {
+  const updateQuestion = (idx: number, field: keyof BuilderQuestion, val: string | number | string[]) => {
     const qs = value.questions.map((q, i) => i === idx ? { ...q, [field]: val } : q)
     update({ questions: qs })
   }

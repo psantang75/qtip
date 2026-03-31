@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, ChevronDown, Pencil } from 'lucide-react'
-import trainingService from '@/services/trainingService'
+import trainingService, { type TrainingResource, type LibraryQuiz } from '@/services/trainingService'
 import listService, { type ListItem } from '@/services/listService'
 import { ResourceLink } from '@/components/training/ResourceLink'
 import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
@@ -30,10 +30,15 @@ export default function LibraryTopicsPage() {
   const [expanded,     setExpanded]     = useState<Set<number>>(new Set())
   const [search,       setSearch]       = useState('')
   const [modalOpen,    setModalOpen]    = useState(false)
-  const [editingTopic, setEditingTopic] = useState<any | null>(null)
+  const [editingTopic, setEditingTopic] = useState<ListItem | null>(null)
   const [form,         setForm]         = useState<TopicForm>(EMPTY_FORM)
-  const [previewQuiz,  setPreviewQuiz]  = useState<any | null>(null)
+  const [previewQuiz,  setPreviewQuiz]  = useState<{ id?: number; quiz_title: string; pass_score: number; questions: { question_text: string; options: string[]; correct_option: number }[] } | null>(null)
   const [previewOpen,  setPreviewOpen]  = useState(false)
+
+  const previewMut = useMutation({
+    mutationFn: (quizId: number) => trainingService.getLibraryQuizDetail(quizId),
+    onSuccess: (detail) => { setPreviewQuiz(detail); setPreviewOpen(true) },
+  })
 
   const { data: topicItems = [], isLoading } = useQuery({
     queryKey: ['list-items', 'training_topic', 'all'],
@@ -42,8 +47,8 @@ export default function LibraryTopicsPage() {
   const { data: resourcesData } = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 200 }) })
   const { data: quizData }      = useQuery({ queryKey: ['quiz-library-all'], queryFn: () => trainingService.getQuizLibrary({ limit: 200 }) })
 
-  const allResources = (resourcesData?.items ?? []).filter((r: any) => r.is_active)
-  const allQuizzes   = (quizData?.items ?? []).filter((q: any) => q.is_active)
+  const allResources: TrainingResource[] = (resourcesData?.items ?? []).filter(r => r.is_active)
+  const allQuizzes:   LibraryQuiz[]      = (quizData?.items ?? []).filter(q => q.is_active)
 
   // Mirror List Management order: categories in first-appearance (sort_order) order,
   // items within each category in sort_order, uncategorized block at the bottom.
@@ -71,7 +76,7 @@ export default function LibraryTopicsPage() {
 
   // Build resource/quiz maps keyed by topics.id (from item_key) for FK alignment
   const resourcesByTopic = useMemo(() => {
-    const map = new Map<number, any[]>()
+    const map = new Map<number, TrainingResource[]>()
     for (const r of allResources) {
       for (const tid of (r.topic_ids ?? [])) {
         if (!map.has(tid)) map.set(tid, [])
@@ -82,7 +87,7 @@ export default function LibraryTopicsPage() {
   }, [allResources])
 
   const quizzesByTopic = useMemo(() => {
-    const map = new Map<number, any[]>()
+    const map = new Map<number, LibraryQuiz[]>()
     for (const q of allQuizzes) {
       for (const tid of (q.topic_ids ?? [])) {
         if (!map.has(tid)) map.set(tid, [])
@@ -101,15 +106,9 @@ export default function LibraryTopicsPage() {
   const toggleExpanded = (id: number) =>
     setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
-  const openPreview = async (quizId: number, e: React.MouseEvent) => {
+  const openPreview = (quizId: number, e: React.MouseEvent) => {
     e.stopPropagation()
-    try {
-      const detail = await trainingService.getLibraryQuizDetail(quizId)
-      setPreviewQuiz(detail)
-      setPreviewOpen(true)
-    } catch {
-      // silently fail
-    }
+    previewMut.mutate(quizId)
   }
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -119,41 +118,41 @@ export default function LibraryTopicsPage() {
       const fkTopicId = f.fkTopicId   // topics.id for FK references
 
       // Sync resource links
-      const origResIds = resourcesByTopic.get(fkTopicId)?.map((r: any) => r.id) ?? []
+      const origResIds = resourcesByTopic.get(fkTopicId)?.map(r => r.id) ?? []
       const toLink   = f.linkedResourceIds.filter(id => !origResIds.includes(id))
       const toUnlink = origResIds.filter(id => !f.linkedResourceIds.includes(id))
       for (const rid of toLink) {
-        const res = (resourcesData?.items ?? []).find((r: any) => r.id === rid)
-        if (res) await trainingService.updateResource(rid, { topic_ids: [...(res.topic_ids ?? []), fkTopicId] } as any)
+        const res = (resourcesData?.items ?? []).find(r => r.id === rid)
+        if (res) await trainingService.updateResource(rid, { topic_ids: [...(res.topic_ids ?? []), fkTopicId] })
       }
       for (const rid of toUnlink) {
-        const res = (resourcesData?.items ?? []).find((r: any) => r.id === rid)
-        if (res) await trainingService.updateResource(rid, { topic_ids: (res.topic_ids ?? []).filter((x: number) => x !== fkTopicId) } as any)
+        const res = (resourcesData?.items ?? []).find(r => r.id === rid)
+        if (res) await trainingService.updateResource(rid, { topic_ids: (res.topic_ids ?? []).filter(x => x !== fkTopicId) })
       }
 
       // Sync quiz links
-      const origQuizIds = quizzesByTopic.get(fkTopicId)?.map((q: any) => q.id) ?? []
+      const origQuizIds = quizzesByTopic.get(fkTopicId)?.map(q => q.id) ?? []
       const toLinkQ   = f.linkedQuizIds.filter(id => !origQuizIds.includes(id))
       const toUnlinkQ = origQuizIds.filter(id => !f.linkedQuizIds.includes(id))
       for (const qid of toLinkQ) {
-        const quiz = allQuizzes.find((q: any) => q.id === qid)
+        const quiz = allQuizzes.find(q => q.id === qid)
         if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: [...(quiz.topic_ids ?? []), fkTopicId] })
       }
       for (const qid of toUnlinkQ) {
-        const quiz = allQuizzes.find((q: any) => q.id === qid)
-        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: (quiz.topic_ids ?? []).filter((x: number) => x !== fkTopicId) })
+        const quiz = allQuizzes.find(q => q.id === qid)
+        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: (quiz.topic_ids ?? []).filter(x => x !== fkTopicId) })
       }
     },
     onSuccess: () => { invalidateAll(); setModalOpen(false); toast({ title: 'Topic updated' }) },
     onError:   () => toast({ title: 'Failed to save topic', variant: 'destructive' }),
   })
 
-  const openEdit = (topic: any) => {
+  const openEdit = (topic: ListItem) => {
     setEditingTopic(topic)
     const fkId = topic.item_key ? parseInt(topic.item_key) : 0
     setForm({
-      linkedResourceIds: resourcesByTopic.get(fkId)?.map((r: any) => r.id) ?? [],
-      linkedQuizIds:     quizzesByTopic.get(fkId)?.map((q: any) => q.id) ?? [],
+      linkedResourceIds: resourcesByTopic.get(fkId)?.map(r => r.id) ?? [],
+      linkedQuizIds:     quizzesByTopic.get(fkId)?.map(q => q.id) ?? [],
     })
     setModalOpen(true)
   }
@@ -331,7 +330,7 @@ export default function LibraryTopicsPage() {
                 Resources <span className="text-slate-400 font-normal">(optional)</span>
               </label>
               <SearchableMultiSelect
-                items={allResources.map((r: any) => ({ id: r.id, label: r.title }))}
+                items={allResources.map(r => ({ id: r.id, label: r.title }))}
                 selectedIds={form.linkedResourceIds}
                 onChange={ids => setForm(f => ({ ...f, linkedResourceIds: ids }))}
                 placeholder="No resources linked"
@@ -345,7 +344,7 @@ export default function LibraryTopicsPage() {
                 Quizzes <span className="text-slate-400 font-normal">(optional)</span>
               </label>
               <SearchableMultiSelect
-                items={allQuizzes.map((q: any) => ({ id: q.id, label: `${q.quiz_title} — ${q.question_count}Q · Pass: ${q.pass_score}%` }))}
+                items={allQuizzes.map(q => ({ id: q.id, label: `${q.quiz_title} — ${q.question_count}Q · Pass: ${q.pass_score}%` }))}
                 selectedIds={form.linkedQuizIds}
                 onChange={ids => setForm(f => ({ ...f, linkedQuizIds: ids }))}
                 placeholder="No quizzes linked"

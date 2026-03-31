@@ -41,6 +41,7 @@ export interface QuizQuestion {
 
 export interface QuizAttemptSummary {
   id: number
+  quiz_id?: number
   score: number
   passed: boolean
   attempt_number: number
@@ -106,6 +107,8 @@ export interface CoachingSession {
   recent_sessions?: RecentSession[]
   repeat_topics?: string[]
   quiz_attempts?: QuizAttemptSummary[]
+  quiz_count?: number
+  quiz_passed_count?: number
 }
 
 export type ResourceType = 'URL' | 'PDF' | 'IMAGE' | 'WORD' | 'POWERPOINT' | 'EXCEL' | 'VIDEO' | 'FILE'

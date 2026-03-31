@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { CheckCircle, XCircle, HelpCircle } from 'lucide-react'
 import trainingService, { type QuizQuestion, type QuizAttemptResult } from '@/services/trainingService'
 import { Button } from '@/components/ui/button'
@@ -17,7 +18,6 @@ export function QuizPlayer({ quiz, coachingSessionId, onPassed }: QuizPlayerProp
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({})
   const [result, setResult]                 = useState<QuizAttemptResult | null>(null)
-  const [isSubmitting, setIsSubmitting]     = useState(false)
 
   const { questions } = quiz
   const q = questions[currentQuestion]
@@ -28,25 +28,22 @@ export function QuizPlayer({ quiz, coachingSessionId, onPassed }: QuizPlayerProp
     setPhase('taking')
   }
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true)
-    try {
-      const answers = questions.map(q => ({
-        question_id:     q.id,
-        selected_option: selectedAnswers[q.id] ?? -1,
-      }))
-      const r = await trainingService.submitQuizAttempt(quiz.id, {
-        coaching_session_id: coachingSessionId,
-        answers,
-      })
+  const submitMut = useMutation({
+    mutationFn: (answers: { question_id: number; selected_option: number }[]) =>
+      trainingService.submitQuizAttempt(quiz.id, { coaching_session_id: coachingSessionId, answers }),
+    onSuccess: (r) => {
       setResult(r)
       setPhase('result')
       if (r.passed) onPassed()
-    } catch (err) {
-      console.error('[QuizPlayer] submit error', err)
-    } finally {
-      setIsSubmitting(false)
-    }
+    },
+    onError: (err) => console.error('[QuizPlayer] submit error', err),
+  })
+
+  const handleSubmit = () => {
+    submitMut.mutate(questions.map(q => ({
+      question_id:     q.id,
+      selected_option: selectedAnswers[q.id] ?? -1,
+    })))
   }
 
   // ── INTRO ─────────────────────────────────────────────────────────────────
@@ -149,19 +146,22 @@ export function QuizPlayer({ quiz, coachingSessionId, onPassed }: QuizPlayerProp
         <div>
           <p className="text-[15px] font-medium text-slate-800 mb-4">{q.question_text}</p>
           {q.options.map((opt, idx) => (
-            <button key={idx}
+            <Button
+              key={idx}
+              variant="outline"
               onClick={() => setSelectedAnswers(p => ({ ...p, [q.id]: idx }))}
               className={cn(
-                'w-full text-left p-4 rounded-xl border-2 text-[13px] transition-all mb-2',
+                'w-full justify-start text-left p-4 h-auto rounded-xl border-2 text-[13px] transition-all mb-2',
                 selectedAnswers[q.id] === idx
-                  ? 'border-primary bg-blue-50 text-slate-900 font-medium'
+                  ? 'border-primary bg-blue-50 text-slate-900 font-medium hover:bg-blue-50'
                   : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
-              )}>
-              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-slate-100 text-slate-600 text-[12px] font-bold mr-3">
+              )}
+            >
+              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-slate-100 text-slate-600 text-[12px] font-bold mr-3 shrink-0">
                 {String.fromCharCode(65 + idx)}
               </span>
               {opt}
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -175,9 +175,9 @@ export function QuizPlayer({ quiz, coachingSessionId, onPassed }: QuizPlayerProp
 
         {isLast ? (
           <Button className="bg-primary hover:bg-primary/90 text-white"
-            disabled={!hasAnswer || isSubmitting}
+            disabled={!hasAnswer || submitMut.isPending}
             onClick={handleSubmit}>
-            {isSubmitting ? 'Submitting…' : 'Submit Answers'}
+            {submitMut.isPending ? 'Submitting…' : 'Submit Answers'}
           </Button>
         ) : (
           <Button className="bg-primary hover:bg-primary/90 text-white"

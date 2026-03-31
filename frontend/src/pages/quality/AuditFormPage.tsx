@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Save, Send, AlertCircle, ClipboardList } from 'lucide-react'
+import { ArrowLeft, Save, Send, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getFormById } from '@/services/formService'
 import submissionService from '@/services/submissionService'
-import MultipleCallSelector from '@/components/MultipleCallSelector'
-import FormMetadataDisplay from '@/components/FormMetadataDisplay'
+import MultipleCallSelector from '@/components/common/MultipleCallSelector'
+import type { Call } from '@/services/callService'
+import FormMetadataDisplay from '@/components/common/FormMetadataDisplay'
+import userService from '@/services/userService'
 import {
   processConditionalLogic,
   calculateFormScore,
@@ -23,19 +25,6 @@ interface AnswerType {
   answer: string
   score: number
   notes: string
-}
-
-interface Call {
-  id: number
-  call_id: string
-  csr_id: number
-  customer_id: string | null
-  call_date: string
-  duration: number
-  recording_url: string | null
-  transcript: string | null
-  csr_name?: string
-  customer_name?: string
 }
 
 const SCROLL_HIGHLIGHT_DURATION = 3000
@@ -57,6 +46,16 @@ export default function AuditFormPage() {
     enabled: !!formId,
     staleTime: 60 * 1000,
   })
+
+  const { data: csrUsersData } = useQuery({
+    queryKey: ['csr-dropdown-users'],
+    queryFn:  () => userService.getUsers(1, 100, { role_id: 3 }),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  })
+  const csrUserOptions = (csrUsersData?.items ?? [])
+    .map(u => ({ id: u.id, username: u.username }))
+    .sort((a, b) => a.username.localeCompare(b.username))
 
   const [score, setScore] = useState(0)
   const [answers, setAnswers] = useState<Record<number, AnswerType>>({})
@@ -221,61 +220,56 @@ export default function AuditFormPage() {
 
   if (loading) {
     return (
-      <div className="-m-6 h-full flex items-center justify-center bg-slate-50">
-        <div className="animate-spin h-8 w-8 rounded-full border-4 border-primary border-t-transparent" />
+      <div className="p-6 space-y-4">
+        <div className="h-8 bg-slate-100 rounded animate-pulse w-1/3" />
+        <div className="h-64 bg-slate-100 rounded-xl animate-pulse" />
       </div>
     )
   }
 
   return (
-    // Same two-pane split-screen pattern as SubmissionDetailPage
-    <div className="-m-6 h-full flex flex-col overflow-hidden">
+    <div className="flex flex-col" style={{ height: 'calc(100% + 24px)', marginBottom: '-24px' }}>
 
-      {/* ── Fixed header bar ───────────────────────────────────────────────── */}
-      <div className="shrink-0 bg-white border-b border-slate-200 px-5 py-3 z-10">
-        <div className="flex items-start gap-4">
-
-          {/* Back to Review Forms */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="shrink-0 px-6 pb-5">
+        <div className="flex flex-col gap-1 mb-5">
           <button onClick={() => navigate(-1)}
-            className="shrink-0 flex items-center gap-1.5 text-[12px] font-medium text-slate-500 hover:text-primary transition-colors mt-1.5 whitespace-nowrap">
-            <ArrowLeft className="h-3.5 w-3.5" />
+            className="self-start flex items-center gap-1 text-[11px] text-slate-400 hover:text-primary transition-colors">
+            <ArrowLeft className="h-3 w-3" />
             Back to Review Forms
           </button>
-
-          <div className="w-px self-stretch bg-slate-200 shrink-0" />
-
-          {/* Form name */}
-          <div className="flex-1 min-w-0">
-            <h1 className="text-[20px] font-bold text-slate-900 leading-tight truncate">
-              {form?.form_name ?? 'QA Review'}
-            </h1>
-            <div className="flex items-center gap-2 mt-1">
-              <ClipboardList className="h-3.5 w-3.5 text-slate-400" />
-              <span className="text-[12px] text-slate-500">
-                {form?.interaction_type ?? 'Review Form'} · Reviewer: {user?.username}
-              </span>
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="text-2xl font-bold text-slate-900">Review Form</h1>
+            <div className="flex items-center gap-3 shrink-0 mt-0.5">
+              <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
+                <Save className="h-4 w-4 mr-1.5" />
+                {isSavingDraft ? 'Saving…' : 'Save Draft'}
+              </Button>
+              <Button onClick={handleSubmit} disabled={isSubmitting || isSavingDraft}
+                className="bg-primary hover:bg-primary/90 text-white">
+                <Send className="h-4 w-4 mr-1.5" />
+                {isSubmitting ? 'Submitting…' : 'Submit Review'}
+              </Button>
             </div>
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-3 shrink-0 mt-0.5">
-            <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
-              <Save className="h-4 w-4 mr-1.5" />
-              {isSavingDraft ? 'Saving…' : 'Save Draft'}
-            </Button>
-            <Button onClick={handleSubmit} disabled={isSubmitting || isSavingDraft}
-              className="bg-primary hover:bg-primary/90 text-white">
-              <Send className="h-4 w-4 mr-1.5" />
-              {isSubmitting ? 'Submitting…' : 'Submit Review'}
-            </Button>
-          </div>
-
+        {/* Form name card — mirrors submission detail's title card */}
+        <div className="bg-white rounded-xl border border-slate-200 pl-4 pr-11 py-3 flex items-center justify-between">
+          <span className="text-[15px] font-semibold text-slate-900 truncate">
+            {form?.form_name ?? 'QA Review'}
+          </span>
+          <span className="text-[15px] text-slate-600 shrink-0">
+            {form?.interaction_type && (
+              <>Type: <span className="font-bold text-slate-900">{form.interaction_type}</span></>
+            )}
+          </span>
         </div>
       </div>
 
       {/* ── Error banner ───────────────────────────────────────────────────── */}
       {errorMessage && (
-        <div className="shrink-0 bg-red-50 border-b border-red-200 px-5 py-3 flex items-start gap-3">
+        <div className="shrink-0 bg-red-50 border border-red-200 rounded-xl mx-6 px-4 py-2.5 flex items-start gap-3 mb-2">
           <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
           <div className="flex-1 text-[13px] text-red-700 space-y-0.5">
             {errorMessage.split('\n').map((line, i) => {
@@ -296,11 +290,11 @@ export default function AuditFormPage() {
       )}
 
       {/* ── Two-pane split ─────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="px-6 pb-6 flex flex-1 min-h-0 overflow-hidden gap-4">
 
         {/* ════ LEFT PANE — Form details + Call details ═════════════════════ */}
-        <div className="w-1/2 shrink-0 border-r border-slate-200 bg-slate-50 overflow-y-auto">
-          <div className="p-4 space-y-4">
+        <div className="w-1/2 shrink-0 rounded-xl border border-slate-200 bg-slate-100 overflow-y-auto">
+          <div className="p-3 space-y-2.5">
 
             {/* Form metadata fields */}
             {form?.metadata_fields && form.metadata_fields.length > 0 && (
@@ -322,6 +316,7 @@ export default function AuditFormPage() {
                     }}
                     readonly={false}
                     currentUser={user ? { id: user.id, username: user.username } : undefined}
+                    userOptions={csrUserOptions}
                   />
                 </div>
               </div>
@@ -335,7 +330,7 @@ export default function AuditFormPage() {
               <div className="px-4 py-3">
                 <MultipleCallSelector
                   selectedCalls={selectedCalls}
-                  onCallsChange={(calls: Call[]) => { setSelectedCalls(calls);  }}
+                  onCallsChange={(calls: Call[]) => { setSelectedCalls(calls) }}
                   disabled={isSubmitting || isSavingDraft}
                 />
               </div>
@@ -345,15 +340,9 @@ export default function AuditFormPage() {
         </div>
 
         {/* ════ RIGHT PANE — QA form questions ══════════════════════════════ */}
-        <div className="w-1/2 bg-white overflow-y-auto">
-          <div className="p-4">
-            <div className="rounded-xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center px-4 py-3 border-b border-slate-100 bg-slate-50">
-                <div className="flex items-center gap-2">
-                  <span className="w-[3px] h-4 rounded-full bg-primary shrink-0" />
-                  <span className="text-[13px] font-semibold text-slate-800">{form?.form_name}</span>
-                </div>
-              </div>
+        <div className="flex-1 rounded-xl border border-slate-200 bg-slate-100 overflow-y-auto min-w-0">
+          <div className="p-3">
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
               {formRenderData ? (
                 <FormRenderer
                   formRenderData={formRenderData}

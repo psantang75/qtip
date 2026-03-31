@@ -3,8 +3,14 @@
  * Keeps the main page file focused on state / logic.
  */
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Search, Paperclip } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search, Paperclip, X } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from '@/components/ui/select'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuGroup,
@@ -40,16 +46,24 @@ export function Field({ label, required, error, children }: {
   )
 }
 
-const sel = 'w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-primary/40'
-const inp = 'w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-primary/40'
-const tex = 'w-full px-3 py-2 border border-slate-200 rounded-md text-[13px] resize-none focus:outline-none focus:ring-1 focus:ring-primary/40'
-
 function SubSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="pt-4 mt-4 border-t border-slate-100">
       <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">{title}</p>
       {children}
     </div>
+  )
+}
+
+// ── Chip dismiss button ───────────────────────────────────────────────────────
+
+function ChipRemove({ onClick }: { onClick: () => void }) {
+  return (
+    <Button type="button" variant="ghost" size="sm"
+      className="h-auto w-auto p-0 ml-0.5 text-slate-400 hover:text-slate-600 hover:bg-transparent leading-none"
+      onClick={onClick}>
+      <X className="h-3 w-3" />
+    </Button>
   )
 }
 
@@ -74,16 +88,17 @@ function TopicMultiSelect({ topicItems, selectedIds, onToggle, error }: {
     <div>
       <DropdownMenu open={open} onOpenChange={o => { setOpen(o); if (o) setSearch('') }}>
         <DropdownMenuTrigger asChild>
-          <button type="button"
-            className={`${sel} flex items-center justify-between ${error ? 'border-red-400' : ''}`}>
+          <Button type="button" variant="outline"
+            className={`w-full justify-between font-normal text-[13px] h-9 ${error ? 'border-red-400' : ''}`}>
             <span className={selectedIds.length === 0 ? 'text-slate-400' : 'text-slate-700'}>{label}</span>
             <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-          </button>
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-[380px] p-0" onCloseAutoFocus={e => e.preventDefault()}>
           <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
             <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <input className="flex-1 text-[13px] focus:outline-none placeholder:text-slate-400"
+            <Input
+              className="flex-1 border-0 h-7 text-[13px] focus-visible:ring-0 px-0 placeholder:text-slate-400"
               placeholder="Search topics…" value={search}
               onChange={e => setSearch(e.target.value)} onKeyDown={e => e.stopPropagation()} />
           </div>
@@ -131,11 +146,10 @@ function TopicMultiSelect({ topicItems, selectedIds, onToggle, error }: {
         <div className="mt-3 flex flex-wrap gap-2">
           {selectedTopics.map(t => (
             <span key={t.id}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 text-[13px] rounded-md border border-slate-200">
+              className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-700 text-[13px] rounded-md border border-slate-200">
               {t.category && <span className="text-[10px] text-slate-400 font-medium">{t.category} ·</span>}
               {t.label}
-              <button type="button" onClick={() => onToggle(t.id)}
-                className="text-slate-400 hover:text-slate-600 leading-none">×</button>
+              <ChipRemove onClick={() => onToggle(t.id)} />
             </span>
           ))}
         </div>
@@ -157,7 +171,7 @@ interface S1Props {
   form: CoachingFormState; errors: CoachingFormErrors
   csrs: { id: number; name: string; department: string }[]
   coaches: { id: number; name: string }[]
-  topicItems: ListItem[]
+  topicItems?: ListItem[]
   purposeItems?: { item_key?: string; label: string }[]
   formatItems?:  { item_key?: string; label: string }[]
   sourceItems?:  { item_key?: string; label: string }[]
@@ -166,7 +180,6 @@ interface S1Props {
   toggleTopic: (id: number) => void
 }
 
-// Fallback hardcoded options (used until API loads or if API unavailable)
 const DEFAULT_PURPOSES = [
   { item_key: 'WEEKLY', label: 'Weekly' },
   { item_key: 'PERFORMANCE', label: 'Performance' },
@@ -186,7 +199,7 @@ const DEFAULT_SOURCES = [
   { item_key: 'OTHER',               label: 'Other' },
 ]
 
-export function SessionSection({ form, errors, csrs, coaches, topicItems,
+export function SessionSection({ form, errors, csrs, coaches, topicItems = [],
   purposeItems, formatItems, sourceItems,
   isEdit, update, toggleTopic }: S1Props) {
   const purposes = (purposeItems?.length ? purposeItems : DEFAULT_PURPOSES)
@@ -202,10 +215,8 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems,
 
   return (
     <FormSection title="Session">
-      {/* Scheduling fields */}
       <div className="grid grid-cols-2 gap-4">
         {isEdit ? (
-          /* Editing: show CSR as read-only */
           <div>
             <p className="text-[13px] font-medium text-slate-700 mb-1">CSR</p>
             <p className="text-[13px] text-slate-600 h-9 flex items-center">
@@ -213,27 +224,22 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems,
             </p>
           </div>
         ) : (
-          /* Creating: multi-select CSRs */
           <Field label="CSR(s)" required error={(errors as any).csr_ids}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button type="button" className={`${sel} flex items-center justify-between`}>
+                <Button type="button" variant="outline" className="w-full justify-between font-normal text-[13px] h-9">
                   <span className={form.csr_ids.length === 0 ? 'text-slate-400' : 'text-slate-700'}>
                     {form.csr_ids.length === 0 ? 'Select CSR(s)…'
                       : form.csr_ids.length === 1 ? selectedCsrs[0]?.name
                       : `${form.csr_ids.length} CSRs selected`}
                   </span>
                   <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-                </button>
+                </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-[340px] max-h-[280px] overflow-y-auto py-1" onCloseAutoFocus={e => e.preventDefault()}>
                 {csrs.map(c => (
-                  <DropdownMenuCheckboxItem
-                    key={c.id}
-                    checked={form.csr_ids.includes(c.id)}
-                    onCheckedChange={() => toggleCsr(c.id)}
-                    onSelect={e => e.preventDefault()}
-                  >
+                  <DropdownMenuCheckboxItem key={c.id} checked={form.csr_ids.includes(c.id)}
+                    onCheckedChange={() => toggleCsr(c.id)} onSelect={e => e.preventDefault()}>
                     {c.name} — {c.department}
                   </DropdownMenuCheckboxItem>
                 ))}
@@ -244,7 +250,7 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems,
                 {selectedCsrs.map(c => (
                   <span key={c.id} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-slate-100 text-slate-700 text-[12px] rounded-md border border-slate-200">
                     {c.name}
-                    <button type="button" onClick={() => toggleCsr(c.id)} className="text-slate-400 hover:text-slate-600">×</button>
+                    <ChipRemove onClick={() => toggleCsr(c.id)} />
                   </span>
                 ))}
               </div>
@@ -255,40 +261,57 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems,
           </Field>
         )}
         <Field label="Session Date" required error={errors.session_date}>
-          <input type="datetime-local" className={inp} value={form.session_date}
+          <Input type="datetime-local" value={form.session_date}
             onChange={e => update('session_date', e.target.value)} />
         </Field>
         <Field label="Coaching Purpose" required error={errors.coaching_purpose}>
-          <select className={sel} value={form.coaching_purpose} onChange={e => update('coaching_purpose', e.target.value)}>
-            <option value="">Select purpose…</option>
-            {purposes.map(p => <option key={p.item_key} value={p.item_key}>{p.label}</option>)}
-          </select>
+          <Select value={form.coaching_purpose} onValueChange={v => update('coaching_purpose', v as CoachingPurpose)}>
+            <SelectTrigger className="h-9 text-[13px]">
+              <SelectValue placeholder="Select purpose…" />
+            </SelectTrigger>
+            <SelectContent>
+              {purposes.filter(p => p.item_key).map(p => (
+                <SelectItem key={p.item_key} value={p.item_key!}>{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Source" required error={errors.source_type}>
-          <select className={sel} value={form.source_type} onChange={e => update('source_type', e.target.value)}>
-            <option value="">Select source…</option>
-            {sources.map(s => <option key={s.item_key} value={s.item_key}>{s.label}</option>)}
-          </select>
+          <Select value={form.source_type} onValueChange={v => update('source_type', v as CoachingSourceType)}>
+            <SelectTrigger className="h-9 text-[13px]">
+              <SelectValue placeholder="Select source…" />
+            </SelectTrigger>
+            <SelectContent>
+              {sources.filter(s => s.item_key).map(s => (
+                <SelectItem key={s.item_key} value={s.item_key!}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Coaching Format" required error={errors.coaching_format}>
-          <select className={sel} value={form.coaching_format} onChange={e => update('coaching_format', e.target.value)}>
-            <option value="">Select format…</option>
-            {formats.map(f => <option key={f.item_key} value={f.item_key}>{f.label}</option>)}
-          </select>
+          <Select value={form.coaching_format} onValueChange={v => update('coaching_format', v as CoachingFormat)}>
+            <SelectTrigger className="h-9 text-[13px]">
+              <SelectValue placeholder="Select format…" />
+            </SelectTrigger>
+            <SelectContent>
+              {formats.filter(f => f.item_key).map(f => (
+                <SelectItem key={f.item_key} value={f.item_key!}>{f.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Coach">
-          <select
-            className={sel}
-            value={form.coach_id || ''}
-            onChange={e => update('coach_id', Number(e.target.value))}
-          >
-            <option value="">Select coach…</option>
-            {coaches.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <Select value={form.coach_id ? String(form.coach_id) : ''} onValueChange={v => update('coach_id', Number(v))}>
+            <SelectTrigger className="h-9 text-[13px]">
+              <SelectValue placeholder="Select coach…" />
+            </SelectTrigger>
+            <SelectContent>
+              {coaches.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </Field>
       </div>
 
-      {/* Session content */}
       <div className="border-t border-slate-100 pt-4 mt-4 space-y-4">
         <Field label="Topics" required>
           <TopicMultiSelect
@@ -299,8 +322,8 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems,
           />
         </Field>
         <Field label="Notes" required error={errors.notes}>
-          <textarea
-            className={tex} rows={5} maxLength={3000} value={form.notes}
+          <Textarea
+            rows={5} maxLength={3000} value={form.notes}
             placeholder={form.coaching_purpose ? NOTES_PLACEHOLDER[form.coaching_purpose as CoachingPurpose] : 'Enter session notes…'}
             onChange={e => update('notes', e.target.value)}
           />
@@ -323,9 +346,7 @@ function AssignmentMultiSelect<T extends { id: number; label: string; topics: nu
   const [open, setOpen] = useState(false)
   const filtered = items.filter(i => i.label.toLowerCase().includes(search.toLowerCase()))
   const selected  = items.filter(i => selectedIds.includes(i.id))
-  const label = selected.length === 0
-    ? placeholder
-    : `${selected.length} selected`
+  const label = selected.length === 0 ? placeholder : `${selected.length} selected`
 
   return (
     <div>
@@ -334,31 +355,24 @@ function AssignmentMultiSelect<T extends { id: number; label: string; topics: nu
       ) : (
         <DropdownMenu open={open} onOpenChange={o => { setOpen(o); if (o) setSearch('') }}>
           <DropdownMenuTrigger asChild>
-            <button type="button" className={`${sel} flex items-center justify-between`}>
+            <Button type="button" variant="outline" className="w-full justify-between font-normal text-[13px] h-9">
               <span className={selected.length === 0 ? 'text-slate-400' : 'text-slate-700'}>{label}</span>
               <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-            </button>
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-[420px] p-0" onCloseAutoFocus={e => e.preventDefault()}>
             <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
               <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-              <input
-                className="flex-1 text-[13px] focus:outline-none placeholder:text-slate-400"
-                placeholder="Search…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                onKeyDown={e => e.stopPropagation()}
-              />
+              <Input
+                className="flex-1 border-0 h-7 text-[13px] focus-visible:ring-0 px-0 placeholder:text-slate-400"
+                placeholder="Search…" value={search}
+                onChange={e => setSearch(e.target.value)} onKeyDown={e => e.stopPropagation()} />
             </div>
             <div className="max-h-[220px] overflow-y-auto py-1">
               {filtered.length === 0 && <p className="px-3 py-2 text-[12px] text-slate-400">No matches</p>}
               {filtered.map(i => (
-                <DropdownMenuCheckboxItem
-                  key={i.id}
-                  checked={selectedIds.includes(i.id)}
-                  onCheckedChange={() => onToggle(i.id)}
-                  onSelect={e => e.preventDefault()}
-                >
+                <DropdownMenuCheckboxItem key={i.id} checked={selectedIds.includes(i.id)}
+                  onCheckedChange={() => onToggle(i.id)} onSelect={e => e.preventDefault()}>
                   {i.label}
                 </DropdownMenuCheckboxItem>
               ))}
@@ -375,9 +389,9 @@ function AssignmentMultiSelect<T extends { id: number; label: string; topics: nu
       {selected.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {selected.map(i => (
-            <span key={i.id} className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 text-[13px] rounded-md border border-slate-200">
+            <span key={i.id} className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-700 text-[13px] rounded-md border border-slate-200">
               {i.label}
-              <button type="button" onClick={() => onToggle(i.id)} className="text-slate-400 hover:text-slate-600 leading-none">×</button>
+              <ChipRemove onClick={() => onToggle(i.id)} />
             </span>
           ))}
         </div>
@@ -392,15 +406,14 @@ interface S3Props {
   form: CoachingFormState; errors: CoachingFormErrors
   resources: TrainingResource[]
   quizzes: LibraryQuiz[]
-  topicIdMap: Map<number, number>
+  topicIdMap?: Map<number, number>
   update: (k: keyof CoachingFormState, v: any) => void
 }
 
-export function RequiredActionsSection({ form, errors, resources, quizzes, topicIdMap, update }: S3Props) {
+export function RequiredActionsSection({ form, errors, resources, quizzes, topicIdMap = new Map(), update }: S3Props) {
   const [kbSearch,   setKbSearch]   = useState('')
   const [quizSearch, setQuizSearch] = useState('')
 
-  // Convert selected list_items.id → topics.id for resource/quiz FK filtering
   const topicFKSet = new Set(
     form.topic_ids.map(lid => topicIdMap.get(lid)).filter((x): x is number => x !== undefined)
   )
@@ -412,35 +425,22 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, topic
   )
 
   const resourceItems = filteredResources.map(r => ({
-    id: r.id,
-    label: `${r.title} — ${r.resource_type}`,
-    topics: r.topic_ids,
+    id: r.id, label: `${r.title} — ${r.resource_type}`, topics: r.topic_ids,
   }))
   const quizItems = filteredQuizzes.map(q => ({
-    id: q.id,
-    label: `${q.quiz_title} — ${q.question_count}Q · Pass: ${q.pass_score}%`,
-    topics: q.topic_ids,
+    id: q.id, label: `${q.quiz_title} — ${q.question_count}Q · Pass: ${q.pass_score}%`, topics: q.topic_ids,
   }))
 
-  const toggleResource = (id: number) => {
-    const next = form.kb_resource_ids.includes(id)
-      ? form.kb_resource_ids.filter(x => x !== id)
-      : [...form.kb_resource_ids, id]
-    update('kb_resource_ids', next)
-  }
-  const toggleQuiz = (id: number) => {
-    const next = form.quiz_ids.includes(id)
-      ? form.quiz_ids.filter(x => x !== id)
-      : [...form.quiz_ids, id]
-    update('quiz_ids', next)
-  }
+  const toggleResource = (id: number) => update('kb_resource_ids', form.kb_resource_ids.includes(id)
+    ? form.kb_resource_ids.filter(x => x !== id) : [...form.kb_resource_ids, id])
+  const toggleQuiz = (id: number) => update('quiz_ids', form.quiz_ids.includes(id)
+    ? form.quiz_ids.filter(x => x !== id) : [...form.quiz_ids, id])
 
   return (
     <FormSection title="Required Actions">
-      {/* Required Action Notes */}
       <Field label="Required Action">
-        <textarea
-          className={tex} rows={3} maxLength={1000} value={form.required_action}
+        <Textarea
+          rows={3} maxLength={1000} value={form.required_action}
           placeholder="Describe what must change or improve…"
           onChange={e => update('required_action', e.target.value)}
         />
@@ -449,37 +449,26 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, topic
         </p>
       </Field>
 
-      {/* Reference Materials */}
       <SubSection title="Reference Materials">
         <AssignmentMultiSelect
-          items={resourceItems}
-          selectedIds={form.kb_resource_ids}
-          onToggle={toggleResource}
-          placeholder="Assign Reference Materials…"
-          noTopicsMsg="No resources linked to the selected topics."
-          search={kbSearch}
-          setSearch={setKbSearch}
+          items={resourceItems} selectedIds={form.kb_resource_ids} onToggle={toggleResource}
+          placeholder="Assign Reference Materials…" noTopicsMsg="No resources linked to the selected topics."
+          search={kbSearch} setSearch={setKbSearch}
         />
       </SubSection>
 
-      {/* Quiz */}
       <SubSection title="Quiz Assignment">
         <AssignmentMultiSelect
-          items={quizItems}
-          selectedIds={form.quiz_ids}
-          onToggle={toggleQuiz}
-          placeholder="Assign quizzes…"
-          noTopicsMsg="No quizzes linked to the selected topics."
-          search={quizSearch}
-          setSearch={setQuizSearch}
+          items={quizItems} selectedIds={form.quiz_ids} onToggle={toggleQuiz}
+          placeholder="Assign quizzes…" noTopicsMsg="No quizzes linked to the selected topics."
+          search={quizSearch} setSearch={setQuizSearch}
         />
       </SubSection>
-
     </FormSection>
   )
 }
 
-// ── Section 4: CSR Accountability (with Timing) ──────────────────────────────
+// ── Section 4: CSR Accountability ────────────────────────────────────────────
 
 interface S4Props {
   form: CoachingFormState
@@ -490,7 +479,6 @@ interface S4Props {
 export function AccountabilitySection({ form, errors, update }: S4Props) {
   return (
     <FormSection title="CSR Accountability">
-      {/* Accountability toggles */}
       <div className="space-y-4">
         {([
           ['require_action_plan',    'Require Action Plan',    'CSR must write a response before completing'],
@@ -506,11 +494,10 @@ export function AccountabilitySection({ form, errors, update }: S4Props) {
         ))}
       </div>
 
-      {/* Timing — due dates govern when the CSR must complete their work */}
       <SubSection title="Timing">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Due Date">
-            <input type="date" className={inp} value={form.due_date} onChange={e => update('due_date', e.target.value)} />
+            <Input type="date" value={form.due_date} onChange={e => update('due_date', e.target.value)} />
           </Field>
           <div className="flex items-center gap-3 pt-6">
             <Switch checked={form.follow_up_required} onCheckedChange={v => update('follow_up_required', v)} />
@@ -518,15 +505,15 @@ export function AccountabilitySection({ form, errors, update }: S4Props) {
           </div>
           {form.follow_up_required && (
             <Field label="Follow-Up Date" error={errors.follow_up_date}>
-              <input type="date" className={inp} value={form.follow_up_date} onChange={e => update('follow_up_date', e.target.value)} />
+              <Input type="date" value={form.follow_up_date} onChange={e => update('follow_up_date', e.target.value)} />
             </Field>
           )}
         </div>
         {form.follow_up_required && (
           <div className="mt-4">
             <Field label="Follow-Up Notes">
-              <textarea
-                className={tex} rows={4} maxLength={3000} value={form.follow_up_notes}
+              <Textarea
+                rows={4} maxLength={3000} value={form.follow_up_notes}
                 placeholder="Document notes from the follow-up meeting…"
                 onChange={e => update('follow_up_notes', e.target.value)}
               />
@@ -539,7 +526,7 @@ export function AccountabilitySection({ form, errors, update }: S4Props) {
   )
 }
 
-// ── Dynamic behavior flag multi-select (ID-based) ────────────────────────────
+// ── Dynamic behavior flag multi-select ───────────────────────────────────────
 
 function BehaviorFlagSelect({ flagItems, selectedIds, onToggle }: {
   flagItems: ListItem[]; selectedIds: number[]; onToggle: (id: number) => void
@@ -552,28 +539,24 @@ function BehaviorFlagSelect({ flagItems, selectedIds, onToggle }: {
     ? 'Select behavior flags…'
     : `${selectedItems.length} flag${selectedItems.length !== 1 ? 's' : ''} selected`
 
-  // Group items by category
   const categories = [...new Set(flagItems.map(f => f.category ?? 'Other'))]
 
   return (
     <div>
       <DropdownMenu open={open} onOpenChange={o => { setOpen(o); if (o) setSearch('') }}>
         <DropdownMenuTrigger asChild>
-          <button type="button" className={`${sel} flex items-center justify-between`}>
+          <Button type="button" variant="outline" className="w-full justify-between font-normal text-[13px] h-9">
             <span className={selectedItems.length === 0 ? 'text-slate-400' : 'text-slate-700'}>{label}</span>
             <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-          </button>
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-[380px] p-0" onCloseAutoFocus={e => e.preventDefault()}>
           <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
             <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <input
-              className="flex-1 text-[13px] focus:outline-none placeholder:text-slate-400"
-              placeholder="Search flags…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              onKeyDown={e => e.stopPropagation()}
-            />
+            <Input
+              className="flex-1 border-0 h-7 text-[13px] focus-visible:ring-0 px-0 placeholder:text-slate-400"
+              placeholder="Search flags…" value={search}
+              onChange={e => setSearch(e.target.value)} onKeyDown={e => e.stopPropagation()} />
           </div>
           <div className="max-h-[280px] overflow-y-auto py-1">
             {categories.map((cat, ci) => {
@@ -589,12 +572,8 @@ function BehaviorFlagSelect({ flagItems, selectedIds, onToggle }: {
                     {cat}
                   </DropdownMenuLabel>
                   {items.map(f => (
-                    <DropdownMenuCheckboxItem
-                      key={f.id}
-                      checked={selectedIds.includes(f.id)}
-                      onCheckedChange={() => onToggle(f.id)}
-                      onSelect={e => e.preventDefault()}
-                    >
+                    <DropdownMenuCheckboxItem key={f.id} checked={selectedIds.includes(f.id)}
+                      onCheckedChange={() => onToggle(f.id)} onSelect={e => e.preventDefault()}>
                       {f.label}
                     </DropdownMenuCheckboxItem>
                   ))}
@@ -617,10 +596,9 @@ function BehaviorFlagSelect({ flagItems, selectedIds, onToggle }: {
         <div className="mt-3 flex flex-wrap gap-2">
           {selectedItems.map(f => (
             <span key={f.id}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 text-[13px] rounded-md border border-slate-200">
+              className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-700 text-[13px] rounded-md border border-slate-200">
               {f.label}
-              <button type="button" onClick={() => onToggle(f.id)}
-                className="text-slate-400 hover:text-slate-600 leading-none">×</button>
+              <ChipRemove onClick={() => onToggle(f.id)} />
             </span>
           ))}
         </div>
@@ -629,7 +607,7 @@ function BehaviorFlagSelect({ flagItems, selectedIds, onToggle }: {
   )
 }
 
-// ── Section 5: Internal Notes (trainer/manager/admin only) ───────────────────
+// ── Section 5: Internal Notes ─────────────────────────────────────────────────
 
 interface S5InternalProps {
   form: CoachingFormState
@@ -639,13 +617,8 @@ interface S5InternalProps {
 
 export function InternalNotesSection({ form, flagItems, update }: S5InternalProps) {
   const selectedIds = form.behavior_flag_ids ?? []
-
-  const toggleFlag = (id: number) => {
-    update(
-      'behavior_flag_ids',
-      selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id]
-    )
-  }
+  const toggleFlag = (id: number) => update('behavior_flag_ids',
+    selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id])
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -658,8 +631,8 @@ export function InternalNotesSection({ form, flagItems, update }: S5InternalProp
           <BehaviorFlagSelect flagItems={flagItems} selectedIds={selectedIds} onToggle={toggleFlag} />
         </Field>
         <Field label="Internal Notes">
-          <textarea
-            className={tex} rows={4} maxLength={3000} value={form.internal_notes}
+          <Textarea
+            rows={4} maxLength={3000} value={form.internal_notes}
             placeholder="Context, observations, concerns…"
             onChange={e => update('internal_notes', e.target.value)}
           />
@@ -672,21 +645,19 @@ export function InternalNotesSection({ form, flagItems, update }: S5InternalProp
 
 // ── Section 6: Attachment (optional) ─────────────────────────────────────────
 
-interface S4Props {
+interface AttachmentProps {
   form: CoachingFormState; update: (k: keyof CoachingFormState, v: any) => void
   existingFilename?: string; onRemoveExisting: () => void
 }
 
-export function AttachmentSection({ form, update, existingFilename, onRemoveExisting }: S4Props) {
+export function AttachmentSection({ form, update, existingFilename, onRemoveExisting }: AttachmentProps) {
   const [expanded, setExpanded] = useState(!!(existingFilename || form.attachment_file))
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <button
-        type="button"
+      <Button type="button" variant="ghost"
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2 px-5 py-4 text-left hover:bg-slate-50 transition-colors"
-      >
+        className="w-full flex items-center gap-2 px-5 py-4 justify-start h-auto rounded-none hover:bg-slate-50">
         {expanded
           ? <ChevronDown  className="h-4 w-4 text-slate-400 shrink-0" />
           : <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
@@ -697,19 +668,23 @@ export function AttachmentSection({ form, update, existingFilename, onRemoveExis
         {(existingFilename || form.attachment_file) && (
           <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-1">1 file</span>
         )}
-      </button>
+      </Button>
 
       {expanded && (
         <div className="px-5 pb-5 border-t border-slate-100 pt-4">
           {existingFilename && (
             <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg mb-3">
               <span className="text-[13px] text-slate-700 truncate">{existingFilename}</span>
-              <button type="button" onClick={onRemoveExisting} className="text-[12px] text-red-500 hover:text-red-700 ml-3 shrink-0">Remove</button>
+              <Button type="button" variant="ghost" size="sm"
+                className="text-[12px] text-red-500 hover:text-red-700 ml-3 shrink-0 h-auto"
+                onClick={onRemoveExisting}>
+                Remove
+              </Button>
             </div>
           )}
-          <input
+          <Input
             type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-            className="w-full text-[13px] text-slate-600 file:mr-3 file:py-1 file:px-3 file:border-0 file:rounded file:bg-primary/10 file:text-primary file:text-[12px] file:cursor-pointer"
+            className="text-[13px] text-slate-600 file:mr-3 file:py-1 file:px-3 file:border-0 file:rounded file:bg-primary/10 file:text-primary file:text-[12px] file:cursor-pointer"
             onChange={e => update('attachment_file', e.target.files?.[0] ?? null)}
           />
           <p className="text-[11px] text-slate-400 mt-1">Max 10 MB · PDF, Word, Images</p>

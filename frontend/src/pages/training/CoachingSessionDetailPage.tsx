@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Download, Paperclip, BookOpen, HelpCircle, Pencil } from 'lucide-react'
-import trainingService, { type CoachingSession, type CoachingSourceType } from '@/services/trainingService'
+import trainingService, { type CoachingSession, type CoachingSourceType, type CoachingFormat, type CoachingPurpose } from '@/services/trainingService'
 import topicService from '@/services/topicService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
@@ -11,6 +11,7 @@ import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
@@ -362,9 +363,9 @@ export default function CoachingSessionDetailPage() {
               <InfoRow label="CSR"              value={session.csr_name} />
               <InfoRow label="Coach"            value={session.created_by_name} />
               <InfoRow label="Session Date"     value={formatQualityDate(session.session_date)} />
-              <InfoRow label="Coaching Format"  value={formatItems.find(i => i.item_key === session.coaching_format)?.label ?? FORMAT_MAP[session.coaching_format as any] ?? session.coaching_format} />
-              <InfoRow label="Coaching Purpose" value={purposeItems.find(i => i.item_key === session.coaching_purpose)?.label ?? PURPOSE_MAP[session.coaching_purpose as any] ?? session.coaching_purpose} />
-              <InfoRow label="Coaching Source"  value={sourceItems.find(i => i.item_key === session.source_type)?.label ?? SOURCE_LABELS[session.source_type as any] ?? session.source_type} />
+              <InfoRow label="Coaching Format"  value={formatItems.find(i => i.item_key === session.coaching_format)?.label ?? FORMAT_MAP[session.coaching_format as CoachingFormat] ?? session.coaching_format} />
+              <InfoRow label="Coaching Purpose" value={purposeItems.find(i => i.item_key === session.coaching_purpose)?.label ?? PURPOSE_MAP[session.coaching_purpose as CoachingPurpose] ?? session.coaching_purpose} />
+              <InfoRow label="Coaching Source"  value={sourceItems.find(i => i.item_key === session.source_type)?.label ?? SOURCE_LABELS[session.source_type as CoachingSourceType] ?? session.source_type} />
               <InfoRow label="Created"          value={formatQualityDate(session.created_at)} />
               {!!session.is_overdue && (
                 <InfoRow label="Overdue" value={<span className="text-[13px] font-semibold text-red-600">⚠ Overdue</span>} />
@@ -435,7 +436,7 @@ export default function CoachingSessionDetailPage() {
               {(session.quizzes?.length ?? 0) > 0 ? (
                 <div className="space-y-4">
                   {session.quizzes!.map(quiz => {
-                    const attempts = (session.quiz_attempts ?? []).filter(a => (a as any).quiz_id === quiz.id)
+                    const attempts = (session.quiz_attempts ?? []).filter(a => a.quiz_id === quiz.id)
                     const passed   = attempts.find(a => a.passed)
                     return (
                       <div key={quiz.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
@@ -459,30 +460,30 @@ export default function CoachingSessionDetailPage() {
                           </div>
                         </div>
                         {attempts.length > 0 && (
-                          <table className="w-full text-[12px] mt-2">
-                            <thead>
-                              <tr className="text-left text-[11px] text-slate-400 border-b border-slate-200">
-                                <th className="pb-1.5 font-medium">Attempt</th>
-                                <th className="pb-1.5 font-medium">Score</th>
-                                <th className="pb-1.5 font-medium">Result</th>
-                                <th className="pb-1.5 font-medium">Date</th>
-                              </tr>
-                            </thead>
-                            <tbody>
+                          <Table className="mt-2 text-[12px]">
+                            <TableHeader>
+                              <TableRow className="border-slate-200">
+                                <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Attempt</TableHead>
+                                <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Score</TableHead>
+                                <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Result</TableHead>
+                                <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Date</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
                               {attempts.map(a => (
-                                <tr key={a.id} className={cn('border-b border-slate-100 last:border-0', a.passed ? 'bg-emerald-50/30' : 'bg-red-50/30')}>
-                                  <td className="py-1.5 text-slate-600">#{a.attempt_number}</td>
-                                  <td className="py-1.5 text-slate-600">{Number(a.score).toFixed(0)}%</td>
-                                  <td className="py-1.5">
+                                <TableRow key={a.id} className={cn('border-slate-100', a.passed ? 'bg-emerald-50/30' : 'bg-red-50/30')}>
+                                  <TableCell className="py-1.5 text-slate-600">#{a.attempt_number}</TableCell>
+                                  <TableCell className="py-1.5 text-slate-600">{Number(a.score).toFixed(0)}%</TableCell>
+                                  <TableCell className="py-1.5">
                                     <span className={cn('text-[11px] font-semibold', a.passed ? 'text-emerald-700' : 'text-red-600')}>
                                       {a.passed ? 'PASS ✓' : 'FAIL ✗'}
                                     </span>
-                                  </td>
-                                  <td className="py-1.5 text-slate-400">{formatQualityDate(a.submitted_at)}</td>
-                                </tr>
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-slate-400">{formatQualityDate(a.submitted_at)}</TableCell>
+                                </TableRow>
                               ))}
-                            </tbody>
-                          </table>
+                            </TableBody>
+                          </Table>
                         )}
                       </div>
                     )

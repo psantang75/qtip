@@ -93,8 +93,8 @@ export function TopicChips({ topics, max = 2 }: { topics: string[]; max?: number
 }
 
 export function QuizStatusBadge({ session }: { session: CoachingSession }) {
-  const quizCount   = Number((session as any).quiz_count  ?? session.quizzes?.length ?? 0)
-  const passedCount = Number((session as any).quiz_passed_count ?? 0)
+  const quizCount   = Number(session.quiz_count   ?? session.quizzes?.length ?? 0)
+  const passedCount = Number(session.quiz_passed_count ?? 0)
   const attempts    = session.quiz_attempts ?? []
 
   if (quizCount === 0 && !session.quizzes?.length)

@@ -1,11 +1,12 @@
-﻿import PlaceholderPage from '@/pages/PlaceholderPage'
+import PlaceholderPage from '@/pages/PlaceholderPage'
 
 export default function CoursesPage() {
   return (
     <PlaceholderPage
       title="Course Library"
       subtitle="Browse and manage training courses."
-      colorClass="text-[#00aeef]"
+      colorClass="text-primary"
     />
   )
 }
+

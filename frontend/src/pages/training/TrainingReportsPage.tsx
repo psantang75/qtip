@@ -1,12 +1,14 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { BarChart, DonutChart } from '@tremor/react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell, PieChart, Pie,
+  BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import { MessageSquare, TrendingUp, Clock, CheckCircle, RefreshCw } from 'lucide-react'
 import trainingService from '@/services/trainingService'
+import { Button } from '@/components/ui/button'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
@@ -21,7 +23,7 @@ import { useQualityRole } from '@/hooks/useQualityRole'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 
-// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const TYPE_COLORS: Record<string, string> = {
   WEEKLY_COACHING: '#60a5fa', PERFORMANCE_COACHING: '#fbbf24',
@@ -33,7 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 const typeLabel = (t: string) => t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
-// â”€â”€ Stat Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Stat Card (Tremor-styled) ─────────────────────────────────────────────────
 
 function StatCard({ label, value, icon: Icon, valueClass }: {
   label: string; value: string | number
@@ -48,7 +50,7 @@ function StatCard({ label, value, icon: Icon, valueClass }: {
   )
 }
 
-// â”€â”€ Chart Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Chart Card ────────────────────────────────────────────────────────────────
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -59,7 +61,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   )
 }
 
-// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function TrainingReportsPage() {
   const navigate      = useNavigate()
@@ -76,7 +78,7 @@ export default function TrainingReportsPage() {
   const page      = parseInt(get('page')) || 1
   const pageSize  = parseInt(get('size')) || 20
   const setPage   = (p: number) => set('page', String(p))
-  const selectedCsrs   = useMemo(() => csrsParam   ? csrsParam.split(',').filter(Boolean)   : [], [csrsParam])
+  const selectedCsrs = useMemo(() => csrsParam ? csrsParam.split(',').filter(Boolean) : [], [csrsParam])
 
   const summaryParams = { date_from: dateFrom || undefined, date_to: dateTo || undefined }
 
@@ -88,17 +90,16 @@ export default function TrainingReportsPage() {
   const { data: csrListPage, isLoading: csrLoading } = useQuery({
     queryKey: ['coaching-csr-list', page, pageSize, dateFrom, dateTo],
     queryFn:  () => trainingService.getCSRCoachingList({ page, limit: pageSize, ...summaryParams }),
-    placeholderData: (p: any) => p,
+    placeholderData: (p: unknown) => p as typeof csrListPage,
   })
 
-  // Client-side CSR name filter
   const csrRows = useMemo(() => {
     const items = csrListPage?.items ?? []
     return selectedCsrs.length ? items.filter(r => selectedCsrs.includes(r.csr_name)) : items
   }, [csrListPage?.items, selectedCsrs])
 
   const csrOptions = useMemo(() => {
-    const names = new Set((csrListPage?.items ?? []).map((r: any) => r.csr_name).filter(Boolean))
+    const names = new Set((csrListPage?.items ?? []).map(r => r.csr_name).filter(Boolean))
     return Array.from(names).sort() as string[]
   }, [csrListPage?.items])
 
@@ -106,11 +107,38 @@ export default function TrainingReportsPage() {
   const compRate = Number(s.completion_rate ?? 0)
   const quizRate = Number(s.quiz_pass_rate   ?? 0)
 
-  // Chart data
-  const weekData   = (s.sessions_by_week   ?? []).map((r: any) => ({ name: r.week,         count: Number(r.count) }))
-  const topicData  = (s.top_topics         ?? []).slice(0, 10).map((r: any) => ({ name: r.topic_name,   count: Number(r.count) }))
-  const typeData   = (s.sessions_by_type   ?? []).map((r: any) => ({ name: typeLabel(r.coaching_purpose ?? r.coaching_type), type: r.coaching_purpose ?? r.coaching_type, count: Number(r.count) }))
-  const statusData = (s.sessions_by_status ?? []).map((r: any) => ({ name: r.status, count: Number(r.count) }))
+  // Tremor BarChart data: sessions by week
+  const weekData = (s.sessions_by_week ?? []).map(
+    (r: { week: string; count: number | string }) => ({ Week: r.week, Sessions: Number(r.count) })
+  )
+
+  // Tremor BarChart data: top topics (horizontal)
+  const topicData = (s.top_topics ?? []).slice(0, 10).map(
+    (r: { topic_name: string; count: number | string }) => ({ Topic: r.topic_name, Sessions: Number(r.count) })
+  )
+
+  // Recharts data for multi-color bars (Sessions by Type)
+  const typeData = (s.sessions_by_type ?? []).map(
+    (r: { coaching_purpose?: string; coaching_type?: string; count: number | string }) => ({
+      name:  typeLabel(r.coaching_purpose ?? r.coaching_type ?? ''),
+      type:  r.coaching_purpose ?? r.coaching_type ?? '',
+      count: Number(r.count),
+    })
+  )
+
+  // Tremor DonutChart data: status distribution
+  const statusData = (s.sessions_by_status ?? []).map(
+    (r: { status: string; count: number | string }) => ({ name: r.status, Sessions: Number(r.count) })
+  )
+
+  // Tremor DonutChart needs colors as Tremor color names; map status to closest Tremor color
+  const donutColors: string[] = statusData.map((d: { name: string }) =>
+    ({ SCHEDULED: 'slate', IN_PROCESS: 'blue', AWAITING_CSR_ACTION: 'amber',
+       COMPLETED: 'emerald', FOLLOW_UP_REQUIRED: 'orange', CLOSED: 'gray' } as Record<string, string>
+    )[d.name] ?? 'slate'
+  )
+
+  void roleId // used for future role-gated features
 
   return (
     <QualityListPage>
@@ -123,62 +151,57 @@ export default function TrainingReportsPage() {
           onChange={v => setMany({ from: v.start, to: v.end, page: '1' })}
         />
         <div className="flex items-center gap-1.5 text-[12px] text-slate-500">
-          <span className="font-medium text-slate-700">{s.total_sessions ?? 'â€”'}</span> sessions in range
+          <span className="font-medium text-slate-700">{s.total_sessions ?? '—'}</span> sessions in range
         </div>
       </QualityFilterBar>
 
-      {/* â”€â”€ Stat cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Stat cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
-        <StatCard label="Total Sessions"      value={summaryLoading ? 'â€”' : (s.total_sessions ?? 0)} icon={MessageSquare} />
-        <StatCard label="Completion Rate"     value={summaryLoading ? 'â€”' : `${compRate}%`} icon={TrendingUp}
+        <StatCard label="Total Sessions"      value={summaryLoading ? '—' : (s.total_sessions ?? 0)} icon={MessageSquare} />
+        <StatCard label="Completion Rate"     value={summaryLoading ? '—' : `${compRate}%`} icon={TrendingUp}
           valueClass={compRate >= 70 ? 'text-emerald-600' : compRate >= 40 ? 'text-amber-600' : 'text-red-600'} />
         <StatCard label="Avg Days to Complete"
-          value={summaryLoading ? 'â€”' : s.avg_days_to_completion != null ? `${s.avg_days_to_completion}d` : 'â€”'}
+          value={summaryLoading ? '—' : s.avg_days_to_completion != null ? `${s.avg_days_to_completion}d` : '—'}
           icon={Clock} />
-        <StatCard label="Quiz Pass Rate"      value={summaryLoading ? 'â€”' : `${quizRate}%`} icon={CheckCircle} />
-        <StatCard label="Repeat Coaching"     value={summaryLoading ? 'â€”' : `${s.repeat_coaching_rate ?? 0}%`}
+        <StatCard label="Quiz Pass Rate"      value={summaryLoading ? '—' : `${quizRate}%`} icon={CheckCircle} />
+        <StatCard label="Repeat Coaching"     value={summaryLoading ? '—' : `${s.repeat_coaching_rate ?? 0}%`}
           icon={RefreshCw}
           valueClass={(s.repeat_coaching_rate ?? 0) > 20 ? 'text-amber-600' : undefined} />
       </div>
 
-      {/* â”€â”€ Charts 2x2 grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Charts 2x2 grid ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
 
+        {/* Sessions by Week — Tremor BarChart */}
         <ChartCard title="Sessions by Week">
           {weekData.length === 0
             ? <p className="text-center text-slate-400 text-[13px] py-10">No data in range</p>
-            : <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={weekData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#00aeef" radius={[3, 3, 0, 0]} name="Sessions" />
-                </BarChart>
-              </ResponsiveContainer>
+            : <BarChart
+                data={weekData} index="Week" categories={['Sessions']}
+                colors={['blue']} showLegend={false} yAxisWidth={32}
+                className="h-[220px]"
+              />
           }
         </ChartCard>
 
+        {/* Top Topics — Tremor BarChart (layout vertical) */}
         <ChartCard title="Top Topics">
           {topicData.length === 0
             ? <p className="text-center text-slate-400 text-[13px] py-10">No data in range</p>
-            : <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={topicData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#00aeef" radius={[0, 3, 3, 0]} name="Sessions" />
-                </BarChart>
-              </ResponsiveContainer>
+            : <BarChart
+                data={topicData} index="Topic" categories={['Sessions']}
+                colors={['blue']} layout="vertical" showLegend={false}
+                yAxisWidth={120} className="h-[220px]"
+              />
           }
         </ChartCard>
 
+        {/* Sessions by Type — Recharts (per-bar custom colors, not supported in Tremor) */}
         <ChartCard title="Sessions by Type">
           {typeData.length === 0
             ? <p className="text-center text-slate-400 text-[13px] py-10">No data in range</p>
             : <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={typeData}>
+                <RechartsBarChart data={typeData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
@@ -188,43 +211,38 @@ export default function TrainingReportsPage() {
                       <Cell key={idx} fill={TYPE_COLORS[entry.type] ?? '#94a3b8'} />
                     ))}
                   </Bar>
-                </BarChart>
+                </RechartsBarChart>
               </ResponsiveContainer>
           }
         </ChartCard>
 
+        {/* Status Distribution — Tremor DonutChart */}
         <ChartCard title="Status Distribution">
           {statusData.length === 0
             ? <p className="text-center text-slate-400 text-[13px] py-10">No data in range</p>
-            : <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={statusData} dataKey="count" nameKey="name" cx="50%" cy="50%"
-                    outerRadius={80} label={({ name, percent }) => `${name.replace(/_/g, ' ')} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}>
-                    {statusData.map((entry: any, idx: number) => (
-                      <Cell key={idx} fill={STATUS_COLORS[entry.name] ?? '#94a3b8'} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: any) => [v, 'Sessions']} />
-                </PieChart>
-              </ResponsiveContainer>
+            : <DonutChart
+                data={statusData} index="name" category="Sessions"
+                colors={donutColors} className="h-[220px]"
+                valueFormatter={v => `${v} sessions`}
+              />
           }
         </ChartCard>
 
       </div>
 
-      {/* â”€â”€ CSR Drill-Down Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── CSR Drill-Down Table ────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700">CSR Breakdown</p>
           {csrOptions.length > 0 && (
             <div className="flex gap-2 flex-wrap">
               {csrOptions.slice(0, 6).map(name => (
-                <button key={name}
+                <Button key={name} variant="ghost" size="sm"
                   onClick={() => setMany({ csrs: selectedCsrs.includes(name) ? selectedCsrs.filter(c => c !== name).join(',') : [...selectedCsrs, name].join(','), page: '1' })}
-                  className={cn('px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors', selectedCsrs.includes(name) ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}>
+                  className={cn('px-2.5 py-0.5 h-auto rounded-full text-[11px] font-medium',
+                    selectedCsrs.includes(name) ? 'bg-primary/10 text-primary hover:bg-primary/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}>
                   {name}
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -250,7 +268,7 @@ export default function TrainingReportsPage() {
             <TableBody>
               {csrRows.length === 0 ? (
                 <TableEmptyState colSpan={9} icon={MessageSquare} title="No coaching data in this range" />
-              ) : csrRows.map((csr: any) => (
+              ) : csrRows.map(csr => (
                 <TableRow key={csr.user_id} className="cursor-pointer hover:bg-slate-50/50"
                   onClick={() => navigate(`/app/training/coaching?csrs=${csr.user_id}`)}>
                   <TableCell className="text-[13px] font-medium text-slate-900">{csr.csr_name}</TableCell>
@@ -265,14 +283,14 @@ export default function TrainingReportsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">
-                    {csr.avg_days_to_completion != null ? `${csr.avg_days_to_completion}d` : 'â€”'}
+                    {csr.avg_days_to_completion != null ? `${csr.avg_days_to_completion}d` : '—'}
                   </TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">{csr.quizzes_passed ?? 0}</TableCell>
-                  <TableCell className="text-[13px] text-slate-500 max-w-[120px] truncate">{csr.most_common_topic ?? 'â€”'}</TableCell>
+                  <TableCell className="text-[13px] text-slate-500 max-w-[120px] truncate">{csr.most_common_topic ?? '—'}</TableCell>
                   <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">
-                    {csr.last_session_date ? formatQualityDate(csr.last_session_date) : 'â€”'}
+                    {csr.last_session_date ? formatQualityDate(csr.last_session_date) : '—'}
                   </TableCell>
-                  <TableCell className="text-slate-400 text-[13px]">â†’</TableCell>
+                  <TableCell className="text-slate-400 text-[13px]">→</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -291,5 +309,3 @@ export default function TrainingReportsPage() {
     </QualityListPage>
   )
 }
-
-

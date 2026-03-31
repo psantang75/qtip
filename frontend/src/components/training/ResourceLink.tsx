@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import trainingService, { type TrainingResource } from '@/services/trainingService'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 interface ResourceLinkProps {
   resource: TrainingResource
-  /** Optional max width Tailwind class (default max-w-[200px]) */
   maxWidth?: string
 }
 
@@ -16,18 +17,15 @@ interface ResourceLinkProps {
 export function ResourceLink({ resource, maxWidth = 'max-w-[200px]' }: ResourceLinkProps) {
   const [loading, setLoading] = useState(false)
 
-  const cls = `text-[13px] font-medium text-primary hover:underline truncate ${maxWidth} block`
+  const cls = cn('text-[13px] font-medium text-primary hover:underline truncate block text-left h-auto p-0', maxWidth)
 
   if (resource.resource_type === 'URL') {
     return (
-      <a
-        href={resource.url ?? '#'}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={cls}
-      >
-        {resource.title}
-      </a>
+      <Button variant="link" asChild className={cls}>
+        <a href={resource.url ?? '#'} target="_blank" rel="noopener noreferrer">
+          {resource.title}
+        </a>
+      </Button>
     )
   }
 
@@ -41,8 +39,6 @@ export function ResourceLink({ resource, maxWidth = 'max-w-[200px]' }: ResourceL
         resource.resource_type === 'POWERPOINT' ||
         resource.resource_type === 'EXCEL'
 
-      // Office Online Viewer requires a publicly reachable URL.
-      // It works on any deployed domain but not on localhost.
       const isPublicHost =
         window.location.hostname !== 'localhost' &&
         window.location.hostname !== '127.0.0.1'
@@ -54,8 +50,6 @@ export function ResourceLink({ resource, maxWidth = 'max-w-[200px]' }: ResourceL
         return
       }
 
-      // PDF / Image / Video — open inline in a new tab.
-      // Office files on localhost, or any other file type — download.
       const blob    = await trainingService.downloadResourceFile(resource.id)
       const blobUrl = URL.createObjectURL(blob)
 
@@ -81,12 +75,8 @@ export function ResourceLink({ resource, maxWidth = 'max-w-[200px]' }: ResourceL
   }
 
   return (
-    <button
-      onClick={handleOpen}
-      disabled={loading}
-      className={`${cls} text-left disabled:opacity-60`}
-    >
+    <Button variant="link" disabled={loading} className={cn(cls, 'disabled:opacity-60')} onClick={handleOpen}>
       {loading ? 'Opening…' : resource.title}
-    </button>
+    </Button>
   )
 }

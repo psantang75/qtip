@@ -9,6 +9,7 @@ import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
@@ -305,30 +306,28 @@ export default function MyCoachingDetailPage() {
                             {hasAttempts && (
                               <div>
                                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Attempt History</p>
-                                <table className="w-full text-[12px]">
-                                  <thead>
-                                    <tr className="text-left text-[11px] text-slate-400 border-b border-slate-100">
-                                      <th className="pb-1.5 font-medium">Attempt</th>
-                                      <th className="pb-1.5 font-medium">Score</th>
-                                      <th className="pb-1.5 font-medium">Result</th>
-                                      <th className="pb-1.5 font-medium">Date</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
+                                <Table className="text-[12px]">
+                                  <TableHeader>
+                                    <TableRow className="border-slate-100">
+                                      <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Attempt</TableHead>
+                                      <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Score</TableHead>
+                                      <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Result</TableHead>
+                                      <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Date</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
                                     {attempts.map(a => (
-                                      <tr key={a.id} className="border-b border-slate-50 last:border-0">
-                                        <td className="py-1.5 text-slate-600">#{a.attempt_number}</td>
-                                        <td className="py-1.5 text-slate-600">{Number(a.score).toFixed(0)}%</td>
-                                        <td className="py-1.5">
-                                          <span className="text-slate-600">
-                                            {a.passed ? 'Passed' : 'Not passed'}
-                                          </span>
-                                        </td>
-                                        <td className="py-1.5 text-slate-400">{formatQualityDate(a.submitted_at)}</td>
-                                      </tr>
+                                      <TableRow key={a.id} className="border-slate-50">
+                                        <TableCell className="py-1.5 text-slate-600">#{a.attempt_number}</TableCell>
+                                        <TableCell className="py-1.5 text-slate-600">{Number(a.score).toFixed(0)}%</TableCell>
+                                        <TableCell className="py-1.5 text-slate-600">
+                                          {a.passed ? 'Passed' : 'Not passed'}
+                                        </TableCell>
+                                        <TableCell className="py-1.5 text-slate-400">{formatQualityDate(a.submitted_at)}</TableCell>
+                                      </TableRow>
                                     ))}
-                                  </tbody>
-                                </table>
+                                  </TableBody>
+                                </Table>
                               </div>
                             )}
 

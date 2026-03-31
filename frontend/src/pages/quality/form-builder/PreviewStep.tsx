@@ -12,7 +12,7 @@ import {
 } from '@/utils/forms'
 import type { CategoryRenderData } from '@/utils/forms'
 import { getMaxPossibleScore } from '@/utils/forms/scoringAdapter'
-import FormMetadataDisplay from '@/components/FormMetadataDisplay'
+import FormMetadataDisplay from '@/components/common/FormMetadataDisplay'
 import { cn } from '@/lib/utils'
 import { totalCategoryWeight } from './formBuilderUtils'
 
