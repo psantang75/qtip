@@ -7,17 +7,9 @@
 
 import type { Form, FormQuestionCondition, FormQuestion } from '../../types/form.types';
 
-// Development-only logging utility
-const devLog = (message: string, ...args: any[]) => {
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[CONDITIONAL LOGIC] ${message}`, ...args);
-  }
-};
-
-// Development-only warning utility
-const devWarn = (message: string, ...args: any[]) => {
-  if (process.env.NODE_ENV === 'development') {
-    console.warn(`[CONDITIONAL LOGIC WARNING] ${message}`, ...args);
+const devWarn = (message: string) => {
+  if (import.meta.env.DEV) {
+    console.warn(`[CONDITIONAL LOGIC] ${message}`);
   }
 };
 
@@ -37,7 +29,6 @@ export const processConditionalLogic = (
 
   // In preview mode, show all questions
   if (isPreview) {
-    devLog('Preview mode: showing all questions regardless of conditions');
     form.categories.forEach(category => {
       category.questions.forEach(question => {
         if (question.id) {
@@ -48,20 +39,14 @@ export const processConditionalLogic = (
     return visibilityMap;
   }
 
-  devLog('Processing conditional logic with answers:', answers);
-
   // Assign temporary IDs to questions without IDs (for new forms)
   form.categories.forEach((category, categoryIndex) => {
-    // Assign category ID if missing
     if (!category.id) {
       category.id = (categoryIndex + 1) * -1000;
     }
-    
     category.questions.forEach((question, questionIndex) => {
       if (!question.id) {
-        const tempId = -(category.id! * 1000 + questionIndex + 1);
-        question.id = tempId;
-        devLog(`Assigned temporary ID ${tempId} to question: ${question.question_text}`);
+        question.id = -(category.id! * 1000 + questionIndex + 1);
       }
     });
   });
@@ -91,7 +76,6 @@ export const processConditionalLogic = (
         });
 
         if (validConditions.length === 0) {
-          devLog(`Question ${question.id} has only invalid conditions, making it visible by default`);
           isVisible = true;
         } else {
           isVisible = evaluateConditionalLogic(validConditions, answers);
@@ -132,23 +116,11 @@ const evaluateConditionalLogic = (
   }, {} as Record<number, FormQuestionCondition[]>);
 
   // Evaluate each group (AND within group, OR between groups)
-  const groupResults = Object.entries(conditionGroups).map(([groupId, conditions]) => {
-    devLog(`Processing condition group ${groupId} with ${conditions.length} conditions`);
-    
-    // All conditions in a group must be true (AND logic)
-    const groupResult = conditions.every(condition => {
-      return evaluateSingleCondition(condition, answers);
-    });
-    
-    devLog(`Group ${groupId} result: ${groupResult}`);
-    return groupResult;
+  const groupResults = Object.entries(conditionGroups).map(([, groupConditions]) => {
+    return groupConditions.every(condition => evaluateSingleCondition(condition, answers));
   });
 
-  // At least one group must be true (OR logic between groups)
-  const finalResult = groupResults.some(result => result);
-  devLog(`Final visibility result: ${finalResult}`);
-  
-  return finalResult;
+  return groupResults.some(result => result);
 };
 
 /**
@@ -160,25 +132,18 @@ const evaluateSingleCondition = (
 ): boolean => {
   const { target_question_id: targetQuestionId, condition_type: conditionType, target_value: targetValue } = condition;
   
-  devLog(`Processing condition (target=${targetQuestionId}, type=${conditionType}, value=${targetValue})`);
-  
   if (!targetQuestionId) {
-    devLog(`Target question ${targetQuestionId} doesn't exist`);
     return false;
   }
 
   const targetAnswer = answers[targetQuestionId];
   
   if (targetAnswer === undefined || targetAnswer === null) {
-    // No answer provided for target question
     if (conditionType === 'NOT_EXISTS') {
       return true;
     }
-    devLog(`No answer for target question ${targetQuestionId}`);
     return false;
   }
-
-  devLog(`Evaluating condition: Q${targetQuestionId} ${conditionType} "${targetValue}". Current value: "${targetAnswer}"`);
   
   // Normalize values for comparison
   const normalizedTargetAnswer = String(targetAnswer).trim().toLowerCase();
@@ -219,7 +184,6 @@ const evaluateSingleCondition = (
       conditionMet = false;
   }
   
-  devLog(`Condition met: ${conditionMet}`);
   return conditionMet;
 };
 

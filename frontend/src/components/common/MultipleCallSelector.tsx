@@ -28,10 +28,11 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
     }),
     onSuccess: (results) => {
       // Use found call if available, otherwise create a manual entry from the entered fields
+      // Negative ID signals to the backend that this call needs to be created (not looked up)
       const call: Call = results.length > 0
         ? results[0]
         : {
-            id:            Date.now(), // temp local id
+            id:            -(selectedCalls.length + 1),
             call_id:       callId.trim(),
             csr_id:        0,
             customer_id:   null,
@@ -55,7 +56,7 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
     onError: () => {
       // On network error also fall back to manual entry
       const call: Call = {
-        id:            Date.now(),
+        id:            -(selectedCalls.length + 1),
         call_id:       callId.trim(),
         csr_id:        0,
         customer_id:   null,

@@ -649,7 +649,7 @@ export const getQAStats = async (req: Request, res: Response): Promise<void> => 
         FROM submissions s
         JOIN submission_metadata sm ON s.id = sm.submission_id
         JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
-        JOIN users u ON u.id = CAST(sm.value AS UNSIGNED)
+        JOIN users u ON CAST(sm.value AS UNSIGNED) = u.id
         JOIN roles r ON u.role_id = r.id
         WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED')
         AND fmf.field_name = 'CSR'
@@ -731,24 +731,25 @@ export const getQACSRActivity = async (req: Request, res: Response): Promise<voi
     const auditCounts = await prisma.$queryRaw<{csr_id: bigint, total_audits: bigint, week_audits: bigint, month_audits: bigint}[]>(
       Prisma.sql`
         SELECT 
-          CAST(sm.value AS UNSIGNED) as csr_id,
+          u.id as csr_id,
           COUNT(s.id) as total_audits,
           COUNT(CASE WHEN s.submitted_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK) THEN 1 END) as week_audits,
           COUNT(CASE WHEN s.submitted_at >= DATE_FORMAT(NOW(), '%Y-%m-01') THEN 1 END) as month_audits
         FROM submissions s
         JOIN submission_metadata sm ON s.id = sm.submission_id
         JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
+        JOIN users u ON CAST(sm.value AS UNSIGNED) = u.id
         WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED')
         AND fmf.field_name = 'CSR'
         AND s.submitted_by = ${qaUserId}
-        GROUP BY sm.value
+        GROUP BY u.id
       `
     );
 
     const disputeCounts = await prisma.$queryRaw<{csr_id: bigint, total_disputes: bigint, week_disputes: bigint, month_disputes: bigint}[]>(
       Prisma.sql`
         SELECT 
-          CAST(sm.value AS UNSIGNED) as csr_id,
+          u.id as csr_id,
           COUNT(d.id) as total_disputes,
           COUNT(CASE WHEN d.created_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK) THEN 1 END) as week_disputes,
           COUNT(CASE WHEN d.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01') THEN 1 END) as month_disputes
@@ -756,9 +757,10 @@ export const getQACSRActivity = async (req: Request, res: Response): Promise<voi
         JOIN submissions s ON d.submission_id = s.id
         JOIN submission_metadata sm ON s.id = sm.submission_id
         JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
+        JOIN users u ON CAST(sm.value AS UNSIGNED) = u.id
         WHERE fmf.field_name = 'CSR'
         AND s.submitted_by = ${qaUserId}
-        GROUP BY sm.value
+        GROUP BY u.id
       `
     );
 

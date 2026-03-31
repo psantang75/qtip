@@ -80,11 +80,18 @@ export default function FormMetadataDisplay({
             )}
 
             {field.field_type === 'DROPDOWN' && (
-              readonly ? (
-                <p className="text-[13px] text-slate-700 h-9 flex items-center">{val || '—'}</p>
-              ) : (() => {
+              (() => {
                 const staticOpts = (field.dropdown_source ?? '').split(',').map(o => o.trim()).filter(Boolean)
                 const showUsers  = staticOpts.length === 0 && userOptions.length > 0
+
+                if (readonly) {
+                  // Resolve display label: for user dropdowns the stored value is the user ID
+                  const displayVal = showUsers
+                    ? (userOptions.find(u => String(u.id) === val)?.username ?? val)
+                    : val
+                  return <p className="text-[13px] text-slate-700 h-9 flex items-center">{displayVal || '—'}</p>
+                }
+
                 return (
                   <Select value={val} onValueChange={v => handleChange(field, v)}>
                     <SelectTrigger className="h-9 text-[13px]">
@@ -93,7 +100,8 @@ export default function FormMetadataDisplay({
                     <SelectContent>
                       {showUsers
                         ? userOptions.map(u => (
-                            <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>
+                            // Store the user ID as the value, display the username
+                            <SelectItem key={u.id} value={String(u.id)}>{u.username}</SelectItem>
                           ))
                         : staticOpts.map(opt => (
                             <SelectItem key={opt} value={opt}>{opt}</SelectItem>

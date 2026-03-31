@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Submission model interfaces - aligned with frontend for consistency
  */
 
@@ -68,18 +68,19 @@ export interface SubmissionMetadataDTO {
 export interface CreateSubmissionDTO {
   form_id: number;
   call_id?: number | null;
-  call_ids?: number[]; // Add support for multiple calls
-  call_data?: Array<{ // Add call data for virtual calls
+  call_ids?: number[];
+  call_data?: Array<{
     call_id: string;
-    csr_id?: number;
     department_id?: number | null;
     customer_id?: string | null;
     call_date?: string | Date;
     duration?: number;
     recording_url?: string | null;
     transcript?: string | null;
-    metadata?: Record<string, any> | null;
+    metadata?: Record<string, unknown> | null;
   }>;
+  /** CSR user ID resolved from the form's metadata CSR dropdown */
+  csr_id?: number | null;
   submitted_by: number;
   answers: CreateSubmissionAnswerDTO[];
   status?: SubmissionStatus;

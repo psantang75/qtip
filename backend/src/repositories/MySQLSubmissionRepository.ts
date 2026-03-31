@@ -202,27 +202,21 @@ export class MySQLSubmissionRepository {
         }
 
         if (submissionData.call_ids && submissionData.call_ids.length > 0) {
-          console.log('[SUBMISSION REPO] Processing call_ids:', submissionData.call_ids);
-
           for (let i = 0; i < submissionData.call_ids.length; i++) {
             let call_id = submissionData.call_ids[i];
 
             if (call_id < 0) {
               const callData = submissionData.call_data?.[i];
               if (callData) {
-                let csr_id = 1;
-                if (submissionData.metadata) {
-                  const csrMetadata = submissionData.metadata.find(
-                    (m) => m.field_id && m.value && m.value.toString().match(/^\d+$/)
-                  );
-                  if (csrMetadata?.value) {
-                    const parsed = parseInt(csrMetadata.value);
-                    if (!isNaN(parsed) && parsed > 0) csr_id = parsed;
-                  }
-                }
+                // Use the CSR resolved from the form metadata by the frontend,
+                // falling back to the submitter (QA reviewer) to satisfy the FK constraint.
+                const csr_id = submissionData.csr_id ?? submissionData.submitted_by;
 
-                const newCall = await tx.call.create({
-                  data: {
+                // Upsert: if a call with this conversation ID already exists (e.g. from
+                // a previous failed attempt), reuse it rather than failing on the unique constraint.
+                const upsertedCall = await tx.call.upsert({
+                  where: { call_id: callData.call_id },
+                  create: {
                     call_id: callData.call_id,
                     csr_id: csr_id,
                     department_id: callData.department_id ?? null,
@@ -233,15 +227,17 @@ export class MySQLSubmissionRepository {
                     transcript: callData.transcript ?? null,
                     metadata: callData.metadata ? JSON.stringify(callData.metadata) : null,
                   },
+                  update: {},
                 });
 
-                call_id = newCall.id;
-                console.log(`[SUBMISSION REPO] Created new call with ID: ${call_id}`);
+                call_id = upsertedCall.id;
               }
             }
 
-            await tx.submissionCall.create({
-              data: { submission_id: submission.id, call_id: call_id, sort_order: i },
+            await tx.submissionCall.upsert({
+              where: { unique_submission_call: { submission_id: submission.id, call_id: call_id } },
+              create: { submission_id: submission.id, call_id: call_id, sort_order: i },
+              update: { sort_order: i },
             });
           }
         }
