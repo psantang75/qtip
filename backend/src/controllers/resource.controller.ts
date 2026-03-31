@@ -18,6 +18,7 @@ function cleanExpiredTokens() {
 
 interface AuthReq extends Request {
   user?: { user_id: number; role: string };
+  file?: Express.Multer.File;
 }
 
 function detectResourceType(mimeType: string): string {
@@ -102,7 +103,7 @@ export const createResource = async (req: AuthReq, res: Response) => {
   try {
     const userId = req.user!.user_id;
     const { title, resource_type, url, description, topic_ids: rawTopicIds, is_active } = req.body;
-    const file = (req as any).file;
+    const file = req.file;
     const topicIds = parseTopicIds(rawTopicIds);
 
     if (!title) return res.status(400).json({ success: false, message: 'title is required' });
@@ -153,7 +154,7 @@ export const updateResource = async (req: AuthReq, res: Response) => {
   try {
     const resourceId = parseInt(req.params.id);
     const { title, resource_type, url, description, topic_ids: rawTopicIds, is_active } = req.body;
-    const file = (req as any).file;
+    const file = req.file;
 
     const existing = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM training_resources WHERE id = ${resourceId}`);
     if (!existing.length) return res.status(404).json({ success: false, message: 'Resource not found' });

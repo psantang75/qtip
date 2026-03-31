@@ -140,15 +140,7 @@ export const finalizeAudit = async (submissionId: number, finalData: any): Promi
 export const finalizeSubmission = async (submissionId: number, finalData: any): Promise<any> => {
   try {
     const url = `/api/submissions/${submissionId}/finalize`;
-    console.log('Finalize Submission Request:', {
-      url,
-      submissionId,
-      finalData,
-      method: 'PUT'
-    });
-    
     const response = await apiClient.put(url, finalData);
-    console.log('Finalize Submission Response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error finalizing submission:', error);
@@ -208,9 +200,6 @@ export const fetchDisputeHistory = async (
     // Use the correct endpoint path for disputes history
     // The backend has routes at both /api/disputes/history and /api/csr/disputes/history
     const response = await apiClient.get(`${BASE_URL}/disputes/history`, { params });
-    
-    console.log('Dispute history response:', response.data);
-    
     return response.data;
   } catch (error) {
     console.error('Error fetching dispute history:', error);
@@ -224,9 +213,6 @@ export const getDisputeDetails = async (disputeId: number): Promise<CSRDispute> 
     // Use the correct endpoint path for dispute details
     // The backend has this route at /api/disputes/:disputeId
     const response = await apiClient.get(`${BASE_URL}/disputes/${disputeId}`);
-    
-    console.log('Dispute details response:', response.data);
-    
     return response.data;
   } catch (error) {
     console.error('Error fetching dispute details:', error);

@@ -29,7 +29,7 @@ export default function Sidebar() {
   // When navigating to a detail page, location.state.fromPath holds the
   // originating list page path so that nav item stays highlighted instead of
   // a prefix-matched sibling lighting up.
-  const originPath = (location.state as any)?.fromPath as string | undefined
+  const originPath = (location.state as { fromPath?: string } | null)?.fromPath
 
   return (
     <aside className="fixed left-0 top-[124px] bottom-0 w-[280px] bg-white border-r border-slate-200 flex flex-col z-30 overflow-y-auto">

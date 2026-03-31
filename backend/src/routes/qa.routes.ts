@@ -28,7 +28,7 @@ router.get('/health', async (req, res) => {
         cache: false,
         features: false
       },
-      details: {} as any
+      details: {} as Record<string, unknown>
     };
 
     // Database connectivity check

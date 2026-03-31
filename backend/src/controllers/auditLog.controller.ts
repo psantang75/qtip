@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { AuditLogFilters, AuditLogWithDetails } from '../types/auditLog.types';
@@ -22,7 +22,7 @@ export const getAuditLogs = async (req: Request, res: Response): Promise<void> =
       department_id: req.query.department_id ? parseInt(req.query.department_id as string) : undefined
     };
 
-    const user_id = (req as any).user.id;
+    const user_id = req.user.id;
     const userInfo = await prisma.$queryRaw<{ role_name: string; department_id: number | null }[]>`
       SELECT r.role_name, u.department_id
       FROM users u
@@ -105,7 +105,7 @@ export const getAuditLogById = async (req: Request, res: Response): Promise<void
   try {
     const logId = parseInt(req.params.id);
 
-    const user_id = (req as any).user.id;
+    const user_id = req.user.id;
     const userInfo = await prisma.$queryRaw<{ role_name: string; department_id: number | null }[]>`
       SELECT r.role_name, u.department_id
       FROM users u

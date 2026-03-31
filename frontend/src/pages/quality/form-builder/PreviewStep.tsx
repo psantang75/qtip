@@ -25,9 +25,9 @@ export function PreviewStep({ form }: { form: Form }) {
   const previewForm = useMemo(() => {
     const f = JSON.parse(JSON.stringify(form)) as Form
     f.categories.forEach((cat, ci) => {
-      if (!cat.id) (cat as any).id = -(ci + 1) * 1000
+      if (!cat.id) cat.id = -(ci + 1) * 1000
       cat.questions.forEach((q, qi) => {
-        if (!q.id) (q as any).id = -((ci + 1) * 1000 + qi + 1)
+        if (!q.id) q.id = -((ci + 1) * 1000 + qi + 1)
       })
     })
     return f
@@ -173,7 +173,7 @@ export function PreviewStep({ form }: { form: Form }) {
                               const orig = previewForm.categories.flatMap(c => c.questions).find(x => x.id === q.id)
                               if (orig) {
                                 const isNA = ans?.answer?.toLowerCase() === 'na' || ans?.answer?.toLowerCase() === 'n/a'
-                                maxScore = (isNA && (orig as any).is_na_allowed) ? 0 : getMaxPossibleScore(orig)
+                                maxScore = (isNA && orig.is_na_allowed) ? 0 : getMaxPossibleScore(orig)
                               }
                             }
                             const catW = Number(cat.weight) || 0

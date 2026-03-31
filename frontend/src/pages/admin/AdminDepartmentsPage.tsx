@@ -103,8 +103,8 @@ export default function AdminDepartmentsPage() {
     })
     if (sortField) {
       list = [...list].sort((a, b) => {
-        const av = (a as any)[sortField] ?? ''
-        const bv = (b as any)[sortField] ?? ''
+        const av = (a as Record<string, unknown>)[sortField] ?? ''
+        const bv = (b as Record<string, unknown>)[sortField] ?? ''
         const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
         return sortDir === 'asc' ? cmp : -cmp
       })
@@ -122,7 +122,7 @@ export default function AdminDepartmentsPage() {
 
   // ── Form ─────────────────────────────────────────────────────────────────
   const form = useForm<FormValues>({
-    resolver: zodResolver(deptSchema as any),
+    resolver: zodResolver(deptSchema),
     defaultValues: { department_name: '', manager_ids: [] },
   })
 

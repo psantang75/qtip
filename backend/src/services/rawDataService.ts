@@ -26,6 +26,17 @@ type PrismaRawModel =
   | typeof prisma.ticketTaskRaw
   | typeof prisma.emailStatsRaw;
 
+interface PrismaModelDelegate {
+  count(args?: { where?: Record<string, unknown> }): Promise<number>
+  findMany(args?: {
+    where?: Record<string, unknown>
+    select?: Record<string, boolean>
+    skip?: number
+    take?: number
+    orderBy?: Record<string, unknown>
+  }): Promise<Record<string, unknown>[]>
+}
+
 const TABLE_PRISMA_MAP: Record<string, PrismaRawModel> = {
   call_activity_raw:     prisma.callActivityRaw,
   sales_margin_raw:      prisma.salesMarginRaw,
@@ -276,7 +287,7 @@ export async function queryRawData(params: RawDataQueryParams): Promise<RawDataR
     throw new Error(`Unknown table: ${tableName}`);
   }
 
-  const model = TABLE_PRISMA_MAP[tableName] as any;
+  const model = TABLE_PRISMA_MAP[tableName] as unknown as PrismaModelDelegate;
   const schema = TABLE_SCHEMAS[tableName] ?? [];
   const allColumns = schema.map((c) => c.name);
   const selectedColumns = params.columns && params.columns.length > 0
@@ -336,7 +347,7 @@ export async function exportRawData(params: RawDataQueryParams): Promise<Buffer>
     throw new Error(`Unknown table: ${tableName}`);
   }
 
-  const model = TABLE_PRISMA_MAP[tableName] as any;
+  const model = TABLE_PRISMA_MAP[tableName] as unknown as PrismaModelDelegate;
   const schema = TABLE_SCHEMAS[tableName] ?? [];
   const allColumns = schema.map((c) => c.name);
   const selectedColumns = params.columns && params.columns.length > 0

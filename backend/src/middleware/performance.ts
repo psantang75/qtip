@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import logger from '../config/logger';
 
 // Performance metrics storage
@@ -115,7 +115,7 @@ export const performanceMiddleware = (req: Request, res: Response, next: NextFun
   const startTime = Date.now();
   
   // Add performance context to request
-  (req as any).startTime = startTime;
+  (req as Request & { startTime?: number }).startTime = startTime;
   
   // Override res.end to capture response time
   const originalEnd = res.end;
@@ -138,7 +138,7 @@ export const performanceMiddleware = (req: Request, res: Response, next: NextFun
       responseTime: `${responseTime}ms`,
       userAgent: req.get('User-Agent'),
       ip: req.ip,
-      user_id: (req as any).user?.user_id
+      user_id: req.user?.user_id
     });
     
     // Call original end method with proper signature

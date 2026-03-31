@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { CSRRepository } from '../repositories/CSRRepository';
 import { asyncHandler, createAuthorizationError } from '../utils/errorHandler';
 
@@ -12,7 +12,7 @@ import { asyncHandler, createAuthorizationError } from '../utils/errorHandler';
  * @route GET /api/csr/dashboard-stats
  */
 export const getCSRDashboardStats = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const csr_id = (req as any).user?.user_id;
+  const csr_id = req.user?.user_id;
   
   if (!csr_id) {
     throw createAuthorizationError('Unauthorized access', { endpoint: 'dashboard-stats' });
@@ -27,7 +27,7 @@ export const getCSRDashboardStats = asyncHandler(async (req: Request, res: Respo
  * @route GET /api/csr/csr-activity
  */
 export const getCSRActivity = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const csr_id = (req as any).user?.user_id;
+  const csr_id = req.user?.user_id;
   
   if (!csr_id) {
     throw createAuthorizationError('Unauthorized access', { endpoint: 'csr-activity' });
@@ -42,7 +42,7 @@ export const getCSRActivity = asyncHandler(async (req: Request, res: Response): 
  * @route GET /api/csr/stats
  */
 export const getCSRStats = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const csr_id = (req as any).user?.user_id;
+  const csr_id = req.user?.user_id;
   
   if (!csr_id) {
     throw createAuthorizationError('Unauthorized access', { endpoint: 'stats' });

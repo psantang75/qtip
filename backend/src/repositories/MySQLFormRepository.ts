@@ -3,9 +3,14 @@
  */
 
 import prisma from '../config/prisma';
-import { CreateFormDTO, FormWithCategories, FormCategoryWithQuestions, FormQuestion } from '../models';
+import { CreateFormDTO, FormWithCategories, FormCategoryWithQuestions, FormQuestion, QuestionType, condition_type, logical_operator, MetadataFieldType, interaction_type } from '../models';
+import type {
+  FormInteractionType, FormQuestionType, FormMetadataFieldType,
+  FormMetadataInteractionType, FormQuestionConditionType, FormQuestionLogicalOperator,
+  Prisma,
+} from '@prisma/client';
 
-const safeParam = (value: any): any => (value === undefined ? null : value);
+const safeParam = <T>(value: T | undefined): T | null => (value === undefined ? null : value);
 
 export class MySQLFormRepository {
 
@@ -29,7 +34,7 @@ export class MySQLFormRepository {
       const form = await tx.form.create({
         data: {
           form_name: formData.form_name,
-          interaction_type: formData.interaction_type as any,
+          interaction_type: formData.interaction_type as FormInteractionType,
           created_by: formData.created_by,
           is_active: true,
           user_version: formData.user_version ?? null,
@@ -59,7 +64,7 @@ export class MySQLFormRepository {
             data: {
               category_id: cat.id,
               question_text: safeParam(question.question_text),
-              question_type: safeParam(question.question_type) as any,
+              question_type: question.question_type as FormQuestionType,
               weight: safeParam(question.weight),
               sort_order: qi,
               scale_min: safeParam(question.scale_min),
@@ -101,9 +106,9 @@ export class MySQLFormRepository {
                   data: {
                     question_id: q.id,
                     target_question_id: target_question_id,
-                    condition_type: safeParam(condition.condition_type) as any,
+                    condition_type: condition.condition_type as FormQuestionConditionType,
                     target_value: safeParam(condition.target_value),
-                    logical_operator: (safeParam(condition.logical_operator) || 'AND') as any,
+                    logical_operator: (condition.logical_operator ?? 'AND') as FormQuestionLogicalOperator,
                     group_id: safeParam(condition.group_id) ?? 0,
                     sort_order: safeParam(condition.sort_order) ?? condIdx,
                   },
@@ -125,9 +130,9 @@ export class MySQLFormRepository {
             data: {
               form_id: form.id,
               field_name: safeParam(field.field_name),
-              field_type: safeParam(field.field_type) as any,
+              field_type: field.field_type as FormMetadataFieldType,
               is_required: safeParam(field.is_required) === true,
-              interaction_type: safeParam(field.interaction_type || formData.interaction_type) as any,
+              interaction_type: (field.interaction_type || formData.interaction_type) as FormMetadataInteractionType,
               dropdown_source: field.dropdown_source ?? null,
               sort_order: field.sort_order ?? 0,
             },
@@ -155,7 +160,7 @@ export class MySQLFormRepository {
         const targetCategory = formData.categories[tci];
         for (let tqi = 0; tqi < targetCategory.questions.length; tqi++) {
           const tq = targetCategory.questions[tqi];
-          if ((tq as any).id === target_question_id) {
+          if (tq.id === target_question_id) {
             return questionIdMap.get(`${tci}-${tqi}`) || target_question_id;
           }
         }
@@ -168,7 +173,7 @@ export class MySQLFormRepository {
         const targetCategory = formData.categories[tci];
         for (let tqi = 0; tqi < targetCategory.questions.length; tqi++) {
           const tq = targetCategory.questions[tqi];
-          if ((tq as any).id === target_question_id) {
+          if (tq.id === target_question_id) {
             return questionIdMap.get(`${tci}-${tqi}`) || target_question_id;
           }
         }
@@ -181,7 +186,7 @@ export class MySQLFormRepository {
     // isActive === true  → only active forms
     // isActive === false → only inactive forms
     // isActive === undefined → all forms
-    const where: any = isActive === true ? { is_active: true } : isActive === false ? { is_active: false } : {};
+    const where: Prisma.FormWhereInput = isActive === true ? { is_active: true } : isActive === false ? { is_active: false } : {};
 
     const take = limit ? Math.min(Math.max(parseInt(String(limit)) || 50, 1), 1000) : undefined;
     const skip = page && take ? (Math.max(parseInt(String(page)) || 1, 1) - 1) * take : undefined;
@@ -242,7 +247,7 @@ export class MySQLFormRepository {
           id: q.id,
           category_id: q.category_id,
           question_text: q.question_text,
-          question_type: q.question_type as any,
+          question_type: q.question_type as unknown as QuestionType,
           weight: Number(q.weight),
           sort_order: q.sort_order,
           scale_min: q.scale_min ?? undefined,
@@ -256,9 +261,9 @@ export class MySQLFormRepository {
             id: c.id,
             question_id: c.question_id,
             target_question_id: c.target_question_id,
-            condition_type: c.condition_type as any,
+            condition_type: c.condition_type as unknown as condition_type,
             target_value: c.target_value ?? undefined,
-            logical_operator: c.logical_operator as any,
+            logical_operator: c.logical_operator as unknown as logical_operator,
             group_id: c.group_id,
             sort_order: c.sort_order,
             created_at: c.created_at,
@@ -275,7 +280,7 @@ export class MySQLFormRepository {
           })),
         };
         if (question.conditions && question.conditions.length > 0) {
-          (question as any).is_conditional = true;
+          question.is_conditional = true;
         }
         return question;
       }),
@@ -301,9 +306,9 @@ export class MySQLFormRepository {
         id: f.id,
         form_id: f.form_id,
         field_name: f.field_name,
-        field_type: f.field_type as any,
+        field_type: f.field_type as unknown as MetadataFieldType,
         is_required: f.is_required,
-        interaction_type: f.interaction_type as any,
+        interaction_type: f.interaction_type as unknown as interaction_type,
         dropdown_source: f.dropdown_source ?? undefined,
         sort_order: f.sort_order,
         created_at: f.created_at,
@@ -331,7 +336,7 @@ export class MySQLFormRepository {
       const form = await tx.form.create({
         data: {
           form_name: formData.form_name,
-          interaction_type: formData.interaction_type as any,
+          interaction_type: formData.interaction_type as FormInteractionType,
           version: newVersion,
           created_by: formData.created_by,
           is_active: true,
@@ -362,7 +367,7 @@ export class MySQLFormRepository {
             data: {
               category_id: cat.id,
               question_text: safeParam(question.question_text),
-              question_type: safeParam(question.question_type) as any,
+              question_type: question.question_type as FormQuestionType,
               weight: safeParam(question.weight),
               sort_order: qi,
               scale_min: safeParam(question.scale_min),
@@ -404,9 +409,9 @@ export class MySQLFormRepository {
                   data: {
                     question_id: q.id,
                     target_question_id: target_question_id,
-                    condition_type: safeParam(condition.condition_type) as any,
+                    condition_type: condition.condition_type as FormQuestionConditionType,
                     target_value: safeParam(condition.target_value),
-                    logical_operator: (safeParam(condition.logical_operator) || 'AND') as any,
+                    logical_operator: (condition.logical_operator ?? 'AND') as FormQuestionLogicalOperator,
                     group_id: safeParam(condition.group_id) ?? 0,
                     sort_order: safeParam(condition.sort_order) ?? condIdx,
                   },
@@ -428,9 +433,9 @@ export class MySQLFormRepository {
             data: {
               form_id: form.id,
               field_name: safeParam(field.field_name),
-              field_type: safeParam(field.field_type) as any,
+              field_type: field.field_type as FormMetadataFieldType,
               is_required: safeParam(field.is_required) === true,
-              interaction_type: safeParam(field.interaction_type || formData.interaction_type) as any,
+              interaction_type: (field.interaction_type || formData.interaction_type) as FormMetadataInteractionType,
               dropdown_source: field.dropdown_source ?? null,
               sort_order: field.sort_order ?? 0,
             },

@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import logger from '../config/logger';
 import { v4 as uuidv4 } from 'uuid';
@@ -89,7 +89,7 @@ export const errorHandler = (
     path: req.path,
     userAgent: req.get('User-Agent'),
     ip: req.ip,
-    user_id: (req as any).user?.user_id,
+    user_id: req.user?.user_id,
     timestamp: new Date().toISOString(),
     ...(error instanceof AppError ? error.context : {})
   };

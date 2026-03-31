@@ -1,4 +1,4 @@
-﻿import express, { Request, Response, RequestHandler } from 'express';
+import express, { Request, Response, RequestHandler } from 'express';
 import { authenticate, authorizeAdmin } from '../middleware/auth';
 import { 
   getPerformanceGoals,
@@ -106,7 +106,7 @@ const createPerformanceGoalWrapper = async (req: Request, res: Response): Promis
     console.log('[PERFORMANCE GOAL ROUTES] Using NEW PerformanceGoalService for create goal');
     
     try {
-      const user = (req as any).user;
+      const user = req.user;
       const goalData = req.body;
       const result = await performanceGoalService.createPerformanceGoal(goalData, user.user_id);
       res.status(201).json(result);
@@ -133,7 +133,7 @@ const updatePerformanceGoalWrapper = async (req: Request, res: Response): Promis
     
     try {
       const id = parseInt(req.params.id);
-      const user = (req as any).user;
+      const user = req.user;
       const goalData = req.body;
       const result = await performanceGoalService.updatePerformanceGoal(id, goalData, user.user_id);
       res.status(200).json(result);
@@ -160,7 +160,7 @@ const deletePerformanceGoalWrapper = async (req: Request, res: Response): Promis
     
     try {
       const id = parseInt(req.params.id);
-      const user = (req as any).user;
+      const user = req.user;
       await performanceGoalService.deletePerformanceGoal(id, user.user_id);
       res.status(200).json({ message: 'Performance goal deleted successfully' });
     } catch (error: any) {
@@ -186,7 +186,7 @@ const activatePerformanceGoalWrapper = async (req: Request, res: Response): Prom
     
     try {
       const id = parseInt(req.params.id);
-      const user = (req as any).user;
+      const user = req.user;
       await performanceGoalService.activatePerformanceGoal(id, user.user_id);
       res.status(200).json({ message: 'Performance goal activated successfully' });
     } catch (error: any) {

@@ -89,9 +89,9 @@ export const getFilterOptions = async (req: Request, res: Response): Promise<voi
     ]);
 
     const filterOptions: FilterOptions = {
-      courses: courses as any[],
-      csrs: csrs as any[],
-      departments: departments as any[]
+      courses: courses as FilterOptions['courses'],
+      csrs: csrs as FilterOptions['csrs'],
+      departments: departments as FilterOptions['departments']
     };
 
     res.json(filterOptions);
@@ -264,7 +264,7 @@ Mike Wilson,Communication Skills,In Progress,67,2025-01-11`;
  */
 export const getTrainingStats = async (req: Request, res: Response): Promise<void> => {
   try {
-    const trainerId = (req as any).user?.user_id;
+    const trainerId = req.user?.user_id;
     
     if (!trainerId) {
       res.status(401).json({ message: 'Unauthorized: Trainer ID not found' });
@@ -806,7 +806,7 @@ const createTrainerCoachingSession = async (req: AuthenticatedRequest, res: Resp
       if (!Array.isArray(topic_ids)) {
         topic_ids = [topic_ids];
       }
-      topic_ids = (topic_ids as any[]).map((id: any) => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
+      topic_ids = (topic_ids as unknown[]).map(id => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
     }
 
     if (!trainerId) {
@@ -1010,7 +1010,7 @@ const updateTrainerCoachingSession = async (req: AuthenticatedRequest, res: Resp
       if (!Array.isArray(topic_ids)) {
         topic_ids = [topic_ids];
       }
-      topic_ids = (topic_ids as any[]).map((id: any) => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
+      topic_ids = (topic_ids as unknown[]).map(id => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
     }
 
     if (!trainerId) {
@@ -1614,8 +1614,8 @@ export const getTrainerHealthCheck = async (req: Request, res: Response): Promis
         cache: false,
         logger: false
       },
-      details: {} as any,
-      performance: {} as any
+      details: {} as Record<string, unknown>,
+      performance: {} as Record<string, unknown>
     };
 
     try {

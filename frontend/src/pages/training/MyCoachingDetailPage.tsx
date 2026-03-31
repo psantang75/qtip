@@ -130,7 +130,7 @@ export default function MyCoachingDetailPage() {
     const passed = new Set<number>(
       (session.quiz_attempts ?? [])
         .filter(a => a.passed)
-        .map(a => (a as any).quiz_id as number)
+        .map(a => a.quiz_id as number)
         .filter(Boolean)
     )
     setPassedQuizIds(passed)
@@ -265,7 +265,7 @@ export default function MyCoachingDetailPage() {
               {quizzes.length > 0 ? (
                 <div className="space-y-3">
                   {quizzes.map(quiz => {
-                    const attempts    = (session.quiz_attempts ?? []).filter(a => (a as any).quiz_id === quiz.id)
+                    const attempts    = (session.quiz_attempts ?? []).filter(a => a.quiz_id === quiz.id)
                     const quizPassed  = passedQuizIds.has(quiz.id) || attempts.some(a => a.passed)
                     const bestScore   = attempts.length > 0 ? Math.max(...attempts.map(a => Number(a.score))) : null
                     const isExpanded  = expandedQuizIds.has(quiz.id)
@@ -579,7 +579,7 @@ export default function MyCoachingDetailPage() {
             )}
 
             {quizzes.map(quiz => {
-              const attempts   = (session.quiz_attempts ?? []).filter(a => (a as any).quiz_id === quiz.id)
+              const attempts   = (session.quiz_attempts ?? []).filter(a => a.quiz_id === quiz.id)
               const passed     = passedQuizIds.has(quiz.id) || attempts.find(a => a.passed)
               const passedAttempt = attempts.find(a => a.passed)
               return (

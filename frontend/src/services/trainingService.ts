@@ -352,7 +352,7 @@ export const trainingService = {
   },
 
   async createLibraryQuiz(
-    payload: { quiz_title: string; pass_score: number; topic_id?: number; topic_ids?: number[]; course_id?: number; questions: Omit<QuizQuestion, 'id'>[] },
+    payload: { quiz_title: string; pass_score: number; is_active?: boolean; topic_id?: number; topic_ids?: number[]; course_id?: number; questions: Omit<QuizQuestion, 'id'>[] },
   ): Promise<LibraryQuiz> {
     const { data } = await api.post('/trainer/quiz-library', payload)
     return data?.data ?? data

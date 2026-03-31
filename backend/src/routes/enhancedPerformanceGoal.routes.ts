@@ -1,11 +1,14 @@
-﻿import express, { Request, Response, RequestHandler } from 'express';
+import express, { Request, Response, RequestHandler } from 'express';
 import { authenticate, authorizeAdmin } from '../middleware/auth';
 import { EnhancedPerformanceGoalService } from '../services/EnhancedPerformanceGoalService';
 import {
   CreatePerformanceGoalData,
   UpdatePerformanceGoalData,
   PerformanceGoalFilters,
-  PerformanceGoalServiceError
+  PerformanceGoalServiceError,
+  type goal_type,
+  type GoalScope,
+  type target_scope,
 } from '../types/performanceGoal.types';
 
 const router = express.Router();
@@ -24,9 +27,9 @@ router.get('/', authenticate as unknown as RequestHandler, async (req: Request, 
     const filters: PerformanceGoalFilters = {};
     
     // Apply filters from query parameters
-    if (req.query.goal_type) filters.goal_type = req.query.goal_type as any;
-    if (req.query.scope) filters.scope = req.query.scope as any;
-    if (req.query.target_scope) filters.target_scope = req.query.target_scope as any;
+    if (req.query.goal_type) filters.goal_type = req.query.goal_type as goal_type;
+    if (req.query.scope) filters.scope = req.query.scope as GoalScope;
+    if (req.query.target_scope) filters.target_scope = req.query.target_scope as target_scope;
     if (req.query.is_active !== undefined) filters.is_active = req.query.is_active === 'true';
     if (req.query.start_date) filters.start_date = req.query.start_date as string;
     if (req.query.end_date) filters.end_date = req.query.end_date as string;
@@ -82,7 +85,7 @@ router.post('/',
   authorizeAdmin as unknown as RequestHandler, 
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const user = (req as any).user;
+      const user = req.user;
       const goalData: CreatePerformanceGoalData = req.body;
       
       console.log('[ENHANCED PERF GOAL ROUTES] Creating goal:', goalData);
@@ -112,7 +115,7 @@ router.put('/:id',
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
-      const user = (req as any).user;
+      const user = req.user;
       const updates: UpdatePerformanceGoalData = req.body;
       
       console.log('[ENHANCED PERF GOAL ROUTES] Updating goal:', { id, updates });
@@ -142,7 +145,7 @@ router.delete('/:id',
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
-      const user = (req as any).user;
+      const user = req.user;
       
       console.log('[ENHANCED PERF GOAL ROUTES] Deleting goal:', id);
       
@@ -171,7 +174,7 @@ router.post('/:id/activate',
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
-      const user = (req as any).user;
+      const user = req.user;
       
       console.log('[ENHANCED PERF GOAL ROUTES] Activating goal:', id);
       

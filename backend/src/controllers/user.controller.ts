@@ -238,7 +238,7 @@ export const getDirectors = async (req: Request, res: Response, next: NextFuncti
  */
 export const getMyDepartments = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const user_id = (req as any).user?.user_id;
+    const user_id = req.user?.user_id;
     if (!user_id) return res.status(401).json({ message: 'Authentication required' });
 
     const departments = await prisma.departmentManager.findMany({

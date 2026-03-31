@@ -1,5 +1,15 @@
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
+
+interface JwtTokenPayload {
+  user_id?: number
+  userId?: number
+  role_id?: number
+  roleId?: number
+  type?: string
+  exp?: number
+  iat?: number
+}
 import { Request } from 'express';
 import { User } from '../models/User';
 import { tokenBlacklistService } from './TokenBlacklistService';
@@ -180,7 +190,7 @@ export class AuthenticationService {
       }
 
       // Decode token to get user info and expiration (support both camelCase and snake_case)
-      const decoded = jwt.decode(token) as any;
+      const decoded = jwt.decode(token) as JwtTokenPayload | null;
       const logoutUserId = decoded?.user_id ?? decoded?.userId;
       if (logoutUserId) {
         console.log(`[NEW AUTH] AuthenticationService: User ${logoutUserId} logging out`);
@@ -244,7 +254,7 @@ export class AuthenticationService {
       }
 
       // Verify and decode token (support both camelCase and snake_case payload formats)
-      const decoded = jwt.verify(token, this.JWT_SECRET) as any;
+      const decoded = jwt.verify(token, this.JWT_SECRET) as JwtTokenPayload;
       const tokenUserId = decoded.user_id ?? decoded.userId;
       const tokenRoleId = decoded.role_id ?? decoded.roleId;
 
@@ -325,7 +335,7 @@ export class AuthenticationService {
       }
 
       // Verify refresh token (support both camelCase and snake_case payload formats)
-      const decoded = jwt.verify(refreshToken, this.JWT_SECRET) as any;
+      const decoded = jwt.verify(refreshToken, this.JWT_SECRET) as JwtTokenPayload;
       const refreshUserId = decoded.user_id ?? decoded.userId;
 
       if (!refreshUserId || !decoded.type || decoded.type !== 'refresh') {
@@ -400,7 +410,7 @@ export class AuthenticationService {
       role_id: user.role_id,
       type: 'access'
     };
-    const options = { expiresIn: this.JWT_EXPIRES_IN as any }; // Use configured expiration (8h or 24h)
+    const options: SignOptions = { expiresIn: this.JWT_EXPIRES_IN };
     return jwt.sign(payload, this.JWT_SECRET, options);
   }
 
@@ -413,7 +423,7 @@ export class AuthenticationService {
       role_id: user.role_id,
       type: 'refresh'
     };
-    const options = { expiresIn: this.REFRESH_TOKEN_EXPIRES_IN as any }; // Use configured expiration (7d)
+    const options: SignOptions = { expiresIn: this.REFRESH_TOKEN_EXPIRES_IN };
     return jwt.sign(payload, this.JWT_SECRET, options);
   }
 

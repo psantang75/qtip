@@ -54,16 +54,14 @@ export const processConditionalLogic = (
   form.categories.forEach((category, categoryIndex) => {
     // Assign category ID if missing
     if (!category.id) {
-      const categoryId = (categoryIndex + 1) * -1000;
-      (category as any).id = categoryId;
+      category.id = (categoryIndex + 1) * -1000;
     }
     
     category.questions.forEach((question, questionIndex) => {
-      const q = question as unknown as FormQuestion;
-      if (!q.id) {
-        const tempId = -(category.id * 1000 + questionIndex + 1);
-        (q as any).id = tempId;
-        devLog(`Assigned temporary ID ${tempId} to question: ${q.question_text}`);
+      if (!question.id) {
+        const tempId = -(category.id! * 1000 + questionIndex + 1);
+        question.id = tempId;
+        devLog(`Assigned temporary ID ${tempId} to question: ${question.question_text}`);
       }
     });
   });
@@ -72,9 +70,8 @@ export const processConditionalLogic = (
   const questionsById = new Map<number, FormQuestion>();
   form.categories.forEach(category => {
     category.questions.forEach(question => {
-      const q = question as unknown as FormQuestion;
-      if (q.id) {
-        questionsById.set(q.id, q);
+      if (question.id) {
+        questionsById.set(question.id, question);
       }
     });
   });
@@ -82,39 +79,30 @@ export const processConditionalLogic = (
   // Process each question's conditional logic
   form.categories.forEach(category => {
     category.questions.forEach(question => {
-      const q = question as unknown as FormQuestion;
-      
-      // Set default visibility
       let isVisible = true;
 
-      // Handle questions with conditional logic
-      if (q.is_conditional && q.conditions && q.conditions.length > 0) {
-        // Filter out conditions with invalid target questions
-        const validConditions = q.conditions.filter(condition => {
+      if (question.is_conditional && question.conditions && question.conditions.length > 0) {
+        const validConditions = question.conditions.filter(condition => {
           const isValid = questionsById.has(condition.target_question_id);
           if (!isValid) {
-            devWarn(`Invalid target question ID ${condition.target_question_id} for question ${q.id}, making question always visible`);
+            devWarn(`Invalid target question ID ${condition.target_question_id} for question ${question.id}, making question always visible`);
           }
           return isValid;
         });
 
         if (validConditions.length === 0) {
-          // No valid conditions, make question visible by default
-          devLog(`Question ${q.id} has only invalid conditions, making it visible by default`);
+          devLog(`Question ${question.id} has only invalid conditions, making it visible by default`);
           isVisible = true;
         } else {
-          // Evaluate conditional logic
           isVisible = evaluateConditionalLogic(validConditions, answers);
         }
-      } else if (q.is_conditional && (!q.conditions || q.conditions.length === 0)) {
-        // Question is marked as conditional but has no conditions
-        devWarn(`Question ${q.id} is marked is_conditional=true but has no conditions array`);
+      } else if (question.is_conditional && (!question.conditions || question.conditions.length === 0)) {
+        devWarn(`Question ${question.id} is marked is_conditional=true but has no conditions array`);
         isVisible = true;
       }
 
-      // Store visibility result
-      if (q.id) {
-        visibilityMap[q.id] = isVisible;
+      if (question.id) {
+        visibilityMap[question.id] = isVisible;
       }
     });
   });
@@ -244,10 +232,9 @@ export const hasCircularDependencies = (form: Form): boolean => {
   // Build dependency graph
   form.categories.forEach(category => {
     category.questions.forEach(question => {
-      const q = question as unknown as FormQuestion;
-      if (q.id && q.conditions) {
-        const deps = q.conditions.map(c => c.target_question_id);
-        dependencies.set(q.id, deps);
+      if (question.id && question.conditions) {
+        const deps = question.conditions.map(c => c.target_question_id);
+        dependencies.set(question.id, deps);
       }
     });
   });
@@ -295,9 +282,8 @@ export const hasCircularDependencies = (form: Form): boolean => {
 export const findQuestionById = (form: Form, questionId: number): FormQuestion | null => {
   for (const category of form.categories) {
     for (const question of category.questions) {
-      const q = question as unknown as FormQuestion;
-      if (q.id === questionId) {
-        return q;
+      if (question.id === questionId) {
+        return question;
       }
     }
   }

@@ -1,4 +1,4 @@
-﻿import express, { Request, Response, RequestHandler } from 'express';
+import express, { Request, Response, RequestHandler } from 'express';
 import { 
   getFilterOptions,
   getQAScoreTrends,
@@ -38,7 +38,7 @@ const getFilterOptionsWrapper = async (req: Request, res: Response): Promise<voi
     console.log('[ANALYTICS ROUTES] Using NEW Analytics Service for filter options');
     
     try {
-      const user = (req as any).user;
+      const user = req.user;
       const result = await analyticsService.getFilterOptions(user.user_id, user.role);
       res.status(200).json(result);
     } catch (error: any) {
@@ -64,7 +64,7 @@ const getQAScoreTrendsWrapper = async (req: Request, res: Response): Promise<voi
     
     try {
       const filters = req.body;
-      const user = (req as any).user;
+      const user = req.user;
       const result = await analyticsService.getQAScoreTrends(filters, user.user_id, user.role);
       res.status(200).json(result);
     } catch (error: any) {
@@ -90,7 +90,7 @@ const getQAScoreDistributionWrapper = async (req: Request, res: Response): Promi
     
     try {
       const filters = req.body;
-      const user = (req as any).user;
+      const user = req.user;
       const result = await analyticsService.getQAScoreDistribution(filters, user.user_id, user.role);
       res.status(200).json(result);
     } catch (error: any) {
@@ -116,7 +116,7 @@ const getPerformanceGoalsWrapper = async (req: Request, res: Response): Promise<
     
     try {
       const filters = req.body;
-      const user = (req as any).user;
+      const user = req.user;
       const result = await analyticsService.getPerformanceGoals(filters, user.user_id, user.role);
       res.status(200).json(result);
     } catch (error: any) {
@@ -141,7 +141,7 @@ const exportQAScoresWrapper = async (req: Request, res: Response): Promise<void>
     console.log('[ANALYTICS ROUTES] Using NEW Analytics Service for QA scores export');
     try {
       const filters = req.body;
-      const user = (req as any).user;
+      const user = req.user;
       const result = await analyticsService.exportQAScores(filters, user.user_id, user.role);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -169,7 +169,7 @@ const exportAnalyticsWrapper = async (req: Request, res: Response): Promise<void
     console.log('[ANALYTICS ROUTES] Using NEW Analytics Service for analytics export');
     try {
       const filters = req.body;
-      const user = (req as any).user;
+      const user = req.user;
       const result = await analyticsService.exportComprehensiveReport(filters, user.user_id, user.role);
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -198,7 +198,7 @@ const getComprehensiveReportWrapper = async (req: Request, res: Response): Promi
     
     try {
       const filters = req.body;
-      const user = (req as any).user;
+      const user = req.user;
       const result = await analyticsService.getComprehensiveReport(filters, user.user_id, user.role);
       res.status(200).json(result);
     } catch (error: any) {

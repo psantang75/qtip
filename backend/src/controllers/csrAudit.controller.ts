@@ -12,7 +12,7 @@ import { CSRService, CSRAuditFilters } from '../services/CSRService';
  */
 export const getCSRAudits = async (req: Request, res: Response): Promise<void> => {
   try {
-    const csr_id = (req as any).user?.user_id;
+    const csr_id = req.user?.user_id;
     
     if (!csr_id) {
       res.status(401).json({ message: 'Unauthorized' });
@@ -56,7 +56,7 @@ export const getCSRAudits = async (req: Request, res: Response): Promise<void> =
  */
 export const getCSRAuditDetails = async (req: Request, res: Response): Promise<void> => {
   try {
-    const csr_id = (req as any).user?.user_id;
+    const csr_id = req.user?.user_id;
     const auditId = parseInt(req.params.id);
     
     console.log(`\n🚀 CSR AUDIT CONTROLLER: getCSRAuditDetails called for audit ${auditId} by CSR ${csr_id}`);
@@ -91,7 +91,7 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
  */
 export const isAuditDisputable = async (req: Request, res: Response): Promise<void> => {
   try {
-    const csr_id = (req as any).user?.user_id;
+    const csr_id = req.user?.user_id;
     const auditId = parseInt(req.params.id);
     
     if (!csr_id) {
@@ -124,7 +124,7 @@ export const finalizeSubmission = async (req: Request, res: Response): Promise<v
     console.log('[CSR AUDIT CONTROLLER] Request body:', req.body);
     console.log('[CSR AUDIT CONTROLLER] User:', req.user);
     
-    const csr_id = (req as any).user?.user_id;
+    const csr_id = req.user?.user_id;
     const submission_id = parseInt(req.params.id);
     
     console.log('[CSR AUDIT CONTROLLER] Parsed values:', { csr_id, submission_id });

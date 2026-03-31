@@ -8,7 +8,7 @@ import {
 } from '../services/rawDataService';
 
 function getRequestingUser(req: Request) {
-  const user = (req as any).user;
+  const user = req.user;
   return {
     requestingUserId: user?.user_id ?? 0,
     userRole: user?.role ?? 'CSR',

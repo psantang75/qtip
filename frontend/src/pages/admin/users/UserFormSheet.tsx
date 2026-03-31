@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import { z, type ZodTypeAny } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Eye, EyeOff } from 'lucide-react'
 import userService from '@/services/userService'
@@ -52,7 +52,7 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
   const isCreate = !editUser
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(makeSchema(isCreate) as any),
+    resolver: zodResolver(makeSchema(isCreate) as ZodTypeAny),
     defaultValues: { username: '', email: '', password: '', title: '', role_id: 3, department_id: null, is_active: true },
   })
 

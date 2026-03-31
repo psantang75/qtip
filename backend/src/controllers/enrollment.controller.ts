@@ -517,7 +517,7 @@ export const createBatchEnrollments = async (req: Request, res: Response): Promi
  */
 export const createEnrollment = async (req: Request, res: Response): Promise<void> => {
   try {
-    const current_user_id = (req.user as any)?.userId;
+    const current_user_id = req.user?.user_id;
     const { course_id, user_id, due_date } = req.body;
 
     if (!course_id || !user_id) {

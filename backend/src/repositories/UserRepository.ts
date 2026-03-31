@@ -62,7 +62,7 @@ export class MySQLUserRepository {
       dbLogger.query('Users query completed', [`found=${users.length}`, `total=${total}`]);
 
       return {
-        users: users as unknown as any[],
+        users: users as UserWithDetails[],
         pagination: {
           page,
           limit,

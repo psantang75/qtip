@@ -14,7 +14,7 @@ const router = Router();
 
 /** Require Director or Admin role. */
 const authorizeDirectorOrAdmin = (req: Request, res: Response, next: NextFunction): void => {
-  const role = (req as any).user?.role;
+  const role = req.user?.role;
   if (role === 'Admin' || role === 'Director') return next();
   res.status(403).json({ error: 'FORBIDDEN', message: 'Director or Admin role required' });
 };

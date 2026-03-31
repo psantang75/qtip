@@ -55,7 +55,7 @@ export const uploadImport = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const userId = (req as any).user?.user_id;
+    const userId = req.user?.user_id;
     if (!userId) {
       res.status(401).json({ message: 'Authentication required' });
       return;

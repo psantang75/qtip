@@ -1,4 +1,5 @@
 import prisma from '../config/prisma';
+import { DisputeScoreHistoryType } from '../generated/prisma/client';
 
 export type DisputeScoreType = 'PREVIOUS' | 'ADJUSTED';
 
@@ -30,7 +31,7 @@ export async function recordDisputeScore(
     data: {
       dispute_id: params.disputeId,
       submission_id: params.submissionId,
-      score_type: params.scoreType as any,
+      score_type: params.scoreType as DisputeScoreHistoryType,
       score: params.score,
       recorded_by: params.recordedBy ?? null,
       notes: params.notes ?? null,

@@ -115,7 +115,7 @@ export function EditDisputeForm({
       </div>
       {error && (
         <p className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded p-2">
-          {(error as any)?.response?.data?.message ?? 'Failed to update dispute.'}
+          {(error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to update dispute.'}
         </p>
       )}
       <div className="flex gap-2 justify-end pt-1">

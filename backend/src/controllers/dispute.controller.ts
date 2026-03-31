@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -10,7 +10,7 @@ import {
 } from '../types/dispute.types';
 import { getDisputeScoreHistory, recordDisputeScore } from '../utils/disputeScoreHistory';
 import prisma from '../config/prisma';
-import { Prisma } from '../generated/prisma/client';
+import { Prisma, DisputeStatus as PrismaDisputeStatus, DisputeScoreHistoryType } from '../generated/prisma/client';
 
 /**
  * Get audit history for the current CSR
@@ -265,7 +265,7 @@ export const submitDispute = async (req: Request, res: Response): Promise<void> 
         data: {
           submission_id: submission_id,
           disputed_by: user_id,
-          status: DisputeStatus.OPEN as any,
+          status: PrismaDisputeStatus.OPEN,
           reason,
           attachment_url: attachmentUrl
         }
@@ -275,7 +275,7 @@ export const submitDispute = async (req: Request, res: Response): Promise<void> 
         data: {
           dispute_id: newDispute.id,
           submission_id: submission_id,
-          score_type: 'PREVIOUS' as any,
+          score_type: DisputeScoreHistoryType.PREVIOUS,
           score: previousScore,
           recorded_by: user_id,
           notes: 'Score captured when dispute was created'

@@ -4,7 +4,7 @@
  * This module handles the creation and modification of form structures.
  */
 
-import type { Form, Category, Question, MetadataField } from '../../types';
+import type { Form, FormCategory, FormQuestion, FormMetadataField } from '../../types/form.types';
 import { validateForm } from './formValidation';
 
 /**
@@ -24,8 +24,8 @@ export const createEmptyForm = (): Form => {
 /**
  * Get default metadata fields based on interaction type
  */
-export const getDefaultMetadataFields = (interactionType: string): MetadataField[] => {
-  const baseFields: Partial<MetadataField>[] = [
+export const getDefaultMetadataFields = (interactionType: string): FormMetadataField[] => {
+  const baseFields: Partial<FormMetadataField>[] = [
     {
       field_name: 'Auditor Name',
       field_type: 'TEXT',
@@ -112,7 +112,7 @@ export const getDefaultMetadataFields = (interactionType: string): MetadataField
     id: -(index + 1), // Temporary negative ID 
     form_id: 0,       // Will be assigned by backend
     ...field
-  })) as MetadataField[];
+  })) as FormMetadataField[];
 };
 
 /**
@@ -125,7 +125,7 @@ export const addCategory = (form: Form, categoryName: string, weight: number = 0
     : 1;
   
   // Create new category with temporary ID
-  const newCategory: Category = {
+  const newCategory: FormCategory = {
     id: -(form.categories.length + 1), // Temporary negative ID
     form_id: form.id,
     category_name: categoryName,
@@ -178,7 +178,7 @@ export const addQuestion = (
   };
   
   // Create new question with temporary ID
-  const newQuestion: Question = {
+  const newQuestion: FormQuestion = {
     id: -(Date.now()), // Temporary unique negative ID based on timestamp
     category_id: categoryId,
     question_text: questionText,

@@ -124,7 +124,7 @@ export const getTrainingPathById = async (req: Request, res: Response): Promise<
 export const createTrainingPath = async (req: Request, res: Response): Promise<void> => {
   try {
     const { path_name, courses } = req.body;
-    const user_id = (req.user as any)?.userId || (req.user as any)?.user_id;
+    const user_id = req.user?.user_id;
 
     if (!path_name || !courses || courses.length === 0) {
       res.status(400).json({ message: 'Path name and courses are required' });

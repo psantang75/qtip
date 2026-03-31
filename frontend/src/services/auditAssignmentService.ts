@@ -51,17 +51,11 @@ const auditAssignmentService = {
         url += `&search=${encodeURIComponent(search)}`;
       }
       
-      // Handle special parameters
-      console.log('Service fetching with additionalParams:', additionalParams);
-      
-      // Add additional filter parameters
       Object.entries(additionalParams).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
           url += `&${key}=${encodeURIComponent(value)}`;
         }
       });
-      
-      console.log('Making request to URL:', url);
       
       const response = await apiClient.get(url);
       return response.data;

@@ -1,5 +1,6 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import prisma from '../config/prisma';
+import type { PerformanceGoalType, PerformanceGoalScope } from '@prisma/client';
 import { PerformanceGoal, PerformanceGoalDTO, PaginatedResponse } from '../types/performanceGoal.types';
 import { serviceLogger } from '../config/logger';
 
@@ -151,8 +152,8 @@ export const createPerformanceGoal = async (req: Request, res: Response): Promis
     // Check if a similar goal already exists and is active
     const existingGoals = await prisma.performanceGoal.findMany({
       where: {
-        goal_type: goalData.goal_type as any,
-        scope: goalData.scope as any,
+        goal_type: goalData.goal_type as PerformanceGoalType,
+        scope: goalData.scope as PerformanceGoalScope,
         is_active: true,
         ...(goalData.scope === 'DEPARTMENT' ? { department_id: goalData.department_id } : {})
       }
@@ -169,9 +170,9 @@ export const createPerformanceGoal = async (req: Request, res: Response): Promis
     // Insert the new goal
     const newGoal = await prisma.performanceGoal.create({
       data: {
-        goal_type: goalData.goal_type as any,
+        goal_type: goalData.goal_type as PerformanceGoalType,
         target_value: goalData.target_value,
-        scope: goalData.scope as any,
+        scope: goalData.scope as PerformanceGoalScope,
         department_id: goalData.department_id ?? null,
         description: goalData.description ?? null,
         is_active: goalData.is_active !== undefined ? goalData.is_active : true
@@ -252,8 +253,8 @@ export const updatePerformanceGoal = async (req: Request, res: Response): Promis
       const conflictingGoals = await prisma.performanceGoal.findMany({
         where: {
           id: { not: id },
-          goal_type: updatedGoal.goal_type as any,
-          scope: updatedGoal.scope as any,
+          goal_type: updatedGoal.goal_type as PerformanceGoalType,
+          scope: updatedGoal.scope as PerformanceGoalScope,
           is_active: true,
           ...(updatedGoal.scope === 'DEPARTMENT' ? { department_id: updatedGoal.department_id } : {})
         }
@@ -272,9 +273,9 @@ export const updatePerformanceGoal = async (req: Request, res: Response): Promis
     const updated = await prisma.performanceGoal.update({
       where: { id },
       data: {
-        goal_type: updatedGoal.goal_type as any,
+        goal_type: updatedGoal.goal_type as PerformanceGoalType,
         target_value: updatedGoal.target_value,
-        scope: updatedGoal.scope as any,
+        scope: updatedGoal.scope as PerformanceGoalScope,
         department_id: updatedGoal.department_id ?? null,
         description: updatedGoal.description ?? null,
         is_active: updatedGoal.is_active
@@ -361,8 +362,8 @@ export const activatePerformanceGoal = async (req: Request, res: Response): Prom
     const conflictingGoals = await prisma.performanceGoal.findMany({
       where: {
         id: { not: id },
-        goal_type: existingGoal.goal_type as any,
-        scope: existingGoal.scope as any,
+        goal_type: existingGoal.goal_type as PerformanceGoalType,
+        scope: existingGoal.scope as PerformanceGoalScope,
         is_active: true,
         ...(existingGoal.scope === 'DEPARTMENT' ? { department_id: existingGoal.department_id } : {})
       }

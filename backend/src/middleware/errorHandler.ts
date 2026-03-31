@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { UserServiceError } from '../services/UserService';
 import logger from '../config/logger';
 
@@ -45,7 +45,7 @@ export const errorHandler = (
     url: req.url,
     method: req.method,
     ip: req.ip,
-    user_id: (req as any).user?.user_id
+    user_id: req.user?.user_id
   });
 
   // Handle UserServiceError (custom service errors)

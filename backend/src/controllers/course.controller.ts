@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { 
@@ -141,8 +141,8 @@ export const getCourseById = async (req: Request, res: Response): Promise<void> 
 
       quiz = {
         id: quizData.id,
-        quiz_title: (quizData as any).quiz_title,
-        pass_score: (quizData as any).pass_score,
+        quiz_title: quizData.quiz_title,
+        pass_score: quizData.pass_score,
         questions
       };
     }

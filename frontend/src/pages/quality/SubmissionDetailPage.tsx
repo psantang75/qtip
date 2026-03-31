@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Edit3, X } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useQualityRole } from '@/hooks/useQualityRole'
-import qaService, { type SubmissionDetail } from '@/services/qaService'
+import qaService, { type SubmissionDetail, type MetadataEntry } from '@/services/qaService'
 import { api } from '@/services/authService'
 import {
   processConditionalLogic,
@@ -13,6 +13,19 @@ import {
   getQuestionScore,
   type FormRenderData,
 } from '@/utils/forms'
+import type { Form, Answer, FormMetadataField } from '@/types/form.types'
+
+interface SubmissionCall {
+  call_id?: string
+  call_date?: string
+  recording_url?: string | null
+  transcript?: string | null
+}
+
+type SubmissionDetailWithForm = SubmissionDetail & {
+  formData?: Form
+  calls?: SubmissionCall[]
+}
 import { useToast } from '@/hooks/use-toast'
 import { DisputeForm } from './submission-detail/DisputeForms'
 import { SubmissionHeader } from './submission-detail/SubmissionHeader'
@@ -42,12 +55,12 @@ export default function SubmissionDetailPage() {
   const [resNotes,       setResNotes]       = useState('')
   const [resError,       setResError]       = useState<string | null>(null)
   const [resSubmitting,  setResSubmitting]  = useState(false)
-  const [editedAnswers,  setEditedAnswers]  = useState<Record<number, string | number | boolean>>({})
+  const [editedAnswers,  setEditedAnswers]  = useState<Record<number, Answer>>({})
   const [editRenderData, setEditRenderData] = useState<FormRenderData | null>(null)
   const [liveScore,      setLiveScore]      = useState(0)
 
   // ── Data fetch ────────────────────────────────────────────────────────────
-  const { data: detail, isLoading, isError } = useQuery<SubmissionDetail | null>({
+  const { data: detail, isLoading, isError } = useQuery<SubmissionDetailWithForm | null>({
     queryKey: ['submission-detail', id, roleId],
     queryFn: async () => {
       if (!id) return null
@@ -59,7 +72,7 @@ export default function SubmissionDetailPage() {
       if (submission?.form_id) {
         try {
           const res = await api.get(`/forms/${submission.form_id}?include_inactive=true`)
-          ;(submission as any).formData = res.data
+          ;(submission as SubmissionDetailWithForm).formData = res.data
         } catch { /* fall back to basic view */ }
       }
       return submission
@@ -95,8 +108,8 @@ export default function SubmissionDetailPage() {
     )
   }
 
-  const formData = (detail as any).formData
-  const calls    = (detail as any).calls as any[] | undefined
+  const formData = detail.formData
+  const calls    = detail.calls
   const score    = typeof detail.score === 'string' ? parseFloat(detail.score) || 0 : Number(detail.score) || 0
 
   const canDispute      = isCSR && detail.status === 'SUBMITTED' && !detail.dispute
@@ -118,20 +131,20 @@ export default function SubmissionDetailPage() {
     return raw
   }
   const metaRows = Array.isArray(detail.metadata)
-    ? (detail.metadata as any[]).map((m: any) => {
-        const name = m.field_name ?? m.key ?? ''
-        return { field_name: name, value: fmtMetaValue(name, String(m.value ?? '')), field_type: m.field_type }
+    ? (detail.metadata as MetadataEntry[]).map((m: MetadataEntry) => {
+        const name = m.field_name ?? ''
+        return { field_name: name, value: fmtMetaValue(name, String(m.value ?? '')), field_type: (m as MetadataEntry & { field_type?: string }).field_type }
       })
     : Object.entries(detail.metadata ?? {}).map(([k, v]) => {
-        const val = typeof v === 'object' ? String((v as any)?.value ?? '') : String(v)
+        const val = typeof v === 'object' ? String((v as { value?: string }).value ?? '') : String(v)
         return { field_name: k, value: fmtMetaValue(k, val) }
       })
 
   const metaValueMap = new Map(metaRows.map(r => [r.field_name.toLowerCase(), r.value] as [string, string]))
   const reviewDetailsFields = formData?.metadata_fields
     ? [...formData.metadata_fields]
-        .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-        .map((f: any) => ({
+        .sort((a: FormMetadataField, b: FormMetadataField) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        .map((f: FormMetadataField) => ({
           field_name: f.field_name ?? '',
           field_type: f.field_type ?? 'TEXT',
           value: metaValueMap.get((f.field_name ?? '').toLowerCase()) ?? '',
@@ -159,7 +172,7 @@ export default function SubmissionDetailPage() {
     const { totalScore, categoryScores } = calculateFormScore(formData, initial)
     setLiveScore(totalScore)
     const ansStrings: Record<number, string> = {}
-    Object.entries(initial).forEach(([k, v]) => { ansStrings[Number(k)] = (v as any).answer || '' })
+    Object.entries(initial).forEach(([k, v]) => { ansStrings[Number(k)] = v.answer || '' })
     const visibility = processConditionalLogic(formData, ansStrings)
     setEditRenderData(prepareFormForRender(formData, initial, visibility, categoryScores, totalScore, roleId))
     setResolutionMode(true)
@@ -178,7 +191,7 @@ export default function SubmissionDetailPage() {
     const { totalScore, categoryScores } = calculateFormScore(formData, newAnswers)
     setLiveScore(totalScore)
     const ansStrings: Record<number, string> = {}
-    Object.entries(newAnswers).forEach(([k, v]) => { ansStrings[Number(k)] = (v as any).answer || '' })
+    Object.entries(newAnswers).forEach(([k, v]) => { ansStrings[Number(k)] = v.answer || '' })
     const visibility = processConditionalLogic(formData, ansStrings)
     setEditRenderData(prepareFormForRender(formData, newAnswers, visibility, categoryScores, totalScore, roleId))
   }
@@ -194,7 +207,7 @@ export default function SubmissionDetailPage() {
         resolution_notes:  resNotes,
         new_score: action === 'ADJUST' ? liveScore : undefined,
         answers:   action === 'ADJUST'
-          ? Object.entries(editedAnswers).map(([qId, a]) => ({ question_id: Number(qId), answer: (a as any).answer ?? '', notes: (a as any).notes ?? '' }))
+          ? Object.entries(editedAnswers).map(([qId, a]) => ({ question_id: Number(qId), answer: a.answer ?? '', notes: a.notes ?? '' }))
           : undefined,
       })
       toast({ title: 'Dispute resolved' })

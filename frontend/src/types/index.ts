@@ -15,10 +15,5 @@ export * from './performance.types';
 // Temporarily comment out trainer.types to avoid conflicts with csr.types
 // export * from './trainer.types';
 
-// Legacy type aliases for backward compatibility
-export type { FormQuestion as Question } from './form.types';
-export type { FormCategory as Category } from './form.types';
-export type { FormMetadataField as MetadataField } from './form.types';
-
 // Re-export standardized submission interfaces from form.types.ts
 export type { Answer, FormSubmission, CategoryScore, CreateSubmissionDTO, SubmissionStatus } from './form.types'; 

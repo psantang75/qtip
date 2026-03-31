@@ -11,7 +11,7 @@ import {
 import prisma from '../config/prisma';
 
 function getUserContext(req: Request): { userId: number; userRole: string; departmentId: number | null } {
-  const user = (req as any).user;
+  const user = req.user;
   return {
     userId: user?.user_id ?? 0,
     userRole: user?.role ?? 'CSR',

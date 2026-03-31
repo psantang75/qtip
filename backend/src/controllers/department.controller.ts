@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { DepartmentService, DepartmentServiceError } from '../services/DepartmentService';
 import { MySQLDepartmentRepository } from '../repositories/MySQLDepartmentRepository';
 
@@ -14,7 +14,7 @@ export const createDepartment = async (req: Request, res: Response) => {
   console.log('[DEPT CONTROLLER] Creating new department');
   
   try {
-    const user_id = (req as any).user?.user_id;
+    const user_id = req.user?.user_id;
     if (!user_id) {
       return res.status(401).json({ message: 'Authentication required' });
     }
@@ -94,7 +94,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
   console.log('[DEPT CONTROLLER] Updating department');
   
   try {
-    const user_id = (req as any).user?.user_id;
+    const user_id = req.user?.user_id;
     if (!user_id) {
       return res.status(401).json({ message: 'Authentication required' });
     }
@@ -125,7 +125,7 @@ export const toggleDepartmentStatus = async (req: Request, res: Response) => {
   console.log('[DEPT CONTROLLER] Toggling department status');
   
   try {
-    const user_id = (req as any).user?.user_id;
+    const user_id = req.user?.user_id;
     if (!user_id) {
       return res.status(401).json({ message: 'Authentication required' });
     }
@@ -153,7 +153,7 @@ export const deleteDepartment = async (req: Request, res: Response) => {
   console.log('[DEPT CONTROLLER] Deleting department');
   
   try {
-    const user_id = (req as any).user?.user_id;
+    const user_id = req.user?.user_id;
     if (!user_id) {
       return res.status(401).json({ message: 'Authentication required' });
     }
@@ -179,7 +179,7 @@ export const assignUsers = async (req: Request, res: Response) => {
   console.log('[DEPT CONTROLLER] Assigning users to department');
   
   try {
-    const user_id = (req as any).user?.user_id;
+    const user_id = req.user?.user_id;
     if (!user_id) {
       return res.status(401).json({ message: 'Authentication required' });
     }

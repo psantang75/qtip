@@ -11,6 +11,41 @@ interface AuthReq extends Request {
   user?: { user_id: number; role: string };
 }
 
+interface SessionRow {
+  [key: string]: unknown;
+  topics?: string | null;
+  topic_ids?: string | null;
+  is_overdue?: unknown;
+  quiz_count?: unknown;
+  quiz_passed_count?: unknown;
+}
+
+interface QuizRow {
+  id: number;
+  [key: string]: unknown;
+}
+
+interface QuestionRow {
+  id: number;
+  question_text: string;
+  options: string;
+  correct_option: number;
+}
+
+interface BehaviorFlagRow {
+  id: number;
+  [key: string]: unknown;
+}
+
+interface TopicNameRow {
+  topic_name: string;
+}
+
+interface RecentSessionRow {
+  [key: string]: unknown;
+  topics?: string | null;
+}
+
 const escapeFilename = (filename: string | null | undefined): string => {
   if (!filename) return 'filename="attachment"';
   const clean = filename.replace(/[\x00-\x1F\x7F]/g, '').trim();
@@ -114,7 +149,7 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
       ),
     ]);
 
-    const rawData = sessions.map((s: any) => ({
+    const rawData = sessions.map((s: SessionRow) => ({
       ...s,
       topics: s.topics ? s.topics.split(',') : [],
       topic_ids: s.topic_ids ? s.topic_ids.split(',').map(Number) : [],
@@ -220,16 +255,16 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
     ]);
 
     const quizzesWithQuestions = await Promise.all(
-      quizRows.map(async (qr: any) => {
+      quizRows.map(async (qr: QuizRow) => {
         const questions = await prisma.$queryRaw<any[]>(
           Prisma.sql`SELECT id, question_text, options, correct_option FROM quiz_questions WHERE quiz_id = ${qr.id} ORDER BY id`
         );
-        return { ...qr, questions: questions.map((q: any) => ({ ...q, options: JSON.parse(q.options || '[]') })) };
+        return { ...qr, questions: questions.map((q: QuestionRow) => ({ ...q, options: JSON.parse(q.options || '[]') })) };
       })
     );
 
-    const recentSessions = (recentRows || []).map((s: any) => ({ ...s, topics: s.topics ? s.topics.split(',') : [] }));
-    const recentTopicsFlat = recentSessions.flatMap((s: any) => s.topics);
+    const recentSessions = (recentRows || []).map((s: SessionRow) => ({ ...s, topics: s.topics ? s.topics.split(',') : [] }));
+    const recentTopicsFlat = recentSessions.flatMap((s: SessionRow) => s.topics);
     const repeatTopics = session.topics.filter((t: string) => recentTopicsFlat.includes(t));
 
     res.json({
@@ -242,7 +277,7 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
         recent_sessions: recentSessions,
         repeat_topics: repeatTopics,
         behavior_flag_items: behaviorFlagRows,
-        behavior_flag_ids: behaviorFlagRows.map((r: any) => r.id),
+        behavior_flag_ids: behaviorFlagRows.map((r: BehaviorFlagRow) => r.id),
       },
     });
   } catch (error) {
@@ -719,7 +754,7 @@ export const getCSRCoachingHistory = async (req: AuthReq, res: Response) => {
       `
     );
 
-    const sessionsWithTopics = sessions.map((s: any) => ({ ...s, topics: s.topics ? s.topics.split(',') : [] }));
+    const sessionsWithTopics = sessions.map((s: SessionRow) => ({ ...s, topics: s.topics ? s.topics.split(',') : [] }));
 
     const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const repeatConditions: Prisma.Sql[] = [
@@ -739,7 +774,7 @@ export const getCSRCoachingHistory = async (req: AuthReq, res: Response) => {
         GROUP BY t.id HAVING session_count >= 2
       `
     );
-    const repeatTopics = recentTopicRows.map((r: any) => r.topic_name);
+    const repeatTopics = recentTopicRows.map((r: TopicNameRow) => r.topic_name);
 
     res.json({ success: true, data: { sessions: sessionsWithTopics, repeat_topics: repeatTopics } });
   } catch (error) {

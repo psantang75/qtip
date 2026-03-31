@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
-import trainingService from '@/services/trainingService'
+import trainingService, { type QuizQuestion } from '@/services/trainingService'
 import listService from '@/services/listService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
@@ -55,7 +55,7 @@ export default function LibraryQuizFormPage() {
       is_active:  existingDetail.is_active !== false,
       topic_id:   existingDetail.topic_id,
       topic_ids:  (existingDetail.topic_ids ?? []).map(Number),
-      questions:  ((existingDetail as any).questions ?? []).map((q: any) => ({
+      questions:  (existingDetail.questions ?? []).map((q: QuizQuestion) => ({
         question_text:  q.question_text,
         options:        Array.isArray(q.options) ? q.options : JSON.parse(q.options || '[]'),
         correct_option: Number(q.correct_option),
@@ -80,7 +80,7 @@ export default function LibraryQuizFormPage() {
       }
       return isEdit
         ? trainingService.updateLibraryQuiz(Number(id), payload)
-        : trainingService.createLibraryQuiz(payload as any)
+        : trainingService.createLibraryQuiz(payload)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['quiz-detail', id] })
@@ -122,7 +122,7 @@ export default function LibraryQuizFormPage() {
           <QuizBuilder
             value={formData}
             onChange={v => {
-              (Object.keys(v) as (keyof QuizBuilderData)[]).forEach(k => setValue(k, v[k] as any))
+              (Object.keys(v) as (keyof QuizBuilderData)[]).forEach(k => setValue(k, v[k] as QuizBuilderData[typeof k]))
             }}
             errors={builderErrors}
             topics={topicItems}

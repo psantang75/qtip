@@ -2056,7 +2056,7 @@ export const createManagerCoachingSession = async (req: AuthenticatedRequest, re
       if (!Array.isArray(topic_ids)) {
         topic_ids = [topic_ids];
       }
-      topic_ids = (topic_ids as any[]).map((id: any) => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
+      topic_ids = (topic_ids as unknown[]).map(id => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
     }
 
     if (!managerId) {
@@ -2273,7 +2273,7 @@ export const updateManagerCoachingSession = async (req: AuthenticatedRequest, re
       if (!Array.isArray(topic_ids)) {
         topic_ids = [topic_ids];
       }
-      topic_ids = (topic_ids as any[]).map((id: any) => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
+      topic_ids = (topic_ids as unknown[]).map(id => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
     }
 
     if (!userId) {

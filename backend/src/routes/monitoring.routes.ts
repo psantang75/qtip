@@ -205,10 +205,13 @@ router.get('/status/database-pool', async (req: Request, res: Response) => {
     const status: any[] = await prisma.$queryRaw`SHOW STATUS WHERE Variable_name IN ('Connections', 'Max_used_connections', 'Threads_connected', 'Threads_running', 'Uptime')`;
 
 
-    const formattedStatus = (status as any[]).reduce((acc: any, row: any) => {
-      acc[row.Variable_name] = row.Value;
-      return acc;
-    }, {});
+    const formattedStatus = (status as Array<{ Variable_name: string; Value: string }>).reduce(
+      (acc: Record<string, string>, row) => {
+        acc[row.Variable_name] = row.Value;
+        return acc;
+      },
+      {}
+    );
 
     res.status(200).json({
       status: 'ok',

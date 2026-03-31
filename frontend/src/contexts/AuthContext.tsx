@@ -42,8 +42,6 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const logoutTime = Math.max(timeout - 2 * 60 * 1000, 60000); // At least 1 minute
     
     const timeoutId = setTimeout(async () => {
-      console.log('Session timeout - automatically logging out user');
-      
       // Clear local storage and state
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -59,8 +57,6 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }, logoutTime);
     
     setSessionTimeoutId(timeoutId);
-    
-    console.log(`Session timeout set for ${Math.round(logoutTime / 1000 / 60)} minutes`);
   }, []);
 
   // Clear session timeout
@@ -80,14 +76,10 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const storedUser = authService.getCurrentUser();
       
       if (token && storedUser) {
-        console.log('Found token and user in storage, setting authenticated state');
         setUser(storedUser);
         setIsAuthenticated(true);
-        
-        // Set up session timeout for existing session
         setupSessionTimeout();
       } else {
-        console.log('No valid token or user found in storage');
         if (token || storedUser) {
           // Clear partial state
           authService.logout();
@@ -115,28 +107,12 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       const loggedInUser = await authService.login(data);
-      console.log('Login successful, setting authenticated state for:', loggedInUser.email);
       setUser(loggedInUser);
       setIsAuthenticated(true);
-      
-      // Set up session timeout
       setupSessionTimeout();
-      
-    } catch (error: any) {
-      console.error('Login failed in context:', error);
-      
-      // Add more detailed error logging
-      if (error.response) {
-        console.error('Login error response status:', error.response.status);
-        if (error.response.data) {
-          console.error('Login error data:', error.response.data);
-        }
-      }
-      
+    } catch (error: unknown) {
       setUser(null);
       setIsAuthenticated(false);
-      
-      // Re-throw so the component can handle it
       throw error;
     } finally {
       setIsLoading(false);
@@ -151,9 +127,8 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearSessionTimeout();
       
       await authService.logout();
-      console.log('Logout completed successfully');
-    } catch (error) {
-      console.warn('Logout error (continuing anyway):', error);
+    } catch {
+      // Non-fatal: continue regardless
     } finally {
       setUser(null);
       setIsAuthenticated(false);

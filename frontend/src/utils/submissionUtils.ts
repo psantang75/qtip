@@ -65,27 +65,20 @@ export function prepareSubmissionData(
           try {
             // Handle YYYY-MM-DD format directly without timezone conversion
             if (value.match(/^\d{4}-\d{2}-\d{2}$/)) {
-              // Already in correct format, use as-is
               processedValue = value;
-              console.log(`Date already in YYYY-MM-DD format: ${value}`);
             } else {
-              // Attempt to normalize other date formats to YYYY-MM-DD for database storage
               const dateObj = new Date(value);
               if (!isNaN(dateObj.getTime())) {
                 const year = dateObj.getFullYear();
                 const month = String(dateObj.getMonth() + 1).padStart(2, '0');
                 const day = String(dateObj.getDate()).padStart(2, '0');
                 processedValue = `${year}-${month}-${day}`;
-                console.log(`Normalized date value from ${value} to ${processedValue}`);
               }
             }
-          } catch (e) {
-            console.warn(`Failed to normalize date: ${value}`, e);
+          } catch {
             // Keep original value if date processing fails
           }
         }
-        
-        console.log(`Formatting metadata: ${fieldId} -> ${processedFieldId} = ${processedValue}`);
         
         return {
           field_id: processedFieldId,
@@ -93,25 +86,6 @@ export function prepareSubmissionData(
         };
       })
     : undefined;
-
-  // Log the formatted metadata
-  if (formattedMetadata) {
-    console.log('Formatted metadata array for submission:', formattedMetadata);
-    
-    // Verify if review date is in the metadata
-    const reviewDateField = formattedMetadata.find(item => 
-      (typeof item.field_id === 'string' && 
-        item.field_id.toLowerCase().includes('date')) || 
-      (typeof item.field_id === 'number' && 
-        item.value && item.value.match(/^\d{4}-\d{2}-\d{2}$/))
-    );
-    
-    if (reviewDateField) {
-      console.log('Review date found in metadata:', reviewDateField);
-    } else {
-      console.warn('No review date found in metadata!');
-    }
-  }
 
   return {
     form_id: Number(formId),

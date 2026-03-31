@@ -72,6 +72,23 @@ export interface CSRActivityRow {
   last_audit_date?: string
 }
 
+interface RawManagerActivityRow {
+  id?: number
+  csr_id?: number
+  csr_name?: string
+  name?: string
+  department_name?: string
+  department?: string
+  audits_week?: number
+  audits_month?: number
+  audits?: number
+  avg_score?: number
+  disputes_week?: number
+  disputes_month?: number
+  disputes?: number
+  [key: string]: unknown
+}
+
 export interface Submission {
   id: number
   call_id?: number
@@ -211,7 +228,7 @@ const qaService = {
     api.get(`/manager/csr-activity?period=${period}`).then(r => {
       // Backend returns {id, name, department, audits_week, audits_month, disputes_week, ...}
       // Normalize to CSRActivityRow shape and apply period filter client-side
-      return (r.data as any[]).map((row: any): CSRActivityRow & { _raw: any } => ({
+      return (r.data as RawManagerActivityRow[]).map((row): CSRActivityRow & { _raw: RawManagerActivityRow } => ({
         _raw: row,
         csr_id:          row.id ?? row.csr_id ?? 0,
         csr_name:        row.csr_name ?? row.name ?? '',

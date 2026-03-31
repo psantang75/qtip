@@ -3,6 +3,7 @@ import { Info } from 'lucide-react'
 import userService, { type User } from '@/services/userService'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { TableErrorState } from '@/components/common/TableErrorState'
 
 const ROLE_META: Record<number, { name: string; description: string; access: string[] }> = {
   1: {
@@ -33,7 +34,7 @@ const ROLE_META: Record<number, { name: string; description: string; access: str
 }
 
 export default function AdminRolesPage() {
-  const { data: users = [] } = useQuery({
+  const { data: users = [], isError, refetch } = useQuery({
     queryKey: ['admin-users-all'],
     queryFn:  () => userService.getUsers(1, 100),
     select:   d => d.items,
@@ -44,6 +45,8 @@ export default function AdminRolesPage() {
   users.forEach((u: User) => {
     counts[u.role_id] = (counts[u.role_id] ?? 0) + 1
   })
+
+  if (isError) return <TableErrorState message="Failed to load user counts." onRetry={refetch} />
 
   return (
     <div className="space-y-5">

@@ -1,4 +1,4 @@
-﻿import prisma from '../config/prisma';
+import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { IAnalyticsRepository } from '../interfaces/IAnalyticsRepository';
 import { ReportFilters, ComprehensiveReportFilters } from '../types/analytics.types';
@@ -1841,7 +1841,7 @@ export class MySQLAnalyticsRepository implements IAnalyticsRepository {
           let submissionPoints = 0;
           let submissionMaxPoints = 0;
 
-          (answers as any[]).forEach((answer: any) => {
+          answers.forEach((answer) => {
             const question = categoryRows.find((cr: any) =>
               cr.question_id === answer.question_id &&
               category.category_ids.includes(cr.category_id)
@@ -1860,7 +1860,7 @@ export class MySQLAnalyticsRepository implements IAnalyticsRepository {
           if (submissionMaxPoints > 0) {
             const categoryPercentage = (submissionPoints / submissionMaxPoints) * 100;
             submissionCategoryScores.push(categoryPercentage);
-          } else if ((answers as any[]).length > 0) {
+          } else if (answers.length > 0) {
             submissionCategoryScores.push(0);
           }
         });

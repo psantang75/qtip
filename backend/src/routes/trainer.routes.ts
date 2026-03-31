@@ -66,7 +66,7 @@ const upload = multer({
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'text/plain', 'image/jpeg', 'image/png', 'image/gif'
     ];
-    cb(null, allowed.includes(file.mimetype) ? true : (new Error('Invalid file type') as any));
+    if (allowed.includes(file.mimetype)) { cb(null, true); } else { cb(new Error('Invalid file type')); }
   }
 });
 
@@ -125,7 +125,7 @@ const resourceUpload = multer({
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
       'video/mp4', 'video/webm',
     ];
-    cb(null, allowed.includes(file.mimetype) ? true : (new Error('Unsupported file type') as any));
+    if (allowed.includes(file.mimetype)) { cb(null, true); } else { cb(new Error('Unsupported file type')); }
   },
 });
 

@@ -1,9 +1,10 @@
-﻿/**
+/**
  * MySQLSubmissionRepository - Data access layer for submission operations using Prisma
  */
 
 import prisma from '../config/prisma';
-import { Prisma } from '../generated/prisma/client';
+import { Prisma, SubmissionStatus as PrismaSubmissionStatus } from '../generated/prisma/client';
+import type { QuestionType } from '../models/Form';
 import {
   FormWithCategories,
   FlagSubmissionDTO,
@@ -132,7 +133,7 @@ export class MySQLSubmissionRepository {
           questions: cat.form_questions.map((q) => ({
             id: q.id,
             question_text: q.question_text,
-            question_type: q.question_type as any,
+            question_type: q.question_type as unknown as QuestionType,
             weight: Number(q.weight),
             is_na_allowed: q.is_na_allowed,
             scale_min: q.scale_min ?? undefined,
@@ -141,8 +142,8 @@ export class MySQLSubmissionRepository {
             no_value: q.no_value,
             na_value: q.na_value,
             sort_order: q.sort_order,
-          })) as any,
-        })) as any,
+          })),
+        })),
       };
 
       const existingSubmission = await prisma.submission.findFirst({
@@ -174,7 +175,7 @@ export class MySQLSubmissionRepository {
             form_id: submissionData.form_id,
             call_id: submissionData.call_id ?? null,
             submitted_by: submissionData.submitted_by,
-            status: submissionData.status as any,
+            status: submissionData.status as PrismaSubmissionStatus,
             submitted_at: submissionData.submitted_at ?? undefined,
           },
         });
@@ -292,7 +293,7 @@ export class MySQLSubmissionRepository {
         await tx.submission.update({
           where: { id: submission_id },
           data: {
-            status: submissionData.status as any,
+            status: submissionData.status as PrismaSubmissionStatus,
             submitted_at: submissionData.submitted_at ?? undefined,
           },
         });

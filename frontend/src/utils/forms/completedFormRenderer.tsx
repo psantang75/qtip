@@ -5,7 +5,7 @@ import { prepareFormForRender } from './formRenderPrep';
 import { FormRenderer } from './formRendererComponents';
 import { calculateFormScore } from './scoringAdapter';
 import { processConditionalLogic } from './formConditions';
-import type { Form as FormType, Answer as AnswerType } from '../../types';
+import type { Form as FormType, Answer as AnswerType } from '../../types/form.types';
 
 interface CompletedFormProps {
   submissionId?: number;
@@ -60,8 +60,8 @@ const CompletedFormRenderer: React.FC<CompletedFormProps> = ({
         if (!answer?.question_id) return;
 
         const questionObj = formData.categories
-          .flatMap((cat: any) => cat.questions || [])
-          .find((q: any) => q.id === answer.question_id);
+          .flatMap(cat => cat.questions || [])
+          .find(q => q.id === answer.question_id);
 
         let answerScore = answer.score ?? 0;
 
@@ -132,7 +132,7 @@ const CompletedFormRenderer: React.FC<CompletedFormProps> = ({
           <h2 className="text-xl font-bold text-slate-800">{formRenderData.name}</h2>
           {form && (
             <span className="text-[13px] text-slate-500 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
-              Version {(form as any).version || 1}
+              Version {form.version || 1}
             </span>
           )}
         </div>

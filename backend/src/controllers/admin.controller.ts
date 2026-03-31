@@ -588,7 +588,7 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
       if (!Array.isArray(topic_ids)) {
         topic_ids = [topic_ids];
       }
-      topic_ids = (topic_ids as any[]).map((id: any) => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
+      topic_ids = (topic_ids as unknown[]).map(id => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
     }
 
     if (!adminId) {
@@ -1064,7 +1064,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
       if (!Array.isArray(topic_ids)) {
         topic_ids = [topic_ids];
       }
-      topic_ids = (topic_ids as any[]).map((id: any) => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
+      topic_ids = (topic_ids as unknown[]).map(id => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
     }
 
     if (!adminId) {

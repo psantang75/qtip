@@ -1,4 +1,4 @@
-﻿import pool from '../config/database';
+import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 
 /**
@@ -88,7 +88,7 @@ async function recalculateAllScores(dryRun: boolean = true): Promise<void> {
         const result = await calculateFormScore(
           pool,
           submission.form_id,
-          answersRows as any[]
+          answersRows as Array<{ question_id: number; answer: string; notes?: string }>
         );
 
         const oldScore = parseFloat(submission.current_total_score) || 0;

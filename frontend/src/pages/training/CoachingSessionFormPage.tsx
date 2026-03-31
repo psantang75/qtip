@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
+import { useForm, type FieldError } from 'react-hook-form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
@@ -40,12 +40,12 @@ export default function CoachingSessionFormPage() {
 
   // Convert RHF errors to the flat string map that child sections expect
   const errors: CoachingFormErrors = Object.fromEntries(
-    Object.entries(rhfErrors).map(([k, v]) => [k, (v as any)?.message])
+    Object.entries(rhfErrors).map(([k, v]) => [k, (v as FieldError | undefined)?.message])
   ) as CoachingFormErrors
 
   const update = useCallback(<K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => {
     setValue(k, v)
-    clearErrors(k as any)
+    clearErrors(k)
   }, [setValue, clearErrors])
 
   const toggleTopic = useCallback((topicId: number) => {
@@ -54,7 +54,7 @@ export default function CoachingSessionFormPage() {
       ? current.filter(x => x !== topicId)
       : [...current, topicId]
     )
-    clearErrors('topic_ids' as any)
+    clearErrors('topic_ids')
   }, [getValues, setValue, clearErrors])
 
   // ── Queries ─────────────────────────────────────────────────────────────────
@@ -143,7 +143,7 @@ export default function CoachingSessionFormPage() {
     if (!f.topic_ids.length) issues.push({ field: 'topic_ids',         message: 'Select at least one topic' })
     if (f.follow_up_required && !f.follow_up_date)
       issues.push({ field: 'follow_up_date', message: 'Follow-up date is required' })
-    issues.forEach(({ field, message }) => setError(field as any, { message }))
+    issues.forEach(({ field, message }) => setError(field, { message }))
     return issues.length === 0
   }
 

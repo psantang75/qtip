@@ -654,7 +654,7 @@ export const exportQAScores = async (req: Request, res: Response): Promise<void>
     const headers = Object.keys(csvData[0]);
     const csvRows = csvData.map(row => 
       headers.map(header => {
-        const value = (row as any)[header] ?? '';
+        const value = (row as Record<string, unknown>)[header] ?? '';
         const escapedValue = String(value).replace(/"/g, '""');
         return `"${escapedValue}"`;
       }).join(',')

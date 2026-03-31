@@ -161,7 +161,7 @@ export const useAuth = () => {
     
     return {
       id: user.department_id,
-      name: (user as any).department_name || null
+      name: (user as typeof user & { department_name?: string }).department_name || null
     };
   }, [context.user]);
 

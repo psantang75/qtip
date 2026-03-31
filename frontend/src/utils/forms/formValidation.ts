@@ -5,7 +5,7 @@
  * meet requirements before saving or submitting.
  */
 
-import type { Form } from '../../types';
+import type { Form } from '../../types/form.types';
 import { hasCircularDependencies } from './formConditions';
 
 /**
