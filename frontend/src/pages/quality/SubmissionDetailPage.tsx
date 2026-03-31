@@ -11,6 +11,7 @@ import {
   calculateFormScore,
   prepareFormForRender,
   getQuestionScore,
+  type FormRenderData,
 } from '@/utils/forms'
 import { useToast } from '@/hooks/use-toast'
 import { DisputeForm } from './submission-detail/DisputeForms'
@@ -28,7 +29,7 @@ export default function SubmissionDetailPage() {
   const qc        = useQueryClient()
   const { toast } = useToast()
 
-  const backLabel = (location.state as any)?.from ?? 'Submissions'
+  const backLabel = (location.state as { from?: string } | null)?.from ?? 'Submissions'
   const { roleId, isCSR, isManager, canResolveDispute } = useQualityRole()
 
   // ── UI state ──────────────────────────────────────────────────────────────
@@ -41,8 +42,8 @@ export default function SubmissionDetailPage() {
   const [resNotes,       setResNotes]       = useState('')
   const [resError,       setResError]       = useState<string | null>(null)
   const [resSubmitting,  setResSubmitting]  = useState(false)
-  const [editedAnswers,  setEditedAnswers]  = useState<Record<number, any>>({})
-  const [editRenderData, setEditRenderData] = useState<any>(null)
+  const [editedAnswers,  setEditedAnswers]  = useState<Record<number, string | number | boolean>>({})
+  const [editRenderData, setEditRenderData] = useState<FormRenderData | null>(null)
   const [liveScore,      setLiveScore]      = useState(0)
 
   // ── Data fetch ────────────────────────────────────────────────────────────

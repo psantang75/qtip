@@ -9,6 +9,7 @@ import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -40,7 +41,7 @@ export default function LibraryTopicsPage() {
     onSuccess: (detail) => { setPreviewQuiz(detail); setPreviewOpen(true) },
   })
 
-  const { data: topicItems = [], isLoading } = useQuery({
+  const { data: topicItems = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['list-items', 'training_topic', 'all'],
     queryFn:  () => listService.getItems('training_topic', true),
   })
@@ -264,6 +265,10 @@ export default function LibraryTopicsPage() {
       {isLoading ? (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <TableLoadingSkeleton rows={6} />
+        </div>
+      ) : isError ? (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <TableErrorState message="Failed to load topics." onRetry={refetch} />
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">

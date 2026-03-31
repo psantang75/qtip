@@ -7,6 +7,7 @@ import trainingService from '@/services/trainingService'
 import listService from '@/services/listService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import { QuizBuilder, validateQuizBuilder, type QuizBuilderData, type QuizBuilderErrors } from '@/components/training/QuizBuilder'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -38,7 +39,7 @@ export default function LibraryQuizFormPage() {
     queryFn:  () => listService.getItems('training_topic'),
   })
 
-  const { data: existingDetail } = useQuery({
+  const { data: existingDetail, isError: detailError, refetch: detailRefetch } = useQuery({
     queryKey: ['quiz-detail', id],
     queryFn:  () => trainingService.getLibraryQuizDetail(Number(id)),
     enabled:  isEdit,
@@ -97,6 +98,14 @@ export default function LibraryQuizFormPage() {
     saveMut.mutate(formData)
   }
 
+  if (isEdit && detailError) {
+    return (
+      <QualityListPage>
+        <TableErrorState message="Failed to load quiz." onRetry={detailRefetch} />
+      </QualityListPage>
+    )
+  }
+
   return (
     <QualityListPage>
       <QualityPageHeader
@@ -116,7 +125,7 @@ export default function LibraryQuizFormPage() {
               (Object.keys(v) as (keyof QuizBuilderData)[]).forEach(k => setValue(k, v[k] as any))
             }}
             errors={builderErrors}
-            topics={topicItems.map(t => ({ id: t.id, topic_name: t.label, is_active: t.is_active, sort_order: t.sort_order, category: t.category ?? undefined, created_at: '', updated_at: '' }))}
+            topics={topicItems}
           />
 
           {/* Active / Inactive toggle */}

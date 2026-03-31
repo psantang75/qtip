@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { ChevronRight, ChevronLeft } from 'lucide-react'
 import { FormBuilderList } from './FormBuilderList'
 import { MetadataStep }   from './form-builder/MetadataStep'
@@ -36,23 +37,21 @@ export default function FormsPage() {
 
   const handleChange = (updated: Form) => { setForm(updated); setHasChanges(true) }
 
-  const openEdit = async (formId: number) => {
-    try {
-      const data = await getFormById(formId, true)
-      setForm(data); setStep('metadata'); setView('builder'); setHasChanges(false)
-    } catch { toast({ title: 'Error', description: 'Failed to load form.', variant: 'destructive' }) }
-  }
+  const editMut = useMutation({
+    mutationFn: (formId: number) => getFormById(formId, true),
+    onSuccess: (data) => { setForm(data); setStep('metadata'); setView('builder'); setHasChanges(false) },
+    onError: () => toast({ title: 'Error', description: 'Failed to load form.', variant: 'destructive' }),
+  })
 
-  const openPreview = async (formId: number) => {
-    try {
-      const data = await getFormById(formId, true)
-      setForm(data); setStep('preview'); setView('builder'); setHasChanges(false)
-    } catch { toast({ title: 'Error', description: 'Failed to load form.', variant: 'destructive' }) }
-  }
+  const previewMut = useMutation({
+    mutationFn: (formId: number) => getFormById(formId, true),
+    onSuccess: (data) => { setForm(data); setStep('preview'); setView('builder'); setHasChanges(false) },
+    onError: () => toast({ title: 'Error', description: 'Failed to load form.', variant: 'destructive' }),
+  })
 
-  const openDuplicate = async (formId: number) => {
-    try {
-      const data = await getFormById(formId)
+  const duplicateMut = useMutation({
+    mutationFn: (formId: number) => getFormById(formId),
+    onSuccess: (data) => {
       const copy: Form = {
         ...data, id: undefined, form_name: `${data.form_name} (Copy)`, version: 1,
         categories: data.categories.map(c => ({
@@ -62,8 +61,13 @@ export default function FormsPage() {
         metadata_fields: data.metadata_fields?.map(f => ({ ...f, id: undefined, form_id: undefined })) || [],
       }
       setForm(copy); setStep('metadata'); setView('builder'); setHasChanges(true)
-    } catch { toast({ title: 'Error', description: 'Failed to duplicate form.', variant: 'destructive' }) }
-  }
+    },
+    onError: () => toast({ title: 'Error', description: 'Failed to duplicate form.', variant: 'destructive' }),
+  })
+
+  const openEdit      = (formId: number) => editMut.mutate(formId)
+  const openPreview   = (formId: number) => previewMut.mutate(formId)
+  const openDuplicate = (formId: number) => duplicateMut.mutate(formId)
 
   const validateStep = (): { ok: boolean; message?: string } => {
     if (step === 'metadata' && !form.form_name.trim()) return { ok: false, message: 'Form name is required.' }

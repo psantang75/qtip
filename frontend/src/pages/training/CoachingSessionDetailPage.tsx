@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Download, Paperclip, BookOpen, HelpCircle, Pencil } from 'lucide-react'
 import trainingService, { type CoachingSession, type CoachingSourceType, type CoachingFormat, type CoachingPurpose } from '@/services/trainingService'
-import topicService from '@/services/topicService'
+import listService from '@/services/listService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
@@ -19,7 +19,6 @@ import { PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './CoachingSessionsPage'
 import {
   SessionSection, RequiredActionsSection, AccountabilitySection, InternalNotesSection,
 } from './coaching-form/CoachingFormSections'
-import listService from '@/services/listService'
 import { emptyForm, type CoachingFormState } from './coaching-form/types'
 
 // ── Source labels ─────────────────────────────────────────────────────────────
@@ -184,10 +183,10 @@ export default function CoachingSessionDetailPage() {
   const { data: sourceItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_source'],  queryFn: () => listService.getItems('coaching_source') })
   const { data: csrs = [] }    = useQuery({ queryKey: ['team-csrs'],    queryFn: () => trainingService.getTeamCSRs() })
   const { data: coaches = [] } = useQuery({ queryKey: ['eligible-coaches'], queryFn: () => trainingService.getCoaches() })
-  const { data: topicsData }   = useQuery({ queryKey: ['topics-active'], queryFn: () => topicService.getTopics(1, 200, { is_active: true }) })
+  const { data: topicsData }   = useQuery({ queryKey: ['list-items', 'training_topic'], queryFn: () => listService.getItems('training_topic') })
   const { data: resourcesData }= useQuery({ queryKey: ['resources'],     queryFn: () => trainingService.getResources({ is_active: true, limit: 200 }) })
   const { data: quizLibrary }  = useQuery({ queryKey: ['quiz-library'],  queryFn: () => trainingService.getQuizLibrary({ limit: 200 }) })
-  const topics    = topicsData?.items    ?? []
+  const topics    = topicsData ?? []
   const resources = resourcesData?.items ?? []
   const quizzes   = quizLibrary?.items   ?? []
 

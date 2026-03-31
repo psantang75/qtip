@@ -16,6 +16,8 @@ import departmentService from '@/services/departmentService'
 import userService from '@/services/userService'
 import type { Department } from '@/services/departmentService'
 import { Button } from '@/components/ui/button'
+import { TableErrorState } from '@/components/common/TableErrorState'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -43,8 +45,8 @@ function DeptSortHead({ field, sortField, sortDir, onSort, children }: {
         {sortField !== field
           ? <ChevronsUpDown size={12} className="ml-1 text-slate-400" />
           : sortDir === 'asc'
-            ? <ChevronUp   size={12} className="ml-1 text-[#00aeef]" />
-            : <ChevronDown size={12} className="ml-1 text-[#00aeef]" />
+            ? <ChevronUp   size={12} className="ml-1 text-primary" />
+            : <ChevronDown size={12} className="ml-1 text-primary" />
         }
       </div>
     </TableHead>
@@ -80,7 +82,7 @@ export default function AdminDepartmentsPage() {
   const isCreate = !editDept
 
   // ── Queries ──────────────────────────────────────────────────────────────
-  const { data: deptsRaw, isLoading } = useQuery({
+  const { data: deptsRaw, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-departments'],
     queryFn:  () => departmentService.getDepartments(1, 100),
   })
@@ -268,7 +270,7 @@ export default function AdminDepartmentsPage() {
         <button
           onClick={() => { setSearch(''); setStatusFilter('active') }}
           disabled={search === '' && statusFilter === 'active'}
-          className="ml-auto text-[12px] font-medium text-[#00aeef] hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
+          className="ml-auto text-[12px] font-medium text-primary hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
         >
           Reset Filters
         </button>
@@ -283,19 +285,21 @@ export default function AdminDepartmentsPage() {
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50 border-b border-slate-200">
+            <StandardTableHeaderRow>
               <DeptSortHead field="department_name" sortField={sortField} sortDir={sortDir} onSort={deptSort}>Department</DeptSortHead>
               <TableHead className="py-4">Users</TableHead>
               <TableHead className="py-4">Managers</TableHead>
               <DeptSortHead field="is_active" sortField={sortField} sortDir={sortDir} onSort={deptSort}>Status</DeptSortHead>
               <TableHead className="py-4 w-[80px]" />
-            </TableRow>
+            </StandardTableHeaderRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">Loading…</TableCell>
               </TableRow>
+            ) : isError ? (
+              <TableRow><TableCell colSpan={5} className="py-4"><TableErrorState message="Failed to load departments." onRetry={refetch} /></TableCell></TableRow>
             ) : departments.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No departments found</TableCell>
@@ -370,7 +374,7 @@ export default function AdminDepartmentsPage() {
                       return (
                         <span
                           key={id}
-                          className="flex items-center gap-1 bg-[#00aeef]/10 text-[#00aeef] text-[12px] font-medium px-2.5 py-1 rounded-full"
+                          className="flex items-center gap-1 bg-primary/10 text-primary text-[12px] font-medium px-2.5 py-1 rounded-full"
                         >
                           {m.username ?? '—'}
                           <button
@@ -454,7 +458,7 @@ export default function AdminDepartmentsPage() {
                       <button
                         type="button"
                         onClick={() => field.onChange(!field.value)}
-                        className={`w-10 h-5 rounded-full transition-colors relative ${field.value ? 'bg-[#00aeef]' : 'bg-slate-300'}`}
+                        className={`w-10 h-5 rounded-full transition-colors relative ${field.value ? 'bg-primary' : 'bg-slate-300'}`}
                       >
                         <span className={`absolute top-1/2 left-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition-transform ${field.value ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
                       </button>

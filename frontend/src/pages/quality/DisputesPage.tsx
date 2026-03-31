@@ -11,6 +11,7 @@ import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
@@ -73,7 +74,7 @@ function DisputeListView() {
         endDate:   dateRange.end   || undefined,
       })
     },
-    placeholderData: (prev: any) => prev,
+    placeholderData: (prev) => prev,
   })
 
   // For CSR: apply all filters client-side (date, form, status)
@@ -92,7 +93,7 @@ function DisputeListView() {
     if (selectedCsrNames.length > 0)
       items = items.filter(d => selectedCsrNames.includes(d.csr_name ?? ''))
     if (selectedReviewerNames.length > 0)
-      items = items.filter(d => selectedReviewerNames.includes((d as any).qa_analyst_name ?? ''))
+      items = items.filter(d => selectedReviewerNames.includes(d.qa_analyst_name ?? ''))
     if (selectedStatuses.length > 0)
       items = items.filter(d => selectedStatuses.includes(d.status))
 
@@ -120,13 +121,13 @@ function DisputeListView() {
   }, [dateFiltered])
 
   const reviewerNameOptions = useMemo(() => {
-    const s = new Set(dateFiltered.map((d: any) => d.qa_analyst_name).filter(Boolean))
+    const s = new Set(dateFiltered.map((d: DisputeRecord) => d.qa_analyst_name).filter(Boolean))
     return Array.from(s).sort() as string[]
   }, [dateFiltered])
 
   const statusOptions = useMemo(() => {
     const present = new Set(dateFiltered.map((d: DisputeRecord) => d.status).filter(Boolean))
-    return DISPUTE_STATUSES.filter(s => present.has(s as any))
+    return DISPUTE_STATUSES.filter(s => present.has(s))
   }, [dateFiltered])
 
   const { sort, dir, toggle, sorted } = useListSort(clientFiltered)
@@ -227,7 +228,7 @@ function DisputeListView() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 border-b border-slate-200">
+              <StandardTableHeaderRow>
                 <SortableTableHead field="status"          sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
                 <SortableTableHead field="form_name"       sort={sort} dir={dir} onSort={toggle}>Form Name</SortableTableHead>
                 {!isCSR && <SortableTableHead field="csr_name"        sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>}
@@ -238,7 +239,7 @@ function DisputeListView() {
                 <SortableTableHead field="original_score"  sort={sort} dir={dir} onSort={toggle} right>Score</SortableTableHead>
                 <SortableTableHead field="adjusted_score"  sort={sort} dir={dir} onSort={toggle} right>Adjusted Score</SortableTableHead>
                 <TableHead className="w-20" />
-              </TableRow>
+              </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {displayedItems.length ? (
@@ -248,11 +249,11 @@ function DisputeListView() {
                       state: { from: fromLabel, fromPath },
                     })}>
                     <TableCell className="text-[13px] text-slate-600">
-                      {d.status.charAt(0) + d.status.slice(1).toLowerCase()}
+                      {d.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
                     </TableCell>
                     <TableCell className="text-[13px] font-medium text-slate-900">{d.form_name ?? '—'}</TableCell>
                     {!isCSR && <TableCell className="text-[13px] text-slate-600">{d.csr_name ?? '—'}</TableCell>}
-                    {!isCSR && <TableCell className="text-[13px] text-slate-600">{(d as any).qa_analyst_name ?? '—'}</TableCell>}
+                    {!isCSR && <TableCell className="text-[13px] text-slate-600">{d.qa_analyst_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-500">#{d.submission_id ?? '—'}</TableCell>
                     <TableCell className="text-[13px] text-slate-500">#{d.id ?? '—'}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">{fmtDate(d.created_at)}</TableCell>
@@ -263,8 +264,8 @@ function DisputeListView() {
                       }
                     </TableCell>
                     <TableCell className="text-right pr-20 text-[13px] text-slate-600">
-                      {(d as any).adjusted_score != null && (d as any).adjusted_score > 0
-                        ? `${Number((d as any).adjusted_score).toFixed(1)}%`
+                      {d.adjusted_score != null && d.adjusted_score > 0
+                        ? `${Number(d.adjusted_score).toFixed(1)}%`
                         : <span className="text-slate-400">—</span>
                       }
                     </TableCell>

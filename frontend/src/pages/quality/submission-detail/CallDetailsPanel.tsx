@@ -4,8 +4,15 @@ import { cn } from '@/lib/utils'
 import { formatTranscriptText } from '@/utils/transcriptUtils'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
 
+interface SubmissionCall {
+  call_id?: string
+  call_date?: string
+  recording_url?: string | null
+  transcript?: string | null
+}
+
 interface Props {
-  calls: any[]
+  calls: SubmissionCall[]
 }
 
 export function CallDetailsPanel({ calls }: Props) {
@@ -112,14 +119,14 @@ export function CallDetailsPanel({ calls }: Props) {
       {calls.length > 1 && (
         <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center gap-3">
           <span className="text-[11px] text-slate-400">{calls.length} calls</span>
-          {calls.filter((c: any) => c.recording_url).length > 0 && (
+          {calls.filter((c: SubmissionCall) => c.recording_url).length > 0 && (
             <span className="text-[11px] text-emerald-600">
-              {calls.filter((c: any) => c.recording_url).length} with audio
+              {calls.filter((c: SubmissionCall) => c.recording_url).length} with audio
             </span>
           )}
-          {calls.filter((c: any) => c.transcript).length > 0 && (
+          {calls.filter((c: SubmissionCall) => c.transcript).length > 0 && (
             <span className="text-[11px] text-blue-600">
-              {calls.filter((c: any) => c.transcript).length} with transcript
+              {calls.filter((c: SubmissionCall) => c.transcript).length} with transcript
             </span>
           )}
         </div>

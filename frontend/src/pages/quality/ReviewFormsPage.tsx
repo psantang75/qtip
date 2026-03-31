@@ -3,6 +3,7 @@ import { PlayCircle, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { useActiveForms } from '@/hooks/useQualityQueries'
+import type { FormSummary } from '@/services/qaService'
 import { useFormListFilters } from '@/hooks/useFormListFilters'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +13,7 @@ import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
@@ -36,7 +38,7 @@ export default function ReviewFormsPage() {
     filtered,
     hasFilters,
     resetFilters,
-  } = useFormListFilters(rawForms as any[])
+  } = useFormListFilters(rawForms as FormSummary[])
 
   const { sort, dir, toggle, sorted } = useListSort(filtered)
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
@@ -54,7 +56,7 @@ export default function ReviewFormsPage() {
       <QualityFilterBar
         hasFilters={hasFilters}
         onReset={resetFilters}
-        resultCount={{ filtered: sorted.length, total: (rawForms as any[]).length }}
+        resultCount={{ filtered: sorted.length, total: rawForms.length }}
       >
         <StagedMultiSelect
           options={formNames}
@@ -80,14 +82,14 @@ export default function ReviewFormsPage() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 border-b border-slate-200">
+              <StandardTableHeaderRow>
                 <SortableTableHead field="form_name"        sort={sort} dir={dir} onSort={v => { toggle(v); setPage(1) }}>Name</SortableTableHead>
                 <SortableTableHead field="is_active"        sort={sort} dir={dir} onSort={v => { toggle(v); setPage(1) }}>Status</SortableTableHead>
                 <SortableTableHead field="interaction_type" sort={sort} dir={dir} onSort={v => { toggle(v); setPage(1) }}>Type</SortableTableHead>
                 <SortableTableHead field="version"          sort={sort} dir={dir} onSort={v => { toggle(v); setPage(1) }}>Version</SortableTableHead>
                 <SortableTableHead field="created_at"       sort={sort} dir={dir} onSort={v => { toggle(v); setPage(1) }}>Created On</SortableTableHead>
                 <TableHead className="py-4 w-[120px]" />
-              </TableRow>
+              </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {forms.length === 0 ? (
@@ -98,7 +100,7 @@ export default function ReviewFormsPage() {
                   description={hasFilters ? undefined : 'Create a form in the Form Builder first.'}
                   action={hasFilters ? { label: 'Clear filters', onClick: resetFilters } : undefined}
                 />
-              ) : forms.map((f: any) => (
+              ) : forms.map((f: FormSummary) => (
                 <TableRow key={f.id} className="hover:bg-slate-50/50">
                   <TableCell className="text-[13px] font-medium text-slate-900">{f.form_name}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">

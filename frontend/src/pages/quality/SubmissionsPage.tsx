@@ -13,6 +13,7 @@ import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { DateRangeFilter } from '@/components/common/DateRangeFilter'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
@@ -74,7 +75,7 @@ export default function SubmissionsPage() {
       return qaService.getSubmissions({ page, limit: pageSize, status: apiStatus, date_start: ds, date_end: de })
     },
     enabled: roleId > 0,
-    placeholderData: (prev: any) => prev,
+    placeholderData: (prev) => prev,
   })
 
   // Derive filter options from the fetched items — only show what's in the current result
@@ -171,7 +172,7 @@ export default function SubmissionsPage() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 border-b border-slate-200">
+              <StandardTableHeaderRow>
                 <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
                 <SortableTableHead field="form_name"     sort={sort} dir={dir} onSort={toggle}>Form Name</SortableTableHead>
                 {!isCSR      && <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>}
@@ -180,7 +181,7 @@ export default function SubmissionsPage() {
                 <SortableTableHead field="created_at"   sort={sort} dir={dir} onSort={toggle}>Date</SortableTableHead>
                 <SortableTableHead field="score"        sort={sort} dir={dir} onSort={toggle}>Score</SortableTableHead>
                 <TableHead className="w-20" />
-              </TableRow>
+              </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {sortedItems.length ? (
@@ -190,7 +191,7 @@ export default function SubmissionsPage() {
                       state: { from: pageTitle, fromPath: '/app/quality/submissions' },
                     })}>
                     <TableCell className="text-[13px] text-slate-600">
-                      {row.status.charAt(0) + row.status.slice(1).toLowerCase()}
+                      {row.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
                     </TableCell>
                     <TableCell className="text-[13px] font-medium text-slate-900">{row.form_name}</TableCell>
                     {!isCSR      && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}

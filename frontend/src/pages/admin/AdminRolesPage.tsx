@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Info } from 'lucide-react'
-import userService from '@/services/userService'
+import userService, { type User } from '@/services/userService'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -35,13 +35,13 @@ const ROLE_META: Record<number, { name: string; description: string; access: str
 export default function AdminRolesPage() {
   const { data: users = [] } = useQuery({
     queryKey: ['admin-users-all'],
-    queryFn:  () => userService.getUsers(1, 200),
+    queryFn:  () => userService.getUsers(1, 100),
     select:   d => d.items,
   })
 
   // Count per role
   const counts: Record<number, number> = {}
-  users.forEach((u: any) => {
+  users.forEach((u: User) => {
     counts[u.role_id] = (counts[u.role_id] ?? 0) + 1
   })
 
@@ -67,7 +67,7 @@ export default function AdminRolesPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1.5">
-                      <span className="w-7 h-7 rounded-full bg-[#00aeef]/10 text-[#00aeef] text-[11px] font-bold flex items-center justify-center">
+                      <span className="w-7 h-7 rounded-full bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center">
                         {id}
                       </span>
                       <span className="text-[15px] font-semibold text-slate-900">{meta.name}</span>

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Eye } from 'lucide-react'
 import trainingService, { type LibraryQuiz } from '@/services/trainingService'
-import topicService from '@/services/topicService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
@@ -11,6 +10,7 @@ import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderR
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useListSort } from '@/hooks/useListSort'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
 
 type StatusFilter = 'all' | 'active' | 'inactive'
@@ -33,16 +34,11 @@ export default function LibraryQuizzesPage() {
   const [topicFilter,   setTopicFilter]   = useState<string[]>([])
   const [page,          setPage]          = useState(1)
   const [pageSize,      setPageSize]      = useState(20)
-  const [previewQuiz,   setPreviewQuiz]   = useState<any | null>(null)
-  const [previewOpen,   setPreviewOpen]   = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
-  const { data: quizData, isLoading } = useQuery({
+  const { data: quizData, isLoading, isError, refetch } = useQuery({
     queryKey: ['quiz-library-all'],
     queryFn:  () => trainingService.getQuizLibrary({ limit: 500 }),
-  })
-  const { data: topicsData } = useQuery({
-    queryKey: ['topics-active'],
-    queryFn:  () => topicService.getTopics(1, 200, { is_active: true }),
   })
 
   const allQuizzes = quizData?.items ?? []
@@ -86,15 +82,15 @@ export default function LibraryQuizzesPage() {
     onError: () => toast({ title: 'Failed to update status', variant: 'destructive' }),
   })
 
-  const openPreview = async (id: number) => {
-    try {
-      const detail = await trainingService.getLibraryQuizDetail(id)
-      setPreviewQuiz(detail)
-      setPreviewOpen(true)
-    } catch {
-      toast({ title: 'Failed to load quiz preview', variant: 'destructive' })
-    }
-  }
+  const [previewQuiz, setPreviewQuiz] = useState<{ id?: number; quiz_title: string; pass_score: number; questions: { question_text: string; options: string[]; correct_option: number }[] } | null>(null)
+
+  const previewMut = useMutation({
+    mutationFn: (id: number) => trainingService.getLibraryQuizDetail(id),
+    onSuccess: (detail) => { setPreviewQuiz(detail); setPreviewOpen(true) },
+    onError: () => toast({ title: 'Failed to load quiz preview', variant: 'destructive' }),
+  })
+
+  const openPreview = (id: number) => previewMut.mutate(id)
 
   return (
     <QualityListPage>
@@ -136,7 +132,9 @@ export default function LibraryQuizzesPage() {
       </QualityFilterBar>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        {isLoading ? <TableLoadingSkeleton rows={6} /> : (
+        {isLoading ? <TableLoadingSkeleton rows={6} /> : isError ? (
+          <TableErrorState message="Failed to load quizzes." onRetry={refetch} />
+        ) : (
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
@@ -187,7 +185,7 @@ export default function LibraryQuizzesPage() {
                   <TableCell className="text-center text-[13px] text-slate-600">{q.question_count}</TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">{q.pass_score}%</TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">{q.times_used}</TableCell>
-                  <TableCell className="text-[13px] text-slate-600">{q.is_active ? 'Active' : 'Inactive'}</TableCell>
+                  <TableCell><StatusBadge status={q.is_active ? 'ACTIVE' : 'INACTIVE'} /></TableCell>
 
                   <TableCell>
                     <div className="flex items-center gap-1 justify-end">

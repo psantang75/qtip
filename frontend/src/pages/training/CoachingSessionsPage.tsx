@@ -14,6 +14,8 @@ import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { ListPagination } from '@/components/common/ListPagination'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
@@ -181,7 +183,7 @@ export default function CoachingSessionsPage() {
       overdue_only: overdue   === 'true' ? true : undefined,
       due_today:    dueToday  === 'true' ? true : undefined,
     }),
-    placeholderData: (prev: any) => prev,
+    placeholderData: (prev) => prev,
   })
 
   // Derive filter options from current result set
@@ -267,13 +269,13 @@ export default function CoachingSessionsPage() {
         {/* ── Row 1: Session Date · CSRs · Topics · Status ── */}
         <div className="flex items-center gap-1.5">
           <span className="text-[12px] text-slate-500 shrink-0">Session</span>
-          <input type="date" value={dateFrom} max={dateTo || undefined}
+          <Input type="date" value={dateFrom} max={dateTo || undefined}
             onChange={e => setMany({ from: e.target.value, page: '1' })}
-            className="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/40 w-[140px]" />
+            className="h-9 w-[140px]" />
           <span className="text-[12px] text-slate-400">–</span>
-          <input type="date" value={dateTo} min={dateFrom || undefined}
+          <Input type="date" value={dateTo} min={dateFrom || undefined}
             onChange={e => setMany({ to: e.target.value, page: '1' })}
-            className="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/40 w-[140px]" />
+            className="h-9 w-[140px]" />
         </div>
         <StagedMultiSelect
           options={csrOptions}
@@ -312,15 +314,13 @@ export default function CoachingSessionsPage() {
           width="w-[220px]"
         />
         <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
-          <input type="checkbox" checked={dueToday === 'true'}
-            onChange={e => setMany({ dueToday: e.target.checked ? 'true' : '', overdue: '', page: '1' })}
-            className="accent-primary h-4 w-4" />
+          <Checkbox checked={dueToday === 'true'}
+            onCheckedChange={v => setMany({ dueToday: v ? 'true' : '', overdue: '', page: '1' })} />
           Due Today
         </label>
         <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
-          <input type="checkbox" checked={overdue === 'true'}
-            onChange={e => setMany({ overdue: e.target.checked ? 'true' : '', dueToday: '', page: '1' })}
-            className="accent-primary h-4 w-4" />
+          <Checkbox checked={overdue === 'true'}
+            onCheckedChange={v => setMany({ overdue: v ? 'true' : '', dueToday: '', page: '1' })} />
           Overdue
         </label>
       </QualityFilterBar>

@@ -3,6 +3,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useAllForms } from '@/hooks/useQualityQueries'
+import type { FormSummary } from '@/services/qaService'
 import { useFormListFilters } from '@/hooks/useFormListFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { Button } from '@/components/ui/button'
@@ -41,7 +42,7 @@ export function FormBuilderList({ onEdit, onCreate, onPreview, onDuplicate }: Fo
     filtered,
     hasFilters,
     resetFilters,
-  } = useFormListFilters(rawForms as any[], { defaultStatus: 'active' })
+  } = useFormListFilters(rawForms as FormSummary[], { defaultStatus: 'active' })
 
   const { sort, dir, toggle, sorted } = useListSort(filtered)
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
@@ -61,7 +62,7 @@ export function FormBuilderList({ onEdit, onCreate, onPreview, onDuplicate }: Fo
       <QualityFilterBar
         hasFilters={hasFilters}
         onReset={resetFilters}
-        resultCount={{ filtered: sorted.length, total: (rawForms as any[]).length }}
+        resultCount={{ filtered: sorted.length, total: rawForms.length }}
       >
         <StagedMultiSelect
           options={formNames}
@@ -115,7 +116,7 @@ export function FormBuilderList({ onEdit, onCreate, onPreview, onDuplicate }: Fo
                   description={hasFilters ? undefined : 'Create your first QA form to get started.'}
                   action={hasFilters ? { label: 'Clear filters', onClick: resetFilters } : undefined}
                 />
-              ) : displayed.map((f: any) => (
+              ) : displayed.map((f: FormSummary) => (
                 <TableRow key={f.id} className="hover:bg-slate-50/50">
                   <TableCell className="text-[13px] font-medium text-slate-900">{f.form_name}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">

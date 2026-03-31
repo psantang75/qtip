@@ -36,12 +36,7 @@ const callService = {
   // Search calls with filters
   searchCalls: async (params: CallSearchParams): Promise<Call[]> => {
     try {
-      console.log('[CALL SERVICE] Searching calls with params:', params);
-      
       const response = await apiClient.get('/calls/search', { params });
-      
-      console.log('[CALL SERVICE] Search results:', response.data);
-      
       // Handle different response formats
       if (Array.isArray(response.data)) {
         return response.data;
@@ -60,12 +55,7 @@ const callService = {
   // Get a single call by ID
   getCallById: async (callId: string): Promise<Call> => {
     try {
-      console.log('[CALL SERVICE] Fetching call by ID:', callId);
-      
       const response = await apiClient.get(`/calls/${callId}`);
-      
-      console.log('[CALL SERVICE] Call details:', response.data);
-      
       return response.data;
     } catch (error) {
       console.error(`[CALL SERVICE] Error fetching call ${callId}:`, error);
@@ -76,8 +66,6 @@ const callService = {
   // Get calls for a specific CSR
   getCallsForCSR: async (csrId: number, page: number = 1, limit: number = 20): Promise<PaginatedCallResponse> => {
     try {
-      console.log('[CALL SERVICE] Fetching calls for CSR:', csrId);
-      
       const response = await apiClient.get('/calls/search', {
         params: { 
           csr_id: csrId, 
@@ -85,9 +73,6 @@ const callService = {
           limit 
         }
       });
-      
-      console.log('[CALL SERVICE] CSR calls response:', response.data);
-      
       // Handle paginated response
       if (response.data && typeof response.data === 'object' && 'items' in response.data) {
         return response.data;
@@ -124,8 +109,6 @@ const callService = {
     limit: number = 20
   ): Promise<PaginatedCallResponse> => {
     try {
-      console.log('[CALL SERVICE] Fetching calls by date range:', { startDate, endDate });
-      
       const response = await apiClient.get('/calls/search', {
         params: { 
           date_start: startDate, 
@@ -134,9 +117,6 @@ const callService = {
           limit 
         }
       });
-      
-      console.log('[CALL SERVICE] Date range calls response:', response.data);
-      
       // Handle paginated response
       if (response.data && typeof response.data === 'object' && 'items' in response.data) {
         return response.data;
@@ -168,14 +148,9 @@ const callService = {
   // Get recent calls (for dashboard widgets, etc.)
   getRecentCalls: async (limit: number = 10): Promise<Call[]> => {
     try {
-      console.log('[CALL SERVICE] Fetching recent calls, limit:', limit);
-      
       const response = await apiClient.get('/calls/recent', {
         params: { limit }
       });
-      
-      console.log('[CALL SERVICE] Recent calls response:', response.data);
-      
       // Handle different response formats
       if (Array.isArray(response.data)) {
         return response.data;
@@ -201,16 +176,11 @@ const callService = {
     totalDuration: number;
   }> => {
     try {
-      console.log('[CALL SERVICE] Fetching call stats for CSR:', csrId);
-      
       const params: any = { csr_id: csrId };
       if (startDate) params.date_start = startDate;
       if (endDate) params.date_end = endDate;
       
       const response = await apiClient.get('/calls/stats', { params });
-      
-      console.log('[CALL SERVICE] Call stats response:', response.data);
-      
       return response.data;
     } catch (error) {
       console.error(`[CALL SERVICE] Error fetching call stats for CSR ${csrId}:`, error);
@@ -273,24 +243,17 @@ const callService = {
   // Check if call exists in database by conversation ID
   checkCallExists: async (conversationId: string): Promise<boolean> => {
     try {
-      console.log('[CALL SERVICE] Checking if call exists:', conversationId);
-      
       const response = await apiClient.get('/calls/search', {
         params: { 
           external_id: conversationId,
           limit: 1
         }
       });
-      
-      console.log('[CALL SERVICE] Check exists response:', response.data);
-      
       // Check if any calls were found
       const calls = Array.isArray(response.data) ? response.data : 
                    (response.data && Array.isArray(response.data.items)) ? response.data.items : [];
       
       const exists = calls.length > 0;
-      console.log(`[CALL SERVICE] Call ${conversationId} exists: ${exists}`);
-      
       return exists;
     } catch (error) {
       console.error('[CALL SERVICE] Error checking if call exists:', error);
@@ -301,12 +264,7 @@ const callService = {
   // Check if conversation ID is already used in any submission
   checkConversationIdInSubmissions: async (conversationId: string): Promise<{ exists: boolean; submissions: any[] }> => {
     try {
-      console.log('[CALL SERVICE] Checking if conversation ID is used in submissions:', conversationId);
-      
       const response = await apiClient.get(`/calls/check-submission/${conversationId}`);
-      
-      console.log('[CALL SERVICE] Check submission response:', response.data);
-      
       return response.data;
     } catch (error) {
       console.error('[CALL SERVICE] Error checking conversation ID in submissions:', error);

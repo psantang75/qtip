@@ -176,7 +176,7 @@ interface S1Props {
   formatItems?:  { item_key?: string; label: string }[]
   sourceItems?:  { item_key?: string; label: string }[]
   isEdit?: boolean
-  update: (k: keyof CoachingFormState, v: any) => void
+  <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
   toggleTopic: (id: number) => void
 }
 
@@ -224,7 +224,7 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems = [],
             </p>
           </div>
         ) : (
-          <Field label="CSR(s)" required error={(errors as any).csr_ids}>
+          <Field label="CSR(s)" required error={errors.csr_ids}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant="outline" className="w-full justify-between font-normal text-[13px] h-9">
@@ -407,7 +407,7 @@ interface S3Props {
   resources: TrainingResource[]
   quizzes: LibraryQuiz[]
   topicIdMap?: Map<number, number>
-  update: (k: keyof CoachingFormState, v: any) => void
+  <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
 }
 
 export function RequiredActionsSection({ form, errors, resources, quizzes, topicIdMap = new Map(), update }: S3Props) {
@@ -473,7 +473,7 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, topic
 interface S4Props {
   form: CoachingFormState
   errors: CoachingFormErrors
-  update: (k: keyof CoachingFormState, v: any) => void
+  <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
 }
 
 export function AccountabilitySection({ form, errors, update }: S4Props) {
@@ -612,7 +612,7 @@ function BehaviorFlagSelect({ flagItems, selectedIds, onToggle }: {
 interface S5InternalProps {
   form: CoachingFormState
   flagItems: ListItem[]
-  update: (k: keyof CoachingFormState, v: any) => void
+  <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
 }
 
 export function InternalNotesSection({ form, flagItems, update }: S5InternalProps) {
@@ -646,7 +646,7 @@ export function InternalNotesSection({ form, flagItems, update }: S5InternalProp
 // ── Section 6: Attachment (optional) ─────────────────────────────────────────
 
 interface AttachmentProps {
-  form: CoachingFormState; update: (k: keyof CoachingFormState, v: any) => void
+  form: CoachingFormState; <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
   existingFilename?: string; onRemoveExisting: () => void
 }
 

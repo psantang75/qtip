@@ -9,6 +9,7 @@ import trainingService, { type CoachingSession } from '@/services/trainingServic
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Button } from '@/components/ui/button'
@@ -74,7 +75,7 @@ function CSRView() {
   const navigate = useNavigate()
 
   // CSRs cannot call trainer-only stats endpoint — derive counts from sessions list
-  const { data: sessionsPage, isLoading: sessionsLoading } = useQuery({
+  const { data: sessionsPage, isLoading: sessionsLoading, isError: sessionsError, refetch: sessionsRefetch } = useQuery({
     queryKey: ['my-coaching-overview'],
     queryFn: () => trainingService.getMyCoachingSessions({ limit: 20 }),
   })
@@ -132,6 +133,8 @@ function CSRView() {
         </div>
         {sessionsLoading ? (
           <TableLoadingSkeleton rows={5} />
+        ) : sessionsError ? (
+          <TableErrorState message="Failed to load coaching sessions." onRetry={sessionsRefetch} />
         ) : (
           <Table>
             <TableHeader>
@@ -185,17 +188,17 @@ function CSRView() {
 function TrainerView() {
   const navigate = useNavigate()
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: statsRefetch } = useQuery({
     queryKey: ['training-stats-trainer'],
     queryFn: () => trainingService.getCoachingStats(),
   })
 
-  const { data: recentPage, isLoading: recentLoading } = useQuery({
+  const { data: recentPage, isLoading: recentLoading, isError: recentError, refetch: recentRefetch } = useQuery({
     queryKey: ['training-recent'],
     queryFn: () => trainingService.getCoachingSessions({ limit: 10, sort: 'session_date', dir: 'desc' }),
   })
 
-  const { data: overduePage, isLoading: overdueLoading } = useQuery({
+  const { data: overduePage, isLoading: overdueLoading, isError: overdueError, refetch: overdueRefetch } = useQuery({
     queryKey: ['training-overdue'],
     queryFn: () => trainingService.getCoachingSessions({ overdue_only: true, limit: 10 }),
   })
@@ -280,6 +283,8 @@ function TrainerView() {
           </div>
           {recentLoading ? (
             <TableLoadingSkeleton rows={5} />
+          ) : recentError ? (
+            <TableErrorState message="Failed to load recent sessions." onRetry={recentRefetch} />
           ) : (
             <Table>
               <TableHeader>
@@ -327,6 +332,8 @@ function TrainerView() {
           </div>
           {overdueLoading ? (
             <TableLoadingSkeleton rows={5} />
+          ) : overdueError ? (
+            <TableErrorState message="Failed to load overdue sessions." onRetry={overdueRefetch} />
           ) : (
             <Table>
               <TableHeader>

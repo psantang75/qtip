@@ -19,6 +19,7 @@ import {
 } from '@/utils/forms'
 import { validateAnswers } from '@/utils/submissionUtils'
 import { Button } from '@/components/ui/button'
+import { TableErrorState } from '@/components/common/TableErrorState'
 
 interface AnswerType {
   question_id: number
@@ -40,7 +41,7 @@ export default function AuditFormPage() {
 
   const qc = useQueryClient()
 
-  const { data: form, isLoading: loading } = useQuery({
+  const { data: form, isLoading: loading, isError: formError, refetch: refetchForm } = useQuery({
     queryKey: ['audit-form', formId],
     queryFn: () => getFormById(Number(formId)),
     enabled: !!formId,
@@ -227,17 +228,25 @@ export default function AuditFormPage() {
     )
   }
 
+  if (formError) {
+    return (
+      <div className="p-6">
+        <TableErrorState message="Failed to load review form." onRetry={refetchForm} />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col" style={{ height: 'calc(100% + 24px)', marginBottom: '-24px' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="shrink-0 px-6 pb-5">
         <div className="flex flex-col gap-1 mb-5">
-          <button onClick={() => navigate(-1)}
-            className="self-start flex items-center gap-1 text-[11px] text-slate-400 hover:text-primary transition-colors">
+          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}
+            className="self-start flex items-center gap-1 text-[11px] text-slate-400 hover:text-primary h-auto px-0">
             <ArrowLeft className="h-3 w-3" />
             Back to Review Forms
-          </button>
+          </Button>
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold text-slate-900">Review Form</h1>
             <div className="flex items-center gap-3 shrink-0 mt-0.5">
@@ -284,8 +293,8 @@ export default function AuditFormPage() {
               return <p key={i}>{line}</p>
             })}
           </div>
-          <button onClick={() => setErrorMessage(null)}
-            className="shrink-0 text-red-400 hover:text-red-600 text-lg leading-none">×</button>
+          <Button variant="ghost" size="sm" onClick={() => setErrorMessage(null)}
+            className="shrink-0 text-red-400 hover:text-red-600 h-auto p-0 leading-none hover:bg-transparent text-lg">×</Button>
         </div>
       )}
 

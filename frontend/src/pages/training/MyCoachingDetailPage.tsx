@@ -8,6 +8,7 @@ import trainingService, { type CoachingSourceType } from '@/services/trainingSer
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
@@ -114,7 +115,7 @@ export default function MyCoachingDetailPage() {
       return next
     })
 
-  const { data: session, isLoading } = useQuery({
+  const { data: session, isLoading, isError, refetch } = useQuery({
     queryKey: ['my-coaching-detail', id],
     queryFn:  () => trainingService.getMyCoachingDetail(Number(id)),
     enabled:  !!id,
@@ -161,9 +162,8 @@ export default function MyCoachingDetailPage() {
     } catch { toast({ title: 'Download failed', variant: 'destructive' }) }
   }
 
-  if (isLoading || !session) {
-    return <QualityListPage><TableLoadingSkeleton rows={8} /></QualityListPage>
-  }
+  if (isLoading) return <QualityListPage><TableLoadingSkeleton rows={8} /></QualityListPage>
+  if (isError || !session) return <QualityListPage><TableErrorState message="Failed to load coaching session." onRetry={refetch} /></QualityListPage>
 
   const { status, require_action_plan, require_acknowledgment } = session
   const quizzes          = session.quizzes ?? []

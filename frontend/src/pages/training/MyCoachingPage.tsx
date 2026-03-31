@@ -12,8 +12,10 @@ import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderR
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useListSort } from '@/hooks/useListSort'
@@ -40,7 +42,7 @@ export default function MyCoachingPage() {
   const handleRangeChange = useCallback((s: string, e: string) => { setDateFrom(s); setDateTo(e); setPage(1) }, [])
   const handleFieldChange = useCallback((f: DateField) => { setDateField(f); setDateFrom(''); setDateTo(''); setPage(1) }, [])
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['my-coaching'],
     queryFn:  () => trainingService.getMyCoachingSessions({ limit: 100 }),
   })
@@ -142,15 +144,13 @@ export default function MyCoachingPage() {
           onRangeChange={handleRangeChange}
         />
         <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
-          <input type="checkbox" checked={dueTodayOnly}
-            onChange={e => { setDueTodayOnly(e.target.checked); if (e.target.checked) setOverdueOnly(false); setPage(1) }}
-            className="accent-primary h-4 w-4" />
+          <Checkbox checked={dueTodayOnly}
+            onCheckedChange={v => { setDueTodayOnly(!!v); if (v) setOverdueOnly(false); setPage(1) }} />
           Due Today
         </label>
         <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
-          <input type="checkbox" checked={overdueOnly}
-            onChange={e => { setOverdueOnly(e.target.checked); if (e.target.checked) setDueTodayOnly(false); setPage(1) }}
-            className="accent-primary h-4 w-4" />
+          <Checkbox checked={overdueOnly}
+            onCheckedChange={v => { setOverdueOnly(!!v); if (v) setDueTodayOnly(false); setPage(1) }} />
           Overdue
         </label>
       </QualityFilterBar>
@@ -158,6 +158,8 @@ export default function MyCoachingPage() {
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? (
           <TableLoadingSkeleton rows={5} />
+        ) : isError ? (
+          <TableErrorState message="Failed to load coaching sessions." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>

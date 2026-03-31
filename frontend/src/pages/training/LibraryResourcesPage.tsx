@@ -3,13 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, FileText, Image, FileSpreadsheet, Film, Link, File } from 'lucide-react'
 import trainingService, { type TrainingResource, type ResourceType } from '@/services/trainingService'
 import { ResourceLink } from '@/components/training/ResourceLink'
-import topicService, { type Topic } from '@/services/topicService'
+import listService, { type ListItem } from '@/services/listService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
@@ -89,8 +90,8 @@ export default function LibraryResourcesPage() {
   const [page,          setPage]          = useState(1)
   const [pageSize,     setPageSize]     = useState(20)
 
-  const { data: resData,   isLoading } = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 200 }) })
-  const { data: topicsData }           = useQuery({ queryKey: ['topics-active'],   queryFn: () => topicService.getTopics(1, 200, { is_active: true }) })
+  const { data: resData,   isLoading, isError, refetch } = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 200 }) })
+  const { data: topicsData }           = useQuery({ queryKey: ['list-items', 'training_topic'], queryFn: () => listService.getItems('training_topic') })
 
   const allResources = resData?.items ?? []
 
@@ -120,7 +121,7 @@ export default function LibraryResourcesPage() {
   const onSort = (field: string) => { toggle(field); setPage(1) }
 
   // All active topics — used in the add/edit dialog checkbox list
-  const topics: Topic[] = topicsData?.items ?? []
+  const topics: ListItem[] = topicsData ?? []
 
   // Topic options: only topics present in the current search+status results
   const topicOptions = useMemo(() => {
@@ -210,7 +211,9 @@ export default function LibraryResourcesPage() {
       </QualityFilterBar>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        {isLoading ? <TableLoadingSkeleton rows={6} /> : (
+        {isLoading ? <TableLoadingSkeleton rows={6} />
+        : isError ? <TableErrorState message="Failed to load resources." onRetry={refetch} />
+        : (
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
@@ -359,7 +362,7 @@ export default function LibraryResourcesPage() {
                 Topics <span className="text-slate-400 font-normal">(optional)</span>
               </label>
               <SearchableMultiSelect
-                items={topics.map(t => ({ id: t.id, label: t.topic_name }))}
+                items={topics.map(t => ({ id: t.id, label: t.label }))}
                 selectedIds={form.topic_ids}
                 onChange={ids => setForm(f => ({ ...f, topic_ids: ids }))}
                 placeholder="No topics selected"

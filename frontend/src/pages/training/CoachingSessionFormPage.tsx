@@ -8,6 +8,7 @@ import trainingService from '@/services/trainingService'
 import listService from '@/services/listService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -58,7 +59,7 @@ export default function CoachingSessionFormPage() {
 
   // ── Queries ─────────────────────────────────────────────────────────────────
 
-  const { data: existing } = useQuery({
+  const { data: existing, isError: existingError, refetch: existingRefetch } = useQuery({
     queryKey: ['coaching-session', id],
     queryFn:  () => trainingService.getCoachingSessionDetail(Number(id)),
     enabled:  isEdit,
@@ -243,6 +244,14 @@ export default function CoachingSessionFormPage() {
 
   const isSaving = saveMut.isPending || scheduleMut.isPending
   const sessions = history?.sessions ?? []
+
+  if (isEdit && existingError) {
+    return (
+      <QualityListPage>
+        <TableErrorState message="Failed to load coaching session." onRetry={existingRefetch} />
+      </QualityListPage>
+    )
+  }
 
   return (
     <QualityListPage>

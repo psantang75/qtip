@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
 import { cn } from '@/lib/utils'
-import type { Topic } from '@/services/topicService'
+import type { ListItem } from '@/services/listService'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ interface QuizBuilderProps {
   value: QuizBuilderData
   onChange: (data: QuizBuilderData) => void
   errors: QuizBuilderErrors
-  topics: Topic[]
+  topics: ListItem[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ export function QuizBuilder({ value, onChange, errors, topics }: QuizBuilderProp
       <div>
         <label className="text-[12px] font-medium text-slate-700 block mb-1">Topics <span className="text-slate-400 font-normal">(optional)</span></label>
         <SearchableMultiSelect
-          items={topics.map(t => ({ id: t.id, label: t.topic_name }))}
+          items={topics.map(t => ({ id: t.id, label: t.label }))}
           selectedIds={value.topic_ids ?? []}
           onChange={ids => update({ topic_ids: ids, topic_id: ids[0] })}
           placeholder="No topics selected"

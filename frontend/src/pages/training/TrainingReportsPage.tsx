@@ -14,6 +14,7 @@ import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { DateRangeFilter } from '@/components/common/DateRangeFilter'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { ListPagination } from '@/components/common/ListPagination'
@@ -25,13 +26,21 @@ import { cn } from '@/lib/utils'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// Chart colors mapped to Tailwind palette equivalents
 const TYPE_COLORS: Record<string, string> = {
-  WEEKLY_COACHING: '#60a5fa', PERFORMANCE_COACHING: '#fbbf24',
-  ESCALATION: '#f87171', SIDE_BY_SIDE: '#2dd4bf', TEAM_SESSION: '#818cf8',
+  WEEKLY_COACHING:     'var(--color-chart-blue,   #60a5fa)',
+  PERFORMANCE_COACHING:'var(--color-chart-amber,  #fbbf24)',
+  ESCALATION:          'var(--color-chart-red,    #f87171)',
+  SIDE_BY_SIDE:        'var(--color-chart-teal,   #2dd4bf)',
+  TEAM_SESSION:        'var(--color-chart-indigo, #818cf8)',
 }
 const STATUS_COLORS: Record<string, string> = {
-  SCHEDULED: '#94a3b8', IN_PROCESS: '#3b82f6', AWAITING_CSR_ACTION: '#f59e0b',
-  COMPLETED: '#10b981', FOLLOW_UP_REQUIRED: '#f97316', CLOSED: '#64748b',
+  SCHEDULED:           'var(--color-chart-slate,  #94a3b8)',
+  IN_PROCESS:          'var(--color-chart-blue,   #3b82f6)',
+  AWAITING_CSR_ACTION: 'var(--color-chart-amber,  #f59e0b)',
+  COMPLETED:           'var(--color-chart-green,  #10b981)',
+  FOLLOW_UP_REQUIRED:  'var(--color-chart-orange, #f97316)',
+  CLOSED:              'var(--color-chart-gray,   #64748b)',
 }
 const typeLabel = (t: string) => t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
@@ -82,12 +91,12 @@ export default function TrainingReportsPage() {
 
   const summaryParams = { date_from: dateFrom || undefined, date_to: dateTo || undefined }
 
-  const { data: summary, isLoading: summaryLoading } = useQuery({
+  const { data: summary, isLoading: summaryLoading, isError: summaryError } = useQuery({
     queryKey: ['coaching-reports-summary', dateFrom, dateTo],
     queryFn:  () => trainingService.getReportsSummary(summaryParams),
   })
 
-  const { data: csrListPage, isLoading: csrLoading } = useQuery({
+  const { data: csrListPage, isLoading: csrLoading, isError: csrError, refetch: csrRefetch } = useQuery({
     queryKey: ['coaching-csr-list', page, pageSize, dateFrom, dateTo],
     queryFn:  () => trainingService.getCSRCoachingList({ page, limit: pageSize, ...summaryParams }),
     placeholderData: (p: unknown) => p as typeof csrListPage,
@@ -250,6 +259,8 @@ export default function TrainingReportsPage() {
 
         {csrLoading ? (
           <TableLoadingSkeleton rows={8} />
+        ) : csrError ? (
+          <TableErrorState message="Failed to load coaching data." onRetry={csrRefetch} />
         ) : (
           <Table>
             <TableHeader>

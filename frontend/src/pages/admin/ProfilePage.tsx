@@ -136,7 +136,7 @@ export default function ProfilePage() {
 
           {/* Avatar + identity */}
           <div className="flex items-center gap-4 mb-5">
-            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-[#00aeef] to-[#0095cc] flex items-center justify-center text-white text-xl font-bold shrink-0">
+            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center text-white text-xl font-bold shrink-0">
               {initials}
             </div>
             <div>
