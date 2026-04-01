@@ -328,7 +328,6 @@ export default function CoachingSessionDetailPage() {
     <QualityListPage>
       <QualityPageHeader
         title={`Coaching Session #${id}`}
-        subtitle={`${session.csr_name} — ${formatQualityDate(session.session_date)}`}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => navigate('/app/training/coaching')}>← Back</Button>
