@@ -1,4 +1,4 @@
-export type NavSection = 'quality' | 'training' | 'insights' | 'analytics'
+export type NavSection = 'quality' | 'training' | 'writeups' | 'insights' | 'analytics'
 
 export interface NavItem {
   label: string
@@ -50,6 +50,17 @@ export const NAV_CONFIG: SectionConfig[] = [
     ],
   },
   {
+    id: 'writeups',
+    label: 'Write-Ups',
+    icon: 'FileWarning',
+    color: '#00aeef',
+    defaultPath: '/app/writeups',
+    items: [
+      { label: 'Write-Ups',    path: '/app/writeups',     icon: 'FileWarning', roles: [1, 2, 5] },
+      { label: 'My Write-Ups', path: '/app/writeups/my',  icon: 'FileText',    roles: [3] },
+    ],
+  },
+  {
     id: 'insights',
     label: 'Insights',
     icon: 'BarChart2',
@@ -91,6 +102,7 @@ export function getNavItemsForRole(section: NavSection, roleId: number): NavItem
 export function getSectionFromPath(pathname: string): NavSection | null {
   if (pathname.startsWith('/app/quality')) return 'quality'
   if (pathname.startsWith('/app/training')) return 'training'
+  if (pathname.startsWith('/app/writeups')) return 'writeups'
   if (pathname.startsWith('/app/insights')) return 'insights'
   if (pathname.startsWith('/app/analytics')) return 'analytics'
   return null

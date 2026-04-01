@@ -25,8 +25,13 @@ const STATUS_MAP: Record<string, StatusConfig> = {
   SCHEDULED:           { label: 'Scheduled',    classes: 'bg-slate-100   text-slate-700'   },
   IN_PROCESS:          { label: 'In Process',   classes: 'bg-blue-100    text-blue-800'    },
   AWAITING_CSR_ACTION: { label: 'Awaiting CSR', classes: 'bg-amber-100   text-amber-800'   },
-  FOLLOW_UP_REQUIRED:  { label: 'Follow-Up',     classes: 'bg-orange-100  text-orange-800'  },
+  FOLLOW_UP_REQUIRED:  { label: 'Follow-Up',    classes: 'bg-orange-100  text-orange-800'  },
   CLOSED:              { label: 'Closed',        classes: 'bg-slate-100   text-slate-500'   },
+  // Write-up statuses
+  DELIVERED:           { label: 'Delivered',         classes: 'bg-indigo-100  text-indigo-800'  },
+  AWAITING_SIGNATURE:  { label: 'Awaiting Signature', classes: 'bg-amber-100   text-amber-800'   },
+  SIGNED:              { label: 'Signed',             classes: 'bg-emerald-100 text-emerald-800' },
+  FOLLOW_UP_PENDING:   { label: 'Follow-Up',          classes: 'bg-orange-100  text-orange-800'  },
 }
 
 interface StatusBadgeProps {

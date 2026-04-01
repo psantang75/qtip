@@ -92,9 +92,26 @@ model User {
   email_stats_raw                       EmailStatsRaw[]
   quiz_attempts                         QuizAttempt[]
   training_resources                    TrainingResource[]
+  write_ups_as_csr                      WriteUp[]          @relation("WriteUpCsr")
+  write_ups_created                     WriteUp[]          @relation("WriteUpCreatedBy")
+  write_up_follow_ups                   WriteUp[]          @relation("WriteUpFollowUpAssignee")
 
   @@index([last_login])
   @@map("users")
+}
+
+/// Managed via raw SQL — Prisma must never modify this table
+model ListItem {
+  id        Int      @id @default(autoincrement())
+  list_type String   @db.VarChar(100)
+  label     String   @db.VarChar(255)
+  item_key  String?  @db.VarChar(100)
+  sort_order Int     @default(0)
+  is_active  Boolean @default(true)
+  created_at DateTime @default(now()) @db.DateTime(0)
+
+  @@ignore
+  @@map("list_items")
 }
 
 model TrainingPath {
@@ -576,6 +593,7 @@ model CoachingSession {
 
   coaching_session_topics CoachingSessionTopic[]
   quiz_attempts           QuizAttempt[]
+  write_ups               WriteUp[]
 
   @@index([created_by])
   @@index([csr_id, created_by])
@@ -584,6 +602,111 @@ model CoachingSession {
   @@index([coaching_purpose])
   @@index([coaching_format])
   @@map("coaching_sessions")
+}
+
+model WriteUp {
+  id                     Int            @id @default(autoincrement())
+  csr_id                 Int
+  document_type          WriteUpType
+  status                 WriteUpStatus  @default(DRAFT)
+  meeting_date           DateTime?      @db.DateTime(0)
+  meeting_notes          String?        @db.Text
+  corrective_action      String?        @db.Text
+  correction_timeline    String?        @db.VarChar(255)
+  checkin_date           DateTime?      @db.Date
+  consequence            String?        @db.Text
+  linked_coaching_id     Int?
+  follow_up_required     Boolean        @default(false) @db.TinyInt
+  follow_up_date         DateTime?      @db.Date
+  follow_up_assigned_to  Int?
+  follow_up_checklist    String?        @db.Text
+  follow_up_notes        String?        @db.Text
+  follow_up_completed_at DateTime?      @db.DateTime(0)
+  signed_at              DateTime?      @db.DateTime(0)
+  signature_data         String?        @db.Text
+  acknowledged_at        DateTime?      @db.DateTime(0)
+  created_by             Int
+  created_at             DateTime       @default(now()) @db.DateTime(0)
+  updated_at             DateTime       @updatedAt @db.DateTime(0)
+  delivered_at           DateTime?      @db.DateTime(0)
+  closed_at              DateTime?      @db.DateTime(0)
+  csr                    User           @relation("WriteUpCsr", fields: [csr_id], references: [id], onDelete: Cascade)
+  creator                User           @relation("WriteUpCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
+  follow_up_assignee     User?          @relation("WriteUpFollowUpAssignee", fields: [follow_up_assigned_to], references: [id], onDelete: SetNull)
+  linked_coaching        CoachingSession? @relation(fields: [linked_coaching_id], references: [id], onDelete: SetNull)
+  incidents              WriteUpIncident[]
+  prior_discipline       WriteUpPriorDiscipline[]
+  attachments            WriteUpAttachment[]
+  @@index([csr_id])
+  @@index([status])
+  @@index([created_by])
+  @@index([created_at])
+  @@map("write_ups")
+}
+
+model WriteUpIncident {
+  id             Int      @id @default(autoincrement())
+  write_up_id    Int
+  incident_date  DateTime @db.Date
+  description    String   @db.Text
+  sort_order     Int      @default(0)
+  write_up       WriteUp  @relation(fields: [write_up_id], references: [id], onDelete: Cascade)
+  violations     WriteUpViolation[]
+  @@index([write_up_id])
+  @@map("write_up_incidents")
+}
+
+model WriteUpViolation {
+  id                 Int             @id @default(autoincrement())
+  incident_id        Int
+  policy_violated    String          @db.VarChar(255)
+  reference_material String?         @db.VarChar(500)
+  sort_order         Int             @default(0)
+  incident           WriteUpIncident @relation(fields: [incident_id], references: [id], onDelete: Cascade)
+  examples           WriteUpExample[]
+  @@index([incident_id])
+  @@map("write_up_violations")
+}
+
+model WriteUpExample {
+  id               Int                  @id @default(autoincrement())
+  violation_id     Int
+  example_date     DateTime?            @db.Date
+  description      String               @db.Text
+  source           WriteUpExampleSource @default(MANUAL)
+  qa_submission_id Int?
+  qa_question_id   Int?
+  sort_order       Int                  @default(0)
+  violation        WriteUpViolation     @relation(fields: [violation_id], references: [id], onDelete: Cascade)
+  @@index([violation_id])
+  @@map("write_up_examples")
+}
+
+model WriteUpPriorDiscipline {
+  id             Int     @id @default(autoincrement())
+  write_up_id    Int
+  reference_type String  @db.VarChar(50)
+  reference_id   Int
+  write_up       WriteUp @relation(fields: [write_up_id], references: [id], onDelete: Cascade)
+  @@unique([write_up_id, reference_type, reference_id], name: "unique_prior_discipline")
+  @@index([write_up_id])
+  @@map("write_up_prior_discipline")
+}
+
+model WriteUpAttachment {
+  id              Int      @id @default(autoincrement())
+  write_up_id     Int
+  attachment_type String   @db.VarChar(20)
+  reference_type  String?  @db.VarChar(50)
+  reference_id    Int?
+  filename        String   @db.VarChar(255)
+  file_path       String?  @db.VarChar(500)
+  file_size       Int?
+  mime_type       String?  @db.VarChar(100)
+  created_at      DateTime @default(now()) @db.DateTime(0)
+  write_up        WriteUp  @relation(fields: [write_up_id], references: [id], onDelete: Cascade)
+  @@index([write_up_id])
+  @@map("write_up_attachments")
 }
 
 model Call {
@@ -1314,4 +1437,26 @@ enum ImportStatus {
   PROCESSING
   COMPLETE
   FAILED
+}
+
+enum WriteUpType {
+  VERBAL_WARNING
+  WRITTEN_WARNING
+  FINAL_WARNING
+}
+
+enum WriteUpStatus {
+  DRAFT
+  SCHEDULED
+  DELIVERED
+  AWAITING_SIGNATURE
+  SIGNED
+  FOLLOW_UP_PENDING
+  CLOSED
+}
+
+enum WriteUpExampleSource {
+  MANUAL
+  QA_IMPORT
+  COACHING_IMPORT
 }

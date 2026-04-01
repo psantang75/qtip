@@ -44,6 +44,16 @@ const SECTIONS: ListSection[] = [
       { key: 'behavior_flags',   label: 'Behavior Flags',   description: '', tier: 'dynamic',        implemented: true,  listType: 'behavior_flag'    },
     ],
   },
+  {
+    id: 'writeups',
+    label: 'Write-Ups',
+    lists: [
+      { key: 'writeup_policy',      label: 'Policy Violated',        description: 'Policies selectable when documenting a policy violation in a write-up.',                       tier: 'dynamic', implemented: true, listType: 'writeup_policy'      },
+      { key: 'writeup_reference',   label: 'Reference Material',     description: 'Reference materials (e.g. handbook sections) that can be cited in a write-up violation.',      tier: 'dynamic', implemented: true, listType: 'writeup_reference'   },
+      { key: 'writeup_timeline',    label: 'Timeline for Correction', description: 'Correction timeline options available when setting expectations in a write-up.',              tier: 'dynamic', implemented: true, listType: 'writeup_timeline'    },
+      { key: 'writeup_consequence', label: 'Consequence if Not Met', description: 'Consequence options displayed when the corrective action is not met in a write-up.',            tier: 'dynamic', implemented: true, listType: 'writeup_consequence' },
+    ],
+  },
 ]
 
 // ── Page ──────────────────────────────────────────────────────────────────────

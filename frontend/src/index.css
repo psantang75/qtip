@@ -1,4 +1,4 @@
-﻿@import "./styles/tokens.css";
+@import "./styles/tokens.css";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
@@ -73,8 +73,10 @@
     font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     color: var(--color-neutral-700);
     background-color: var(--color-neutral-600);
+    height: 100%;
+    overflow: hidden;
   }
-  
+
   h1 {
     font-size: 32px;
     font-weight: 700;
@@ -95,6 +97,8 @@
   
   body {
     font-size: 16px;
+    height: 100%;
+    overflow: hidden;
   }
   
   /* CSS Custom Properties */

@@ -40,6 +40,12 @@ const LibraryQuizzesPage        = React.lazy(() => import('./pages/training/Libr
 const LibraryQuizFormPage       = React.lazy(() => import('./pages/training/LibraryQuizFormPage'))
 const LibraryResourcesPage      = React.lazy(() => import('./pages/training/LibraryResourcesPage'))
 
+const WriteUpsPage           = React.lazy(() => import('./pages/writeups/WriteUpsPage'))
+const WriteUpFormPage        = React.lazy(() => import('./pages/writeups/WriteUpFormPage'))
+const WriteUpDetailPage      = React.lazy(() => import('./pages/writeups/WriteUpDetailPage'))
+const MyWriteUpsPage         = React.lazy(() => import('./pages/writeups/MyWriteUpsPage'))
+const MyWriteUpDetailPage    = React.lazy(() => import('./pages/writeups/MyWriteUpDetailPage'))
+
 const DashboardPage         = React.lazy(() => import('./pages/insights/DashboardPage'))
 const TeamDashboardPage     = React.lazy(() => import('./pages/insights/TeamDashboardPage'))
 const ReportBuilderPage     = React.lazy(() => import('./pages/insights/ReportBuilderPage'))
@@ -210,6 +216,51 @@ export default function App() {
                     <Route path="quizzes/:id/edit" element={<PageLoader><LibraryQuizFormPage /></PageLoader>} />
                     <Route path="resources" element={<PageLoader><LibraryResourcesPage /></PageLoader>} />
                   </Route>
+                </Route>
+
+                {/* Write-Ups */}
+                <Route path="/app/writeups">
+                  <Route index element={<Navigate to="list" replace />} />
+                  <Route
+                    path="list"
+                    element={
+                      <RequireRole allowed={[1,2,5]} fallback="/app/writeups/my">
+                        <PageLoader><WriteUpsPage /></PageLoader>
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="new"
+                    element={
+                      <RequireRole allowed={[1,2,5]} fallback="/app">
+                        <PageLoader><WriteUpFormPage /></PageLoader>
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path=":id"
+                    element={
+                      <RequireRole allowed={[1,2,5]} fallback="/app">
+                        <PageLoader><WriteUpDetailPage /></PageLoader>
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path=":id/edit"
+                    element={
+                      <RequireRole allowed={[1,2,5]} fallback="/app">
+                        <PageLoader><WriteUpFormPage /></PageLoader>
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="my"
+                    element={<PageLoader><MyWriteUpsPage /></PageLoader>}
+                  />
+                  <Route
+                    path="my/:id"
+                    element={<PageLoader><MyWriteUpDetailPage /></PageLoader>}
+                  />
                 </Route>
 
                 {/* Insights */}
