@@ -229,16 +229,16 @@ function DisputeListView() {
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
-                <SortableTableHead field="status"          sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
-                <SortableTableHead field="form_name"       sort={sort} dir={dir} onSort={toggle}>Form Name</SortableTableHead>
-                {!isCSR && <SortableTableHead field="csr_name"        sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>}
-                {!isCSR && <SortableTableHead field="qa_analyst_name" sort={sort} dir={dir} onSort={toggle}>Reviewer</SortableTableHead>}
-                <SortableTableHead field="submission_id"   sort={sort} dir={dir} onSort={toggle}>Review #</SortableTableHead>
-                <SortableTableHead field="id"              sort={sort} dir={dir} onSort={toggle}>Dispute #</SortableTableHead>
-                <SortableTableHead field="created_at"      sort={sort} dir={dir} onSort={toggle}>Date</SortableTableHead>
-                <SortableTableHead field="original_score"  sort={sort} dir={dir} onSort={toggle} right>Score</SortableTableHead>
-                <SortableTableHead field="adjusted_score"  sort={sort} dir={dir} onSort={toggle} right>Adjusted Score</SortableTableHead>
-                <TableHead className="w-20" />
+                <SortableTableHead field="status"           sort={sort} dir={dir} onSort={toggle} className="w-24">Status</SortableTableHead>
+                <SortableTableHead field="form_name"        sort={sort} dir={dir} onSort={toggle}>Form Name</SortableTableHead>
+                {!isCSR && <SortableTableHead field="csr_name" sort={sort} dir={dir} onSort={toggle} className="w-40">CSR</SortableTableHead>}
+                <SortableTableHead field="submission_id"    sort={sort} dir={dir} onSort={toggle} className="w-20">Review #</SortableTableHead>
+                <SortableTableHead field="id"               sort={sort} dir={dir} onSort={toggle} className="w-20">Dispute #</SortableTableHead>
+                <SortableTableHead field="created_at"       sort={sort} dir={dir} onSort={toggle} className="w-28">Review Date</SortableTableHead>
+                <SortableTableHead field="interaction_date" sort={sort} dir={dir} onSort={toggle} className="w-28">Int. Date</SortableTableHead>
+                <SortableTableHead field="original_score"   sort={sort} dir={dir} onSort={toggle} className="w-20" right>Score</SortableTableHead>
+                <SortableTableHead field="adjusted_score"   sort={sort} dir={dir} onSort={toggle} className="w-24" right>Adj. Score</SortableTableHead>
+                <TableHead className="w-16" />
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
@@ -248,22 +248,22 @@ function DisputeListView() {
                     onClick={() => navigate(`/app/quality/submissions/${d.submission_id}`, {
                       state: { from: fromLabel, fromPath },
                     })}>
-                    <TableCell className="text-[13px] text-slate-600">
+                    <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                       {d.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
                     </TableCell>
                     <TableCell className="text-[13px] font-medium text-slate-900">{d.form_name ?? '—'}</TableCell>
-                    {!isCSR && <TableCell className="text-[13px] text-slate-600">{d.csr_name ?? '—'}</TableCell>}
-                    {!isCSR && <TableCell className="text-[13px] text-slate-600">{d.qa_analyst_name ?? '—'}</TableCell>}
-                    <TableCell className="text-[13px] text-slate-500">#{d.submission_id ?? '—'}</TableCell>
-                    <TableCell className="text-[13px] text-slate-500">#{d.id ?? '—'}</TableCell>
-                    <TableCell className="text-[13px] text-slate-600">{fmtDate(d.created_at)}</TableCell>
-                    <TableCell className="text-right pr-6 text-[13px] font-medium text-slate-700">
+                    {!isCSR && <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{d.csr_name ?? '—'}</TableCell>}
+                    <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">#{d.submission_id ?? '—'}</TableCell>
+                    <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">#{d.id ?? '—'}</TableCell>
+                    <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{fmtDate(d.created_at)}</TableCell>
+                    <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{d.interaction_date ? fmtDate(d.interaction_date) : <span className="text-slate-400">—</span>}</TableCell>
+                    <TableCell className="text-right pr-4 text-[13px] font-medium text-slate-700 whitespace-nowrap">
                       {d.original_score != null && d.original_score > 0
                         ? `${d.original_score.toFixed(1)}%`
                         : <span className="text-slate-400">—</span>
                       }
                     </TableCell>
-                    <TableCell className="text-right pr-20 text-[13px] text-slate-600">
+                    <TableCell className="text-right pr-4 text-[13px] text-slate-600 whitespace-nowrap">
                       {d.adjusted_score != null && d.adjusted_score > 0
                         ? `${Number(d.adjusted_score).toFixed(1)}%`
                         : <span className="text-slate-400">—</span>

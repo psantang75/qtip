@@ -176,9 +176,9 @@ export default function SubmissionsPage() {
                 <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
                 <SortableTableHead field="form_name"     sort={sort} dir={dir} onSort={toggle}>Form Name</SortableTableHead>
                 {!isCSR      && <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>}
-                {isAdminOrQA && <SortableTableHead field="reviewer_name" sort={sort} dir={dir} onSort={toggle}>Reviewer</SortableTableHead>}
                 <SortableTableHead field="id"           sort={sort} dir={dir} onSort={toggle}>Review #</SortableTableHead>
-                <SortableTableHead field="created_at"   sort={sort} dir={dir} onSort={toggle}>Date</SortableTableHead>
+                <SortableTableHead field="created_at"   sort={sort} dir={dir} onSort={toggle}>Review Date</SortableTableHead>
+                <SortableTableHead field="interaction_date" sort={sort} dir={dir} onSort={toggle}>Interaction Date</SortableTableHead>
                 <SortableTableHead field="score"        sort={sort} dir={dir} onSort={toggle}>Score</SortableTableHead>
                 <TableHead className="w-20" />
               </StandardTableHeaderRow>
@@ -195,9 +195,9 @@ export default function SubmissionsPage() {
                     </TableCell>
                     <TableCell className="text-[13px] font-medium text-slate-900">{row.form_name}</TableCell>
                     {!isCSR      && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}
-                    {isAdminOrQA && <TableCell className="text-[13px] text-slate-600">{row.reviewer_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-500">{row.id}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">{fmtDate(row.created_at)}</TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{row.interaction_date ? fmtDate(row.interaction_date) : <span className="text-slate-400">—</span>}</TableCell>
                     <TableCell className="text-[13px] font-medium text-slate-700">
                       {row.score != null && row.score > 0
                         ? `${row.score.toFixed(1)}%`

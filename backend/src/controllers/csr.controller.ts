@@ -478,7 +478,14 @@ export const getCSRAudits = async (req: Request, res: Response) => {
           s.submitted_at as submittedDate,
           s.total_score as score,
           s.status,
-          sm.value as csr_id
+          sm.value as csr_id,
+          (
+            SELECT sm2.value
+            FROM submission_metadata sm2
+            JOIN form_metadata_fields fmf2 ON sm2.field_id = fmf2.id
+            WHERE sm2.submission_id = s.id AND fmf2.field_name IN ('Interaction Date', 'Call Date')
+            LIMIT 1
+          ) as interaction_date
         FROM submissions s
         JOIN forms f ON s.form_id = f.id
         JOIN submission_metadata sm ON sm.submission_id = s.id

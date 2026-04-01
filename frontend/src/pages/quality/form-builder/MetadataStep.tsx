@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -17,6 +18,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import listService from '@/services/listService'
+
+const FALLBACK_FORM_TYPES = [
+  { value: 'CALL',      label: 'Call'      },
+  { value: 'TICKET',    label: 'Ticket'    },
+  { value: 'EMAIL',     label: 'Email'     },
+  { value: 'CHAT',      label: 'Chat'      },
+  { value: 'UNIVERSAL', label: 'Universal' },
+]
 
 // ── Sortable metadata field row ───────────────────────────────────────────────
 function SortableMetadataField({ field, idx, onUpdate, onRemove }: {
@@ -126,6 +136,18 @@ export function MetadataStep({ form, onChange }: { form: Form; onChange: (f: For
   const fields = form.metadata_fields || []
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
+  const { data: formTypeItems = [] } = useQuery({
+    queryKey: ['list-items', 'qa_form_type'],
+    queryFn: () => listService.getItems('qa_form_type'),
+  })
+
+  const formTypeOptions = formTypeItems.length > 0
+    ? formTypeItems.map(item => ({
+        value: item.item_key ?? item.label.toUpperCase().replace(/\s+/g, '_'),
+        label: item.label,
+      }))
+    : FALLBACK_FORM_TYPES
+
   const updateField = (idx: number, patch: Partial<FormMetadataField>) =>
     onChange({ ...form, metadata_fields: fields.map((f, i) => i === idx ? { ...f, ...patch } : f) })
 
@@ -167,15 +189,13 @@ export function MetadataStep({ form, onChange }: { form: Form; onChange: (f: For
             placeholder="e.g. Customer Service Call Review" className="h-9" />
         </div>
         <div className="space-y-1.5">
-          <Label>Interaction Type</Label>
+          <Label>Form Type</Label>
           <Select value={form.interaction_type || 'CALL'} onValueChange={handleInteractionChange}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="CALL">Call</SelectItem>
-              <SelectItem value="TICKET">Ticket</SelectItem>
-              <SelectItem value="EMAIL">Email</SelectItem>
-              <SelectItem value="CHAT">Chat</SelectItem>
-              <SelectItem value="UNIVERSAL">Universal</SelectItem>
+              {formTypeOptions.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -204,6 +224,7 @@ export function MetadataStep({ form, onChange }: { form: Form; onChange: (f: For
               <span className="text-xs text-slate-400 ml-2">
                 {field.field_type === 'AUTO' && '— Auto-populated'}
                 {field.field_type === 'DROPDOWN' && '— Dropdown'}
+                {field.field_type === 'DATE' && '— Date'}
                 {field.field_type === 'SPACER' && '— Visual spacer'}
               </span>
             </div>

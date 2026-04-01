@@ -41,7 +41,7 @@ export default function FormMetadataDisplay({
         const val  = values[key] ?? ''
 
         if (field.field_type === 'SPACER') {
-          return <div key={idx} className="col-span-full h-2" />
+          return <div key={idx} className="h-0 overflow-hidden" aria-hidden />
         }
 
         return (

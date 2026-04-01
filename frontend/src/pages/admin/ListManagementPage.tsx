@@ -30,8 +30,7 @@ const SECTIONS: ListSection[] = [
     id: 'quality',
     label: 'Quality',
     lists: [
-      { key: 'dispute_reasons', label: 'Dispute Reasons', description: 'Reasons a CSR can select when disputing a QA audit.', tier: 'dynamic', implemented: false },
-      { key: 'qa_form_types',  label: 'QA Form Types',   description: 'Categories used to classify quality audit forms.',  tier: 'dynamic', implemented: false },
+      { key: 'qa_form_types', label: 'QA Form Types', description: 'Form type categories used to classify quality audit forms.', tier: 'dynamic', implemented: true, listType: 'qa_form_type' },
     ],
   },
   {
@@ -50,9 +49,9 @@ const SECTIONS: ListSection[] = [
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ListManagementPage() {
-  const [openSection,  setOpenSection]  = useState<string>('training')
+  const [openSection,  setOpenSection]  = useState<string>('quality')
   const [selectedList, setSelectedList] = useState<ManagedList | null>(
-    SECTIONS.find(s => s.id === 'training')?.lists.find(l => l.key === 'behavior_flags') ?? null
+    SECTIONS.find(s => s.id === 'quality')?.lists.find(l => l.key === 'qa_form_types') ?? null
   )
 
   const currentSection = SECTIONS.find(s => s.id === openSection)

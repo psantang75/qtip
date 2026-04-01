@@ -6,7 +6,7 @@ import { MetadataStep }   from './form-builder/MetadataStep'
 import { CategoriesStep } from './form-builder/CategoriesStep'
 import { QuestionsStep }  from './form-builder/QuestionsStep'
 import { PreviewStep }    from './form-builder/PreviewStep'
-import { STEPS, StepBar, freshForm, totalCategoryWeight, type Step } from './form-builder/formBuilderUtils'
+import { STEPS, StepBar, freshForm, normalizeFormMetadata, totalCategoryWeight, type Step } from './form-builder/formBuilderUtils'
 import { useAuth } from '@/contexts/AuthContext'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { getFormById, createForm, updateForm } from '@/services/formService'
@@ -39,26 +39,27 @@ export default function FormsPage() {
 
   const editMut = useMutation({
     mutationFn: (formId: number) => getFormById(formId, true),
-    onSuccess: (data) => { setForm(data); setStep('metadata'); setView('builder'); setHasChanges(false) },
+    onSuccess: (data) => { setForm(normalizeFormMetadata(data)); setStep('metadata'); setView('builder'); setHasChanges(false) },
     onError: () => toast({ title: 'Error', description: 'Failed to load form.', variant: 'destructive' }),
   })
 
   const previewMut = useMutation({
     mutationFn: (formId: number) => getFormById(formId, true),
-    onSuccess: (data) => { setForm(data); setStep('preview'); setView('builder'); setHasChanges(false) },
+    onSuccess: (data) => { setForm(normalizeFormMetadata(data)); setStep('preview'); setView('builder'); setHasChanges(false) },
     onError: () => toast({ title: 'Error', description: 'Failed to load form.', variant: 'destructive' }),
   })
 
   const duplicateMut = useMutation({
     mutationFn: (formId: number) => getFormById(formId),
     onSuccess: (data) => {
+      const normalized = normalizeFormMetadata(data)
       const copy: Form = {
-        ...data, id: undefined, form_name: `${data.form_name} (Copy)`, version: 1,
-        categories: data.categories.map(c => ({
+        ...normalized, id: undefined, form_name: `${normalized.form_name} (Copy)`, version: 1,
+        categories: normalized.categories.map(c => ({
           ...c, id: undefined, form_id: undefined,
           questions: c.questions.map(q => ({ ...q, id: undefined, category_id: undefined })),
         })),
-        metadata_fields: data.metadata_fields?.map(f => ({ ...f, id: undefined, form_id: undefined })) || [],
+        metadata_fields: normalized.metadata_fields?.map(f => ({ ...f, id: undefined, form_id: undefined })) || [],
       }
       setForm(copy); setStep('metadata'); setView('builder'); setHasChanges(true)
     },

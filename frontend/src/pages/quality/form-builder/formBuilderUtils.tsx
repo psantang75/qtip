@@ -8,12 +8,39 @@ export const STEP_LABELS: Record<Step, string> = {
   metadata: '1. Details', categories: '2. Categories', questions: '3. Questions', preview: '4. Preview & Save',
 }
 
+/**
+ * When opening an existing form for editing, upgrade its required metadata fields
+ * so that any Spacer at index 3 is replaced by "Interaction Date" (DATE).
+ * If no such spacer exists and "Interaction Date" is already present, it's a no-op.
+ */
+export function normalizeFormMetadata(form: Form): Form {
+  const fields = form.metadata_fields ? [...form.metadata_fields] : []
+
+  // Check if Interaction Date already exists in the first 4 required fields
+  const hasInteractionDate = fields.slice(0, 4).some(f => f.field_name === 'Interaction Date')
+  if (hasInteractionDate) return form
+
+  // Replace a Spacer in the first 4 slots with Interaction Date
+  const spacerIdx = fields.slice(0, 4).findIndex(f => f.field_type === 'SPACER')
+  if (spacerIdx !== -1) {
+    fields[spacerIdx] = {
+      ...fields[spacerIdx],
+      field_name: 'Interaction Date',
+      field_type: 'DATE',
+      is_required: true,
+    }
+    return { ...form, metadata_fields: fields }
+  }
+
+  return form
+}
+
 export function freshForm(): Form {
   const defaultMetadata: FormMetadataField[] = [
     { field_name: 'Reviewer Name', field_type: 'AUTO',     is_required: true,  interaction_type: 'CALL', sort_order: 0 },
     { field_name: 'Review Date',   field_type: 'AUTO',     is_required: true,  interaction_type: 'CALL', sort_order: 1 },
     { field_name: 'CSR',           field_type: 'DROPDOWN', is_required: true,  interaction_type: 'CALL', sort_order: 2 },
-    { field_name: 'Spacer-1',      field_type: 'SPACER',   is_required: false, interaction_type: 'CALL', sort_order: 3 },
+    { field_name: 'Interaction Date', field_type: 'DATE',   is_required: true,  interaction_type: 'CALL', sort_order: 3 },
     { field_name: 'Customer ID',   field_type: 'TEXT',     is_required: true,  interaction_type: 'CALL', sort_order: 4 },
     { field_name: 'Customer Name', field_type: 'TEXT',     is_required: true,  interaction_type: 'CALL', sort_order: 5 },
     { field_name: 'Ticket Number', field_type: 'TEXT',     is_required: true,  interaction_type: 'CALL', sort_order: 6 },

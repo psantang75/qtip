@@ -55,7 +55,7 @@ export const getCompletedSubmissions = async (req: Request, res: Response): Prom
     
     const whereClause = Prisma.sql`WHERE ${Prisma.join(sqlConditions, ' AND ')}`;
     
-    const rows = await prisma.$queryRaw<{id: number, form_id: number, form_name: string, auditor_name: string, csr_name: string, submitted_at: Date, total_score: number, status: string}[]>(
+    const rows = await prisma.$queryRaw<{id: number, form_id: number, form_name: string, auditor_name: string, csr_name: string, submitted_at: Date, total_score: number, status: string, interaction_date: string | null}[]>(
       Prisma.sql`
         SELECT 
           s.id,
@@ -65,7 +65,14 @@ export const getCompletedSubmissions = async (req: Request, res: Response): Prom
           COALESCE(csr.username, 'No CSR assigned') AS csr_name, 
           s.submitted_at,
           s.total_score,
-          s.status
+          s.status,
+          (
+            SELECT sm.value
+            FROM submission_metadata sm
+            JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
+            WHERE sm.submission_id = s.id AND fmf.field_name IN ('Interaction Date', 'Call Date')
+            LIMIT 1
+          ) AS interaction_date
         FROM 
           submissions s
           JOIN forms f ON s.form_id = f.id

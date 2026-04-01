@@ -1,4 +1,4 @@
-﻿import express, { Request, Response, RequestHandler } from 'express';
+import express, { Request, Response, RequestHandler } from 'express';
 import multer from 'multer';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -662,7 +662,14 @@ const getTeamAuditsWithFiltersHandler = async (req: Request, res: Response) => {
         s.status,
         f.form_name,
         sm.value as csr_id,
-        qa.username as qa_analyst_name
+        qa.username as qa_analyst_name,
+        (
+          SELECT sm2.value
+          FROM submission_metadata sm2
+          JOIN form_metadata_fields fmf2 ON sm2.field_id = fmf2.id
+          WHERE sm2.submission_id = s.id AND fmf2.field_name IN ('Interaction Date', 'Call Date')
+          LIMIT 1
+        ) as interaction_date
       FROM submissions s
       JOIN forms f ON s.form_id = f.id
       JOIN submission_metadata sm ON sm.submission_id = s.id
@@ -800,7 +807,8 @@ const getTeamAuditsWithFiltersHandler = async (req: Request, res: Response) => {
         submitted_at: row.submitted_at,
         status: row.status,
         dispute_id: dispute.dispute_id,
-        dispute_status: dispute.dispute_status
+        dispute_status: dispute.dispute_status,
+        interaction_date: row.interaction_date ?? null
       };
     });
 

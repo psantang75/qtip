@@ -103,6 +103,7 @@ export interface Submission {
   reviewer_name?: string
   has_dispute?: boolean
   dispute_status?: string
+  interaction_date?: string | null
 }
 
 export interface AnswerRow {
@@ -131,6 +132,7 @@ export interface DisputeRecord {
   form_name?: string
   original_score?: number
   qa_analyst_name?: string
+  interaction_date?: string | null
 }
 
 export interface MetadataEntry {

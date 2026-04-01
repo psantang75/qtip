@@ -745,7 +745,14 @@ export const getManagerTeamDisputes = async (req: AuthenticatedRequest, res: Res
          csr.username as csr_name,
          f.id as form_id,
          f.form_name,
-         qa.username as qa_analyst_name
+         qa.username as qa_analyst_name,
+         (
+           SELECT sm.value
+           FROM submission_metadata sm
+           JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
+           WHERE sm.submission_id = s.id AND fmf.field_name IN ('Interaction Date', 'Call Date')
+           LIMIT 1
+         ) as interaction_date
        FROM disputes d
        JOIN submissions s ON d.submission_id = s.id
        JOIN forms f ON s.form_id = f.id
@@ -774,7 +781,8 @@ export const getManagerTeamDisputes = async (req: AuthenticatedRequest, res: Res
         csr_name: dispute.csr_name,
         form_id: dispute.form_id,
         form_name: dispute.form_name,
-        qa_analyst_name: dispute.qa_analyst_name
+        qa_analyst_name: dispute.qa_analyst_name,
+        interaction_date: dispute.interaction_date ?? null
       })),
       total: totalCount,
       page,
