@@ -22,7 +22,6 @@ export interface ViolationInput {
 
 export interface IncidentInput {
   id?: number
-  incident_date: string
   description: string
   sort_order: number
   violations: ViolationInput[]
@@ -34,9 +33,18 @@ export interface PriorDisciplineRef {
   label: string
   // Optional display metadata — populated when added from modals
   date?: string
-  subtype?: string   // document_type label (write-up) or coaching_purpose label (coaching)
-  detail?: string    // policies_violated or topic_names
+  subtype?: string    // document_type label (write-up) or coaching_purpose label (coaching)
+  detail?: string[]   // policies_violated (write-up) or topic_names (coaching)
+  notes?: string      // incident_descriptions (write-up) or session notes (coaching)
   status?: string
+}
+
+export interface SavedAttachment {
+  id: number
+  filename: string
+  file_size?: number | null
+  mime_type?: string | null
+  attachment_type: string
 }
 
 export interface WriteUpFormState {
@@ -55,6 +63,7 @@ export interface WriteUpFormState {
   prior_discipline: PriorDisciplineRef[]
   meeting_notes: string
   attachment_files: File[]
+  existing_attachments: SavedAttachment[]
 }
 
 export function emptyForm(): WriteUpFormState {
@@ -74,11 +83,12 @@ export function emptyForm(): WriteUpFormState {
     prior_discipline: [],
     meeting_notes: '',
     attachment_files: [],
+    existing_attachments: [],
   }
 }
 
 export function newIncident(order: number): IncidentInput {
-  return { incident_date: '', description: '', sort_order: order, violations: [newViolation(0)] }
+  return { description: '', sort_order: order, violations: [newViolation(0)] }
 }
 
 export function newViolation(order: number): ViolationInput {

@@ -308,7 +308,7 @@ export async function queryRawData(params: RawDataQueryParams): Promise<RawDataR
       take: Math.min(limit, 1000),
       orderBy: { report_date: 'desc' },
     }),
-  ]);
+  ] as any) as [number, Record<string, unknown>[]];
 
   return { rows, total, columns: selectedColumns };
 }

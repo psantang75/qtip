@@ -94,6 +94,8 @@ model User {
   training_resources                    TrainingResource[]
   write_ups_as_csr                      WriteUp[]          @relation("WriteUpCsr")
   write_ups_created                     WriteUp[]          @relation("WriteUpCreatedBy")
+  write_ups_as_manager                  WriteUp[]          @relation("WriteUpManager")
+  write_ups_as_hr_witness               WriteUp[]          @relation("WriteUpHrWitness")
   write_up_follow_ups                   WriteUp[]          @relation("WriteUpFollowUpAssignee")
 
   @@index([last_login])
@@ -616,6 +618,8 @@ model WriteUp {
   checkin_date           DateTime?      @db.Date
   consequence            String?        @db.Text
   linked_coaching_id     Int?
+  manager_id             Int?
+  hr_witness_id          Int?
   follow_up_required     Boolean        @default(false) @db.TinyInt
   follow_up_date         DateTime?      @db.Date
   follow_up_assigned_to  Int?
@@ -632,6 +636,8 @@ model WriteUp {
   closed_at              DateTime?      @db.DateTime(0)
   csr                    User           @relation("WriteUpCsr", fields: [csr_id], references: [id], onDelete: Cascade)
   creator                User           @relation("WriteUpCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
+  manager                User?          @relation("WriteUpManager", fields: [manager_id], references: [id], onDelete: SetNull)
+  hr_witness             User?          @relation("WriteUpHrWitness", fields: [hr_witness_id], references: [id], onDelete: SetNull)
   follow_up_assignee     User?          @relation("WriteUpFollowUpAssignee", fields: [follow_up_assigned_to], references: [id], onDelete: SetNull)
   linked_coaching        CoachingSession? @relation(fields: [linked_coaching_id], references: [id], onDelete: SetNull)
   incidents              WriteUpIncident[]
@@ -647,7 +653,6 @@ model WriteUp {
 model WriteUpIncident {
   id             Int      @id @default(autoincrement())
   write_up_id    Int
-  incident_date  DateTime @db.Date
   description    String   @db.Text
   sort_order     Int      @default(0)
   write_up       WriteUp  @relation(fields: [write_up_id], references: [id], onDelete: Cascade)

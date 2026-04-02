@@ -8,14 +8,13 @@ import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
-import { DateRangeFilter } from '@/components/common/DateRangeFilter'
+import { GroupedStagedMultiSelect, type GroupedOption } from '@/components/common/GroupedStagedMultiSelect'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { ListPagination } from '@/components/common/ListPagination'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -23,7 +22,6 @@ import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { useAuth } from '@/contexts/AuthContext'
-import { cn } from '@/lib/utils'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -49,20 +47,13 @@ export const WRITE_UP_STATUS_LABELS: Record<WriteUpStatus, string> = {
   CLOSED:              'Closed',
 }
 
-const ALL_STATUSES = Object.keys(WRITE_UP_STATUS_LABELS) as WriteUpStatus[]
-const ALL_TYPES    = Object.keys(WRITE_UP_TYPE_LABELS)   as WriteUpType[]
+const ALL_STATUSES    = Object.keys(WRITE_UP_STATUS_LABELS) as WriteUpStatus[]
+const ALL_TYPES       = Object.keys(WRITE_UP_TYPE_LABELS)   as WriteUpType[]
+const CLOSED_LABEL    = WRITE_UP_STATUS_LABELS['CLOSED']
 
-// ── Badge components ──────────────────────────────────────────────────────────
-
+// kept for external imports if needed
 export function WriteUpTypeBadge({ type }: { type: WriteUpType }) {
-  return (
-    <span className={cn(
-      'inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
-      WRITE_UP_TYPE_STYLES[type] ?? 'bg-slate-100 text-slate-600',
-    )}>
-      {WRITE_UP_TYPE_LABELS[type] ?? type}
-    </span>
-  )
+  return <span>{WRITE_UP_TYPE_LABELS[type] ?? type}</span>
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -73,11 +64,10 @@ export default function WriteUpsPage() {
   const canCreate   = [1, 2, 5].includes(user?.role_id ?? 0)
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    search: '', csrs: '', statuses: '', types: '',
+    csrs: '', statuses: '', types: '',
     from: '', to: '', page: '1', size: '20',
   })
 
-  const search      = get('search')
   const csrsParam   = get('csrs')
   const statusParam = get('statuses')
   const typeParam   = get('types')
@@ -86,22 +76,21 @@ export default function WriteUpsPage() {
   const page        = parseInt(get('page')) || 1
   const pageSize    = parseInt(get('size')) || 20
 
-  const setPage     = (p: number)  => set('page', String(p))
-  const setPageSize = (s: number)  => setMany({ size: String(s), page: '1' })
+  const setPage     = (p: number) => set('page', String(p))
+  const setPageSize = (s: number) => setMany({ size: String(s), page: '1' })
 
   const selectedCsrs     = useMemo(() => csrsParam   ? csrsParam.split(',').filter(Boolean)   : [], [csrsParam])
   const selectedStatuses = useMemo(() => statusParam ? statusParam.split(',').filter(Boolean) : [], [statusParam])
   const selectedTypes    = useMemo(() => typeParam   ? typeParam.split(',').filter(Boolean)   : [], [typeParam])
 
-  // Fetch write-ups with server-side date + search filtering
+  // Fetch write-ups with server-side meeting date filtering
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['writeups', page, pageSize, dateFrom, dateTo, search],
+    queryKey: ['writeups', page, pageSize, dateFrom, dateTo],
     queryFn: () => writeupService.getWriteUps({
       page,
       limit:     pageSize,
       date_from: dateFrom || undefined,
       date_to:   dateTo   || undefined,
-      search:    search   || undefined,
     }),
     placeholderData: (prev) => prev,
   })
@@ -112,33 +101,42 @@ export default function WriteUpsPage() {
     queryFn:  () => userService.getUsers(1, 100, { role_id: 3, is_active: true }),
     staleTime: Infinity,
   })
-  const csrOptions = useMemo(
-    () => (csrData?.items ?? []).map(u => u.username).sort(),
+  // Build grouped employee options: department (alpha) → employees (alpha)
+  const csrOptions = useMemo<GroupedOption[]>(
+    () => (csrData?.items ?? []).map(u => ({
+      group: u.department_name ?? '',
+      value: u.username,
+    })),
     [csrData?.items],
+  )
+  const statusOptions = useMemo(() => ALL_STATUSES.map(s => WRITE_UP_STATUS_LABELS[s]), [])
+  const typeOptions   = useMemo(() => ALL_TYPES.map(t => WRITE_UP_TYPE_LABELS[t]), [])
+
+  // Default: all except Closed — same pattern as coaching sessions
+  const allExceptClosed = useMemo(() => statusOptions.filter(s => s !== CLOSED_LABEL), [statusOptions])
+  const effectiveSelectedStatuses = useMemo(
+    () => selectedStatuses.length === 0 ? allExceptClosed : selectedStatuses,
+    [selectedStatuses, allExceptClosed],
   )
 
   // Client-side filtering for CSR, status, type
   const clientFiltered = useMemo(() => {
     let items = data?.items ?? []
-    if (selectedCsrs.length)     items = items.filter(w => selectedCsrs.includes(w.csr_name))
-    if (selectedStatuses.length) items = items.filter(w => selectedStatuses.includes(WRITE_UP_STATUS_LABELS[w.status]))
-    if (selectedTypes.length)    items = items.filter(w => selectedTypes.includes(WRITE_UP_TYPE_LABELS[w.document_type]))
+    if (selectedCsrs.length)               items = items.filter(w => selectedCsrs.includes(w.csr_name))
+    if (effectiveSelectedStatuses.length)  items = items.filter(w => effectiveSelectedStatuses.includes(WRITE_UP_STATUS_LABELS[w.status]))
+    if (selectedTypes.length)              items = items.filter(w => selectedTypes.includes(WRITE_UP_TYPE_LABELS[w.document_type]))
     return items
-  }, [data?.items, selectedCsrs, selectedStatuses, selectedTypes])
+  }, [data?.items, selectedCsrs, effectiveSelectedStatuses, selectedTypes])
 
   const { sort, dir, toggle, sorted } = useListSort(clientFiltered)
 
-  const hasClientFilter  = selectedCsrs.length > 0 || selectedStatuses.length > 0 || selectedTypes.length > 0
-  const displayTotal     = hasClientFilter ? clientFiltered.length : (data?.total ?? 0)
-
-  const statusOptions = ALL_STATUSES.map(s => WRITE_UP_STATUS_LABELS[s])
-  const typeOptions   = ALL_TYPES.map(t => WRITE_UP_TYPE_LABELS[t])
+  const hasClientFilter = selectedCsrs.length > 0 || selectedStatuses.length > 0 || selectedTypes.length > 0
+  const displayTotal    = hasClientFilter ? clientFiltered.length : (data?.total ?? 0)
 
   return (
     <QualityListPage>
       <QualityPageHeader
         title="Write-Ups"
-        subtitle="Manage employee disciplinary documentation"
         actions={
           canCreate ? (
             <Button
@@ -156,39 +154,14 @@ export default function WriteUpsPage() {
         onReset={reset}
         resultCount={{ total: displayTotal }}
       >
-        {/* Search */}
-        <Input
-          placeholder="Search by name…"
-          value={search}
-          onChange={e => setMany({ search: e.target.value, page: '1' })}
-          className="h-9 w-[200px]"
-        />
-
-        {/* Date range */}
-        <DateRangeFilter
-          value={{ start: dateFrom, end: dateTo }}
-          onChange={r => setMany({ from: r.start, to: r.end, page: '1' })}
-        />
-
-        {/* CSR */}
-        <StagedMultiSelect
+        {/* ── Row 1: Employee · Type · Status ── */}
+        <GroupedStagedMultiSelect
           options={csrOptions}
           selected={selectedCsrs}
           onApply={v => setMany({ csrs: v.join(','), page: '1' })}
           placeholder="All Employees"
-          width="w-[260px]"
+          width="w-[390px]"
         />
-
-        {/* Status */}
-        <StagedMultiSelect
-          options={statusOptions}
-          selected={selectedStatuses}
-          onApply={v => setMany({ statuses: v.join(','), page: '1' })}
-          placeholder="All Statuses"
-          width="w-[200px]"
-        />
-
-        {/* Document type */}
         <StagedMultiSelect
           options={typeOptions}
           selected={selectedTypes}
@@ -196,6 +169,31 @@ export default function WriteUpsPage() {
           placeholder="All Types"
           width="w-[200px]"
         />
+        <StagedMultiSelect
+          options={statusOptions}
+          selected={effectiveSelectedStatuses}
+          onApply={v => {
+            const isDefault = v.length === allExceptClosed.length && allExceptClosed.every(s => v.includes(s))
+            setMany({ statuses: isDefault ? '' : v.join(','), page: '1' })
+          }}
+          placeholder="All Statuses"
+          width="w-[200px]"
+        />
+
+        {/* ── Row break ── */}
+        <div className="w-full" />
+
+        {/* ── Row 2: Meeting Date Range ── */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] text-slate-500 shrink-0">Meeting</span>
+          <Input type="date" value={dateFrom} max={dateTo || undefined}
+            onChange={e => setMany({ from: e.target.value, page: '1' })}
+            className="h-9 w-[140px]" />
+          <span className="text-[12px] text-slate-400">–</span>
+          <Input type="date" value={dateTo} min={dateFrom || undefined}
+            onChange={e => setMany({ to: e.target.value, page: '1' })}
+            className="h-9 w-[140px]" />
+        </div>
       </QualityFilterBar>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -233,9 +231,9 @@ export default function WriteUpsPage() {
                   onClick={() => navigate(`/app/writeups/${w.id}`)}
                 >
                   <TableCell className="text-[11px] text-slate-400 font-mono">#{w.id}</TableCell>
-                  <TableCell><WriteUpTypeBadge type={w.document_type} /></TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{WRITE_UP_TYPE_LABELS[w.document_type] ?? w.document_type}</TableCell>
                   <TableCell className="text-[13px] font-medium text-slate-900">{w.csr_name}</TableCell>
-                  <TableCell><StatusBadge status={w.status} /></TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{WRITE_UP_STATUS_LABELS[w.status] ?? w.status}</TableCell>
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {w.meeting_date ? formatQualityDate(w.meeting_date) : <span className="text-slate-300">—</span>}
                   </TableCell>

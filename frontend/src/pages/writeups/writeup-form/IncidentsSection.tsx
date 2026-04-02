@@ -214,7 +214,7 @@ function IncidentBlock({ incident, incIdx, onChange, onRemove, onOpenQa }: {
     <div className="border border-slate-200 rounded-xl p-4 space-y-4 bg-white">
       <div className="flex items-center gap-2 justify-between">
         <p className="text-[12px] font-semibold text-slate-500 uppercase tracking-widest">
-          Incident {incIdx + 1}
+          Incident #{incIdx + 1}
         </p>
         <Button type="button" variant="ghost" size="sm"
           className="h-6 text-[12px] text-red-400 hover:text-red-600 hover:bg-red-50"

@@ -85,12 +85,11 @@ router.post('/',
   authorizeAdmin as unknown as RequestHandler, 
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const user = req.user;
       const goalData: CreatePerformanceGoalData = req.body;
       
       console.log('[ENHANCED PERF GOAL ROUTES] Creating goal:', goalData);
       
-      const result = await performanceGoalService.createPerformanceGoal(goalData, user.user_id);
+      const result = await performanceGoalService.createPerformanceGoal(goalData, req.user!.user_id);
       
       res.status(201).json(result);
     } catch (error: any) {
@@ -115,12 +114,11 @@ router.put('/:id',
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
-      const user = req.user;
       const updates: UpdatePerformanceGoalData = req.body;
       
       console.log('[ENHANCED PERF GOAL ROUTES] Updating goal:', { id, updates });
       
-      const result = await performanceGoalService.updatePerformanceGoal(id, updates, user.user_id);
+      const result = await performanceGoalService.updatePerformanceGoal(id, updates, req.user!.user_id);
       
       res.status(200).json(result);
     } catch (error: any) {
@@ -145,11 +143,10 @@ router.delete('/:id',
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
-      const user = req.user;
       
       console.log('[ENHANCED PERF GOAL ROUTES] Deleting goal:', id);
       
-      await performanceGoalService.deletePerformanceGoal(id, user.user_id);
+      await performanceGoalService.deletePerformanceGoal(id, req.user!.user_id);
       
       res.status(200).json({ message: 'Performance goal deleted successfully' });
     } catch (error: any) {
@@ -174,11 +171,10 @@ router.post('/:id/activate',
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = parseInt(req.params.id);
-      const user = req.user;
       
       console.log('[ENHANCED PERF GOAL ROUTES] Activating goal:', id);
       
-      await performanceGoalService.activatePerformanceGoal(id, user.user_id);
+      await performanceGoalService.activatePerformanceGoal(id, req.user!.user_id);
       
       res.status(200).json({ message: 'Performance goal activated successfully' });
     } catch (error: any) {

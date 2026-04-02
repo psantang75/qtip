@@ -37,7 +37,6 @@ export interface WriteUpViolation {
 export interface WriteUpIncident {
   id: number
   write_up_id: number
-  incident_date: string
   description: string
   sort_order: number
   violations: WriteUpViolation[]
@@ -73,6 +72,10 @@ export interface WriteUpDetail extends WriteUp {
   checkin_date?: string | null
   consequence?: string | null
   linked_coaching_id?: number | null
+  manager_id?: number | null
+  manager_name?: string | null
+  hr_witness_id?: number | null
+  hr_witness_name?: string | null
   follow_up_required: boolean
   follow_up_date?: string | null
   follow_up_assigned_to?: number | null
@@ -200,10 +203,25 @@ const writeupService = {
     session_date: string
     coaching_purpose: string
     coaching_format: string
+    source_type?: string
+    topic_names?: string[]
     notes?: string
   }): Promise<{ id: number; label: string }> => {
     const res = await api.post('/writeups/coaching-session', params)
     return res.data.data ?? res.data
+  },
+
+  uploadAttachment: async (writeUpId: number, file: File): Promise<{ id: number }> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await api.post(`/writeups/${writeUpId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return res.data.data ?? res.data
+  },
+
+  deleteAttachment: async (writeUpId: number, attachmentId: number): Promise<void> => {
+    await api.delete(`/writeups/${writeUpId}/attachments/${attachmentId}`)
   },
 
 }

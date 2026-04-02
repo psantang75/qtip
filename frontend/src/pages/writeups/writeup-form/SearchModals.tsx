@@ -583,14 +583,17 @@ export function CoachingSearchModal({ csrId, onImport, onImportRefs, onClose }: 
       const purposeLabel: Record<string, string> = { WEEKLY: 'Weekly', PERFORMANCE: 'Performance', ONBOARDING: 'Onboarding' }
       const refs = Array.from(selected).map(idx => {
         const r = results[idx]
-        const topicStr = Array.isArray(r.topic_names) ? r.topic_names.join(', ') : (r.topic_names ?? '')
+        const topics: string[] = Array.isArray(r.topic_names)
+          ? r.topic_names.filter(Boolean)
+          : r.topic_names ? [r.topic_names] : []
         return {
           reference_type: 'coaching_session' as const,
           reference_id:   r.session_id as number,
           label:          `Coaching #${r.session_id}`,
           date:           r.session_date?.slice(0, 10),
           subtype:        purposeLabel[r.coaching_purpose ?? ''] ?? (r.coaching_purpose ?? 'Coaching'),
-          detail:         topicStr || undefined,
+          detail:         topics,
+          notes:          r.notes as string | undefined,
           status:         r.status as string | undefined,
         }
       })

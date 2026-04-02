@@ -1,15 +1,41 @@
 import { useState, useMemo } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { History, Search, Trash2, ExternalLink } from 'lucide-react'
+
+// ── Status label maps (module-level constants — must be declared before any component) ──
+
+const WRITEUP_TYPE_LABELS: Record<string, string> = {
+  VERBAL_WARNING:  'Verbal Warning',
+  WRITTEN_WARNING: 'Written Warning',
+  FINAL_WARNING:   'Final Warning',
+}
+
+const WRITEUP_STATUS_LABELS: Record<string, string> = {
+  DRAFT:              'Draft',
+  SCHEDULED:          'Scheduled',
+  DELIVERED:          'Delivered',
+  AWAITING_SIGNATURE: 'Awaiting Signature',
+  SIGNED:             'Signed',
+  FOLLOW_UP_PENDING:  'Follow-Up Pending',
+  CLOSED:             'Closed',
+}
+
+const COACHING_STATUS_LABELS: Record<string, string> = {
+  SCHEDULED:           'Draft',
+  IN_PROCESS:          'In Process',
+  AWAITING_CSR_ACTION: 'Awaiting CSR',
+  COMPLETED:           'Completed',
+  FOLLOW_UP_REQUIRED:  'Follow-Up',
+  CLOSED:              'Closed',
+}
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { FormSection } from '@/pages/training/coaching-form/CoachingFormSections'
-import { StatusBadge } from '@/components/common/StatusBadge'
-import { WriteUpTypeBadge } from '@/pages/writeups/WriteUpsPage'
 import { formatQualityDate } from '@/utils/dateFormat'
 import writeupService from '@/services/writeupService'
 import listService from '@/services/listService'
@@ -104,9 +130,16 @@ function PriorDisciplineModal({ csrId, selected, onSave, onClose }: PriorDiscipl
       const id = Number(idStr)
       const refType = type as 'write_up' | 'coaching_session'
       const item = refType === 'write_up'
-        ? (data?.write_ups ?? []).find((w: any) => w.id === id)
-        : (data?.coaching_sessions ?? []).find((c: any) => c.id === id)
-      if (!item) return
+        ? (data?.write_ups ?? []).find((w: any) => Number(w.id) === id)
+        : (data?.coaching_sessions ?? []).find((c: any) => Number(c.id) === id)
+
+      if (!item) {
+        // History not loaded or item filtered out — preserve the existing ref if it was already selected
+        const existingRef = selected.find(r => r.reference_type === refType && r.reference_id === id)
+        if (existingRef) refs.push(existingRef)
+        return
+      }
+
       if (refType === 'write_up') {
         const typeLabel = (item.document_type ?? '').replace('_WARNING', '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
         refs.push({
@@ -115,7 +148,10 @@ function PriorDisciplineModal({ csrId, selected, onSave, onClose }: PriorDiscipl
           label:          `Write-Up #${id}`,
           date:           item.meeting_date?.slice(0, 10) ?? item.created_at?.slice(0, 10),
           subtype:        typeLabel || 'Warning',
-          detail:         Array.isArray(item.policies_violated) ? item.policies_violated.join(', ') : undefined,
+          detail:         Array.isArray(item.policies_violated) ? item.policies_violated.filter(Boolean) : [],
+          notes:          Array.isArray(item.incident_descriptions) && item.incident_descriptions.length
+                            ? item.incident_descriptions.join(' · ')
+                            : undefined,
           status:         item.status,
         })
       } else {
@@ -126,7 +162,8 @@ function PriorDisciplineModal({ csrId, selected, onSave, onClose }: PriorDiscipl
           label:          `Coaching #${id}`,
           date:           item.session_date?.slice(0, 10),
           subtype:        purposeLabel[item.coaching_purpose ?? ''] ?? (item.coaching_purpose ?? 'Coaching'),
-          detail:         Array.isArray(item.topic_names) ? item.topic_names.join(', ') : undefined,
+          detail:         Array.isArray(item.topic_names) ? item.topic_names.filter(Boolean) : [],
+          notes:          item.notes ?? undefined,
           status:         item.status,
         })
       }
@@ -262,8 +299,8 @@ function PriorDisciplineModal({ csrId, selected, onSave, onClose }: PriorDiscipl
                               onCheckedChange={() => toggle('write_up', w.id)} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <WriteUpTypeBadge type={w.document_type} />
-                                <StatusBadge status={w.status} />
+                                <span className="text-[12px] font-medium text-slate-700">{WRITEUP_TYPE_LABELS[w.document_type] ?? w.document_type}</span>
+                                <span className="text-[12px] text-slate-500">{WRITEUP_STATUS_LABELS[w.status] ?? w.status}</span>
                                 <span className="text-[11px] text-slate-400">
                                   {formatQualityDate(w.meeting_date ?? w.created_at)}
                                 </span>
@@ -345,73 +382,126 @@ export function PriorDisciplineSection({ form, update }: { form: WriteUpFormStat
       {form.prior_discipline.length === 0 ? (
         <p className="text-[13px] text-slate-400 mt-3">No prior discipline linked yet.</p>
       ) : (
-        <div className="mt-3 rounded-lg border border-slate-200 overflow-hidden">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-24">Type</th>
-                <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Description</th>
-                <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-28">Date</th>
-                <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-28">Status</th>
-                <th className="px-3 py-2 w-16" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {form.prior_discipline.map((ref, i) => (
-                <tr key={i} className="hover:bg-slate-50/60">
-                  <td className="px-3 py-2.5">
-                    {ref.reference_type === 'write_up' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-red-50 text-red-700 border border-red-100">
-                        Write-Up
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                        Coaching
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <p className="font-medium text-slate-700">
-                      {ref.subtype ?? ref.label}
-                    </p>
-                    {ref.detail && (
-                      <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-xs" title={ref.detail}>
-                        {ref.detail}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">
-                    {ref.date ? formatQualityDate(ref.date) : '—'}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    {ref.status ? <StatusBadge status={ref.status} /> : <span className="text-slate-400">—</span>}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-2 justify-end">
-                      <a
-                        href={ref.reference_type === 'write_up'
-                          ? `/app/writeups/${ref.reference_id}`
-                          : `/app/training/coaching/${ref.reference_id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-slate-400 hover:text-primary transition-colors"
-                        title="View record"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                      <Button type="button" variant="ghost" size="sm"
-                        className="h-auto w-auto p-0 text-slate-300 hover:text-red-500 hover:bg-transparent"
-                        onClick={() => remove(i)}
-                        title="Remove">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
+        <TooltipProvider delayDuration={200}>
+          <div className="mt-3 rounded-lg border border-slate-200 overflow-hidden">
+            <table className="w-full text-[13px] table-fixed">
+              <colgroup>
+                <col className="w-[90px]" />
+                <col className="w-[150px]" />
+                <col className="w-[110px]" />
+                <col className="w-[160px]" />
+                <col className="w-[160px]" />
+                <col className="w-[110px]" />
+                <col className="w-[70px]" />
+              </colgroup>
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Type</th>
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Purpose / Type</th>
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Topic / Policy</th>
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Notes / Incidents</th>
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Meeting / Session Date</th>
+                  <th className="px-3 py-2" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {form.prior_discipline.map((ref, i) => (
+                  <tr key={i} className="hover:bg-slate-50/60">
+
+                    {/* Type */}
+                    <td className="px-3 py-2.5 text-[13px] text-slate-600 whitespace-nowrap">
+                      {ref.reference_type === 'write_up' ? 'Write-Up' : 'Coaching'}
+                    </td>
+
+                    {/* Purpose / Type */}
+                    <td className="px-3 py-2.5 text-[13px] text-slate-600 truncate">
+                      {ref.subtype ?? <span className="text-slate-300">&mdash;</span>}
+                    </td>
+
+                    {/* Status — plain text, no badge */}
+                    <td className="px-3 py-2.5 text-[13px] text-slate-600">
+                      {ref.status
+                        ? (WRITEUP_STATUS_LABELS[ref.status] ?? COACHING_STATUS_LABELS[ref.status] ?? ref.status)
+                        : <span className="text-slate-300">&mdash;</span>}
+                    </td>
+
+                    {/* Topic / Policy — truncated text, tooltip bullet list */}
+                    <td className="px-3 py-2.5">
+                      {ref.detail && ref.detail.length > 0 ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-[13px] text-slate-500 truncate block cursor-default">
+                              {ref.detail.join(', ')}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                            <ul className="space-y-1">
+                              {ref.detail.map((d, j) => (
+                                <li key={j} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{d}
+                                </li>
+                              ))}
+                            </ul>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="text-slate-300">&mdash;</span>
+                      )}
+                    </td>
+
+                    {/* Notes / Incidents — truncated text, tooltip full content */}
+                    <td className="px-3 py-2.5">
+                      {ref.notes ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-[13px] text-slate-500 truncate block cursor-default">
+                              {ref.notes}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                            <p className="text-[13px] text-slate-700 whitespace-pre-wrap">{ref.notes}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="text-slate-300">&mdash;</span>
+                      )}
+                    </td>
+
+                    {/* Meeting / Session Date */}
+                    <td className="px-3 py-2.5 text-[13px] text-slate-600 whitespace-nowrap">
+                      {ref.date ? formatQualityDate(ref.date) : <span className="text-slate-300">&mdash;</span>}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2 justify-end">
+                        <a
+                          href={ref.reference_type === 'write_up'
+                            ? `/app/writeups/${ref.reference_id}`
+                            : `/app/training/coaching/${ref.reference_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-slate-400 hover:text-primary transition-colors"
+                          title="View record"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                        <Button type="button" variant="ghost" size="sm"
+                          className="h-auto w-auto p-0 text-slate-300 hover:text-red-500 hover:bg-transparent"
+                          onClick={() => remove(i)}
+                          title="Remove">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </TooltipProvider>
       )}
 
       <Dialog open={showModal} onOpenChange={setShowModal}>

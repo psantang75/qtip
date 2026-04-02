@@ -125,7 +125,7 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
         Prisma.sql`
           SELECT cs.id, cs.batch_id, cs.csr_id, u.username as csr_name, cs.coaching_purpose, cs.coaching_format, cs.source_type,
             cs.status, cs.session_date, cs.due_date, cs.follow_up_date, cs.follow_up_required,
-            cs.created_at, cb.username as created_by_name, cs.attachment_filename,
+            cs.notes, cs.created_at, cb.username as created_by_name, cs.attachment_filename,
             GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics,
             GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids,
             CASE WHEN cs.due_date IS NOT NULL AND cs.due_date < NOW() AND cs.status NOT IN ('COMPLETED','CLOSED') THEN 1 ELSE 0 END as is_overdue,
@@ -264,7 +264,7 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
     );
 
     const recentSessions = (recentRows || []).map((s: SessionRow) => ({ ...s, topics: s.topics ? s.topics.split(',') : [] }));
-    const recentTopicsFlat = recentSessions.flatMap((s: SessionRow) => s.topics);
+    const recentTopicsFlat = recentSessions.flatMap((s: any) => s.topics as string[]);
     const repeatTopics = session.topics.filter((t: string) => recentTopicsFlat.includes(t));
 
     res.json({

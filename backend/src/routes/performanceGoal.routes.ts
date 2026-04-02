@@ -106,9 +106,8 @@ const createPerformanceGoalWrapper = async (req: Request, res: Response): Promis
     console.log('[PERFORMANCE GOAL ROUTES] Using NEW PerformanceGoalService for create goal');
     
     try {
-      const user = req.user;
       const goalData = req.body;
-      const result = await performanceGoalService.createPerformanceGoal(goalData, user.user_id);
+      const result = await performanceGoalService.createPerformanceGoal(goalData, req.user!.user_id);
       res.status(201).json(result);
     } catch (error: any) {
       console.error('[PERFORMANCE GOAL ROUTES] New service error:', error);
@@ -133,9 +132,8 @@ const updatePerformanceGoalWrapper = async (req: Request, res: Response): Promis
     
     try {
       const id = parseInt(req.params.id);
-      const user = req.user;
       const goalData = req.body;
-      const result = await performanceGoalService.updatePerformanceGoal(id, goalData, user.user_id);
+      const result = await performanceGoalService.updatePerformanceGoal(id, goalData, req.user!.user_id);
       res.status(200).json(result);
     } catch (error: any) {
       console.error('[PERFORMANCE GOAL ROUTES] New service error:', error);
@@ -160,8 +158,7 @@ const deletePerformanceGoalWrapper = async (req: Request, res: Response): Promis
     
     try {
       const id = parseInt(req.params.id);
-      const user = req.user;
-      await performanceGoalService.deletePerformanceGoal(id, user.user_id);
+      await performanceGoalService.deletePerformanceGoal(id, req.user!.user_id);
       res.status(200).json({ message: 'Performance goal deleted successfully' });
     } catch (error: any) {
       console.error('[PERFORMANCE GOAL ROUTES] New service error:', error);
@@ -186,8 +183,7 @@ const activatePerformanceGoalWrapper = async (req: Request, res: Response): Prom
     
     try {
       const id = parseInt(req.params.id);
-      const user = req.user;
-      await performanceGoalService.activatePerformanceGoal(id, user.user_id);
+      await performanceGoalService.activatePerformanceGoal(id, req.user!.user_id);
       res.status(200).json({ message: 'Performance goal activated successfully' });
     } catch (error: any) {
       console.error('[PERFORMANCE GOAL ROUTES] New service error:', error);

@@ -7,7 +7,6 @@ interface AuthReq extends Request {
 }
 
 interface IncidentInput {
-  incident_date: string
   description: string
   sort_order?: number
   violations?: ViolationInput[]
@@ -51,9 +50,8 @@ async function insertIncidents(
     const incident = await tx.writeUpIncident.create({
       data: {
         write_up_id: writeUpId,
-        incident_date: new Date(inc.incident_date),
         description: inc.description,
-        sort_order: inc.sort_order ?? 0,
+        sort_order:  inc.sort_order ?? 0,
       },
     })
     for (const viol of (inc.violations ?? [])) {
@@ -103,8 +101,8 @@ export const getWriteUps = async (req: AuthReq, res: Response) => {
 
     if (status)        conditions.push(Prisma.sql`wu.status = ${status}`)
     if (document_type) conditions.push(Prisma.sql`wu.document_type = ${document_type}`)
-    if (date_from)     conditions.push(Prisma.sql`DATE(wu.created_at) >= ${date_from}`)
-    if (date_to)       conditions.push(Prisma.sql`DATE(wu.created_at) <= ${date_to}`)
+    if (date_from)     conditions.push(Prisma.sql`DATE(wu.meeting_date) >= ${date_from}`)
+    if (date_to)       conditions.push(Prisma.sql`DATE(wu.meeting_date) <= ${date_to}`)
     if (search)        conditions.push(Prisma.sql`(csr.username LIKE ${'%' + search + '%'} OR creator.username LIKE ${'%' + search + '%'})`)
 
     const whereClause = conditions.length
@@ -154,12 +152,16 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
 
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT wu.*,
-        csr.username      as csr_name,
-        creator.username  as created_by_name,
-        assignee.username as follow_up_assignee_name
+        csr.username       as csr_name,
+        creator.username   as created_by_name,
+        mgr.username       as manager_name,
+        hrw.username       as hr_witness_name,
+        assignee.username  as follow_up_assignee_name
       FROM write_ups wu
-      JOIN  users csr     ON wu.csr_id             = csr.id
-      JOIN  users creator ON wu.created_by          = creator.id
+      JOIN  users csr      ON wu.csr_id               = csr.id
+      JOIN  users creator  ON wu.created_by            = creator.id
+      LEFT JOIN users mgr      ON wu.manager_id        = mgr.id
+      LEFT JOIN users hrw      ON wu.hr_witness_id     = hrw.id
       LEFT JOIN users assignee ON wu.follow_up_assigned_to = assignee.id
       WHERE wu.id = ${writeUpId}
     `)
@@ -186,10 +188,48 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
       incident.violations = violations
     }
 
-    const [priorDiscipline, attachments] = await Promise.all([
-      prisma.$queryRaw<any[]>(Prisma.sql`SELECT * FROM write_up_prior_discipline WHERE write_up_id = ${writeUpId}`),
+    const splitSep = (val: string | null) => val ? val.split('~|~').filter(Boolean) : []
+
+    const [priorDisciplineRaw, attachments] = await Promise.all([
+      prisma.$queryRaw<any[]>(Prisma.sql`
+        SELECT pd.reference_type, pd.reference_id,
+          wu.document_type, wu.status as wu_status, wu.meeting_date,
+          cs.coaching_purpose, cs.status as cs_status, cs.session_date,
+          SUBSTRING(cs.notes, 1, 500) as cs_notes,
+          GROUP_CONCAT(DISTINCT wuv.policy_violated ORDER BY wuv.policy_violated SEPARATOR '~|~') as policies_violated,
+          GROUP_CONCAT(DISTINCT SUBSTRING(wui.description, 1, 200) SEPARATOR '~|~') as incident_descriptions,
+          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR '~|~') as topic_names
+        FROM write_up_prior_discipline pd
+        LEFT JOIN write_ups wu            ON pd.reference_type = 'write_up' AND pd.reference_id = wu.id
+        LEFT JOIN write_up_incidents wui  ON wu.id = wui.write_up_id
+        LEFT JOIN write_up_violations wuv ON wui.id = wuv.incident_id
+        LEFT JOIN coaching_sessions cs    ON pd.reference_type = 'coaching_session' AND pd.reference_id = cs.id
+        LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
+        LEFT JOIN topics t                ON cst.topic_id = t.id
+        WHERE pd.write_up_id = ${writeUpId}
+        GROUP BY pd.reference_type, pd.reference_id
+        ORDER BY MIN(pd.id) ASC
+      `),
       prisma.$queryRaw<any[]>(Prisma.sql`SELECT * FROM write_up_attachments WHERE write_up_id = ${writeUpId} ORDER BY created_at ASC`),
     ])
+
+    const priorDiscipline = priorDisciplineRaw.map((pd: any) => ({
+      reference_type: pd.reference_type,
+      reference_id:   Number(pd.reference_id),
+      ...(pd.reference_type === 'write_up' ? {
+        document_type:         pd.document_type,
+        status:                pd.wu_status,
+        date:                  pd.meeting_date,
+        policies_violated:     splitSep(pd.policies_violated),
+        incident_descriptions: splitSep(pd.incident_descriptions),
+      } : {
+        coaching_purpose: pd.coaching_purpose,
+        status:           pd.cs_status,
+        date:             pd.session_date,
+        notes:            pd.cs_notes,
+        topic_names:      splitSep(pd.topic_names),
+      }),
+    }))
 
     res.json({
       success: true,
@@ -213,7 +253,8 @@ export const createWriteUp = async (req: AuthReq, res: Response) => {
   try {
     const userId = req.user!.user_id
     const { csr_id, document_type, meeting_date, corrective_action, correction_timeline,
-            checkin_date, consequence, linked_coaching_id, incidents = [] } = req.body
+            checkin_date, consequence, linked_coaching_id, manager_id, hr_witness_id,
+            incidents = [], prior_discipline = [] } = req.body
 
     if (!csr_id || !document_type) {
       return res.status(400).json({ success: false, message: 'csr_id and document_type are required' })
@@ -231,10 +272,17 @@ export const createWriteUp = async (req: AuthReq, res: Response) => {
           checkin_date:       checkin_date       ? new Date(checkin_date)       : null,
           consequence:        consequence        ?? null,
           linked_coaching_id: linked_coaching_id ? parseInt(linked_coaching_id) : null,
+          manager_id:         manager_id         ? parseInt(manager_id)         : null,
+          hr_witness_id:      hr_witness_id      ? parseInt(hr_witness_id)      : null,
           created_by:         userId,
         },
       })
       await insertIncidents(tx, writeUp.id, incidents as IncidentInput[])
+      for (const pd of prior_discipline) {
+        await tx.writeUpPriorDiscipline.create({
+          data: { write_up_id: writeUp.id, reference_type: pd.reference_type, reference_id: parseInt(pd.reference_id) },
+        })
+      }
       return writeUp
     })
 
@@ -265,7 +313,8 @@ export const updateWriteUp = async (req: AuthReq, res: Response) => {
     }
 
     const { meeting_date, corrective_action, correction_timeline, checkin_date,
-            consequence, linked_coaching_id, incidents = [], prior_discipline = [] } = req.body
+            consequence, linked_coaching_id, manager_id, hr_witness_id,
+            incidents = [], prior_discipline = [] } = req.body
 
     await prisma.$transaction(async (tx) => {
       await tx.writeUp.update({
@@ -277,6 +326,8 @@ export const updateWriteUp = async (req: AuthReq, res: Response) => {
           checkin_date:        checkin_date       ? new Date(checkin_date)       : null,
           consequence:         consequence        ?? null,
           linked_coaching_id:  linked_coaching_id ? parseInt(linked_coaching_id) : null,
+          manager_id:          manager_id         ? parseInt(manager_id)         : null,
+          hr_witness_id:       hr_witness_id      ? parseInt(hr_witness_id)      : null,
         },
       })
 
@@ -541,7 +592,8 @@ export const getPriorDiscipline = async (req: AuthReq, res: Response) => {
     const [writeUpsRaw, coachingRaw] = await Promise.all([
       prisma.$queryRaw<any[]>(Prisma.sql`
         SELECT wu.id, wu.document_type, wu.status, wu.meeting_date, wu.created_at,
-          GROUP_CONCAT(DISTINCT wuv.policy_violated ORDER BY wuv.policy_violated SEPARATOR ', ') as policies_violated
+          GROUP_CONCAT(DISTINCT wuv.policy_violated ORDER BY wuv.policy_violated SEPARATOR '~|~') as policies_violated,
+          GROUP_CONCAT(DISTINCT SUBSTRING(wui.description, 1, 200) SEPARATOR '~|~') as incident_descriptions
         FROM write_ups wu
         LEFT JOIN write_up_incidents wui ON wu.id = wui.write_up_id
         LEFT JOIN write_up_violations wuv ON wui.id = wuv.incident_id
@@ -551,8 +603,8 @@ export const getPriorDiscipline = async (req: AuthReq, res: Response) => {
       `),
       prisma.$queryRaw<any[]>(Prisma.sql`
         SELECT cs.id, cs.session_date, cs.coaching_purpose, cs.status,
-          SUBSTRING(cs.notes, 1, 100) as notes,
-          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topic_names
+          SUBSTRING(cs.notes, 1, 500) as notes,
+          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR '~|~') as topic_names
         FROM coaching_sessions cs
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
         LEFT JOIN topics t ON cst.topic_id = t.id
@@ -562,13 +614,16 @@ export const getPriorDiscipline = async (req: AuthReq, res: Response) => {
       `),
     ])
 
+    const splitSep = (val: string | null) => val ? val.split('~|~').filter(Boolean) : []
+
     const writeUps = writeUpsRaw.map(r => ({
       ...r,
-      policies_violated: r.policies_violated ? r.policies_violated.split(', ') : [],
+      policies_violated:      splitSep(r.policies_violated),
+      incident_descriptions:  splitSep(r.incident_descriptions),
     }))
     const coachingSessions = coachingRaw.map(r => ({
       ...r,
-      topic_names: r.topic_names ? r.topic_names.split(', ') : [],
+      topic_names: splitSep(r.topic_names),
     }))
 
     res.json({ success: true, data: { write_ups: writeUps, coaching_sessions: coachingSessions } })
@@ -578,33 +633,136 @@ export const getPriorDiscipline = async (req: AuthReq, res: Response) => {
   }
 }
 
-// ── 11. createLinkedCoachingSession ───────────────────────────────────────────
+// ── 11. uploadAttachment ──────────────────────────────────────────────────────
+
+export const uploadAttachment = async (req: AuthReq, res: Response) => {
+  try {
+    const writeUpId = parseInt(req.params.id)
+    if (isNaN(writeUpId)) return res.status(400).json({ success: false, message: 'Invalid write-up ID' })
+
+    const existing = await prisma.writeUp.findUnique({ where: { id: writeUpId } })
+    if (!existing) return res.status(404).json({ success: false, message: 'Write-up not found' })
+
+    const file = (req as any).file
+    if (!file) return res.status(400).json({ success: false, message: 'No file uploaded' })
+
+    const attachment = await prisma.writeUpAttachment.create({
+      data: {
+        write_up_id:     writeUpId,
+        attachment_type: 'UPLOAD',
+        filename:        file.originalname,
+        file_path:       file.path ?? null,
+        file_size:       file.size ?? null,
+        mime_type:       file.mimetype ?? null,
+      },
+    })
+
+    res.status(201).json({ success: true, data: { id: attachment.id } })
+  } catch (error) {
+    console.error('[WRITEUP] uploadAttachment error:', error)
+    res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+}
+
+// ── 12. downloadAttachment ───────────────────────────────────────────────────
+
+export const downloadAttachment = async (req: AuthReq, res: Response) => {
+  try {
+    const writeUpId    = parseInt(req.params.id)
+    const attachmentId = parseInt(req.params.attachmentId)
+    if (isNaN(writeUpId) || isNaN(attachmentId)) {
+      return res.status(400).json({ success: false, message: 'Invalid ID' })
+    }
+
+    const attachment = await prisma.writeUpAttachment.findFirst({
+      where: { id: attachmentId, write_up_id: writeUpId },
+    })
+    if (!attachment) return res.status(404).json({ success: false, message: 'Attachment not found' })
+    if (!attachment.file_path) return res.status(404).json({ success: false, message: 'File not available' })
+
+    const fs   = await import('fs')
+    const path = await import('path')
+    const absPath = path.resolve(attachment.file_path)
+
+    if (!fs.existsSync(absPath)) {
+      return res.status(404).json({ success: false, message: 'File not found on disk' })
+    }
+
+    const mime = attachment.mime_type ?? 'application/octet-stream'
+    res.setHeader('Content-Type', mime)
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(attachment.filename)}"`)
+    fs.createReadStream(absPath).pipe(res)
+  } catch (error) {
+    console.error('[WRITEUP] downloadAttachment error:', error)
+    res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+}
+
+// ── 13. deleteAttachment ─────────────────────────────────────────────────────
+
+export const deleteAttachment = async (req: AuthReq, res: Response) => {
+  try {
+    const writeUpId     = parseInt(req.params.id)
+    const attachmentId  = parseInt(req.params.attachmentId)
+    if (isNaN(writeUpId) || isNaN(attachmentId)) {
+      return res.status(400).json({ success: false, message: 'Invalid ID' })
+    }
+
+    const attachment = await prisma.writeUpAttachment.findFirst({
+      where: { id: attachmentId, write_up_id: writeUpId },
+    })
+    if (!attachment) return res.status(404).json({ success: false, message: 'Attachment not found' })
+
+    await prisma.writeUpAttachment.delete({ where: { id: attachmentId } })
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('[WRITEUP] deleteAttachment error:', error)
+    res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+}
+
+// ── 13. createLinkedCoachingSession ───────────────────────────────────────────
 
 export const createLinkedCoachingSession = async (req: AuthReq, res: Response) => {
   try {
-    const { csr_id, session_date, coaching_purpose, coaching_format, notes } = req.body
+    const { csr_id, session_date, coaching_purpose, coaching_format, notes, source_type, topic_names = [] } = req.body
     if (!csr_id || !session_date) {
       return res.status(400).json({ success: false, message: 'csr_id and session_date are required' })
     }
 
-    const purpose   = (['WEEKLY', 'PERFORMANCE', 'ONBOARDING'].includes(coaching_purpose) ? coaching_purpose : 'PERFORMANCE') as string
-    const format    = (['ONE_ON_ONE', 'SIDE_BY_SIDE', 'TEAM_SESSION'].includes(coaching_format) ? coaching_format : 'ONE_ON_ONE') as string
-    const createdBy = req.user?.user_id ?? null
+    const purpose = (['WEEKLY', 'PERFORMANCE', 'ONBOARDING'].includes(coaching_purpose) ? coaching_purpose : 'PERFORMANCE') as string
+    const format  = (['ONE_ON_ONE', 'SIDE_BY_SIDE', 'TEAM_SESSION'].includes(coaching_format) ? coaching_format : 'ONE_ON_ONE') as string
+    const source  = (['QA_AUDIT', 'MANAGER_OBSERVATION', 'TREND', 'DISPUTE', 'SCHEDULED', 'OTHER'].includes(source_type) ? source_type : 'OTHER') as string
+    const createdBy = req.user!.user_id
 
-    await prisma.$executeRaw(Prisma.sql`
-      INSERT INTO coaching_sessions
-        (csr_id, session_date, coaching_purpose, coaching_format, notes, status, source_type, created_by)
-      VALUES
-        (${parseInt(csr_id)}, ${session_date}, ${purpose}, ${format}, ${notes || null}, 'SCHEDULED', 'OTHER', ${createdBy})
-    `)
+    const sessionId = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO coaching_sessions
+          (csr_id, session_date, coaching_purpose, coaching_format, notes, status, source_type, created_by)
+        VALUES
+          (${parseInt(csr_id)}, ${session_date}, ${purpose}, ${format}, ${notes || null}, 'SCHEDULED', ${source}, ${createdBy})
+      `)
+      const [row] = await tx.$queryRaw<[{ id: bigint }]>(Prisma.sql`SELECT LAST_INSERT_ID() as id`)
+      return Number(row.id)
+    })
 
-    const [row] = await prisma.$queryRaw<[{ id: bigint }]>(Prisma.sql`SELECT LAST_INSERT_ID() as id`)
-    const sessionId = Number(row.id)
+    // Insert topic associations (outside transaction — non-critical)
+    if (Array.isArray(topic_names) && topic_names.length > 0) {
+      for (const topicName of topic_names) {
+        const topicRows = await prisma.$queryRaw<[{ id: number }]>(
+          Prisma.sql`SELECT id FROM topics WHERE topic_name = ${topicName} LIMIT 1`
+        )
+        if (topicRows?.[0]?.id) {
+          await prisma.$executeRaw(
+            Prisma.sql`INSERT IGNORE INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sessionId}, ${topicRows[0].id})`
+          )
+        }
+      }
+    }
 
     const purposeLabels: Record<string, string> = {
-      WEEKLY: 'Weekly Coaching',
-      PERFORMANCE: 'Performance Coaching',
-      ONBOARDING: 'Onboarding Coaching',
+      WEEKLY: 'Weekly Coaching', PERFORMANCE: 'Performance Coaching', ONBOARDING: 'Onboarding Coaching',
     }
     const label = `${purposeLabels[purpose] ?? 'Coaching'} — ${String(session_date).slice(0, 10)}`
 

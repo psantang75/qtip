@@ -299,7 +299,7 @@ export const getCSRActivity = async (req: Request, res: Response): Promise<void>
  */
 export const getCSRStats = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
 
     const qaScoreResults = await prisma.$queryRaw<{avg_score: number, total_audits: bigint}[]>(
       Prisma.sql`
@@ -422,7 +422,7 @@ export const getCSRStats = async (req: Request, res: Response) => {
  */
 export const getCSRAudits = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const { page = 1, limit = 10, formName, startDate, endDate, status, searchTerm } = req.query;
     
     const offset = (Number(page) - 1) * Number(limit);
@@ -537,7 +537,7 @@ export const getCSRAudits = async (req: Request, res: Response) => {
  */
 export const getAuditDetails = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const auditId = req.params.id;
     
     const auditResults = await prisma.$queryRaw<any[]>(
@@ -665,7 +665,7 @@ export const getAuditDetails = async (req: Request, res: Response) => {
  */
 export const isAuditDisputable = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const submissionId = req.params.id;
     
     const auditResults = await prisma.$queryRaw<{id: number}[]>(
@@ -708,7 +708,7 @@ export const isAuditDisputable = async (req: Request, res: Response) => {
  */
 export const getTrainingCourses = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const { page = 1, pageSize = 10, status, dueDateOrder = 'asc' } = req.query;
     
     const offset = (Number(page) - 1) * Number(pageSize);
@@ -819,7 +819,7 @@ export const getTrainingCourses = async (req: Request, res: Response) => {
  */
 export const getCSRAuditDetails = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const submissionId = parseInt(req.params.id);
     
     console.log(`\nÃ°Å¸Å¡â‚¬ CSR CONTROLLER: getCSRAuditDetails called for submission ${submissionId} by user ${userId}`);
@@ -1100,7 +1100,7 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
  */
 export const getTrainingSummary = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
 
     const summaryResults = await prisma.$queryRaw<any[]>(
       Prisma.sql`
@@ -1131,7 +1131,7 @@ export const getTrainingSummary = async (req: Request, res: Response) => {
  */
 export const submitQuizAnswers = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const quizId = parseInt(req.params.quizId);
     const { answers } = req.body;
 
@@ -1192,7 +1192,7 @@ export const submitQuizAnswers = async (req: Request, res: Response) => {
  */
 export const updateCourseProgress = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const enrollmentId = parseInt(req.params.enrollmentId);
     const { pageId, completed } = req.body;
 
@@ -1266,7 +1266,7 @@ export const updateCourseProgress = async (req: Request, res: Response) => {
  */
 export const completeCourse = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const enrollmentId = parseInt(req.params.enrollmentId);
 
     const enrollmentCheck = await prisma.$queryRaw<any[]>(
@@ -1320,7 +1320,7 @@ export const completeCourse = async (req: Request, res: Response) => {
  */
 export const getCertificate = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const certificateId = parseInt(req.params.certificateId);
 
     const certificateResults = await prisma.$queryRaw<any[]>(
@@ -1365,7 +1365,7 @@ export const getCertificate = async (req: Request, res: Response) => {
  */
 export const getCourseContentForCSR = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     
     let courseId: number;
     let enrollmentId: number;
@@ -1547,7 +1547,7 @@ export const getCourseContentForCSR = async (req: Request, res: Response) => {
  */
 export const updateLastViewedPosition = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const enrollmentId = parseInt(req.params.enrollmentId);
     const { pageId, pageIndex } = req.body;
 
@@ -1588,7 +1588,7 @@ export const updateLastViewedPosition = async (req: Request, res: Response) => {
  */
 export const getLastViewedPosition = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const enrollmentId = parseInt(req.params.enrollmentId);
 
     const enrollmentCheck = await prisma.$queryRaw<{id: number, course_id: number}[]>(
@@ -1633,7 +1633,7 @@ export const getLastViewedPosition = async (req: Request, res: Response) => {
  */
 export const getCertificates = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const { 
       page = 1, 
       limit = 10,
@@ -1730,7 +1730,7 @@ export const finalizeSubmission = async (req: Request, res: Response): Promise<v
     }
     
     const submissionId = parseInt(req.params.id);
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     
     if (!submissionId || isNaN(submissionId)) {
       res.status(400).json({ message: 'Valid submission ID is required' });
@@ -1805,7 +1805,7 @@ export const finalizeSubmission = async (req: Request, res: Response): Promise<v
  */
 export const getCSRCoachingSessions = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const { page = 1, pageSize = 10, status, coaching_purpose, coaching_format, startDate, endDate, search } = req.query;
     
     const pageNum = Number(page);
@@ -2007,7 +2007,7 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
  */
 export const getCSRCoachingSessionDetails = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const sessionId = parseInt(req.params.sessionId);
 
     if (!sessionId || isNaN(sessionId) || sessionId <= 0) {
@@ -2168,7 +2168,7 @@ export const getCSRResourceFile = async (req: Request, res: Response) => {
 
 export const downloadCSRCoachingAttachment = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const sessionId = parseInt(req.params.sessionId);
 
     if (!sessionId || isNaN(sessionId) || sessionId <= 0) {
@@ -2290,7 +2290,7 @@ export const downloadCSRCoachingAttachment = async (req: Request, res: Response)
  */
 export const submitCSRResponse = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.user_id;
+    const userId = req.user!.user_id;
     const sessionId = parseInt(req.params.id);
     const { action_plan, root_cause, support_needed, acknowledged } = req.body;
 

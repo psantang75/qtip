@@ -266,17 +266,7 @@ export default function CoachingSessionsPage() {
         onReset={reset}
         resultCount={{ total: displayTotal }}
       >
-        {/* ── Row 1: Session Date · CSRs · Topics · Status ── */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[12px] text-slate-500 shrink-0">Session</span>
-          <Input type="date" value={dateFrom} max={dateTo || undefined}
-            onChange={e => setMany({ from: e.target.value, page: '1' })}
-            className="h-9 w-[140px]" />
-          <span className="text-[12px] text-slate-400">–</span>
-          <Input type="date" value={dateTo} min={dateFrom || undefined}
-            onChange={e => setMany({ to: e.target.value, page: '1' })}
-            className="h-9 w-[140px]" />
-        </div>
+        {/* ── Row 1: CSR · Topics · Format · Status ── */}
         <StagedMultiSelect
           options={csrOptions}
           selected={selectedCsrs}
@@ -292,6 +282,13 @@ export default function CoachingSessionsPage() {
           width="w-[280px]"
         />
         <StagedMultiSelect
+          options={formatOptions}
+          selected={selectedFormats}
+          onApply={v => setMany({ formats: v.join(','), page: '1' })}
+          placeholder="All Formats"
+          width="w-[200px]"
+        />
+        <StagedMultiSelect
           options={statusOptions}
           selected={effectiveSelectedStatuses}
           onApply={v => {
@@ -305,14 +302,17 @@ export default function CoachingSessionsPage() {
         {/* ── Row break ── */}
         <div className="w-full" />
 
-        {/* ── Row 2: Format · Overdue ── */}
-        <StagedMultiSelect
-          options={formatOptions}
-          selected={selectedFormats}
-          onApply={v => setMany({ formats: v.join(','), page: '1' })}
-          placeholder="All Formats"
-          width="w-[220px]"
-        />
+        {/* ── Row 2: Session Date Range · Due Today · Overdue ── */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] text-slate-500 shrink-0">Session</span>
+          <Input type="date" value={dateFrom} max={dateTo || undefined}
+            onChange={e => setMany({ from: e.target.value, page: '1' })}
+            className="h-9 w-[140px]" />
+          <span className="text-[12px] text-slate-400">–</span>
+          <Input type="date" value={dateTo} min={dateFrom || undefined}
+            onChange={e => setMany({ to: e.target.value, page: '1' })}
+            className="h-9 w-[140px]" />
+        </div>
         <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
           <Checkbox checked={dueToday === 'true'}
             onCheckedChange={v => setMany({ dueToday: v ? 'true' : '', overdue: '', page: '1' })} />

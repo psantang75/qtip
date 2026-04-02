@@ -50,9 +50,9 @@ export class MySQLFormRepository {
         const cat = await tx.formCategory.create({
           data: {
             form_id: form.id,
-            category_name: safeParam(category.category_name),
+            category_name: safeParam(category.category_name) as string,
             description: safeParam(category.description),
-            weight: safeParam(category.weight),
+            weight: safeParam(category.weight) as any,
             sort_order: ci,
           },
         });
@@ -63,12 +63,12 @@ export class MySQLFormRepository {
           const q = await tx.formQuestion.create({
             data: {
               category_id: cat.id,
-              question_text: safeParam(question.question_text),
+              question_text: safeParam(question.question_text) as string,
               question_type: question.question_type as FormQuestionType,
-              weight: safeParam(question.weight),
+              weight: safeParam(question.weight) as any,
               sort_order: qi,
-              scale_min: safeParam(question.scale_min),
-              scale_max: safeParam(question.scale_max),
+              scale_min: safeParam(question.scale_min) as any,
+              scale_max: safeParam(question.scale_max) as any,
               is_na_allowed: safeParam(question.is_na_allowed) ?? false,
               yes_value: safeParam(question.yes_value) ?? 1,
               no_value: safeParam(question.no_value) ?? 0,
@@ -83,12 +83,12 @@ export class MySQLFormRepository {
             await tx.radioOption.createMany({
               data: question.radio_options.map((opt, oi) => ({
                 question_id: q.id,
-                option_text: safeParam(opt.option_text),
-                option_value: safeParam(opt.option_value),
+                option_text: safeParam(opt.option_text) as string,
+                option_value: safeParam(opt.option_value) as string,
                 score: safeParam(opt.score) ?? 0,
-                has_free_text: safeParam(opt.has_free_text || false),
+                has_free_text: safeParam(opt.has_free_text || false) as any,
                 sort_order: oi,
-              })),
+              })) as any,
             });
           }
 
@@ -129,7 +129,7 @@ export class MySQLFormRepository {
           await tx.formMetadataField.create({
             data: {
               form_id: form.id,
-              field_name: safeParam(field.field_name),
+              field_name: safeParam(field.field_name) as string,
               field_type: field.field_type as FormMetadataFieldType,
               is_required: safeParam(field.is_required) === true,
               interaction_type: (field.interaction_type || formData.interaction_type) as FormMetadataInteractionType,
@@ -159,7 +159,7 @@ export class MySQLFormRepository {
       for (let tci = 0; tci < formData.categories.length; tci++) {
         const targetCategory = formData.categories[tci];
         for (let tqi = 0; tqi < targetCategory.questions.length; tqi++) {
-          const tq = targetCategory.questions[tqi];
+          const tq = targetCategory.questions[tqi] as any;
           if (tq.id === target_question_id) {
             return questionIdMap.get(`${tci}-${tqi}`) || target_question_id;
           }
@@ -172,7 +172,7 @@ export class MySQLFormRepository {
       for (let tci = 0; tci < formData.categories.length; tci++) {
         const targetCategory = formData.categories[tci];
         for (let tqi = 0; tqi < targetCategory.questions.length; tqi++) {
-          const tq = targetCategory.questions[tqi];
+          const tq = targetCategory.questions[tqi] as any;
           if (tq.id === target_question_id) {
             return questionIdMap.get(`${tci}-${tqi}`) || target_question_id;
           }
@@ -353,9 +353,9 @@ export class MySQLFormRepository {
         const cat = await tx.formCategory.create({
           data: {
             form_id: form.id,
-            category_name: safeParam(category.category_name),
+            category_name: safeParam(category.category_name) as string,
             description: safeParam(category.description),
-            weight: safeParam(category.weight),
+            weight: safeParam(category.weight) as any,
             sort_order: ci,
           },
         });
@@ -366,12 +366,12 @@ export class MySQLFormRepository {
           const q = await tx.formQuestion.create({
             data: {
               category_id: cat.id,
-              question_text: safeParam(question.question_text),
+              question_text: safeParam(question.question_text) as string,
               question_type: question.question_type as FormQuestionType,
-              weight: safeParam(question.weight),
+              weight: safeParam(question.weight) as any,
               sort_order: qi,
-              scale_min: safeParam(question.scale_min),
-              scale_max: safeParam(question.scale_max),
+              scale_min: safeParam(question.scale_min) as any,
+              scale_max: safeParam(question.scale_max) as any,
               is_na_allowed: safeParam(question.is_na_allowed) ?? false,
               yes_value: safeParam(question.yes_value) ?? 1,
               no_value: safeParam(question.no_value) ?? 0,
@@ -386,12 +386,12 @@ export class MySQLFormRepository {
             await tx.radioOption.createMany({
               data: question.radio_options.map((opt, oi) => ({
                 question_id: q.id,
-                option_text: safeParam(opt.option_text),
-                option_value: safeParam(opt.option_value),
+                option_text: safeParam(opt.option_text) as string,
+                option_value: safeParam(opt.option_value) as string,
                 score: safeParam(opt.score) ?? 0,
-                has_free_text: safeParam(opt.has_free_text || false),
+                has_free_text: safeParam(opt.has_free_text || false) as any,
                 sort_order: oi,
-              })),
+              })) as any,
             });
           }
 
@@ -432,7 +432,7 @@ export class MySQLFormRepository {
           await tx.formMetadataField.create({
             data: {
               form_id: form.id,
-              field_name: safeParam(field.field_name),
+              field_name: safeParam(field.field_name) as string,
               field_type: field.field_type as FormMetadataFieldType,
               is_required: safeParam(field.is_required) === true,
               interaction_type: (field.interaction_type || formData.interaction_type) as FormMetadataInteractionType,

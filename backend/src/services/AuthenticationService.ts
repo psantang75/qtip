@@ -196,7 +196,7 @@ export class AuthenticationService {
         console.log(`[NEW AUTH] AuthenticationService: User ${logoutUserId} logging out`);
         
         // Add token to blacklist with its expiration time
-        const expirationTime = decoded.exp;
+        const expirationTime = decoded!.exp;
         tokenBlacklistService.blacklistToken(token, expirationTime);
         
         // Log the logout in audit log
@@ -410,7 +410,7 @@ export class AuthenticationService {
       role_id: user.role_id,
       type: 'access'
     };
-    const options: SignOptions = { expiresIn: this.JWT_EXPIRES_IN };
+    const options: SignOptions = { expiresIn: this.JWT_EXPIRES_IN as any };
     return jwt.sign(payload, this.JWT_SECRET, options);
   }
 
@@ -423,7 +423,7 @@ export class AuthenticationService {
       role_id: user.role_id,
       type: 'refresh'
     };
-    const options: SignOptions = { expiresIn: this.REFRESH_TOKEN_EXPIRES_IN };
+    const options: SignOptions = { expiresIn: this.REFRESH_TOKEN_EXPIRES_IN as any };
     return jwt.sign(payload, this.JWT_SECRET, options);
   }
 

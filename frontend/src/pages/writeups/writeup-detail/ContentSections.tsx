@@ -1,4 +1,4 @@
-import { ExternalLink, Paperclip } from 'lucide-react'
+import { Download, ExternalLink, Paperclip } from 'lucide-react'
 import { formatQualityDate } from '@/utils/dateFormat'
 import type { WriteUpDetail } from '@/services/writeupService'
 
@@ -68,7 +68,6 @@ function IncidentsDisplay({ writeup }: { writeup: WriteUpDetail }) {
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
                 Incident {i + 1}
               </span>
-              <span className="text-[12px] text-slate-500">{formatQualityDate(inc.incident_date)}</span>
             </div>
             <p className="text-[13px] text-slate-700 mb-3">{inc.description}</p>
 
@@ -195,14 +194,20 @@ function AttachmentsDisplay({ writeup }: { writeup: WriteUpDetail }) {
           <div key={a.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50">
             <Paperclip className="h-4 w-4 text-slate-400 shrink-0" />
             <span className="flex-1 text-[13px] text-slate-700 truncate">{a.filename}</span>
-            <span className="text-[11px] px-2 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
-              {a.attachment_type}
-            </span>
             {a.file_size && (
               <span className="text-[11px] text-slate-400 shrink-0">
                 {(a.file_size / 1024).toFixed(0)} KB
               </span>
             )}
+            <a
+              href={`/api/writeups/${writeup.id}/attachments/${a.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:text-primary/80 shrink-0"
+              title="View / Download"
+            >
+              <Download className="h-4 w-4" />
+            </a>
           </div>
         ))}
       </div>

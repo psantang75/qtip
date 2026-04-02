@@ -30,7 +30,8 @@ export default function WriteUpFormPage() {
     queryKey: ['writeup', id],
     queryFn:  () => writeupService.getWriteUpById(Number(id)),
     enabled:  isEdit,
-    staleTime: 0,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   })
 
   useEffect(() => {
@@ -38,9 +39,9 @@ export default function WriteUpFormPage() {
     setForm({
       csr_id:              existing.csr_id,
       document_type:       existing.document_type,
-      manager_id:          (existing as any).manager_id ?? 0,
-      hr_witness_id:       (existing as any).hr_witness_id ?? 0,
-      meeting_date:        existing.meeting_date?.slice(0, 16) ?? '',
+      manager_id:          existing.manager_id   ?? 0,
+      hr_witness_id:       existing.hr_witness_id ?? 0,
+      meeting_date:        existing.meeting_date?.slice(0, 10) ?? '',
       corrective_action:   existing.corrective_action ?? '',
       correction_timeline: existing.correction_timeline ?? '',
       checkin_date:        existing.checkin_date?.slice(0, 10) ?? '',
@@ -50,9 +51,8 @@ export default function WriteUpFormPage() {
         ? `Session #${existing.linked_coaching_id}`
         : '',
       incidents: (existing.incidents ?? []).map(inc => ({
-        id:            inc.id,
-        incident_date: inc.incident_date?.slice(0, 10) ?? '',
-        description:   inc.description,
+        id:          inc.id,
+        description: inc.description,
         sort_order:    inc.sort_order,
         violations:    (inc.violations ?? []).map(v => ({
           id:                v.id,
@@ -70,13 +70,42 @@ export default function WriteUpFormPage() {
           })),
         })),
       })),
-      prior_discipline: (existing.prior_discipline ?? []).map((pd: any) => ({
-        reference_type: pd.reference_type,
-        reference_id:   pd.reference_id,
-        label:          `${pd.reference_type === 'write_up' ? 'Write-Up' : 'Coaching'} #${pd.reference_id}`,
-      })),
+      prior_discipline: (existing.prior_discipline ?? []).map((pd: any) => {
+        const isWriteUp = pd.reference_type === 'write_up'
+        const TYPE_LABELS: Record<string, string> = {
+          VERBAL_WARNING: 'Verbal Warning', WRITTEN_WARNING: 'Written Warning', FINAL_WARNING: 'Final Warning',
+        }
+        const PURPOSE_LABELS: Record<string, string> = {
+          WEEKLY: 'Weekly', PERFORMANCE: 'Performance', ONBOARDING: 'Onboarding',
+        }
+        return {
+          reference_type: pd.reference_type,
+          reference_id:   pd.reference_id,
+          label:          `${isWriteUp ? 'Write-Up' : 'Coaching'} #${pd.reference_id}`,
+          subtype:        isWriteUp
+            ? (TYPE_LABELS[pd.document_type] ?? pd.document_type)
+            : (PURPOSE_LABELS[pd.coaching_purpose] ?? pd.coaching_purpose),
+          status:         isWriteUp ? pd.status : pd.status,
+          date:           pd.date
+            ? String(pd.date).slice(0, 10)
+            : undefined,
+          detail:         isWriteUp
+            ? (pd.policies_violated ?? [])
+            : (pd.topic_names ?? []),
+          notes:          isWriteUp
+            ? (pd.incident_descriptions ?? []).join(' | ')
+            : pd.notes,
+        }
+      }),
       meeting_notes:    existing.meeting_notes ?? '',
       attachment_files: [],
+      existing_attachments: (existing.attachments ?? []).map(a => ({
+        id:              a.id,
+        filename:        a.filename,
+        file_size:       a.file_size ?? null,
+        mime_type:       a.mime_type ?? null,
+        attachment_type: a.attachment_type,
+      })),
     })
   }, [existing])
 
@@ -102,6 +131,8 @@ export default function WriteUpFormPage() {
     checkin_date:        form.checkin_date || null,
     consequence:         form.consequence || null,
     linked_coaching_id:  form.linked_coaching_id,
+    manager_id:          form.manager_id   || null,
+    hr_witness_id:       form.hr_witness_id || null,
     meeting_notes:       form.meeting_notes || null,
     incidents:           form.incidents,
     prior_discipline:    form.prior_discipline.map(pd => ({
@@ -116,12 +147,19 @@ export default function WriteUpFormPage() {
     mutationFn: async () => {
       const err = validate()
       if (err) throw new Error(err)
+      const payload = buildPayload()
+      let savedId: number
       if (isEdit) {
-        await writeupService.updateWriteUp(Number(id), buildPayload() as any)
-        return { id: Number(id) }
+        await writeupService.updateWriteUp(Number(id), payload as any)
+        savedId = Number(id)
+      } else {
+        const result = await writeupService.createWriteUp(payload as any)
+        savedId = result.id
       }
-      const result = await writeupService.createWriteUp(buildPayload() as any)
-      return { id: result.id }
+      if (form.attachment_files.length > 0) {
+        await Promise.all(form.attachment_files.map(f => writeupService.uploadAttachment(savedId, f)))
+      }
+      return { id: savedId }
     },
     onSuccess: ({ id: savedId }) => {
       qc.invalidateQueries({ queryKey: ['writeups'] })
@@ -139,15 +177,23 @@ export default function WriteUpFormPage() {
       const err = validate()
       if (err) throw new Error(err)
       if (!form.meeting_date) throw new Error('Meeting date is required to schedule')
+      const payload = buildPayload()
       let savedId: number
       if (isEdit) {
-        await writeupService.updateWriteUp(Number(id), buildPayload() as any)
+        await writeupService.updateWriteUp(Number(id), payload as any)
         savedId = Number(id)
       } else {
-        const result = await writeupService.createWriteUp(buildPayload() as any)
+        const result = await writeupService.createWriteUp(payload as any)
         savedId = result.id
       }
-      await writeupService.transitionStatus(savedId, { status: 'SCHEDULED', meeting_date: form.meeting_date })
+      if (form.attachment_files.length > 0) {
+        await Promise.all(form.attachment_files.map(f => writeupService.uploadAttachment(savedId, f)))
+      }
+      // Only transition to SCHEDULED when the write-up is currently DRAFT.
+      // If it's already SCHEDULED, updateWriteUp above already persisted the changes.
+      if (!isEdit || existing?.status === 'DRAFT') {
+        await writeupService.transitionStatus(savedId, { status: 'SCHEDULED', meeting_date: form.meeting_date })
+      }
       return { id: savedId }
     },
     onSuccess: ({ id: savedId }) => {
@@ -161,8 +207,9 @@ export default function WriteUpFormPage() {
     },
   })
 
-  const isSaving    = saveMut.isPending || scheduleMut.isPending
-  const canSchedule = !!form.meeting_date
+  const isSaving       = saveMut.isPending || scheduleMut.isPending
+  const canSchedule    = !!form.meeting_date
+  const isScheduled    = isEdit && existing?.status === 'SCHEDULED'
   const showMeetingNotes = isEdit && existing?.status === 'DELIVERED'
 
   const LOCKED_STATUSES = ['AWAITING_SIGNATURE', 'SIGNED', 'FOLLOW_UP_PENDING', 'CLOSED']
@@ -203,7 +250,7 @@ export default function WriteUpFormPage() {
         <IncidentsSection form={form} update={update} />
         <CorrectiveSection form={form} update={update} />
         <PriorDisciplineSection form={form} update={update} />
-        <AttachmentsSection form={form} update={update} />
+        <AttachmentsSection form={form} update={update} writeUpId={isEdit ? Number(id) : undefined} />
         {showMeetingNotes && <MeetingNotesSection form={form} update={update} />}
       </div>
 
@@ -212,17 +259,29 @@ export default function WriteUpFormPage() {
           Cancel
         </Button>
         <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => saveMut.mutate()} disabled={isSaving}>
-            {saveMut.isPending ? 'Saving…' : 'Save as Draft'}
-          </Button>
-          <Button
-            className="bg-primary hover:bg-primary/90 text-white"
-            onClick={() => scheduleMut.mutate()}
-            disabled={isSaving || !canSchedule}
-            title={!canSchedule ? 'Set a meeting date to schedule' : undefined}
-          >
-            {scheduleMut.isPending ? 'Saving…' : 'Save & Schedule'}
-          </Button>
+          {isScheduled ? (
+            <Button
+              className="bg-primary hover:bg-primary/90 text-white"
+              onClick={() => saveMut.mutate()}
+              disabled={isSaving}
+            >
+              {saveMut.isPending ? 'Saving…' : 'Save Changes'}
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => saveMut.mutate()} disabled={isSaving}>
+                {saveMut.isPending ? 'Saving…' : 'Save as Draft'}
+              </Button>
+              <Button
+                className="bg-primary hover:bg-primary/90 text-white"
+                onClick={() => scheduleMut.mutate()}
+                disabled={isSaving || !canSchedule}
+                title={!canSchedule ? 'Set a meeting date to schedule' : undefined}
+              >
+                {scheduleMut.isPending ? 'Saving…' : 'Save & Schedule'}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </QualityListPage>
