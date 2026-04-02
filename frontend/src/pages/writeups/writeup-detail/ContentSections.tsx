@@ -1,13 +1,38 @@
 import { Download, ExternalLink, Paperclip } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatQualityDate } from '@/utils/dateFormat'
 import type { WriteUpDetail } from '@/services/writeupService'
 
-// ── Layout primitives ─────────────────────────────────────────────────────────
+// ── Label maps ────────────────────────────────────────────────────────────────
 
-function DetSection({ title, children }: { title: string; children: React.ReactNode }) {
+const TYPE_LABELS: Record<string, string> = {
+  VERBAL_WARNING: 'Verbal Warning', WRITTEN_WARNING: 'Written Warning', FINAL_WARNING: 'Final Warning',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Draft', SCHEDULED: 'Scheduled', DELIVERED: 'Delivered',
+  AWAITING_SIGNATURE: 'Awaiting Signature', SIGNED: 'Signed',
+  FOLLOW_UP_PENDING: 'Follow-Up Pending', CLOSED: 'Closed',
+}
+
+const COACHING_STATUS_LABELS: Record<string, string> = {
+  SCHEDULED: 'Scheduled', IN_PROCESS: 'In Process', IN_PROGRESS: 'In Progress',
+  AWAITING_CSR_ACTION: 'Awaiting CSR', COMPLETED: 'Completed',
+  FOLLOW_UP_REQUIRED: 'Follow-Up', CLOSED: 'Closed',
+}
+
+const PURPOSE_LABELS: Record<string, string> = {
+  WEEKLY: 'Weekly', PERFORMANCE: 'Performance', ONBOARDING: 'Onboarding',
+}
+
+// ── Layout primitives — mirrors Training Detail exactly ───────────────────────
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">{title}</h3>
+      <div className="border-b border-slate-100 pb-3 mb-4">
+        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+      </div>
       {children}
     </div>
   )
@@ -26,7 +51,9 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
-      <div className="text-[13px] text-slate-800 font-medium">{value ?? <span className="text-slate-400 font-normal">—</span>}</div>
+      <div className="text-[13px] text-slate-800 font-medium">
+        {value ?? <span className="text-slate-400 font-normal">—</span>}
+      </div>
     </div>
   )
 }
@@ -37,158 +64,371 @@ function NoteBlock({ text, placeholder }: { text?: string | null; placeholder: s
     : <p className="text-[13px] text-slate-400 italic">{placeholder}</p>
 }
 
-// ── Source badge ──────────────────────────────────────────────────────────────
+// ── 1. Overview ───────────────────────────────────────────────────────────────
 
-function SourceBadge({ source }: { source: string }) {
-  if (source === 'QA_IMPORT') return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700">QA</span>
+function OverviewSection({ writeup }: { writeup: WriteUpDetail }) {
+  return (
+    <Section title="Write-Up Details">
+      <div className="grid grid-cols-3 gap-x-8 gap-y-4">
+        {/* Row 1: Employee · Document Type · Status */}
+        <InfoRow label="Employee"      value={writeup.csr_name} />
+        <InfoRow label="Document Type" value={TYPE_LABELS[writeup.document_type] ?? writeup.document_type} />
+        <InfoRow label="Status"        value={STATUS_LABELS[writeup.status] ?? writeup.status} />
+
+        {/* Row 2: Manager · HR Witness · Meeting Date */}
+        <InfoRow label="Manager"       value={writeup.manager_name ?? null} />
+        <InfoRow label="HR Witness"    value={writeup.hr_witness_name ?? null} />
+        <InfoRow label="Meeting Date"  value={writeup.meeting_date ? formatQualityDate(writeup.meeting_date) : null} />
+
+        {/* Row 3: Created By · Created Date */}
+        <InfoRow label="Created By"    value={writeup.created_by_name} />
+        <InfoRow label="Created"       value={formatQualityDate(writeup.created_at)} />
+      </div>
+    </Section>
   )
-  if (source === 'COACHING_IMPORT') return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-teal-50 text-teal-700">Coaching</span>
-  )
-  return null
 }
 
-// ── Incidents display ─────────────────────────────────────────────────────────
+// ── 2. Incidents ──────────────────────────────────────────────────────────────
 
-function IncidentsDisplay({ writeup }: { writeup: WriteUpDetail }) {
+function IncidentsSection({ writeup }: { writeup: WriteUpDetail }) {
   if (!writeup.incidents?.length) {
     return (
-      <DetSection title="Incidents">
+      <Section title="Incidents">
         <p className="text-[13px] text-slate-400 italic">No incidents recorded.</p>
-      </DetSection>
+      </Section>
     )
   }
+
   return (
-    <DetSection title="Incidents">
-      <div className="space-y-4">
+    <Section title="Incidents">
+      <div className="space-y-5">
         {writeup.incidents.map((inc, i) => (
-          <div key={inc.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/30">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
-                Incident {i + 1}
+          <div key={inc.id} className="border border-slate-200 rounded-xl overflow-hidden">
+
+            {/* Incident header */}
+            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">
+                Incident #{i + 1}
               </span>
             </div>
-            <p className="text-[13px] text-slate-700 mb-3">{inc.description}</p>
 
+            {/* Incident description */}
+            <div className="px-4 py-3">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Description</p>
+              <p className="text-[13px] text-slate-700 leading-relaxed">{inc.description}</p>
+            </div>
+
+            {/* Violations */}
             {inc.violations?.map((v, vi) => (
-              <div key={v.id} className="border border-slate-200 rounded-lg p-3 mb-2 last:mb-0 bg-white">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <span className="text-[12px] font-semibold text-slate-700">{v.policy_violated}</span>
-                  {v.reference_material && (
-                    <span className="text-[11px] text-slate-400 shrink-0">{v.reference_material}</span>
+              <div key={v.id} className="border-t border-slate-200">
+
+                {/* Policy violated + reference material */}
+                <div className="px-4 py-3 bg-white">
+                  <div className="grid grid-cols-3 gap-x-8">
+                    <InfoRow label="Policy Violated" value={<span className="font-medium text-slate-800">{v.policy_violated}</span>} />
+                    <InfoRow label="Reference Material" value={v.reference_material ?? null} />
+                  </div>
+
+                  {/* Examples */}
+                  {(v.examples?.length ?? 0) > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
+                        Examples
+                      </p>
+                      <div className="rounded-lg border border-slate-200 overflow-hidden">
+                        <table className="w-full text-[12px]">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                              <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-[90px]">Type</th>
+                              <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-[100px]">Date</th>
+                              <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Notes</th>
+                              <th className="px-3 py-2 w-[36px]" />
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {v.examples.map((ex, ei) => (
+                                <tr key={ex.id ?? ei} className="hover:bg-slate-50/60">
+                                  <td className="px-3 py-2.5 text-[13px] text-slate-600 whitespace-nowrap">
+                                    {ex.source === 'QA_IMPORT' ? 'QA' : ex.source === 'COACHING_IMPORT' ? 'Coaching' : 'Manual'}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">
+                                    {ex.example_date ? formatQualityDate(ex.example_date) : <span className="text-slate-300">&mdash;</span>}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-slate-600 leading-relaxed">
+                                    {ex.description}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    {ex.source === 'QA_IMPORT' && ex.qa_submission_id && (
+                                      <a
+                                        href={`/app/quality/submissions/${ex.qa_submission_id}`}
+                                        target="_blank" rel="noopener noreferrer"
+                                        className="text-slate-400 hover:text-primary transition-colors"
+                                        title="View completed QA form"
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                      </a>
+                                    )}
+                                  </td>
+                                </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   )}
                 </div>
-                {(v.examples?.length ?? 0) > 0 && (
-                  <div className="mt-2 space-y-1.5">
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
-                      Examples ({v.examples.length})
-                    </p>
-                    {v.examples.map((ex, ei) => (
-                      <div key={ex.id ?? ei} className="flex items-start gap-2 py-1.5 border-t border-slate-50">
-                        <SourceBadge source={ex.source} />
-                        {ex.example_date && (
-                          <span className="text-[11px] text-slate-400 shrink-0 pt-0.5">
-                            {formatQualityDate(ex.example_date)}
-                          </span>
-                        )}
-                        <p className="text-[12px] text-slate-600 flex-1">{ex.description}</p>
-                        {ex.source === 'QA_IMPORT' && ex.qa_submission_id && (
-                          <a
-                            href={`/app/quality/submissions/${ex.qa_submission_id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="shrink-0 text-primary hover:text-primary/70 transition-colors pt-0.5"
-                            title="View completed QA form"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {(v.examples?.length ?? 0) === 0 && vi === 0 && (
-                  <p className="text-[12px] text-slate-400 italic mt-1">No examples added</p>
-                )}
               </div>
             ))}
           </div>
         ))}
       </div>
-    </DetSection>
+    </Section>
   )
 }
 
-// ── Corrective action display ─────────────────────────────────────────────────
+// ── 3. Corrective Action & Expectations ───────────────────────────────────────
 
-function CorrectiveDisplay({ writeup }: { writeup: WriteUpDetail }) {
+function CorrectiveSection({ writeup }: { writeup: WriteUpDetail }) {
   return (
-    <DetSection title="Corrective Action & Expectations">
-      <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-        <div className="col-span-2">
-          <InfoRow label="Required Corrective Action"
-            value={<NoteBlock text={writeup.corrective_action} placeholder="Not specified" />} />
-        </div>
-        <InfoRow label="Timeline for Correction" value={writeup.correction_timeline} />
-        <InfoRow label="30-Day Check-In Date"
+    <Section title="Corrective Action & Expectations">
+      {/* Required corrective action */}
+      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
+        Required Corrective Action
+      </p>
+      <NoteBlock text={writeup.corrective_action} placeholder="Not specified" />
+
+      {/* Timeline + check-in + consequence */}
+      <div className="grid grid-cols-3 gap-x-8 gap-y-4 mt-4 pt-4 border-t border-slate-100">
+        <InfoRow label="Timeline for Correction" value={writeup.correction_timeline ?? null} />
+        <InfoRow label="Follow-Up Meeting Date"
           value={writeup.checkin_date ? formatQualityDate(writeup.checkin_date) : null} />
-        {writeup.consequence && (
-          <div className="col-span-2">
-            <InfoRow label="Consequence if Not Met"
-              value={<NoteBlock text={writeup.consequence} placeholder="" />} />
-          </div>
-        )}
+        <InfoRow label="Consequence if Not Met" value={writeup.consequence ?? null} />
       </div>
+
+      {/* Linked coaching session */}
       {writeup.linked_coaching_id && (
         <Sub title="Linked Coaching Session">
-          <a href={`/app/training/coaching/${writeup.linked_coaching_id}`}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors">
-            <span className="text-[13px] text-primary font-medium">
-              Coaching Session #{writeup.linked_coaching_id}
-            </span>
-            <ExternalLink className="h-3.5 w-3.5 text-primary" />
-          </a>
+          <div className="rounded-lg border border-slate-200 overflow-hidden -mx-1">
+            <table className="w-full text-[13px] table-fixed">
+              <colgroup>
+                <col className="w-[150px]" />
+                <col className="w-[110px]" />
+                <col className="w-[160px]" />
+                <col className="w-[160px]" />
+                <col className="w-[130px]" />
+                <col className="w-[44px]" />
+              </colgroup>
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Purpose / Type</th>
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Topic</th>
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Notes</th>
+                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Date</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const cs = writeup.linked_coaching_session
+                  const topics = cs?.topic_names ?? []
+                  const statusLabel = COACHING_STATUS_LABELS[cs?.status ?? ''] ?? cs?.status
+                  const purposeLabel = PURPOSE_LABELS[cs?.coaching_purpose ?? ''] ?? cs?.coaching_purpose
+                  return (
+                    <tr className="hover:bg-slate-50/60">
+                      <td className="px-3 py-2.5 text-slate-600 truncate">
+                        {purposeLabel ?? <span className="text-slate-300">&mdash;</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-600">
+                        {statusLabel ?? <span className="text-slate-300">&mdash;</span>}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {topics.length > 0 ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-[13px] text-slate-500 truncate block cursor-default">
+                                {topics.join(', ')}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                              <ul className="space-y-1">
+                                {topics.map((t, i) => (
+                                  <li key={i} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
+                                  </li>
+                                ))}
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : <span className="text-slate-300">&mdash;</span>}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {cs?.notes ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-[13px] text-slate-500 truncate block cursor-default">
+                                {cs.notes}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                              <p className="text-[13px] text-slate-700 whitespace-pre-wrap">{cs.notes}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : <span className="text-slate-300">&mdash;</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
+                        {cs?.date ? formatQualityDate(String(cs.date).slice(0, 10)) : <span className="text-slate-300">&mdash;</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <a href={`/app/training/coaching/${writeup.linked_coaching_id}`} target="_blank" rel="noreferrer"
+                          className="text-slate-400 hover:text-primary transition-colors">
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </td>
+                    </tr>
+                  )
+                })()}
+              </tbody>
+            </table>
+          </div>
         </Sub>
       )}
-    </DetSection>
+    </Section>
   )
 }
 
-// ── Prior discipline display ───────────────────────────────────────────────────
+// ── 4. Prior Discipline & Coaching History ────────────────────────────────────
 
-function PriorDisciplineDisplay({ writeup }: { writeup: WriteUpDetail }) {
-  if (!writeup.prior_discipline?.length) return null
+function PriorDisciplineSection({ writeup }: { writeup: WriteUpDetail }) {
+  const items = writeup.prior_discipline ?? []
+  if (!items.length) return null
+
+  const splitSep = (val: string | string[] | null | undefined): string[] => {
+    if (Array.isArray(val)) return val.filter(Boolean)
+    if (!val) return []
+    return String(val).split('~|~').filter(Boolean)
+  }
+
   return (
-    <DetSection title="Prior Discipline & Coaching History">
-      <div className="space-y-2">
-        {writeup.prior_discipline.map((pd: any, i: number) => (
-          <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50">
-            <span className="text-[12px] font-medium text-slate-700 flex-1">
-              {pd.reference_type === 'write_up' ? 'Write-Up' : 'Coaching'} #{pd.reference_id}
-            </span>
-            <a
-              href={pd.reference_type === 'write_up'
+    <Section title="Prior Discipline & Coaching History">
+      <div className="rounded-lg border border-slate-200 overflow-hidden -mx-1">
+        <table className="w-full text-[13px] table-fixed">
+          <colgroup>
+            <col className="w-[90px]" />
+            <col className="w-[150px]" />
+            <col className="w-[110px]" />
+            <col className="w-[160px]" />
+            <col className="w-[160px]" />
+            <col className="w-[130px]" />
+            <col className="w-[44px]" />
+          </colgroup>
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Type</th>
+              <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Purpose / Type</th>
+              <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+              <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Topic / Policy</th>
+              <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Notes / Incidents</th>
+              <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Date</th>
+              <th className="px-3 py-2" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {items.map((pd: any, i: number) => {
+              const isWriteUp = pd.reference_type === 'write_up'
+              const detail  = splitSep(isWriteUp ? pd.policies_violated  : pd.topic_names)
+              const notesTxt = isWriteUp
+                ? splitSep(pd.incident_descriptions).join(' | ')
+                : pd.notes
+              const statusLabel = isWriteUp
+                ? (STATUS_LABELS[pd.status] ?? pd.status)
+                : (COACHING_STATUS_LABELS[pd.status] ?? pd.status)
+              const subtypeLabel = isWriteUp
+                ? (TYPE_LABELS[pd.document_type] ?? pd.document_type)
+                : (PURPOSE_LABELS[pd.coaching_purpose] ?? pd.coaching_purpose)
+              const date = pd.date
+                ? String(pd.date).slice(0, 10)
+                : undefined
+              const href = isWriteUp
                 ? `/app/writeups/${pd.reference_id}`
-                : `/app/training/coaching/${pd.reference_id}`}
-              target="_blank" rel="noreferrer"
-              className="text-slate-400 hover:text-primary transition-colors"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          </div>
-        ))}
+                : `/app/training/coaching/${pd.reference_id}`
+
+              return (
+                <tr key={i} className="hover:bg-slate-50/60">
+                  <td className="px-3 py-2.5 text-[13px] text-slate-600 whitespace-nowrap">
+                    {isWriteUp ? 'Write-Up' : 'Coaching'}
+                  </td>
+                  <td className="px-3 py-2.5 text-[13px] text-slate-600 truncate">
+                    {subtypeLabel ?? <span className="text-slate-300">&mdash;</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-[13px] text-slate-600">
+                    {statusLabel ?? <span className="text-slate-300">&mdash;</span>}
+                  </td>
+
+                  {/* Topic / Policy — tooltip bullet list */}
+                  <td className="px-3 py-2.5">
+                    {detail.length > 0 ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[13px] text-slate-500 truncate block cursor-default">
+                            {detail.join(', ')}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                          <ul className="space-y-1">
+                            {detail.map((d, j) => (
+                              <li key={j} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{d}
+                              </li>
+                            ))}
+                          </ul>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : <span className="text-slate-300">&mdash;</span>}
+                  </td>
+
+                  {/* Notes / Incidents — tooltip full text */}
+                  <td className="px-3 py-2.5">
+                    {notesTxt ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[13px] text-slate-500 truncate block cursor-default">
+                            {notesTxt}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
+                          <p className="text-[13px] text-slate-700 whitespace-pre-wrap">{notesTxt}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : <span className="text-slate-300">&mdash;</span>}
+                  </td>
+
+                  <td className="px-3 py-2.5 text-[13px] text-slate-600 whitespace-nowrap">
+                    {date ? formatQualityDate(date) : <span className="text-slate-300">&mdash;</span>}
+                  </td>
+
+                  <td className="px-3 py-2.5 text-center">
+                    <a href={href} target="_blank" rel="noreferrer"
+                      className="text-slate-400 hover:text-primary transition-colors">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
-    </DetSection>
+    </Section>
   )
 }
 
-// ── Attachments display ───────────────────────────────────────────────────────
+// ── 5. Attachments ────────────────────────────────────────────────────────────
 
-function AttachmentsDisplay({ writeup }: { writeup: WriteUpDetail }) {
+function AttachmentsSection({ writeup }: { writeup: WriteUpDetail }) {
   if (!writeup.attachments?.length) return null
   return (
-    <DetSection title="Attachments">
+    <Section title="Attachments">
       <div className="space-y-2">
         {writeup.attachments.map(a => (
           <div key={a.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50">
@@ -201,8 +441,7 @@ function AttachmentsDisplay({ writeup }: { writeup: WriteUpDetail }) {
             )}
             <a
               href={`/api/writeups/${writeup.id}/attachments/${a.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
+              target="_blank" rel="noopener noreferrer"
               className="text-primary hover:text-primary/80 shrink-0"
               title="View / Download"
             >
@@ -211,48 +450,49 @@ function AttachmentsDisplay({ writeup }: { writeup: WriteUpDetail }) {
           </div>
         ))}
       </div>
-    </DetSection>
+    </Section>
   )
 }
 
-// ── Meeting notes display ─────────────────────────────────────────────────────
+// ── 6. Meeting Notes ──────────────────────────────────────────────────────────
 
-function MeetingNotesDisplay({ writeup }: { writeup: WriteUpDetail }) {
+function MeetingNotesSection({ writeup }: { writeup: WriteUpDetail }) {
   const showStatuses = ['DELIVERED', 'AWAITING_SIGNATURE', 'SIGNED', 'FOLLOW_UP_PENDING', 'CLOSED']
   if (!showStatuses.includes(writeup.status)) return null
   return (
-    <DetSection title="Meeting Notes">
+    <Section title="Meeting Notes">
       <NoteBlock text={writeup.meeting_notes} placeholder="No meeting notes recorded." />
-    </DetSection>
+    </Section>
   )
 }
 
-// ── Follow-up display ─────────────────────────────────────────────────────────
+// ── 7. Follow-Up ──────────────────────────────────────────────────────────────
 
-function FollowUpDisplay({ writeup }: { writeup: WriteUpDetail }) {
+function FollowUpSection({ writeup }: { writeup: WriteUpDetail }) {
   const show = writeup.status === 'FOLLOW_UP_PENDING' ||
     (writeup.status === 'CLOSED' && writeup.follow_up_required)
   if (!show) return null
+
   return (
-    <DetSection title="Follow-Up">
+    <Section title="Follow-Up">
       <div className="grid grid-cols-2 gap-x-8 gap-y-4">
         <InfoRow label="Follow-Up Date"
           value={writeup.follow_up_date ? formatQualityDate(writeup.follow_up_date) : null} />
         <InfoRow label="Assigned To" value={writeup.follow_up_assignee_name ?? null} />
-        {writeup.follow_up_checklist && (
-          <div className="col-span-2">
-            <InfoRow label="Checklist"
-              value={<NoteBlock text={writeup.follow_up_checklist} placeholder="" />} />
-          </div>
-        )}
-        {writeup.follow_up_notes && (
-          <div className="col-span-2 border-t border-slate-100 pt-4">
-            <InfoRow label="Follow-Up Notes"
-              value={<NoteBlock text={writeup.follow_up_notes} placeholder="" />} />
-          </div>
-        )}
       </div>
-    </DetSection>
+
+      {writeup.follow_up_checklist && (
+        <Sub title="Checklist">
+          <NoteBlock text={writeup.follow_up_checklist} placeholder="" />
+        </Sub>
+      )}
+
+      {writeup.follow_up_notes && (
+        <Sub title="Follow-Up Notes">
+          <NoteBlock text={writeup.follow_up_notes} placeholder="" />
+        </Sub>
+      )}
+    </Section>
   )
 }
 
@@ -261,12 +501,13 @@ function FollowUpDisplay({ writeup }: { writeup: WriteUpDetail }) {
 export function ContentSections({ writeup }: { writeup: WriteUpDetail }) {
   return (
     <>
-      <IncidentsDisplay writeup={writeup} />
-      <CorrectiveDisplay writeup={writeup} />
-      <PriorDisciplineDisplay writeup={writeup} />
-      <AttachmentsDisplay writeup={writeup} />
-      <MeetingNotesDisplay writeup={writeup} />
-      <FollowUpDisplay writeup={writeup} />
+      <OverviewSection     writeup={writeup} />
+      <IncidentsSection    writeup={writeup} />
+      <CorrectiveSection   writeup={writeup} />
+      <PriorDisciplineSection writeup={writeup} />
+      <AttachmentsSection  writeup={writeup} />
+      <MeetingNotesSection writeup={writeup} />
+      <FollowUpSection     writeup={writeup} />
     </>
   )
 }

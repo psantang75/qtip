@@ -190,6 +190,30 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
 
     const splitSep = (val: string | null) => val ? val.split('~|~').filter(Boolean) : []
 
+    const linkedCoachingRaw = writeUp.linked_coaching_id
+      ? await prisma.$queryRaw<any[]>(Prisma.sql`
+          SELECT cs.id, cs.coaching_purpose, cs.status, cs.session_date,
+            SUBSTRING(cs.notes, 1, 500) as notes,
+            GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR '~|~') as topic_names
+          FROM coaching_sessions cs
+          LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
+          LEFT JOIN topics t ON cst.topic_id = t.id
+          WHERE cs.id = ${writeUp.linked_coaching_id}
+          GROUP BY cs.id
+        `)
+      : []
+
+    const linkedCoachingSession = linkedCoachingRaw.length ? {
+      id:               Number(linkedCoachingRaw[0].id),
+      coaching_purpose: linkedCoachingRaw[0].coaching_purpose,
+      status:           linkedCoachingRaw[0].status,
+      date:             linkedCoachingRaw[0].session_date,
+      notes:            linkedCoachingRaw[0].notes,
+      topic_names:      linkedCoachingRaw[0].topic_names
+        ? String(linkedCoachingRaw[0].topic_names).split('~|~').filter(Boolean)
+        : [],
+    } : null
+
     const [priorDisciplineRaw, attachments] = await Promise.all([
       prisma.$queryRaw<any[]>(Prisma.sql`
         SELECT pd.reference_type, pd.reference_id,
@@ -238,6 +262,7 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
         follow_up_required: Boolean(Number(writeUp.follow_up_required)),
         incidents,
         prior_discipline: priorDiscipline,
+        linked_coaching_session: linkedCoachingSession,
         attachments,
       },
     })

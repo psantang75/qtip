@@ -100,14 +100,14 @@ type ActionState = 'schedule' | 'deliver' | 'finalize_confirm' | 'recall_confirm
 function DraftActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: any) => void; busy: boolean }) {
   const navigate = useNavigate()
   const [show, setShow] = useState(false)
-  const [date, setDate] = useState(writeup.meeting_date?.slice(0,16) ?? '')
+  const [date, setDate] = useState(writeup.meeting_date?.slice(0,10) ?? '')
 
   return (
     <div className="space-y-2">
       {show ? (
         <div className="space-y-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-          <p className="text-[12px] font-medium text-slate-600">Meeting Date & Time</p>
-          <Input type="datetime-local" className="h-8 text-[13px]" value={date} onChange={e => setDate(e.target.value)} />
+          <p className="text-[12px] font-medium text-slate-600">Meeting Date</p>
+          <Input type="date" className="h-8 text-[13px]" value={date} onChange={e => setDate(e.target.value)} />
           <div className="flex gap-2">
             <Button size="sm" variant="outline" className="flex-1" onClick={() => setShow(false)}>Cancel</Button>
             <Button size="sm" className="flex-1 bg-primary hover:bg-primary/90 text-white"

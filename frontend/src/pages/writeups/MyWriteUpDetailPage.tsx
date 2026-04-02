@@ -200,14 +200,18 @@ export default function MyWriteUpDetailPage() {
     </QualityListPage>
   )
 
+  const meetingDate = writeup.meeting_date
+    ? formatQualityDate(writeup.meeting_date)
+    : formatQualityDate(writeup.created_at)
+
   return (
     <QualityListPage>
       {/* ── Document card ─────────────────────────────────────────────────── */}
-      <div className="mx-auto max-w-3xl px-4 print:px-0">
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden print:border-0 print:rounded-none">
+      <div className="writeup-print-root mx-auto max-w-3xl px-4 print:px-0">
+        <div className="wu-print-doc bg-white rounded-xl border border-slate-200 overflow-hidden">
 
-          {/* Document header */}
-          <div className="border-b border-slate-200 px-8 py-6 bg-slate-50 print:bg-white">
+          {/* ── Screen header ── */}
+          <div className="border-b border-slate-200 px-8 py-6 bg-slate-50 print:hidden">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
               QTIP — Employee Performance Document
             </p>
@@ -221,11 +225,7 @@ export default function MyWriteUpDetailPage() {
               </div>
               <div>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">Date</p>
-                <p className="text-[13px] font-semibold text-slate-800">
-                  {writeup.meeting_date
-                    ? formatQualityDate(writeup.meeting_date)
-                    : formatQualityDate(writeup.created_at)}
-                </p>
+                <p className="text-[13px] font-semibold text-slate-800">{meetingDate}</p>
               </div>
               <div>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">Issued By</p>
@@ -234,14 +234,68 @@ export default function MyWriteUpDetailPage() {
             </div>
           </div>
 
-          {/* Document body — reuse manager detail sections */}
+          {/* ── Print-only header ── */}
+          <div className="wu-print-header hidden print:block">
+            <div className="wu-print-header-brand">
+              <div className="wu-print-header-brand-bar" />
+              <div>
+                <p className="wu-print-header-org">QTIP — Employee Performance Document</p>
+                <p className="wu-print-header-title">{TYPE_LABELS[writeup.document_type] ?? writeup.document_type}</p>
+              </div>
+            </div>
+            <div className="wu-print-header-meta">
+              <div>
+                <p className="wu-print-meta-item-label">Employee</p>
+                <p className="wu-print-meta-item-value">{writeup.csr_name}</p>
+              </div>
+              <div>
+                <p className="wu-print-meta-item-label">Issued By</p>
+                <p className="wu-print-meta-item-value">{writeup.created_by_name}</p>
+              </div>
+              <div>
+                <p className="wu-print-meta-item-label">Meeting Date</p>
+                <p className="wu-print-meta-item-value">{meetingDate}</p>
+              </div>
+              <div>
+                <p className="wu-print-meta-item-label">Status</p>
+                <p className="wu-print-meta-item-value">{writeup.status.replace(/_/g, ' ')}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Document body */}
           <div className="px-8 py-6 space-y-6">
             <ContentSections writeup={writeup} />
+          </div>
+
+          {/* ── Print-only acknowledgment + signature block ── */}
+          <div className="hidden print:block px-8 pb-8">
+            <p className="wu-print-ack">{ACK_TEXT}</p>
+            <div className="wu-print-sig">
+              <div>
+                <div className="wu-print-sig-line">
+                  {writeup.signature_data && (
+                    <img src={writeup.signature_data} alt="Signature" className="wu-print-sig-image" />
+                  )}
+                </div>
+                <p className="wu-print-sig-label">Employee Signature — {writeup.csr_name}</p>
+              </div>
+              <div>
+                <div className="wu-print-sig-line" />
+                <p className="wu-print-sig-label">
+                  Date Signed: {writeup.signed_at ? formatQualityDate(writeup.signed_at) : '_______________'}
+                </p>
+              </div>
+            </div>
+            <div className="wu-print-footer">
+              <span>Write-Up #{writeup.id} — Confidential HR Document</span>
+              <span>Generated {formatQualityDate(new Date().toISOString())}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Status banners / signature section ────────────────────────────── */}
+      {/* ── Status banners / signature section (screen only) ──────────────── */}
       <div className="print:hidden space-y-4 mt-2">
         {writeup.status !== 'AWAITING_SIGNATURE' && writeup.status !== 'SIGNED' && (
           <StatusBanner writeup={writeup} />
@@ -256,8 +310,8 @@ export default function MyWriteUpDetailPage() {
         {writeup.status === 'SIGNED' && <SignedSection writeup={writeup} />}
       </div>
 
-      {/* ── Footer ────────────────────────────────────────────────────────── */}
-      <div className="mx-auto max-w-3xl px-4 print:hidden">
+      {/* ── Footer (screen only) ──────────────────────────────────────────── */}
+      <div className="print:hidden mx-auto max-w-3xl px-4">
         <div className="flex items-center justify-between pt-2">
           <Button variant="outline" onClick={() => navigate('/app/writeups/my')}>
             ← Back to My Write-Ups

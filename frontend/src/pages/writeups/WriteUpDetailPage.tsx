@@ -11,7 +11,6 @@ import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { ContentSections } from './writeup-detail/ContentSections'
 import { StatusPanel } from './writeup-detail/StatusPanel'
-import { WriteUpTypeBadge } from './WriteUpsPage'
 
 // Document locks at AWAITING_SIGNATURE per backend enforcement
 const LOCKED_STATUSES = ['AWAITING_SIGNATURE', 'SIGNED', 'FOLLOW_UP_PENDING', 'CLOSED'] as const
@@ -72,12 +71,7 @@ export default function WriteUpDetailPage() {
   return (
     <QualityListPage>
       <QualityPageHeader
-        title={
-          <span className="flex items-center gap-3">
-            {writeup.csr_name}
-            <WriteUpTypeBadge type={writeup.document_type} />
-          </span>
-        }
+        title={`Write-Up #${writeup.id}`}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate('/app/writeups')}>

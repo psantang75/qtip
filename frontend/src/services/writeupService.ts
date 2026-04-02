@@ -72,6 +72,14 @@ export interface WriteUpDetail extends WriteUp {
   checkin_date?: string | null
   consequence?: string | null
   linked_coaching_id?: number | null
+  linked_coaching_session?: {
+    id: number
+    coaching_purpose: string | null
+    status: string | null
+    date: string | null
+    notes: string | null
+    topic_names: string[]
+  } | null
   manager_id?: number | null
   manager_name?: string | null
   hr_witness_id?: number | null
