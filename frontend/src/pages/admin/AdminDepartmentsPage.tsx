@@ -168,6 +168,7 @@ export default function AdminDepartmentsPage() {
     mutationFn: ({ id, active }: { id: number; active: boolean }) =>
       departmentService.toggleDepartmentStatus(id, active),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-departments'] }),
+    onError:   () => toast({ title: 'Failed to update status', variant: 'destructive' }),
   })
 
   // ── Helpers ──────────────────────────────────────────────────────────────

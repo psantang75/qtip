@@ -118,7 +118,7 @@ export default function CoachingSessionDetailPage() {
   const qc        = useQueryClient()
   const { toast } = useToast()
   const { user }  = useAuth()
-  const canSeeInternal = [ROLE_IDS.ADMIN, ROLE_IDS.TRAINER, ROLE_IDS.MANAGER].includes(user?.role_id ?? 0)
+  const canSeeInternal = [ROLE_IDS.ADMIN, ROLE_IDS.TRAINER, ROLE_IDS.MANAGER].some(r => r === (user?.role_id ?? 0))
   const [showHistory,    setShowHistory]    = useState(false)
   const [pendingStatus,  setPendingStatus]  = useState('')
 

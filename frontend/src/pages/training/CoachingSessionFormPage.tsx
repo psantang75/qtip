@@ -276,7 +276,7 @@ export default function CoachingSessionFormPage() {
             quizzes={quizzes} topicIdMap={topicIdMap} update={update}
           />
           <AccountabilitySection form={form} errors={errors} update={update} />
-          {[ROLE_IDS.ADMIN, ROLE_IDS.TRAINER, ROLE_IDS.MANAGER].includes(user?.role_id ?? 0) && (
+          {[ROLE_IDS.ADMIN, ROLE_IDS.TRAINER, ROLE_IDS.MANAGER].some(r => r === (user?.role_id ?? 0)) && (
             <InternalNotesSection form={form} flagItems={flagItems} update={update} />
           )}
           <AttachmentSection

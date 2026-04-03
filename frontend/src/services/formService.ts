@@ -44,16 +44,12 @@ export const getFormById = async (formId: number, includeInactive = false): Prom
 // Create new form
 export const createForm = async (formData: Form): Promise<{ message: string; form_id: number }> => {
   try {
-    const modifiedFormData = {
-      ...formData,
-      created_by: localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId') || '1') : 1,
-    };
-    const response = await apiClient.post('/forms', modifiedFormData, {
+    const response = await apiClient.post('/forms', formData, {
       timeout: 60000,
       headers: { 'Content-Type': 'application/json' },
     });
     return response.data;
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error.response) {
       const { status, data } = error.response;
       if (status === 404) throw new Error('Form endpoint not found. Please check if the server is running correctly.');
@@ -73,16 +69,12 @@ export const createForm = async (formData: Form): Promise<{ message: string; for
 // Update form (creates new version)
 export const updateForm = async (formId: number, formData: Form): Promise<{ message: string; form_id: number }> => {
   try {
-    const modifiedFormData = {
-      ...formData,
-      created_by: localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId') || '1') : 1,
-    };
-    const response = await apiClient.put(`/forms/${formId}`, modifiedFormData, {
+    const response = await apiClient.put(`/forms/${formId}`, formData, {
       timeout: 60000,
       headers: { 'Content-Type': 'application/json' },
     });
     return response.data;
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error.response) {
       const { status, data } = error.response;
       if (status === 404) throw new Error(`Form with ID ${formId} not found. Please check if the form exists.`);

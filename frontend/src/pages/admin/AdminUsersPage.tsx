@@ -14,6 +14,9 @@ import {
 import { UserFormSheet } from './users/UserFormSheet'
 import { UserFilterBar, ROLE_NAMES } from './users/UserFilterBar'
 import { TableErrorState } from '@/components/common/TableErrorState'
+import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { TableEmptyState } from '@/components/common/TableEmptyState'
+import { useToast } from '@/hooks/use-toast'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 
 type AdminUser = User
@@ -28,6 +31,7 @@ function formatDate(d?: string | null) {
 export default function AdminUsersPage() {
   const queryClient = useQueryClient()
   const { user: me } = useAuth()
+  const { toast } = useToast()
 
   // ── Filter state ──────────────────────────────────────────────────────────
   const [search,        setSearch]        = useState('')
@@ -106,6 +110,7 @@ export default function AdminUsersPage() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, active }: { id: number; active: boolean }) => userService.toggleUserStatus(id, active),
     onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['admin-users'] }),
+    onError:    () => toast({ title: 'Failed to update status', variant: 'destructive' }),
   })
 
   return (
@@ -155,11 +160,11 @@ export default function AdminUsersPage() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">Loading…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="p-0"><TableLoadingSkeleton rows={6} /></TableCell></TableRow>
             ) : isError ? (
               <TableRow><TableCell colSpan={7} className="py-4"><TableErrorState message="Failed to load users." onRetry={refetch} /></TableCell></TableRow>
             ) : pagedUsers.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No users found</TableCell></TableRow>
+              <TableEmptyState colSpan={7} title="No users found" description="Try adjusting your search or filters." />
             ) : pagedUsers.map(u => (
               <TableRow key={u.id} className="hover:bg-slate-50/50">
                 <TableCell className="text-[13px] font-medium text-slate-900">{u.username}</TableCell>

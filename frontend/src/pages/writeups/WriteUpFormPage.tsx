@@ -73,7 +73,7 @@ export default function WriteUpFormPage() {
           })),
         })),
       })),
-      prior_discipline: (existing.prior_discipline ?? []).map((pd: any) => {
+      prior_discipline: (existing.prior_discipline ?? []).map((pd) => {
         const isWriteUp = pd.reference_type === 'write_up'
         const TYPE_LABELS: Record<string, string> = {
           VERBAL_WARNING: 'Verbal Warning', WRITTEN_WARNING: 'Written Warning', FINAL_WARNING: 'Final Warning',

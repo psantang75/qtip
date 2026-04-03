@@ -95,7 +95,7 @@ function SignatureSection({ id, csrName, onSigned }: { id: number; csrName: stri
       toast({ title: 'Document signed successfully. A copy has been saved to your personnel record.' })
       onSigned()
     },
-    onError: (err: any) => toast({ title: 'Signing failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Signing failed', description: err?.message, variant: 'destructive' }),
   })
 
   return (

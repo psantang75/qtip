@@ -353,14 +353,14 @@ export function StatusPanel({ writeup, id, onInvalidate }: StatusPanelProps) {
     mutationFn: ({ status, extra }: { status: WriteUpStatus; extra?: TransitionExtra }) =>
       writeupService.transitionStatus(id, { status, ...extra }),
     onSuccess: (_data, variables) => onSuccess(`Status updated to ${STATUS_LABELS[variables.status]}`),
-    onError: (err: any) => toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
   })
 
   const setFollowUpMut = useMutation({
     mutationFn: (body: { follow_up_date: string; follow_up_assigned_to: number; follow_up_checklist: string }) =>
       writeupService.setFollowUp(id, body),
     onSuccess: () => onSuccess('Follow-up set'),
-    onError: (err: any) => toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
   })
 
   const transition = (status: WriteUpStatus, extra?: TransitionExtra) =>

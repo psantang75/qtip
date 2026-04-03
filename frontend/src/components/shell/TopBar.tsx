@@ -10,6 +10,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { ROLE_DISPLAY } from '@/config/navConfig'
+import { ROLE_IDS } from '@/hooks/useQualityRole'
 
 function getInitials(username: string): string {
   const parts = username.trim().split(/\s+/)
@@ -50,7 +51,7 @@ export default function TopBar() {
       <div className="flex-1" />
 
       {/* ── Admin shortcut / back-to-app (role_id 1 only) ───────────────── */}
-      {user?.role_id === 1 && (
+      {user?.role_id === ROLE_IDS.ADMIN && (
         isInAdmin ? (
           <button
             type="button"
@@ -81,7 +82,7 @@ export default function TopBar() {
           >
             {/* Avatar */}
             <Avatar className="h-9 w-9 shrink-0">
-              <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-white text-sm font-semibold">
+              <AvatarFallback className="bg-primary text-white text-sm font-semibold">
                 {initials}
               </AvatarFallback>
             </Avatar>

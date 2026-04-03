@@ -32,6 +32,11 @@ const ROLE_META: Record<number, { name: string; description: string; access: str
     description: 'Team oversight — manages one or more departments, sees team audits, training, and metrics.',
     access: ['Submissions (team)', 'Disputes (team)', 'QA analytics (team)', 'Enrollments', 'Coaching', 'Team dashboard', 'Saved reports', 'Data explorer'],
   },
+  6: {
+    name: 'Director',
+    description: 'Org-wide reporting and insights — full analytics visibility across all departments.',
+    access: ['All analytics', 'Insights dashboard', 'Data explorer', 'Raw export', 'Performance reports'],
+  },
 }
 
 export default function AdminRolesPage() {

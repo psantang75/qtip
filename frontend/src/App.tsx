@@ -173,7 +173,7 @@ export default function App() {
 
               {/* Admin area — own layout, Admin-only */}
               <Route path="/app/admin" element={
-                <RequireRole allowed={[1]} fallback="/app">
+                <RequireRole allowed={[ROLE_IDS.ADMIN]} fallback="/app">
                   <AdminLayout />
                 </RequireRole>
               }>

@@ -33,7 +33,7 @@ export function CallDetailsPanel({ calls }: Props) {
       {/* Tabs — only when multiple calls */}
       {calls.length > 1 && (
         <div className="flex border-b border-slate-100">
-          {calls.map((c: any, i: number) => (
+          {calls.map((c: SubmissionCall, i: number) => (
             <button
               key={i}
               onClick={() => { setActiveCallIndex(i); setTranscriptOpen(false) }}

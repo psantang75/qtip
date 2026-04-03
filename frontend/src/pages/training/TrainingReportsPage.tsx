@@ -91,7 +91,7 @@ export default function TrainingReportsPage() {
 
   const summaryParams = { date_from: dateFrom || undefined, date_to: dateTo || undefined }
 
-  const { data: summary, isLoading: summaryLoading, isError: summaryError } = useQuery({
+  const { data: summary, isLoading: summaryLoading, isError: summaryError, refetch: summaryRefetch } = useQuery({
     queryKey: ['coaching-reports-summary', dateFrom, dateTo],
     queryFn:  () => trainingService.getReportsSummary(summaryParams),
   })
@@ -165,7 +165,7 @@ export default function TrainingReportsPage() {
 
       {summaryError && (
         <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <TableErrorState message="Failed to load summary metrics." onRetry={() => {}} />
+          <TableErrorState message="Failed to load summary metrics." onRetry={summaryRefetch} />
         </div>
       )}
 

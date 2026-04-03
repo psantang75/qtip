@@ -23,7 +23,6 @@ const managerReportsService = {
   getFilterOptions: async (): Promise<FilterOptions> => {
     try {
       // Use mock data for now
-      console.log('Using mock data for filter options');
       return Promise.resolve(mockFilterOptions);
       
       // TODO: Uncomment when backend is ready
@@ -40,7 +39,6 @@ const managerReportsService = {
   generateReport: async (filters: ManagerReportFilters): Promise<ManagerReportData> => {
     try {
       // Use mock data for now
-      console.log('Using mock data for report generation', filters);
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       return Promise.resolve(mockReportData);
@@ -59,7 +57,6 @@ const managerReportsService = {
   exportReport: async (reportId: string, format: 'csv' | 'pdf'): Promise<Blob> => {
     try {
       // Mock CSV/PDF export for now
-      console.log('Mock export:', reportId, format);
       const mockData = format === 'csv' 
         ? 'Name,Type,QA Score,Completion Rate,Dispute Count\nCustomer Service,Department,87.5,92.5,21\n'
         : 'Mock PDF content';

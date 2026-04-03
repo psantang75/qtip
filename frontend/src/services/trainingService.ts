@@ -28,6 +28,7 @@ export type CoachingStatus =
   | 'SCHEDULED'
   | 'IN_PROCESS'
   | 'AWAITING_CSR_ACTION'
+  | 'QUIZ_PENDING'
   | 'COMPLETED'
   | 'FOLLOW_UP_REQUIRED'
   | 'CLOSED'
