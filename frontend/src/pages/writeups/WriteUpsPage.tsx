@@ -20,57 +20,39 @@ import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
+import { useWriteUpRole } from '@/hooks/useWriteUpRole'
 import { formatQualityDate } from '@/utils/dateFormat'
-import { useAuth } from '@/contexts/AuthContext'
+import {
+  WRITE_UP_TYPE_LABELS,
+  WRITE_UP_STATUS_LABELS,
+} from './writeupLabels'
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// Re-export for consumers (e.g. MyWriteUpsPage)
+export { WRITE_UP_TYPE_LABELS, WRITE_UP_STATUS_LABELS }
 
-export const WRITE_UP_TYPE_LABELS: Record<WriteUpType, string> = {
-  VERBAL_WARNING:  'Verbal Warning',
-  WRITTEN_WARNING: 'Written Warning',
-  FINAL_WARNING:   'Final Warning',
-}
+const ALL_STATUSES = Object.keys(WRITE_UP_STATUS_LABELS) as WriteUpStatus[]
+const ALL_TYPES    = Object.keys(WRITE_UP_TYPE_LABELS)   as WriteUpType[]
+const CLOSED_LABEL = WRITE_UP_STATUS_LABELS['CLOSED']
 
-const WRITE_UP_TYPE_STYLES: Record<WriteUpType, string> = {
-  VERBAL_WARNING:  'bg-amber-50  text-amber-700',
-  WRITTEN_WARNING: 'bg-orange-50 text-orange-700',
-  FINAL_WARNING:   'bg-red-50    text-red-700',
-}
-
-export const WRITE_UP_STATUS_LABELS: Record<WriteUpStatus, string> = {
-  DRAFT:               'Draft',
-  SCHEDULED:           'Scheduled',
-  DELIVERED:           'Delivered',
-  AWAITING_SIGNATURE:  'Awaiting Signature',
-  SIGNED:              'Signed',
-  FOLLOW_UP_PENDING:   'Follow-Up Pending',
-  CLOSED:              'Closed',
-}
-
-const ALL_STATUSES    = Object.keys(WRITE_UP_STATUS_LABELS) as WriteUpStatus[]
-const ALL_TYPES       = Object.keys(WRITE_UP_TYPE_LABELS)   as WriteUpType[]
-const CLOSED_LABEL    = WRITE_UP_STATUS_LABELS['CLOSED']
-
-// kept for external imports if needed
 export function WriteUpTypeBadge({ type }: { type: WriteUpType }) {
-  return <span>{WRITE_UP_TYPE_LABELS[type] ?? type}</span>
+  return <span className="text-[13px] text-slate-600">{WRITE_UP_TYPE_LABELS[type] ?? type}</span>
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function WriteUpsPage() {
   const navigate    = useNavigate()
-  const { user }    = useAuth()
-  const canCreate   = [1, 2, 5].includes(user?.role_id ?? 0)
+  const { canManage: canCreate } = useWriteUpRole()
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    csrs: '', statuses: '', types: '',
+    csrs: '', statuses: '', types: '', search: '',
     from: '', to: '', page: '1', size: '20',
   })
 
   const csrsParam   = get('csrs')
   const statusParam = get('statuses')
   const typeParam   = get('types')
+  const searchParam = get('search')
   const dateFrom    = get('from')
   const dateTo      = get('to')
   const page        = parseInt(get('page')) || 1
@@ -83,14 +65,15 @@ export default function WriteUpsPage() {
   const selectedStatuses = useMemo(() => statusParam ? statusParam.split(',').filter(Boolean) : [], [statusParam])
   const selectedTypes    = useMemo(() => typeParam   ? typeParam.split(',').filter(Boolean)   : [], [typeParam])
 
-  // Fetch write-ups with server-side meeting date filtering
+  // Fetch write-ups with server-side date + name search filtering
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['writeups', page, pageSize, dateFrom, dateTo],
+    queryKey: ['writeups', page, pageSize, dateFrom, dateTo, searchParam],
     queryFn: () => writeupService.getWriteUps({
       page,
       limit:     pageSize,
-      date_from: dateFrom || undefined,
-      date_to:   dateTo   || undefined,
+      date_from: dateFrom    || undefined,
+      date_to:   dateTo      || undefined,
+      search:    searchParam || undefined,
     }),
     placeholderData: (prev) => prev,
   })
@@ -150,6 +133,9 @@ export default function WriteUpsPage() {
       />
 
       <QualityFilterBar
+        search={searchParam}
+        onSearchChange={v => setMany({ search: v, page: '1' })}
+        searchPlaceholder="Search by employee or creator…"
         hasFilters={hasAnyFilter || hasClientFilter}
         onReset={reset}
         resultCount={{ total: displayTotal }}
@@ -260,7 +246,7 @@ export default function WriteUpsPage() {
 
       <ListPagination
         page={page}
-        totalPages={data?.totalPages ?? 1}
+        totalPages={hasClientFilter ? Math.max(1, Math.ceil(clientFiltered.length / pageSize)) : (data?.totalPages ?? 1)}
         totalItems={displayTotal}
         pageSize={pageSize}
         onPageChange={setPage}

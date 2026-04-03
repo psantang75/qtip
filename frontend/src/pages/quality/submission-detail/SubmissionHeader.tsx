@@ -1,5 +1,6 @@
 import { ArrowLeft, AlertTriangle, CheckCircle, Edit3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import type { SubmissionDetail } from '@/services/qaService'
 
 interface Props {
@@ -66,11 +67,7 @@ export function SubmissionHeader({
         <span className="text-[15px] font-semibold text-slate-900 truncate">
           Review #: {detail.id} — {detail.form_name}
         </span>
-        <span className="text-[15px] text-slate-600 shrink-0">
-          Status: <span className="font-bold text-slate-900">
-            {detail.status.charAt(0) + detail.status.slice(1).toLowerCase()}
-          </span>
-        </span>
+        <StatusBadge status={detail.status} />
       </div>
     </div>
   )

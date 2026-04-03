@@ -110,7 +110,7 @@ export default function LibraryQuizFormPage() {
     <QualityListPage>
       <QualityPageHeader
         title={isEdit ? 'Edit Quiz' : 'New Quiz'}
-        action={
+        actions={
           <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-4 w-4 mr-1" /> Back
           </Button>

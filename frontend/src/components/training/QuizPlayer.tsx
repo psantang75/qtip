@@ -4,6 +4,7 @@ import { CheckCircle, XCircle, HelpCircle } from 'lucide-react'
 import trainingService, { type QuizQuestion, type QuizAttemptResult } from '@/services/trainingService'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useToast } from '@/hooks/use-toast'
 
 interface QuizPlayerProps {
   quiz: { id: number; quiz_title: string; pass_score: number; questions: QuizQuestion[] }
@@ -14,6 +15,7 @@ interface QuizPlayerProps {
 type Phase = 'intro' | 'taking' | 'result'
 
 export function QuizPlayer({ quiz, coachingSessionId, onPassed }: QuizPlayerProps) {
+  const { toast } = useToast()
   const [phase, setPhase]                   = useState<Phase>('intro')
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({})
@@ -36,7 +38,7 @@ export function QuizPlayer({ quiz, coachingSessionId, onPassed }: QuizPlayerProp
       setPhase('result')
       if (r.passed) onPassed()
     },
-    onError: (err) => console.error('[QuizPlayer] submit error', err),
+    onError: () => toast({ title: 'Quiz submission failed', description: 'Please try again.', variant: 'destructive' }),
   })
 
   const handleSubmit = () => {

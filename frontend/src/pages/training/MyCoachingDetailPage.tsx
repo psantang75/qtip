@@ -10,68 +10,23 @@ import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 import { PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './CoachingSessionsPage'
 
-// ── Layout primitives (mirrors CoachingSessionDetailPage) ─────────────────────
+import { Section, Sub, InfoRow, SideCard, SideTitle, ProgressRow } from './training-detail/layout'
+
+// ── Source labels ─────────────────────────────────────────────────────────────
 
 const SOURCE_LABELS: Record<CoachingSourceType, string> = {
   QA_AUDIT: 'QA Audit', MANAGER_OBSERVATION: 'Manager Observation', TREND: 'Trend',
   DISPUTE: 'Dispute', SCHEDULED: 'Scheduled', OTHER: 'Other',
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">{title}</h3>
-      {children}
-    </div>
-  )
-}
-
-function Sub({ title, icon: Icon, children }: {
-  title: string
-  icon?: React.ComponentType<{ className?: string }>
-  children: React.ReactNode
-}) {
-  return (
-    <div className="pt-4 mt-4 border-t border-slate-100">
-      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-        {Icon && <Icon className="h-3 w-3" />}{title}
-      </p>
-      {children}
-    </div>
-  )
-}
-
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
-      <div className="text-[13px] text-slate-800 font-medium">{value ?? '—'}</div>
-    </div>
-  )
-}
-
-function SideCard({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('bg-white rounded-xl border border-slate-200 p-4', className)}>{children}</div>
-}
-
-function SideTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2.5 mb-3">{children}</h3>
-}
-
-function ProgressRow({ label, value, muted }: { label: string; value: React.ReactNode; muted?: boolean }) {
-  return (
-    <div className="flex items-start justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
-      <span className={cn('text-[12px] font-medium', muted ? 'text-slate-400' : 'text-slate-500')}>{label}</span>
-      <span className={cn('text-[12px] text-right shrink-0', muted ? 'text-slate-400' : 'text-slate-700')}>{value}</span>
-    </div>
-  )
-}
 
 function NoteBlock({ text, placeholder }: { text?: string | null; placeholder: string }) {
   return text
@@ -177,8 +132,12 @@ export default function MyCoachingDetailPage() {
   // Quizzes are independent — CSR submits plan/ack separately; quiz pass triggers auto-advance on its own
   const isFormComplete  = planOk && ackOk
 
-  const tex = 'w-full px-3 py-2 border border-slate-200 rounded-md text-[13px] resize-none focus:outline-none focus:ring-1 focus:ring-primary/40'
-  const inp = 'w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-primary/40'
+  const progressItems: { label: string }[] = [
+    ...(require_action_plan   ? [{ label: 'Submit your action plan' }] : []),
+    ...(require_acknowledgment ? [{ label: 'Acknowledge the coaching session' }] : []),
+    ...(quizzes.length > 0    ? [{ label: 'Complete the assigned quiz' }] : []),
+  ]
+
 
 
   return (
@@ -194,7 +153,7 @@ export default function MyCoachingDetailPage() {
       {isScheduled && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
           <p className="text-[13px] font-medium text-slate-700">
-            📅 Your coaching session is scheduled. Notes and any required actions will be shared after your meeting.
+            Your coaching session is scheduled. Notes and any required actions will be shared after your meeting.
           </p>
           {progressItems.length > 0 && (
             <div className="text-[12px] text-slate-500 space-y-1 pt-2 mt-2 border-t border-slate-200">
@@ -457,7 +416,7 @@ export default function MyCoachingDetailPage() {
                     <p>→ What will you do differently going forward?</p>
                     <p>→ What support do you need, if any?</p>
                   </div>
-                  <textarea className={tex} rows={5} maxLength={1000}
+                  <Textarea rows={5} maxLength={1000} className="text-[13px] resize-none"
                     placeholder="Write your response here… (50 characters minimum)"
                     value={actionPlan}
                     onChange={e => setActionPlan(e.target.value)}
@@ -468,12 +427,12 @@ export default function MyCoachingDetailPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Root Cause (optional)</label>
-                      <input className={inp} placeholder="e.g. Misunderstood policy"
+                      <Input className="h-9 text-[13px]" placeholder="e.g. Misunderstood policy"
                         value={rootCause} onChange={e => setRootCause(e.target.value)} disabled={isReadOnly} />
                     </div>
                     <div>
                       <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Support Needed (optional)</label>
-                      <input className={inp} placeholder="e.g. Additional training"
+                      <Input className="h-9 text-[13px]" placeholder="e.g. Additional training"
                         value={supportNeeded} onChange={e => setSupportNeeded(e.target.value)} disabled={isReadOnly} />
                     </div>
                   </div>

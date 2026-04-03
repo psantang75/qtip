@@ -159,14 +159,8 @@ export const generateReport = async (req: Request, res: Response): Promise<void>
             u.username as csrName,
             c.course_name as courseName,
             COALESCE(q.quiz_title, CONCAT(c.course_name, ' Quiz')) as quizTitle,
-            CASE 
-              WHEN e.status = 'COMPLETED' THEN ROUND(75 + (RAND() * 25), 0)
-              ELSE ROUND(40 + (RAND() * 35), 0)
-            END as score,
-            CASE 
-              WHEN e.status = 'COMPLETED' THEN 'PASS'
-              ELSE 'FAIL'
-            END as passFail,
+            e.status,
+            CASE WHEN e.status = 'COMPLETED' THEN 'PASS' ELSE 'FAIL' END as passFail,
             e.created_at as completedAt
           FROM enrollments e
           JOIN courses c ON e.course_id = c.id
@@ -177,26 +171,7 @@ export const generateReport = async (req: Request, res: Response): Promise<void>
           LIMIT 50
         `
       ),
-      prisma.$queryRaw<any[]>(
-        Prisma.sql`
-          SELECT 
-            e.id,
-            u.username as csrName,
-            c.course_name as courseName,
-            ROUND(3 + (RAND() * 2), 0) as rating,
-            CASE 
-              WHEN RAND() > 0.5 THEN 'Great course! Very informative and well-structured.'
-              ELSE 'Good content, could use more examples.'
-            END as comment,
-            e.created_at as submittedAt
-          FROM enrollments e
-          JOIN courses c ON e.course_id = c.id
-          JOIN users u ON e.user_id = u.id
-          ${feedbackWhereClause}
-          ORDER BY e.created_at DESC
-          LIMIT 20
-        `
-      ),
+      Promise.resolve([]),
       prisma.$queryRaw<any[]>(
         Prisma.sql`
           SELECT 

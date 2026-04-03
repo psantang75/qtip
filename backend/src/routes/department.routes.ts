@@ -16,8 +16,11 @@ const router = Router();
 
 // Routes using the controller
 
-// Get all departments
-router.get('/', getDepartments as unknown as RequestHandler);
+// Get all departments — authenticated users only
+router.get('/',
+  authenticate as unknown as RequestHandler,
+  getDepartments as unknown as RequestHandler
+);
 
 // Get users eligible for assignment to departments
 router.get('/users/assignable', 
@@ -26,8 +29,11 @@ router.get('/users/assignable',
   getAssignableUsers as unknown as RequestHandler
 );
 
-// Get a single department
-router.get('/:id', getDepartmentById as unknown as RequestHandler);
+// Get a single department — authenticated users only
+router.get('/:id',
+  authenticate as unknown as RequestHandler,
+  getDepartmentById as unknown as RequestHandler
+);
 
 // Create a new department - admin only
 router.post('/', 

@@ -1,357 +1,22 @@
-import { useState, useMemo } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { History, Search, Trash2, ExternalLink } from 'lucide-react'
-
-// ── Status label maps (module-level constants — must be declared before any component) ──
-
-const WRITEUP_TYPE_LABELS: Record<string, string> = {
-  VERBAL_WARNING:  'Verbal Warning',
-  WRITTEN_WARNING: 'Written Warning',
-  FINAL_WARNING:   'Final Warning',
-}
-
-const WRITEUP_STATUS_LABELS: Record<string, string> = {
-  DRAFT:              'Draft',
-  SCHEDULED:          'Scheduled',
-  DELIVERED:          'Delivered',
-  AWAITING_SIGNATURE: 'Awaiting Signature',
-  SIGNED:             'Signed',
-  FOLLOW_UP_PENDING:  'Follow-Up Pending',
-  CLOSED:             'Closed',
-}
-
-const COACHING_STATUS_LABELS: Record<string, string> = {
-  SCHEDULED:           'Draft',
-  IN_PROCESS:          'In Process',
-  AWAITING_CSR_ACTION: 'Awaiting CSR',
-  COMPLETED:           'Completed',
-  FOLLOW_UP_REQUIRED:  'Follow-Up',
-  CLOSED:              'Closed',
-}
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Dialog } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { FormSection } from '@/pages/training/coaching-form/CoachingFormSections'
 import { formatQualityDate } from '@/utils/dateFormat'
-import writeupService from '@/services/writeupService'
-import listService from '@/services/listService'
-import { CoachingSearchModal } from './SearchModals'
+import {
+  WRITE_UP_STATUS_LABELS as WRITEUP_STATUS_LABELS,
+  COACHING_STATUS_LABELS,
+} from '../writeupLabels'
+import { CoachingSearchModal } from './CoachingSearchModal'
+import { PriorDisciplineModal } from './PriorDisciplineModal'
 import type { WriteUpFormState, PriorDisciplineRef } from './types'
 
 type Updater = <K extends keyof WriteUpFormState>(key: K, value: WriteUpFormState[K]) => void
 
-// ── Prior Discipline Modal ─────────────────────────────────────────────────────
-
-interface PriorDisciplineModalProps {
-  csrId: number
-  selected: PriorDisciplineRef[]
-  onSave: (refs: PriorDisciplineRef[]) => void
-  onClose: () => void
-}
-
-function PriorDisciplineModal({ csrId, selected, onSave, onClose }: PriorDisciplineModalProps) {
-  const twoYearsAgo = new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-  const [dateFrom, setDateFrom]       = useState(twoYearsAgo)
-  const [dateTo, setDateTo]           = useState('')
-  const [topicFilter, setTopicFilter] = useState('')
-  const [policyFilter, setPolicyFilter] = useState('')
-  const [draft, setDraft] = useState<Set<string>>(
-    new Set(selected.map(r => `${r.reference_type}:${r.reference_id}`))
-  )
-
-  const { data: topicItems = [] } = useQuery({
-    queryKey: ['list-items', 'training_topic'],
-    queryFn:  () => listService.getItems('training_topic'),
-    staleTime: 5 * 60_000,
-  })
-  const { data: policyItems = [] } = useQuery({
-    queryKey: ['list-items', 'writeup_policy'],
-    queryFn:  () => listService.getItems('writeup_policy'),
-    staleTime: 5 * 60_000,
-  })
-
-  const activeTopics   = topicItems.filter(i => i.is_active)
-  const activePolicies = policyItems.filter(i => i.is_active)
-
-  const fetchMut = useMutation({
-    mutationFn: () => writeupService.getPriorDiscipline(csrId),
-  })
-  const data = fetchMut.data
-
-  const filterByDate = (dateStr?: string | null) => {
-    if (!dateStr) return true
-    const d = dateStr.slice(0, 10)
-    if (dateFrom && d < dateFrom) return false
-    if (dateTo   && d > dateTo)   return false
-    return true
-  }
-
-  const writeUps = useMemo(() => {
-    const all = data?.write_ups ?? []
-    return all.filter((w: any) => {
-      if (!filterByDate(w.meeting_date ?? w.created_at)) return false
-      if (policyFilter && policyFilter !== '__all__') {
-        const policies: string[] = w.policies_violated ?? []
-        if (!policies.some(p => p.toLowerCase().includes(policyFilter.toLowerCase()))) return false
-      }
-      return true
-    })
-  }, [data, dateFrom, dateTo, policyFilter])
-
-  const coachingSessions = useMemo(() => {
-    const all = data?.coaching_sessions ?? []
-    return all.filter((c: any) => {
-      if (!filterByDate(c.session_date)) return false
-      if (topicFilter && topicFilter !== '__all__') {
-        const topics: string[] = c.topic_names ?? []
-        if (!topics.some(t => t.toLowerCase().includes(topicFilter.toLowerCase()))) return false
-      }
-      return true
-    })
-  }, [data, dateFrom, dateTo, topicFilter])
-
-  const toggle = (type: 'write_up' | 'coaching_session', id: number) => {
-    const key = `${type}:${id}`
-    setDraft(prev => {
-      const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
-      return next
-    })
-  }
-
-  const handleSave = () => {
-    const refs: PriorDisciplineRef[] = []
-    draft.forEach(key => {
-      const [type, idStr] = key.split(':')
-      const id = Number(idStr)
-      const refType = type as 'write_up' | 'coaching_session'
-      const item = refType === 'write_up'
-        ? (data?.write_ups ?? []).find((w: any) => Number(w.id) === id)
-        : (data?.coaching_sessions ?? []).find((c: any) => Number(c.id) === id)
-
-      if (!item) {
-        // History not loaded or item filtered out — preserve the existing ref if it was already selected
-        const existingRef = selected.find(r => r.reference_type === refType && r.reference_id === id)
-        if (existingRef) refs.push(existingRef)
-        return
-      }
-
-      if (refType === 'write_up') {
-        const typeLabel = (item.document_type ?? '').replace('_WARNING', '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
-        refs.push({
-          reference_type: refType,
-          reference_id:   id,
-          label:          `Write-Up #${id}`,
-          date:           item.meeting_date?.slice(0, 10) ?? item.created_at?.slice(0, 10),
-          subtype:        typeLabel || 'Warning',
-          detail:         Array.isArray(item.policies_violated) ? item.policies_violated.filter(Boolean) : [],
-          notes:          Array.isArray(item.incident_descriptions) && item.incident_descriptions.length
-                            ? item.incident_descriptions.join(' · ')
-                            : undefined,
-          status:         item.status,
-        })
-      } else {
-        const purposeLabel: Record<string, string> = { WEEKLY: 'Weekly', PERFORMANCE: 'Performance', ONBOARDING: 'Onboarding' }
-        refs.push({
-          reference_type: refType,
-          reference_id:   id,
-          label:          `Coaching #${id}`,
-          date:           item.session_date?.slice(0, 10),
-          subtype:        purposeLabel[item.coaching_purpose ?? ''] ?? (item.coaching_purpose ?? 'Coaching'),
-          detail:         Array.isArray(item.topic_names) ? item.topic_names.filter(Boolean) : [],
-          notes:          item.notes ?? undefined,
-          status:         item.status,
-        })
-      }
-    })
-    onSave(refs)
-    onClose()
-  }
-
-  return (
-    <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0">
-      <DialogHeader className="px-5 pt-5 pb-3 border-b border-slate-100 shrink-0">
-        <DialogTitle>Prior Discipline & Coaching History</DialogTitle>
-        <DialogDescription className="sr-only">
-          Browse and link prior write-ups and coaching sessions for this employee.
-        </DialogDescription>
-      </DialogHeader>
-
-      {!csrId ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-2 py-12 px-6 text-center">
-          <History className="h-8 w-8 text-slate-200" />
-          <p className="text-[14px] font-semibold text-slate-500">No employee selected</p>
-          <p className="text-[13px] text-slate-400 max-w-xs">
-            Select an employee at the top of the write-up form first.
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-
-          {/* ── Date range + Load button ──────────────────────────────────── */}
-          <div className="px-5 py-3 border-b border-slate-100 shrink-0 flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Input type="date" className="h-8 text-[12px] w-34" value={dateFrom}
-                onChange={e => setDateFrom(e.target.value)} />
-              <span className="text-slate-400 text-[11px] shrink-0">to</span>
-              <Input type="date" className="h-8 text-[12px] w-34" value={dateTo}
-                onChange={e => setDateTo(e.target.value)} />
-            </div>
-            <Button size="sm" className="bg-primary hover:bg-primary/90 text-white shrink-0"
-              onClick={() => fetchMut.mutate()} disabled={fetchMut.isPending}>
-              {fetchMut.isPending ? 'Loading…' : 'Load History'}
-            </Button>
-          </div>
-
-          {/* ── Results tabs ─────────────────────────────────────────────── */}
-          {fetchMut.data ? (
-            <Tabs defaultValue="coaching" className="flex flex-col flex-1 min-h-0">
-              <TabsList className="mx-5 mt-3 shrink-0 self-start">
-                <TabsTrigger value="coaching">Coaching History ({coachingSessions.length})</TabsTrigger>
-                <TabsTrigger value="warnings">Prior Discipline ({writeUps.length})</TabsTrigger>
-              </TabsList>
-
-              {/* ── Coaching History tab ─────────────────────────────────── */}
-              <TabsContent value="coaching" className="flex flex-col flex-1 min-h-0 mt-0">
-                <div className="px-5 py-2.5 border-b border-slate-100 shrink-0">
-                  <Select value={topicFilter || '__all__'} onValueChange={v => setTopicFilter(v === '__all__' ? '' : v)}>
-                    <SelectTrigger className="h-8 text-[12px]">
-                      <SelectValue placeholder="Filter by topic…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">All topics</SelectItem>
-                      {activeTopics.map(t => (
-                        <SelectItem key={t.id} value={t.label}>{t.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="overflow-y-auto flex-1">
-                  {coachingSessions.length === 0 ? (
-                    <p className="text-[13px] text-slate-400 py-6 text-center">No coaching sessions found</p>
-                  ) : (
-                    <div className="divide-y divide-slate-50">
-                      {coachingSessions.map((c: any) => {
-                        const key = `coaching_session:${c.id}`
-                        const topics: string[] = c.topic_names ?? []
-                        return (
-                          <div key={c.id}
-                            className="flex items-start gap-3 px-5 py-2.5 hover:bg-slate-50 cursor-pointer"
-                            onClick={() => toggle('coaching_session', c.id)}>
-                            <Checkbox className="mt-0.5" checked={draft.has(key)}
-                              onCheckedChange={() => toggle('coaching_session', c.id)} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[13px] font-medium text-slate-700">
-                                  {c.coaching_purpose ?? '—'}
-                                </span>
-                                <span className="text-[11px] text-slate-400">
-                                  {formatQualityDate(c.session_date)}
-                                </span>
-                              </div>
-                              {topics.length > 0 && (
-                                <p className="text-[11px] text-primary mt-0.5">{topics.join(', ')}</p>
-                              )}
-                              {c.notes && (
-                                <p className="text-[11px] text-slate-400 mt-0.5 truncate">{c.notes}</p>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              {/* ── Prior Discipline tab ─────────────────────────────────── */}
-              <TabsContent value="warnings" className="flex flex-col flex-1 min-h-0 mt-0">
-                <div className="px-5 py-2.5 border-b border-slate-100 shrink-0">
-                  <Select value={policyFilter || '__all__'} onValueChange={v => setPolicyFilter(v === '__all__' ? '' : v)}>
-                    <SelectTrigger className="h-8 text-[12px]">
-                      <SelectValue placeholder="Filter by policy violated…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">All policies</SelectItem>
-                      {activePolicies.map(p => (
-                        <SelectItem key={p.id} value={p.label}>{p.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="overflow-y-auto flex-1">
-                  {writeUps.length === 0 ? (
-                    <p className="text-[13px] text-slate-400 py-6 text-center">No prior warnings found</p>
-                  ) : (
-                    <div className="divide-y divide-slate-50">
-                      {writeUps.map((w: any) => {
-                        const key = `write_up:${w.id}`
-                        const policies: string[] = w.policies_violated ?? []
-                        return (
-                          <div key={w.id}
-                            className="flex items-start gap-3 px-5 py-2.5 hover:bg-slate-50 cursor-pointer"
-                            onClick={() => toggle('write_up', w.id)}>
-                            <Checkbox className="mt-0.5" checked={draft.has(key)}
-                              onCheckedChange={() => toggle('write_up', w.id)} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[12px] font-medium text-slate-700">{WRITEUP_TYPE_LABELS[w.document_type] ?? w.document_type}</span>
-                                <span className="text-[12px] text-slate-500">{WRITEUP_STATUS_LABELS[w.status] ?? w.status}</span>
-                                <span className="text-[11px] text-slate-400">
-                                  {formatQualityDate(w.meeting_date ?? w.created_at)}
-                                </span>
-                              </div>
-                              {policies.length > 0 && (
-                                <p className="text-[11px] text-slate-500 mt-0.5">{policies.join(', ')}</p>
-                              )}
-                            </div>
-                            <a href={`/app/writeups/${w.id}`} target="_blank" rel="noreferrer"
-                              className="shrink-0 text-slate-400 hover:text-primary mt-0.5"
-                              onClick={e => e.stopPropagation()}>
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-            </Tabs>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center gap-2 py-12 text-center">
-              <History className="h-8 w-8 text-slate-200" />
-              <p className="text-[13px] text-slate-400">Click "Load History" to retrieve records</p>
-            </div>
-          )}
-
-          {/* ── Footer ───────────────────────────────────────────────────── */}
-          <div className="shrink-0 flex items-center justify-between px-5 py-3 border-t border-slate-100">
-            <span className="text-[13px] text-slate-500">
-              {draft.size > 0 ? `${draft.size} item${draft.size !== 1 ? 's' : ''} selected` : 'None selected'}
-            </span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-              <Button size="sm" className="bg-primary hover:bg-primary/90 text-white"
-                disabled={draft.size === 0} onClick={handleSave}>
-                Add Selected
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </DialogContent>
-  )
-}
-
-// ── Main section ──────────────────────────────────────────────────────────────
-
 export function PriorDisciplineSection({ form, update }: { form: WriteUpFormState; update: Updater }) {
-  const [showModal, setShowModal]           = useState(false)
+  const [showModal, setShowModal]                 = useState(false)
   const [showCoachingSearch, setShowCoachingSearch] = useState(false)
 
   const remove = (idx: number) =>
@@ -359,22 +24,16 @@ export function PriorDisciplineSection({ form, update }: { form: WriteUpFormStat
 
   const addRefs = (newRefs: PriorDisciplineRef[]) => {
     const existing = new Set(form.prior_discipline.map(r => `${r.reference_type}:${r.reference_id}`))
-    const merged = [
-      ...form.prior_discipline,
-      ...newRefs.filter(r => !existing.has(`${r.reference_type}:${r.reference_id}`)),
-    ]
-    update('prior_discipline', merged)
+    update('prior_discipline', [...form.prior_discipline, ...newRefs.filter(r => !existing.has(`${r.reference_type}:${r.reference_id}`))])
   }
 
   return (
     <FormSection title="Prior Discipline & Coaching History">
       <div className="flex items-center gap-2 flex-wrap">
-        <Button type="button" variant="outline" size="sm" className="text-[13px]"
-          onClick={() => setShowModal(true)}>
+        <Button type="button" variant="outline" size="sm" className="text-[13px]" onClick={() => setShowModal(true)}>
           <History className="h-4 w-4 mr-1.5" /> Browse History
         </Button>
-        <Button type="button" variant="outline" size="sm" className="text-[13px]"
-          onClick={() => setShowCoachingSearch(true)}>
+        <Button type="button" variant="outline" size="sm" className="text-[13px]" onClick={() => setShowCoachingSearch(true)}>
           <Search className="h-4 w-4 mr-1.5" /> Search Coaching Sessions
         </Button>
       </div>
@@ -386,116 +45,57 @@ export function PriorDisciplineSection({ form, update }: { form: WriteUpFormStat
           <div className="mt-3 rounded-lg border border-slate-200 overflow-hidden">
             <table className="w-full text-[13px] table-fixed">
               <colgroup>
-                <col className="w-[90px]" />
-                <col className="w-[150px]" />
-                <col className="w-[110px]" />
-                <col className="w-[160px]" />
-                <col className="w-[160px]" />
-                <col className="w-[110px]" />
-                <col className="w-[70px]" />
+                <col className="w-[90px]" /><col className="w-[150px]" /><col className="w-[110px]" />
+                <col className="w-[160px]" /><col className="w-[160px]" /><col className="w-[110px]" /><col className="w-[70px]" />
               </colgroup>
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Type</th>
-                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Purpose / Type</th>
-                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Topic / Policy</th>
-                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Notes / Incidents</th>
-                  <th className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Meeting / Session Date</th>
-                  <th className="px-3 py-2" />
+                  {['Type','Purpose / Type','Status','Topic / Policy','Notes / Incidents','Meeting / Session Date',''].map(h => (
+                    <th key={h} className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {form.prior_discipline.map((ref, i) => (
                   <tr key={i} className="hover:bg-slate-50/60">
-
-                    {/* Type */}
-                    <td className="px-3 py-2.5 text-[13px] text-slate-600 whitespace-nowrap">
-                      {ref.reference_type === 'write_up' ? 'Write-Up' : 'Coaching'}
-                    </td>
-
-                    {/* Purpose / Type */}
-                    <td className="px-3 py-2.5 text-[13px] text-slate-600 truncate">
-                      {ref.subtype ?? <span className="text-slate-300">&mdash;</span>}
-                    </td>
-
-                    {/* Status — plain text, no badge */}
+                    <td className="px-3 py-2.5 text-[13px] text-slate-600 whitespace-nowrap">{ref.reference_type === 'write_up' ? 'Write-Up' : 'Coaching'}</td>
+                    <td className="px-3 py-2.5 text-[13px] text-slate-600 truncate">{ref.subtype ?? <span className="text-slate-300">&mdash;</span>}</td>
                     <td className="px-3 py-2.5 text-[13px] text-slate-600">
-                      {ref.status
-                        ? (WRITEUP_STATUS_LABELS[ref.status] ?? COACHING_STATUS_LABELS[ref.status] ?? ref.status)
-                        : <span className="text-slate-300">&mdash;</span>}
+                      {ref.status ? (WRITEUP_STATUS_LABELS[ref.status] ?? COACHING_STATUS_LABELS[ref.status] ?? ref.status) : <span className="text-slate-300">&mdash;</span>}
                     </td>
-
-                    {/* Topic / Policy — truncated text, tooltip bullet list */}
                     <td className="px-3 py-2.5">
                       {ref.detail && ref.detail.length > 0 ? (
                         <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="text-[13px] text-slate-500 truncate block cursor-default">
-                              {ref.detail.join(', ')}
-                            </span>
-                          </TooltipTrigger>
+                          <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{ref.detail.join(', ')}</span></TooltipTrigger>
                           <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
-                            <ul className="space-y-1">
-                              {ref.detail.map((d, j) => (
-                                <li key={j} className="flex items-center gap-2 text-[13px] text-slate-700">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{d}
-                                </li>
-                              ))}
-                            </ul>
+                            <ul className="space-y-1">{ref.detail.map((d, j) => <li key={j} className="flex items-center gap-2 text-[13px] text-slate-700"><span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{d}</li>)}</ul>
                           </TooltipContent>
                         </Tooltip>
-                      ) : (
-                        <span className="text-slate-300">&mdash;</span>
-                      )}
+                      ) : <span className="text-slate-300">&mdash;</span>}
                     </td>
-
-                    {/* Notes / Incidents — truncated text, tooltip full content */}
                     <td className="px-3 py-2.5">
                       {ref.notes ? (
                         <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="text-[13px] text-slate-500 truncate block cursor-default">
-                              {ref.notes}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
-                            <p className="text-[13px] text-slate-700 whitespace-pre-wrap">{ref.notes}</p>
-                          </TooltipContent>
+                          <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{ref.notes}</span></TooltipTrigger>
+                          <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><p className="text-[13px] text-slate-700 whitespace-pre-wrap">{ref.notes}</p></TooltipContent>
                         </Tooltip>
-                      ) : (
-                        <span className="text-slate-300">&mdash;</span>
-                      )}
+                      ) : <span className="text-slate-300">&mdash;</span>}
                     </td>
-
-                    {/* Meeting / Session Date */}
                     <td className="px-3 py-2.5 text-[13px] text-slate-600 whitespace-nowrap">
                       {ref.date ? formatQualityDate(ref.date) : <span className="text-slate-300">&mdash;</span>}
                     </td>
-
-                    {/* Actions */}
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2 justify-end">
-                        <a
-                          href={ref.reference_type === 'write_up'
-                            ? `/app/writeups/${ref.reference_id}`
-                            : `/app/training/coaching/${ref.reference_id}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-slate-400 hover:text-primary transition-colors"
-                          title="View record"
-                        >
+                        <a href={ref.reference_type === 'write_up' ? `/app/writeups/${ref.reference_id}` : `/app/training/coaching/${ref.reference_id}`}
+                          target="_blank" rel="noreferrer" className="text-slate-400 hover:text-primary transition-colors" title="View record">
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>
-                        <Button type="button" variant="ghost" size="sm"
-                          className="h-auto w-auto p-0 text-slate-300 hover:text-red-500 hover:bg-transparent"
-                          onClick={() => remove(i)}
-                          title="Remove">
+                        <Button type="button" variant="ghost" size="sm" className="h-auto w-auto p-0 text-slate-300 hover:text-red-500 hover:bg-transparent"
+                          onClick={() => remove(i)} title="Remove">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </td>
-
                   </tr>
                 ))}
               </tbody>
@@ -505,20 +105,14 @@ export function PriorDisciplineSection({ form, update }: { form: WriteUpFormStat
       )}
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <PriorDisciplineModal
-          csrId={form.csr_id}
-          selected={form.prior_discipline}
-          onSave={refs => update('prior_discipline', refs)}
-          onClose={() => setShowModal(false)}
-        />
+        <PriorDisciplineModal csrId={form.csr_id} selected={form.prior_discipline}
+          onSave={refs => update('prior_discipline', refs)} onClose={() => setShowModal(false)} />
       </Dialog>
 
       <Dialog open={showCoachingSearch} onOpenChange={setShowCoachingSearch}>
-        <CoachingSearchModal
-          csrId={form.csr_id}
+        <CoachingSearchModal csrId={form.csr_id}
           onImportRefs={refs => { addRefs(refs); setShowCoachingSearch(false) }}
-          onClose={() => setShowCoachingSearch(false)}
-        />
+          onClose={() => setShowCoachingSearch(false)} />
       </Dialog>
     </FormSection>
   )

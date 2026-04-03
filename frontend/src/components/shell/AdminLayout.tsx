@@ -10,12 +10,12 @@ const ADMIN_NAV = [
   { label: 'List Management', path: '/app/admin/list-management',  icon: List },
 ]
 
-const ACTIVE   = 'border-l-[3px] border-l-[#00aeef] bg-[#00aeef]/8 text-[#00aeef] font-semibold'
+const ACTIVE   = 'border-l-[3px] border-l-primary bg-primary/[0.08] text-primary font-semibold'
 const INACTIVE = 'border-l-[3px] border-l-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'
 
 export default function AdminLayout() {
   return (
-    <div className="flex flex-col h-screen bg-[#f5f7f8]">
+    <div className="flex flex-col h-screen bg-surface">
       <TopBar />
       {/* pt-[72px] — no SectionNav in admin */}
       <div className="flex flex-1 overflow-hidden pt-[72px]">
@@ -23,7 +23,7 @@ export default function AdminLayout() {
         {/* Admin sidebar */}
         <aside className="fixed left-0 top-[72px] bottom-0 w-[280px] bg-white border-r border-slate-200 flex flex-col z-30">
           <div className="px-4 pt-4 pb-3 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full shrink-0 bg-[#00aeef]" />
+            <span className="w-2 h-2 rounded-full shrink-0 bg-primary" />
             <span className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
               Administration
             </span>

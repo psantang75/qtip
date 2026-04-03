@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react'
+import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor,
@@ -320,13 +322,8 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
     availableCategories: categories,
   }
 
-  if (isLoading) return <div className="p-6 text-[13px] text-slate-400">Loading…</div>
-  if (isError)   return (
-    <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700 flex items-center justify-between">
-      <span>Failed to load list items.</span>
-      <button type="button" onClick={() => refetch()} className="text-primary underline text-[12px]">Retry</button>
-    </div>
-  )
+  if (isLoading) return <div className="bg-white rounded-xl border border-slate-200 overflow-hidden"><TableLoadingSkeleton rows={4} /></div>
+  if (isError)   return <div className="bg-white rounded-xl border border-slate-200 p-4"><TableErrorState message="Failed to load list items." onRetry={refetch} /></div>
 
   return (
     <div className="space-y-3">

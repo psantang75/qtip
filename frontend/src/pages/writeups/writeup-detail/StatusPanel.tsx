@@ -12,15 +12,8 @@ import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 import writeupService from '@/services/writeupService'
 import userService from '@/services/userService'
-import type { WriteUpDetail, WriteUpStatus } from '@/services/writeupService'
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Draft', SCHEDULED: 'Scheduled', DELIVERED: 'Delivered',
-  AWAITING_SIGNATURE: 'Awaiting Signature', SIGNED: 'Signed',
-  FOLLOW_UP_PENDING: 'Follow-Up Pending', CLOSED: 'Closed',
-}
+import type { WriteUpDetail, WriteUpStatus, TransitionExtra } from '@/services/writeupService'
+import { WRITE_UP_STATUS_LABELS as STATUS_LABELS } from '../writeupLabels'
 
 function getTimeline(writeup: WriteUpDetail): string[] {
   const base = ['DRAFT', 'SCHEDULED', 'DELIVERED', 'AWAITING_SIGNATURE', 'SIGNED']
@@ -97,7 +90,7 @@ function ConfirmDialog({ open, title, message, onConfirm, onCancel, loading }: {
 
 type ActionState = 'schedule' | 'deliver' | 'finalize_confirm' | 'recall_confirm' | 'follow_up' | 'close_followup' | null
 
-function DraftActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: any) => void; busy: boolean }) {
+function DraftActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
   const navigate = useNavigate()
   const [show, setShow] = useState(false)
   const [date, setDate] = useState(writeup.meeting_date?.slice(0,10) ?? '')
@@ -131,7 +124,7 @@ function DraftActions({ writeup, id, transition, busy }: { writeup: WriteUpDetai
   )
 }
 
-function ScheduledActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: any) => void; busy: boolean }) {
+function ScheduledActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
   const navigate = useNavigate()
   const [show, setShow]   = useState(false)
   const [notes, setNotes] = useState('')
@@ -152,7 +145,7 @@ function ScheduledActions({ writeup, id, transition, busy }: { writeup: WriteUpD
           <div className="flex gap-2">
             <Button size="sm" variant="outline" className="flex-1" onClick={() => setShow(false)}>Cancel</Button>
             <Button size="sm" className="flex-1 bg-primary hover:bg-primary/90 text-white"
-              disabled={busy} onClick={() => transition('DELIVERED', { meeting_notes: notes })}>
+              disabled={busy || !notes.trim()} onClick={() => transition('DELIVERED', { meeting_notes: notes })}>
               {busy ? 'Saving…' : 'Mark Delivered'}
             </Button>
           </div>
@@ -171,7 +164,7 @@ function ScheduledActions({ writeup, id, transition, busy }: { writeup: WriteUpD
   )
 }
 
-function DeliveredActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: any) => void; busy: boolean }) {
+function DeliveredActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
   const navigate = useNavigate()
   const [confirm, setConfirm] = useState(false)
 
@@ -196,7 +189,7 @@ function DeliveredActions({ writeup, id, transition, busy }: { writeup: WriteUpD
   )
 }
 
-function AwaitingSignatureActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: any) => void; busy: boolean }) {
+function AwaitingSignatureActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
   const navigate = useNavigate()
   const [confirm, setConfirm] = useState(false)
 
@@ -231,7 +224,7 @@ function AwaitingSignatureActions({ writeup, id, transition, busy }: { writeup: 
 function SignedActions({ writeup, id, onSetFollowUp, transition, busy }: {
   writeup: WriteUpDetail; id: number
   onSetFollowUp: (body: { follow_up_date: string; follow_up_assigned_to: number; follow_up_checklist: string }) => void
-  transition: (s: WriteUpStatus, extra?: any) => void; busy: boolean
+  transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean
 }) {
   const [showFollowUp, setShowFollowUp] = useState(false)
   const [fuDate, setFuDate]     = useState('')
@@ -293,7 +286,7 @@ function SignedActions({ writeup, id, onSetFollowUp, transition, busy }: {
   )
 }
 
-function FollowUpPendingActions({ writeup, transition, busy }: { writeup: WriteUpDetail; transition: (s: WriteUpStatus, extra?: any) => void; busy: boolean }) {
+function FollowUpPendingActions({ writeup, transition, busy }: { writeup: WriteUpDetail; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
   const [notes, setNotes] = useState(writeup.follow_up_notes ?? '')
 
   return (
@@ -315,7 +308,8 @@ function FollowUpPendingActions({ writeup, transition, busy }: { writeup: WriteU
           value={notes} onChange={e => setNotes(e.target.value)} />
       </div>
       <Button className="w-full bg-primary hover:bg-primary/90 text-white h-9 text-[13px]"
-        onClick={() => transition('CLOSED', { follow_up_notes: notes })} disabled={busy}>
+        onClick={() => transition('CLOSED', { follow_up_notes: notes })}
+        disabled={busy || (!notes.trim() && !writeup.follow_up_notes)}>
         {busy ? 'Saving…' : 'Add Notes & Close Document'}
       </Button>
     </div>
@@ -352,12 +346,13 @@ export function StatusPanel({ writeup, id, onInvalidate }: StatusPanelProps) {
     toast({ title: msg })
     onInvalidate()
     qc.invalidateQueries({ queryKey: ['writeups'] })
+    qc.invalidateQueries({ queryKey: ['my-writeups'] })
   }
 
   const transitionMut = useMutation({
-    mutationFn: ({ status, extra }: { status: WriteUpStatus; extra?: any }) =>
+    mutationFn: ({ status, extra }: { status: WriteUpStatus; extra?: TransitionExtra }) =>
       writeupService.transitionStatus(id, { status, ...extra }),
-    onSuccess: () => onSuccess(`Status updated to ${STATUS_LABELS[writeup.status]}`),
+    onSuccess: (_data, variables) => onSuccess(`Status updated to ${STATUS_LABELS[variables.status]}`),
     onError: (err: any) => toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
   })
 
@@ -368,7 +363,7 @@ export function StatusPanel({ writeup, id, onInvalidate }: StatusPanelProps) {
     onError: (err: any) => toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
   })
 
-  const transition = (status: WriteUpStatus, extra?: any) =>
+  const transition = (status: WriteUpStatus, extra?: TransitionExtra) =>
     transitionMut.mutate({ status, extra })
   const busy = transitionMut.isPending || setFollowUpMut.isPending
 

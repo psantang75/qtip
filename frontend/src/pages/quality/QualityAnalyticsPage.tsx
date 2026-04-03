@@ -5,6 +5,8 @@ import { useQualityRole } from '@/hooks/useQualityRole'
 import qaService from '@/services/qaService'
 import { useTeamCsrs, useAnalyticsFilters, useFormsForFilter } from '@/hooks/useQualityQueries'
 import { Button } from '@/components/ui/button'
+import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { TableErrorState } from '@/components/common/TableErrorState'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -37,7 +39,7 @@ const PRESETS: { value: Preset; label: string }[] = [
 ]
 
 
-function SummaryCards({ data }: { data: any }) {
+function SummaryCards({ data }: { data: { summary?: Record<string, unknown> } }) {
   if (!data?.summary) return null
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -45,7 +47,7 @@ function SummaryCards({ data }: { data: any }) {
         <div key={k} className="bg-white rounded-xl border border-slate-200 p-4">
           <p className="text-xs text-slate-500 mb-1">{k.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</p>
           <p className="text-2xl font-bold text-slate-900">
-            {typeof v === 'number' && k.toLowerCase().includes('score') ? `${(v as number).toFixed(1)}%` : String(v)}
+            {typeof v === 'number' && k.toLowerCase().includes('score') ? `${v.toFixed(1)}%` : String(v)}
           </p>
         </div>
       ))}
@@ -55,7 +57,7 @@ function SummaryCards({ data }: { data: any }) {
 
 export default function QualityAnalyticsPage() {
   const { toast } = useToast()
-  const { roleId, isManager, canViewAnalytics } = useQualityRole()
+  const { isManager, canViewAnalytics } = useQualityRole()
 
   const [preset, setPreset] = useState<Preset>('30d')
   const [customStart, setCustomStart] = useState('')
@@ -242,16 +244,14 @@ export default function QualityAnalyticsPage() {
       )}
 
       {reportLoading && (
-        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-          <RefreshCw className="h-8 w-8 mx-auto mb-3 text-primary animate-spin" />
-          <p className="text-slate-500 text-sm">Generating report...</p>
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <TableLoadingSkeleton rows={4} />
         </div>
       )}
 
       {reportError && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-5 flex items-center justify-between">
-          <p className="text-red-700 font-medium text-sm">Failed to generate report.</p>
-          <Button variant="outline" size="sm" onClick={runReport}><RefreshCw className="h-4 w-4 mr-1" /> Retry</Button>
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <TableErrorState message="Failed to generate report." onRetry={runReport} />
         </div>
       )}
 

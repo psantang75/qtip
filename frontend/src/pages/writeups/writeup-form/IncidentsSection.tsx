@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog } from '@/components/ui/dialog'
 import { FormSection, Field } from '@/pages/training/coaching-form/CoachingFormSections'
-import { QaSearchModal } from './SearchModals'
+import { QaSearchModal } from './QaSearchModal'
 import listService from '@/services/listService'
 import {
   newIncident, newViolation, newExample,

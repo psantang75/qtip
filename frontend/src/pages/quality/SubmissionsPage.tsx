@@ -15,6 +15,7 @@ import { ListPagination } from '@/components/common/ListPagination'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { DateRangeFilter } from '@/components/common/DateRangeFilter'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { useQualityRole } from '@/hooks/useQualityRole'
@@ -190,9 +191,7 @@ export default function SubmissionsPage() {
                     onClick={() => navigate(`/app/quality/submissions/${row.id}`, {
                       state: { from: pageTitle, fromPath: '/app/quality/submissions' },
                     })}>
-                    <TableCell className="text-[13px] text-slate-600">
-                      {row.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
-                    </TableCell>
+                    <TableCell><StatusBadge status={row.status} /></TableCell>
                     <TableCell className="text-[13px] font-medium text-slate-900">{row.form_name}</TableCell>
                     {!isCSR      && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-500">{row.id}</TableCell>

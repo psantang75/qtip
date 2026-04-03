@@ -1,9 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import { Copy, Pencil } from 'lucide-react'
-import writeupService from '@/services/writeupService'
+import { useWriteUpRole } from '@/hooks/useWriteUpRole'
+import writeupService, { type WriteUpPayload } from '@/services/writeupService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
@@ -20,11 +20,9 @@ const LOCKED_STATUSES = ['AWAITING_SIGNATURE', 'SIGNED', 'FOLLOW_UP_PENDING', 'C
 export default function WriteUpDetailPage() {
   const { id }    = useParams<{ id: string }>()
   const navigate  = useNavigate()
-  const qc        = useQueryClient()
-  const { toast } = useToast()
-  const { user }  = useAuth()
-
-  const canEdit = [1, 2, 5].includes(user?.role_id ?? 0)
+  const qc              = useQueryClient()
+  const { toast }       = useToast()
+  const { canManage: canEdit } = useWriteUpRole()
 
   const { data: writeup, isLoading, isError } = useQuery({
     queryKey:  ['writeup', id],
@@ -41,14 +39,15 @@ export default function WriteUpDetailPage() {
   const duplicateMut = useMutation({
     mutationFn: async () => {
       if (!writeup) throw new Error('No data')
-      return writeupService.createWriteUp({
+      const payload: WriteUpPayload = {
         csr_id:              writeup.csr_id,
         document_type:       writeup.document_type,
-        corrective_action:   writeup.corrective_action ?? undefined,
-        correction_timeline: writeup.correction_timeline ?? undefined,
-        checkin_date:        writeup.checkin_date ?? undefined,
-        consequence:         writeup.consequence ?? undefined,
-      } as any)
+        corrective_action:   writeup.corrective_action ?? null,
+        correction_timeline: writeup.correction_timeline ?? null,
+        checkin_date:        writeup.checkin_date ?? null,
+        consequence:         writeup.consequence ?? null,
+      }
+      return writeupService.createWriteUp(payload)
     },
     onSuccess: ({ id: newId }) => {
       toast({ title: 'Write-up duplicated as new draft' })

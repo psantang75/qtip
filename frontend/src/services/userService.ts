@@ -138,21 +138,11 @@ const userService = {
   },
 
   getRoles: async (): Promise<Role[]> => {
-    try {
-      const response = await api.get('/roles')
-      if (Array.isArray(response.data?.data))  return response.data.data
-      if (Array.isArray(response.data?.items)) return response.data.items
-      if (Array.isArray(response.data))        return response.data
-      return []
-    } catch {
-      return [
-        { id: 1, role_name: 'Admin' },
-        { id: 2, role_name: 'QA' },
-        { id: 3, role_name: 'User' },
-        { id: 4, role_name: 'Trainer' },
-        { id: 5, role_name: 'Manager' },
-      ]
-    }
+    const response = await api.get('/roles')
+    if (Array.isArray(response.data?.data))  return response.data.data
+    if (Array.isArray(response.data?.items)) return response.data.items
+    if (Array.isArray(response.data))        return response.data
+    return []
   },
 
   getDepartments: async (): Promise<Department[]> => {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { ROLE_IDS } from '@/hooks/useQualityRole'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Download, Paperclip, BookOpen, HelpCircle, Pencil } from 'lucide-react'
 import trainingService, { type CoachingSession, type CoachingSourceType, type CoachingFormat, type CoachingPurpose } from '@/services/trainingService'
@@ -35,26 +36,9 @@ const SOURCE_LABELS: Record<CoachingSourceType, string> = {
   DISPUTE: 'Dispute', SCHEDULED: 'Scheduled', OTHER: 'Other',
 }
 
-// ── Layout primitives — mirrors CoachingFormSections exactly ─────────────────
+import { Section, Sub, InfoRow, SideCard, SideTitle } from './training-detail/layout'
 
-function Section({ title, children, onEdit }: {
-  title: string; children: React.ReactNode; onEdit?: () => void
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
-        {onEdit && (
-          <button type="button" onClick={onEdit}
-            className="flex items-center gap-1 text-slate-400 hover:text-primary transition-colors text-[12px]">
-            <Pencil className="h-3 w-3" /> Edit
-          </button>
-        )}
-      </div>
-      {children}
-    </div>
-  )
-}
+// ── Section edit bar (detail page specific) ───────────────────────────────────
 
 function SectionEditBar({ onSave, onCancel, saving, showBatch, applyToBatch, onToggleBatch }: {
   onSave: () => void; onCancel: () => void; saving: boolean
@@ -82,37 +66,6 @@ function SectionEditBar({ onSave, onCancel, saving, showBatch, applyToBatch, onT
   )
 }
 
-function Sub({ title, icon: Icon, children }: {
-  title: string
-  icon?: React.ComponentType<{ className?: string }>
-  children: React.ReactNode
-}) {
-  return (
-    <div className="pt-4 mt-4 border-t border-slate-100">
-      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-        {Icon && <Icon className="h-3 w-3" />}{title}
-      </p>
-      {children}
-    </div>
-  )
-}
-
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
-      <div className="text-[13px] text-slate-800 font-medium">{value ?? '—'}</div>
-    </div>
-  )
-}
-
-function SideCard({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('bg-white rounded-xl border border-slate-200 p-4', className)}>{children}</div>
-}
-
-function SideTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2.5 mb-3">{children}</h3>
-}
 
 function ResponseRow({ label, value, muted }: { label: string; value: React.ReactNode; muted?: boolean }) {
   return (
@@ -165,7 +118,7 @@ export default function CoachingSessionDetailPage() {
   const qc        = useQueryClient()
   const { toast } = useToast()
   const { user }  = useAuth()
-  const canSeeInternal = [1, 4, 5].includes(user?.role_id ?? 0)
+  const canSeeInternal = [ROLE_IDS.ADMIN, ROLE_IDS.TRAINER, ROLE_IDS.MANAGER].includes(user?.role_id ?? 0)
   const [showHistory,    setShowHistory]    = useState(false)
   const [pendingStatus,  setPendingStatus]  = useState('')
 
@@ -321,7 +274,6 @@ export default function CoachingSessionDetailPage() {
 
   const canEdit        = session.status !== 'CLOSED'
   const recentSessions = session.recent_sessions ?? []
-  const repeatTopics   = new Set(session.repeat_topics ?? [])
 
 
   return (
@@ -350,7 +302,7 @@ export default function CoachingSessionDetailPage() {
           {editSection === 'session' ? (
             <>
               <SessionSection form={formDraft} errors={{}} csrs={csrs} coaches={coaches}
-                topics={topics} isEdit
+                topicItems={topics} isEdit
                 purposeItems={purposeItems} formatItems={formatItems} sourceItems={sourceItems}
                 update={updateDraft} toggleTopic={toggleDraftTopic} />
               <SectionEditBar onSave={() => sectionSaveMut.mutate()} onCancel={cancelEdit} saving={sectionSaveMut.isPending} showBatch={!!session?.batch_id} applyToBatch={applyToBatch} onToggleBatch={() => setApplyToBatch(v => !v)} />

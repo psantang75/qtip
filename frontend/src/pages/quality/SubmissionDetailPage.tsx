@@ -5,7 +5,7 @@ import { Edit3, X } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import qaService, { type SubmissionDetail, type MetadataEntry } from '@/services/qaService'
-import { api } from '@/services/authService'
+import { getFormById } from '@/services/formService'
 import {
   processConditionalLogic,
   calculateFormScore,
@@ -71,8 +71,8 @@ export default function SubmissionDetailPage() {
         : await qaService.getSubmissionDetail(Number(id))
       if (submission?.form_id) {
         try {
-          const res = await api.get(`/forms/${submission.form_id}?include_inactive=true`)
-          ;(submission as SubmissionDetailWithForm).formData = res.data
+          const formData = await getFormById(submission.form_id, true)
+          ;(submission as SubmissionDetailWithForm).formData = formData
         } catch { /* fall back to basic view */ }
       }
       return submission

@@ -30,8 +30,9 @@ export default function AdminUsersPage() {
   const { user: me } = useAuth()
 
   // ── Filter state ──────────────────────────────────────────────────────────
-  const [page,          setPage]          = useState(1)
   const [search,        setSearch]        = useState('')
+  // clientPage drives display pagination only; serverPage drives the API fetch
+  const [clientPage,    setClientPage]    = useState(1)
   const [selectedRoles, setSelectedRoles] = useState<number[]>([])
   const [selectedDepts, setSelectedDepts] = useState<number[]>([])
   const [statusFilter,  setStatusFilter]  = useState<string>('active')
@@ -47,9 +48,10 @@ export default function AdminUsersPage() {
   const LIMIT = 100
 
   // ── Queries ───────────────────────────────────────────────────────────────
+  // Server always fetches page 1 with a large limit; client handles display pagination.
   const { data: usersData, isLoading, isError, refetch } = useQuery({
-    queryKey: ['admin-users', page, search],
-    queryFn:  () => userService.getUsers(page, LIMIT, search ? { search } : {}),
+    queryKey: ['admin-users', search],
+    queryFn:  () => userService.getUsers(1, LIMIT, search ? { search } : {}),
   })
   const { data: roles = [] }       = useQuery({ queryKey: ['roles'],              queryFn: () => userService.getRoles() })
   const { data: departments = [] } = useQuery({ queryKey: ['departments-simple'], queryFn: () => userService.getDepartments() })
@@ -75,13 +77,13 @@ export default function AdminUsersPage() {
   const PAGE_SIZE     = 25
   const totalFiltered = filteredUsers.length
   const pages         = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE))
-  const pagedUsers    = filteredUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const pagedUsers    = filteredUsers.slice((clientPage - 1) * PAGE_SIZE, clientPage * PAGE_SIZE)
 
   // ── Sort helpers ──────────────────────────────────────────────────────────
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortField(field); setSortDir('asc') }
-    setPage(1)
+    setClientPage(1)
   }
 
   function SortIcon({ field }: { field: SortField }) {
@@ -94,7 +96,7 @@ export default function AdminUsersPage() {
   function SortHead({ field, children, className }: { field: SortField; children: React.ReactNode; className?: string }) {
     return (
       <TableHead className={`py-4 cursor-pointer select-none hover:bg-slate-100 transition-colors whitespace-nowrap ${className ?? ''}`}
-        onClick={() => { toggleSort(field); setPage(1) }}>
+        onClick={() => { toggleSort(field); setClientPage(1) }}>
         <div className="flex items-center">{children}<SortIcon field={field} /></div>
       </TableHead>
     )
@@ -122,14 +124,14 @@ export default function AdminUsersPage() {
 
       {/* Filters */}
       <UserFilterBar
-        search={search}         onSearchChange={v => { setSearch(v); setPage(1) }}
+        search={search}         onSearchChange={v => { setSearch(v); setClientPage(1) }}
         roles={roles}           departments={departments}
         selectedRoles={selectedRoles}   selectedDepts={selectedDepts}
         statusFilter={statusFilter}
-        onApplyRoles={ids  => { setSelectedRoles(ids);  setPage(1) }}
-        onApplyDepts={ids  => { setSelectedDepts(ids);  setPage(1) }}
-        onStatusChange={v  => { setStatusFilter(v);     setPage(1) }}
-        onReset={() => { setSelectedRoles([]); setSelectedDepts([]); setStatusFilter('active'); setSearch(''); setPage(1) }}
+        onApplyRoles={ids  => { setSelectedRoles(ids);  setClientPage(1) }}
+        onApplyDepts={ids  => { setSelectedDepts(ids);  setClientPage(1) }}
+        onStatusChange={v  => { setStatusFilter(v);     setClientPage(1) }}
+        onReset={() => { setSelectedRoles([]); setSelectedDepts([]); setStatusFilter('active'); setSearch(''); setClientPage(1) }}
       />
 
       {/* Count */}
@@ -189,10 +191,10 @@ export default function AdminUsersPage() {
 
       {/* Pagination */}
       <div className="flex items-center justify-between">
-        <p className="text-[13px] text-muted-foreground">Page {page} of {pages}</p>
+        <p className="text-[13px] text-muted-foreground">Page {clientPage} of {pages}</p>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled={page === 1}    onClick={() => setPage(p => p - 1)}><ChevronLeft  size={14} /></Button>
-          <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage(p => p + 1)}><ChevronRight size={14} /></Button>
+          <Button variant="outline" size="sm" disabled={clientPage === 1}    onClick={() => setClientPage(p => p - 1)}><ChevronLeft  size={14} /></Button>
+          <Button variant="outline" size="sm" disabled={clientPage >= pages} onClick={() => setClientPage(p => p + 1)}><ChevronRight size={14} /></Button>
         </div>
       </div>
 

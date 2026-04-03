@@ -26,7 +26,7 @@ interface Props {
 }
 
 const STATUS_LABELS: Record<string, string> = { all: 'All Status', active: 'Active', inactive: 'Inactive' }
-const ROLE_NAMES: Record<number, string>    = { 1: 'Admin', 2: 'QA', 3: 'User', 4: 'Trainer', 5: 'Manager' }
+const ROLE_NAMES: Record<number, string>    = { 1: 'Admin', 2: 'QA', 3: 'CSR', 4: 'Trainer', 5: 'Manager', 6: 'Director' }
 
 export { ROLE_NAMES }
 

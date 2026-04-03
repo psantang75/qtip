@@ -12,12 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { ContentSections } from './writeup-detail/ContentSections'
-
-// ── Document type label ───────────────────────────────────────────────────────
-
-const TYPE_LABELS: Record<string, string> = {
-  VERBAL_WARNING: 'Verbal Warning', WRITTEN_WARNING: 'Written Warning', FINAL_WARNING: 'Final Warning',
-}
+import { WRITE_UP_TYPE_LABELS as TYPE_LABELS } from './writeupLabels'
 
 // ── Acknowledgment text ───────────────────────────────────────────────────────
 
@@ -36,6 +31,18 @@ function StatusBanner({ writeup }: { writeup: Awaited<ReturnType<typeof writeupS
             {status === 'SCHEDULED' && writeup.meeting_date
               ? `This document has been scheduled for delivery on ${formatQualityDate(writeup.meeting_date)}.`
               : 'This document is in draft and has not yet been scheduled.'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'DELIVERED') {
+    return (
+      <div className="mx-auto max-w-3xl px-4 mb-4">
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+          <p className="text-[13px] text-indigo-700">
+            Your manager has delivered this document. It is awaiting finalization before being sent to you for signature.
           </p>
         </div>
       </div>

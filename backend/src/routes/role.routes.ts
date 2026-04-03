@@ -43,7 +43,7 @@ const getRolesHandler = async (req: Request, res: Response): Promise<void> => {
 /**
  * @route GET /api/roles
  * @desc Get all active roles
- * @access Public (for testing)
+ * @access Authenticated users
  */
 router.get('/', getRolesHandler as unknown as RequestHandler);
 

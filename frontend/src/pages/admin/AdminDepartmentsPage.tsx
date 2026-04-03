@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { ROLE_IDS } from '@/hooks/useQualityRole'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -117,8 +118,7 @@ export default function AdminDepartmentsPage() {
     queryFn:  () => departmentService.getAssignableUsers(),
   })
 
-  // Managers only (role_id 5)
-  const managers = assignable.filter(u => u.role_id === 5)
+  const managers = assignable.filter(u => u.role_id === ROLE_IDS.MANAGER)
 
   // ── Form ─────────────────────────────────────────────────────────────────
   const form = useForm<FormValues>({

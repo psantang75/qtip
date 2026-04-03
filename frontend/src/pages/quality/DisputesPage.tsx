@@ -17,6 +17,7 @@ import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { DateRangeFilter, type DateRange } from '@/components/common/DateRangeFilter'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
 
@@ -248,9 +249,7 @@ function DisputeListView() {
                     onClick={() => navigate(`/app/quality/submissions/${d.submission_id}`, {
                       state: { from: fromLabel, fromPath },
                     })}>
-                    <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
-                      {d.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
-                    </TableCell>
+                    <TableCell><StatusBadge status={d.status} /></TableCell>
                     <TableCell className="text-[13px] font-medium text-slate-900">{d.form_name ?? '—'}</TableCell>
                     {!isCSR && <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{d.csr_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">#{d.submission_id ?? '—'}</TableCell>

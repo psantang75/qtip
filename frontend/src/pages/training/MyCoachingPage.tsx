@@ -20,7 +20,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
-import { QuizStatusBadge, PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './CoachingSessionsPage'
+import { QuizStatusBadge, PURPOSE_MAP, FORMAT_MAP } from './CoachingSessionsPage'
+import { StatusBadge } from '@/components/common/StatusBadge'
 
 
 const SORT_PRIORITY: Record<string, number> = { IN_PROCESS: 0, AWAITING_CSR_ACTION: 0 }
@@ -91,7 +92,7 @@ export default function MyCoachingPage() {
       const bd = b.due_date ? new Date(b.due_date).getTime() : Infinity
       return ad - bd
     })
-  }, [baseFiltered, statusFilter, topicFilter, dateField, dateFrom, dateTo, overdueOnly])
+  }, [baseFiltered, statusFilter, topicFilter, dateField, dateFrom, dateTo, overdueOnly, dueTodayOnly])
 
   const { sort, dir, toggle, sorted } = useListSort(filtered)
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
@@ -188,9 +189,7 @@ export default function MyCoachingPage() {
                     {formatQualityDate(s.session_date)}
                   </TableCell>
 
-                  <TableCell className="text-[13px] text-slate-600">
-                    {STATUS_LABELS[s.status] ?? s.status}
-                  </TableCell>
+                  <TableCell><StatusBadge status={s.status} /></TableCell>
 
                   <TableCell className="text-[13px] text-slate-600">
                     {PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}

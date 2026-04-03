@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
+import { ROLE_IDS } from '@/hooks/useQualityRole'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z, type ZodTypeAny } from 'zod'
+import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Eye, EyeOff } from 'lucide-react'
 import userService from '@/services/userService'
@@ -51,9 +52,10 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
 
   const isCreate = !editUser
 
+  const schema = makeSchema(isCreate)
   const form = useForm<FormValues>({
-    resolver: zodResolver(makeSchema(isCreate) as ZodTypeAny),
-    defaultValues: { username: '', email: '', password: '', title: '', role_id: 3, department_id: null, is_active: true },
+    resolver: zodResolver(schema),
+    defaultValues: { username: '', email: '', password: '', title: '', role_id: ROLE_IDS.CSR, department_id: null, is_active: true },
   })
 
   // Reset form whenever the target user changes
@@ -69,7 +71,7 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
         is_active: editUser.is_active,
       })
     } else {
-      form.reset({ username: '', email: '', password: '', title: '', role_id: 3, department_id: null, is_active: true })
+      form.reset({ username: '', email: '', password: '', title: '', role_id: ROLE_IDS.CSR, department_id: null, is_active: true })
     }
   }, [open, editUser, form])
 
@@ -170,7 +172,7 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
 
             <FormField control={form.control} name="role_id" render={({ field }) => (
               <FormItem><FormLabel>Role</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={String(field.value)}>
+                <Select onValueChange={field.onChange} value={String(field.value)}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger></FormControl>
                   <SelectContent>
                     {roles.map(r => <SelectItem key={r.id} value={String(r.id)}>{r.role_name}</SelectItem>)}
@@ -184,7 +186,7 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
               <FormItem>
                 <FormLabel>Department <span className="text-muted-foreground">(optional)</span></FormLabel>
                 <Select onValueChange={v => field.onChange(v === 'none' ? null : Number(v))}
-                  defaultValue={field.value ? String(field.value) : 'none'}>
+                  value={field.value ? String(field.value) : 'none'}>
                   <FormControl><SelectTrigger><SelectValue placeholder="No department" /></SelectTrigger></FormControl>
                   <SelectContent>
                     <SelectItem value="none">No department</SelectItem>

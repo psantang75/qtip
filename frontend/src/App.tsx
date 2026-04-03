@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ROLE_IDS } from './hooks/useQualityRole'
 import { Toaster } from './components/ui/toaster'
 import { TooltipProvider } from './components/ui/tooltip'
 
@@ -78,11 +79,12 @@ function RoleRedirect() {
   React.useEffect(() => {
     if (!user) return
     const destinations: Record<number, string> = {
-      1: '/app/insights/dashboard',      // admin
-      2: '/app/quality/submissions',     // qa
-      3: '/app/quality/submissions',     // user/csr
-      4: '/app/training/coaching',       // trainer
-      5: '/app/quality/submissions',     // manager
+      [ROLE_IDS.ADMIN]:    '/app/insights/dashboard',
+      [ROLE_IDS.QA]:       '/app/quality/submissions',
+      [ROLE_IDS.CSR]:      '/app/quality/submissions',
+      [ROLE_IDS.TRAINER]:  '/app/training/coaching',
+      [ROLE_IDS.MANAGER]:  '/app/quality/submissions',
+      [ROLE_IDS.DIRECTOR]: '/app/insights/dashboard',
     }
     const dest = destinations[user.role_id] ?? '/app/quality/submissions'
     navigate(dest, { replace: true })
@@ -132,7 +134,7 @@ function CacheResetGuard() {
 
 function TrainingIndexRedirect() {
   const { user } = useAuth()
-  return <Navigate to={user?.role_id === 3 ? 'my-coaching' : 'coaching'} replace />
+  return <Navigate to={user?.role_id === ROLE_IDS.CSR ? 'my-coaching' : 'coaching'} replace />
 }
 
 // ── Role guard — redirects to a fallback if the user's role isn't allowed ─────
@@ -169,8 +171,12 @@ export default function App() {
             {/* Protected shell */}
             <Route element={<ProtectedRoute />}>
 
-              {/* Admin area — own layout, no SectionNav */}
-              <Route path="/app/admin" element={<AdminLayout />}>
+              {/* Admin area — own layout, Admin-only */}
+              <Route path="/app/admin" element={
+                <RequireRole allowed={[1]} fallback="/app">
+                  <AdminLayout />
+                </RequireRole>
+              }>
                 <Route path="users"            element={<AdminUsersPage />} />
                 <Route path="departments"      element={<AdminDepartmentsPage />} />
                 <Route path="roles"            element={<AdminRolesPage />} />
@@ -201,10 +207,10 @@ export default function App() {
                 <Route path="/app/training">
                   <Route index element={<TrainingIndexRedirect />} />
                   {/* Trainer/manager/admin routes — CSRs are redirected to my-coaching */}
-                  <Route path="coaching" element={<RequireRole allowed={[1,2,4,5]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionsPage /></PageLoader></RequireRole>} />
-                  <Route path="coaching/new" element={<RequireRole allowed={[1,2,4,5]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequireRole>} />
-                  <Route path="coaching/:id" element={<RequireRole allowed={[1,2,4,5]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionDetailPage /></PageLoader></RequireRole>} />
-                  <Route path="coaching/:id/edit" element={<RequireRole allowed={[1,2,4,5]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequireRole>} />
+                  <Route path="coaching" element={<RequireRole allowed={[ROLE_IDS.ADMIN,ROLE_IDS.QA,ROLE_IDS.TRAINER,ROLE_IDS.MANAGER]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionsPage /></PageLoader></RequireRole>} />
+                  <Route path="coaching/new" element={<RequireRole allowed={[ROLE_IDS.ADMIN,ROLE_IDS.QA,ROLE_IDS.TRAINER,ROLE_IDS.MANAGER]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequireRole>} />
+                  <Route path="coaching/:id" element={<RequireRole allowed={[ROLE_IDS.ADMIN,ROLE_IDS.QA,ROLE_IDS.TRAINER,ROLE_IDS.MANAGER]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionDetailPage /></PageLoader></RequireRole>} />
+                  <Route path="coaching/:id/edit" element={<RequireRole allowed={[ROLE_IDS.ADMIN,ROLE_IDS.QA,ROLE_IDS.TRAINER,ROLE_IDS.MANAGER]} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequireRole>} />
                   <Route path="my-coaching"       element={<PageLoader><MyCoachingPage /></PageLoader>} />
                   <Route path="my-coaching/:id"   element={<PageLoader><MyCoachingDetailPage /></PageLoader>} />
                   <Route path="reports"           element={<PageLoader><TrainingReportsPage /></PageLoader>} />
@@ -224,7 +230,7 @@ export default function App() {
                   <Route
                     path="list"
                     element={
-                      <RequireRole allowed={[1,2,5]} fallback="/app/writeups/my">
+                      <RequireRole allowed={[ROLE_IDS.ADMIN,ROLE_IDS.QA,ROLE_IDS.MANAGER]} fallback="/app/writeups/my">
                         <PageLoader><WriteUpsPage /></PageLoader>
                       </RequireRole>
                     }
@@ -232,7 +238,7 @@ export default function App() {
                   <Route
                     path="new"
                     element={
-                      <RequireRole allowed={[1,2,5]} fallback="/app">
+                      <RequireRole allowed={[ROLE_IDS.ADMIN,ROLE_IDS.QA,ROLE_IDS.MANAGER]} fallback="/app">
                         <PageLoader><WriteUpFormPage /></PageLoader>
                       </RequireRole>
                     }
@@ -240,7 +246,7 @@ export default function App() {
                   <Route
                     path=":id"
                     element={
-                      <RequireRole allowed={[1,2,5]} fallback="/app">
+                      <RequireRole allowed={[ROLE_IDS.ADMIN,ROLE_IDS.QA,ROLE_IDS.MANAGER]} fallback="/app">
                         <PageLoader><WriteUpDetailPage /></PageLoader>
                       </RequireRole>
                     }
@@ -248,7 +254,7 @@ export default function App() {
                   <Route
                     path=":id/edit"
                     element={
-                      <RequireRole allowed={[1,2,5]} fallback="/app">
+                      <RequireRole allowed={[ROLE_IDS.ADMIN,ROLE_IDS.QA,ROLE_IDS.MANAGER]} fallback="/app">
                         <PageLoader><WriteUpFormPage /></PageLoader>
                       </RequireRole>
                     }

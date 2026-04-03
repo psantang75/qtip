@@ -74,7 +74,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 
 export default function TrainingReportsPage() {
   const navigate      = useNavigate()
-  const { roleId }    = useQualityRole()
+  useQualityRole() // available for future role-gated features
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
@@ -147,7 +147,6 @@ export default function TrainingReportsPage() {
     )[d.name] ?? 'slate'
   )
 
-  void roleId // used for future role-gated features
 
   return (
     <QualityListPage>
@@ -163,6 +162,12 @@ export default function TrainingReportsPage() {
           <span className="font-medium text-slate-700">{s.total_sessions ?? '—'}</span> sessions in range
         </div>
       </QualityFilterBar>
+
+      {summaryError && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <TableErrorState message="Failed to load summary metrics." onRetry={() => {}} />
+        </div>
+      )}
 
       {/* ── Stat cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">

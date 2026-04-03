@@ -18,31 +18,13 @@ import {
 } from '@/components/ui/table'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { formatQualityDate } from '@/utils/dateFormat'
+import { TopicChips } from '@/components/training/TopicChips'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function coachingLabel(type: string): string {
   return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-}
-
-function TopicChips({ topics, max = 2 }: { topics: string[]; max?: number }) {
-  const shown = topics.slice(0, max)
-  const extra = topics.length - max
-  return (
-    <div className="flex flex-wrap gap-1">
-      {shown.map(t => (
-        <span key={t} className="inline-block bg-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-full">
-          {t}
-        </span>
-      ))}
-      {extra > 0 && (
-        <span className="inline-block bg-slate-100 text-slate-500 text-[11px] px-2 py-0.5 rounded-full">
-          +{extra}
-        </span>
-      )}
-    </div>
-  )
 }
 
 interface StatCardProps {
@@ -239,6 +221,12 @@ function TrainerView() {
           </Button>
         }
       />
+
+      {statsError && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <TableErrorState message="Failed to load coaching statistics." onRetry={statsRefetch} />
+        </div>
+      )}
 
       {/* Five stat cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">

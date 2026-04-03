@@ -1,5 +1,6 @@
-import express, { RequestHandler } from 'express';
-import { authenticate } from '../middleware/auth';
+import express from 'express';
+import { authenticate, authorizeAdmin } from '../middleware/auth';
+import { rh } from '../utils/routeHandler';
 import { 
   getUsers, 
   getUserById, 
@@ -15,19 +16,23 @@ import {
 
 const router = express.Router();
 
-// Protect all user management routes with authentication only
-router.use(authenticate as unknown as RequestHandler);
+// All user routes require authentication
+router.use(rh(authenticate));
 
-// User management routes
-router.get('/', getUsers as unknown as RequestHandler);
-router.get('/managers', getManagers as unknown as RequestHandler);
-router.get('/directors', getDirectors as unknown as RequestHandler);
-router.get('/my-departments', getMyDepartments as unknown as RequestHandler);
-router.get('/:id', getUserById as unknown as RequestHandler);
-router.post('/', createUser as unknown as RequestHandler);
-router.put('/change-password', changePassword as unknown as RequestHandler);
-router.put('/:id', updateUser as unknown as RequestHandler);
-router.put('/:id/status', toggleUserStatus as unknown as RequestHandler);
-router.delete('/:id', deleteUser as unknown as RequestHandler);
+// Read routes — all authenticated users
+router.get('/',                rh(getUsers));
+router.get('/managers',        rh(getManagers));
+router.get('/directors',       rh(getDirectors));
+router.get('/my-departments',  rh(getMyDepartments));
+router.get('/:id',             rh(getUserById));
+
+// Self-service — any authenticated user can change their own password
+router.put('/change-password', rh(changePassword));
+
+// Write routes — Admin only
+router.post('/',               rh(authorizeAdmin), rh(createUser));
+router.put('/:id',             rh(authorizeAdmin), rh(updateUser));
+router.put('/:id/status',      rh(authorizeAdmin), rh(toggleUserStatus));
+router.delete('/:id',          rh(authorizeAdmin), rh(deleteUser));
 
 export default router; 

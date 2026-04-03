@@ -2,7 +2,7 @@ import { Router, RequestHandler } from 'express'
 import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
-import { authenticate } from '../middleware/auth'
+import { authenticate, authorizeManager } from '../middleware/auth'
 import {
   getWriteUps,
   getWriteUpById,
@@ -48,19 +48,24 @@ const upload = multer({
 const router = Router()
 router.use(authenticate as unknown as RequestHandler)
 
-router.get('/',                        getWriteUps                                                      as unknown as RequestHandler)
-router.post('/',                       createWriteUp                                                    as unknown as RequestHandler)
-router.post('/coaching-session',       createLinkedCoachingSession                                      as unknown as RequestHandler)
-router.get('/qa-search',               searchQaRecords                                                  as unknown as RequestHandler)
-router.get('/coaching-search',         searchCoachingSessions                                           as unknown as RequestHandler)
-router.get('/prior-discipline/:csrId', getPriorDiscipline                                               as unknown as RequestHandler)
-router.get('/:id',                     getWriteUpById                                                   as unknown as RequestHandler)
-router.put('/:id',                     updateWriteUp                                                    as unknown as RequestHandler)
-router.patch('/:id/status',            transitionStatus                                                 as unknown as RequestHandler)
-router.post('/:id/sign',               signWriteUp                                                      as unknown as RequestHandler)
-router.patch('/:id/follow-up',         setFollowUp                                                      as unknown as RequestHandler)
-router.post('/:id/attachments',                upload.single('file') as unknown as RequestHandler, uploadAttachment   as unknown as RequestHandler)
-router.get('/:id/attachments/:attachmentId',                                                downloadAttachment  as unknown as RequestHandler)
-router.delete('/:id/attachments/:attachmentId',                                             deleteAttachment    as unknown as RequestHandler)
+// Read-only routes — all authenticated users (CSRs see only their own via controller)
+router.get('/',                        getWriteUps                                                                                                              as unknown as RequestHandler)
+router.get('/qa-search',               searchQaRecords                                                                                                          as unknown as RequestHandler)
+router.get('/coaching-search',         searchCoachingSessions                                                                                                   as unknown as RequestHandler)
+router.get('/prior-discipline/:csrId', getPriorDiscipline                                                                                                       as unknown as RequestHandler)
+router.get('/:id',                     getWriteUpById                                                                                                           as unknown as RequestHandler)
+router.get('/:id/attachments/:attachmentId',                                                                                             downloadAttachment      as unknown as RequestHandler)
+
+// Write routes — Manager, Admin, QA only
+router.post('/',                       authorizeManager as unknown as RequestHandler, createWriteUp                                                              as unknown as RequestHandler)
+router.post('/coaching-session',       authorizeManager as unknown as RequestHandler, createLinkedCoachingSession                                                as unknown as RequestHandler)
+router.put('/:id',                     authorizeManager as unknown as RequestHandler, updateWriteUp                                                              as unknown as RequestHandler)
+router.patch('/:id/status',            authorizeManager as unknown as RequestHandler, transitionStatus                                                           as unknown as RequestHandler)
+router.patch('/:id/follow-up',         authorizeManager as unknown as RequestHandler, setFollowUp                                                                as unknown as RequestHandler)
+router.post('/:id/attachments',        authorizeManager as unknown as RequestHandler, upload.single('file') as unknown as RequestHandler, uploadAttachment       as unknown as RequestHandler)
+router.delete('/:id/attachments/:attachmentId', authorizeManager as unknown as RequestHandler,                                           deleteAttachment        as unknown as RequestHandler)
+
+// CSR-only — controller enforces ownership
+router.post('/:id/sign',               signWriteUp                                                                                                              as unknown as RequestHandler)
 
 export default router

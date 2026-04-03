@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -73,6 +73,17 @@ export default function ProfilePage() {
       title:    user?.title ?? '',
     },
   })
+
+  // Keep form values in sync if the authenticated user object is refreshed
+  useEffect(() => {
+    if (user) {
+      profileForm.reset({
+        username: user.username ?? '',
+        email:    user.email ?? '',
+        title:    user.title ?? '',
+      })
+    }
+  }, [user?.id, user?.username, user?.email, user?.title])
 
   const profileMutation = useMutation({
     mutationFn: (v: ProfileValues) => userService.updateUser(user!.id, {
@@ -306,8 +317,10 @@ export default function ProfilePage() {
             <div>
               <p className="text-muted-foreground mb-0.5">Account Status</p>
               <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span className="font-medium text-emerald-700">Active</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                <span className={`font-medium ${user.is_active ? 'text-emerald-700' : 'text-slate-500'}`}>
+                  {user.is_active ? 'Active' : 'Inactive'}
+                </span>
               </div>
             </div>
             <div>

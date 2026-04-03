@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MessageSquare, Eye, ChevronDown, ChevronUp, Users } from 'lucide-react'
+import { Plus, MessageSquare, Eye, ChevronDown, ChevronUp, Users, Flame, AlertTriangle } from 'lucide-react'
 import trainingService, { type CoachingSession, type CoachingPurpose, type CoachingFormat } from '@/services/trainingService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
@@ -18,12 +18,13 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 
-// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 export const PURPOSE_MAP: Record<CoachingPurpose, string> = {
   WEEKLY:      'Weekly',
@@ -54,7 +55,7 @@ export const STATUS_LABELS: Record<string, string> = {
 }
 const ALL_STATUSES = Object.keys(STATUS_LABELS)
 
-// â”€â”€ Exported helper components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Exported helper components ────────────────────────────────────────────────
 
 export function CoachingPurposeBadge({ purpose }: { purpose: CoachingPurpose }) {
   return (
@@ -74,25 +75,8 @@ export function CoachingFormatBadge({ format }: { format: CoachingFormat }) {
   )
 }
 
-/** @deprecated kept for backward compat — use CoachingPurposeBadge */
-export function CoachingTypeBadge({ type }: { type: CoachingPurpose }) {
-  return <CoachingPurposeBadge purpose={type} />
-}
 
-export function TopicChips({ topics, max = 2 }: { topics: string[]; max?: number }) {
-  const shown = topics.slice(0, max)
-  const extra = topics.length - max
-  return (
-    <div className="flex flex-wrap gap-1">
-      {shown.map(t => (
-        <span key={t} className="bg-slate-100 text-slate-700 text-[11px] px-2 py-0.5 rounded-full">{t}</span>
-      ))}
-      {extra > 0 && (
-        <span className="bg-slate-100 text-slate-500 text-[11px] px-2 py-0.5 rounded-full">+{extra}</span>
-      )}
-    </div>
-  )
-}
+export { TopicChips } from '@/components/training/TopicChips'
 
 export function QuizStatusBadge({ session }: { session: CoachingSession }) {
   const quizCount   = Number(session.quiz_count   ?? session.quizzes?.length ?? 0)
@@ -112,16 +96,16 @@ export function QuizStatusBadge({ session }: { session: CoachingSession }) {
   return <span className="text-[13px] text-slate-500">Assigned</span>
 }
 
-// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 // ── Date urgency helper ───────────────────────────────────────────────────────
 
-export function dateUrgency(dateStr?: string | null): { label: string; cls: string } | null {
+export function dateUrgency(dateStr?: string | null): { label: string; cls: string; overdue?: boolean } | null {
   if (!dateStr) return null
   const today = new Date().toISOString().slice(0, 10)
   const d     = dateStr.slice(0, 10)
   if (d === today) return { label: 'Today',                      cls: 'text-amber-600 font-semibold' }
-  if (d  < today)  return { label: `${formatQualityDate(dateStr)} ⚠`, cls: 'text-red-600 font-semibold' }
+  if (d  < today)  return { label: formatQualityDate(dateStr), cls: 'text-red-600 font-semibold', overdue: true }
   return               { label: formatQualityDate(dateStr),       cls: 'text-slate-600' }
 }
 
@@ -424,14 +408,14 @@ export default function CoachingSessionsPage() {
                     <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                       {formatQualityDate(s.session_date)}
                     </TableCell>
-                    <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[s.status] ?? s.status}</TableCell>
+                    <TableCell><StatusBadge status={s.status} /></TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span className="text-[13px] font-medium text-slate-900">{s.csr_name}</span>
                         {(s.repeat_topics?.length ?? 0) > 0 && (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="text-orange-500 text-xs cursor-help select-none">🔥</span>
+                              <Flame className="h-3.5 w-3.5 text-orange-500 cursor-help" />
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
                               <p className="text-[12px] font-semibold text-slate-700 mb-1">Repeat topics</p>
@@ -549,8 +533,8 @@ export default function CoachingSessionsPage() {
 
       <ListPagination
         page={page}
-        totalPages={data?.totalPages ?? 1}
-        totalItems={data?.total ?? 0}
+        totalPages={hasClientFilter ? Math.max(1, Math.ceil(clientFiltered.length / pageSize)) : (data?.totalPages ?? 1)}
+        totalItems={hasClientFilter ? clientFiltered.length : (data?.total ?? 0)}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}

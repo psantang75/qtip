@@ -10,6 +10,7 @@ import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
+import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -271,8 +272,8 @@ export default function LibraryTopicsPage() {
           <TableErrorState message="Failed to load topics." onRetry={refetch} />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-          <p className="text-[13px] text-slate-400">No topics found. Try adjusting your search.</p>
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <TableEmptyState colSpan={1} title="No topics found" description="Try adjusting your search or filters." />
         </div>
       ) : (
         <div className="space-y-3">

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -27,6 +27,8 @@ type LoginFormValues = z.infer<typeof loginSchema>
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const sessionExpired = searchParams.get('expired') === '1'
   const [showPassword, setShowPassword] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
 
@@ -69,6 +71,13 @@ export default function LoginPage() {
             <h1 className="text-xl font-semibold text-slate-900">Welcome back</h1>
             <p className="text-[13px] text-muted-foreground mt-1">Sign in to your account</p>
           </div>
+
+          {/* Session expired banner */}
+          {sessionExpired && !apiError && (
+            <p className="text-[13px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mb-4 text-center">
+              Your session expired. Please sign in again.
+            </p>
+          )}
 
           {/* API error */}
           {apiError && (

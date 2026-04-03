@@ -114,8 +114,9 @@ export const createForm = async (req: Request, res: Response) => {
     console.log('[FORM CONTROLLER] Form data size:', JSON.stringify(req.body).length, 'characters');
     
     const formData = req.body;
-    const created_by = req.user?.user_id || 1;
-    
+    const created_by = req.user?.user_id;
+    if (!created_by) return res.status(401).json({ error: 'Unauthorized', code: 'UNAUTHORIZED' });
+
     // Validate that we have the required data
     if (!formData.form_name) {
       return res.status(400).json({ 
@@ -167,8 +168,9 @@ export const updateForm = async (req: Request, res: Response) => {
     
     const form_id = parseInt(req.params.id);
     const formData = req.body;
-    const updatedBy = req.user?.user_id || 1;
-    
+    const updatedBy = req.user?.user_id;
+    if (!updatedBy) return res.status(401).json({ error: 'Unauthorized', code: 'UNAUTHORIZED' });
+
     // Validate form ID
     if (isNaN(form_id) || form_id <= 0) {
       return res.status(400).json({ 
@@ -224,8 +226,9 @@ export const deactivateForm = async (req: Request, res: Response) => {
     console.log('[FORM CONTROLLER] Deactivating form');
     
     const form_id = parseInt(req.params.id);
-    const updatedBy = req.user?.user_id || 1;
-    
+    const updatedBy = req.user?.user_id;
+    if (!updatedBy) return res.status(401).json({ error: 'Unauthorized', code: 'UNAUTHORIZED' });
+
     console.log('[FORM CONTROLLER] Deactivation request details:', {
       form_id,
       updatedBy,

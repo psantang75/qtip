@@ -32,13 +32,13 @@ export default function TopBar() {
   const roleName = user ? (ROLE_DISPLAY[user.role_id] ?? 'USER') : ''
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-[72px] flex items-center px-6 bg-[#1a2332] border-b border-white/5">
+    <header className="fixed top-0 left-0 right-0 z-50 h-[72px] flex items-center px-6 bg-neutral-900 border-b border-white/5">
 
       {/* ── Logo (left) ─────────────────────────────────────────────────── */}
       <div className="flex flex-col shrink-0">
         <span className="text-white font-bold text-[17px] tracking-tight leading-tight">
           QTIP
-          <span className="text-[#00aeef]">+</span>
+          <span className="text-primary">+</span>
           Insights
         </span>
         <span className="text-[10px] text-slate-500 tracking-widest leading-tight mt-0.5">
@@ -77,11 +77,11 @@ export default function TopBar() {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex items-center gap-3 hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[#00aeef]"
+            className="flex items-center gap-3 hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
           >
             {/* Avatar */}
             <Avatar className="h-9 w-9 shrink-0">
-              <AvatarFallback className="bg-gradient-to-br from-[#00aeef] to-[#0095cc] text-white text-sm font-semibold">
+              <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-white text-sm font-semibold">
                 {initials}
               </AvatarFallback>
             </Avatar>

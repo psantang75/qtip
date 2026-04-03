@@ -14,6 +14,103 @@ export type WriteUpStatus =
   | 'CLOSED'
 export type WriteUpExampleSource = 'MANUAL' | 'QA_IMPORT' | 'COACHING_IMPORT'
 
+// ── Prior discipline rows (discriminated union) ────────────────────────────────
+
+export interface PriorDisciplineWriteUpRow {
+  reference_type:        'write_up'
+  reference_id:          number
+  document_type:         WriteUpType
+  status:                WriteUpStatus
+  date:                  string | null
+  policies_violated:     string[]
+  incident_descriptions: string[]
+}
+
+export interface PriorDisciplineCoachingRow {
+  reference_type:   'coaching_session'
+  reference_id:     number
+  coaching_purpose: string | null
+  status:           string | null
+  date:             string | null
+  notes:            string | null
+  topic_names:      string[]
+}
+
+export type PriorDisciplineRow = PriorDisciplineWriteUpRow | PriorDisciplineCoachingRow
+
+// ── QA / coaching search result rows ──────────────────────────────────────────
+
+export interface QaSearchResult {
+  submission_id:    number
+  submission_date:  string
+  interaction_date: string | null
+  form_name:        string
+  category_name:    string | null
+  question_text:    string
+  answer:           string
+}
+
+export interface CoachingSearchResult {
+  session_id:       number
+  session_date:     string
+  coaching_purpose: string | null
+  status:           string | null
+  notes:            string | null
+  topic_names:      string[] | string | null
+}
+
+// ── Prior discipline API response ──────────────────────────────────────────────
+
+export interface PriorDisciplineData {
+  write_ups:         PriorDisciplineWriteUpRow[]
+  coaching_sessions: PriorDisciplineCoachingRow[]
+}
+
+// ── Create / update payload ────────────────────────────────────────────────────
+
+export interface WriteUpPayload {
+  csr_id:              number
+  document_type:       WriteUpType | ''
+  meeting_date?:       string | null
+  corrective_action?:  string | null
+  correction_timeline?: string | null
+  checkin_date?:       string | null
+  consequence?:        string | null
+  linked_coaching_id?: number | null
+  manager_id?:         number | null
+  hr_witness_id?:      number | null
+  meeting_notes?:      string | null
+  incidents?:          Array<{
+    id?: number
+    description: string
+    sort_order: number
+    violations: Array<{
+      id?: number
+      policy_violated: string
+      reference_material?: string | null
+      sort_order: number
+      examples: Array<{
+        id?: number
+        example_date?: string | null
+        description: string
+        source: WriteUpExampleSource
+        qa_submission_id?: number | null
+        qa_question_id?: number | null
+        sort_order: number
+      }>
+    }>
+  }>
+  prior_discipline?:   Array<{ reference_type: string; reference_id: number }>
+}
+
+// ── Status transition extra payload ───────────────────────────────────────────
+
+export type TransitionExtra =
+  | { meeting_date: string }
+  | { meeting_notes: string }
+  | { follow_up_notes: string }
+  | undefined
+
 export interface WriteUpExample {
   id: number
   violation_id: number
@@ -96,7 +193,7 @@ export interface WriteUpDetail extends WriteUp {
   closed_at?: string | null
   signature_data?: string | null
   incidents: WriteUpIncident[]
-  prior_discipline: any[]
+  prior_discipline: PriorDisciplineRow[]
   attachments: WriteUpAttachment[]
 }
 
@@ -136,12 +233,12 @@ const writeupService = {
     return res.data.data ?? res.data
   },
 
-  createWriteUp: async (body: Partial<WriteUpDetail>): Promise<{ id: number }> => {
+  createWriteUp: async (body: WriteUpPayload): Promise<{ id: number }> => {
     const res = await api.post('/writeups', body)
     return res.data.data ?? res.data
   },
 
-  updateWriteUp: async (id: number, body: Partial<WriteUpDetail>): Promise<void> => {
+  updateWriteUp: async (id: number, body: WriteUpPayload): Promise<void> => {
     await api.put(`/writeups/${id}`, body)
   },
 
@@ -171,7 +268,7 @@ const writeupService = {
     question_text?: string
     question_filters?: Array<{ question_id: number; answer_value: string }>
     failed_only?: boolean
-  }): Promise<any[]> => {
+  }): Promise<QaSearchResult[]> => {
     const query = new URLSearchParams({ csr_id: String(params.csr_id) })
     if (params.form_id)       query.set('form_id',       String(params.form_id))
     if (params.date_from)     query.set('date_from',     params.date_from)
@@ -192,7 +289,7 @@ const writeupService = {
     date_from?: string
     date_to?: string
     topic_names?: string[]
-  }): Promise<any[]> => {
+  }): Promise<CoachingSearchResult[]> => {
     const query = new URLSearchParams({ csr_id: String(params.csr_id) })
     if (params.date_from) query.set('date_from', params.date_from)
     if (params.date_to)   query.set('date_to',   params.date_to)
@@ -201,7 +298,7 @@ const writeupService = {
     return res.data.data ?? res.data
   },
 
-  getPriorDiscipline: async (csrId: number): Promise<{ write_ups: any[]; coaching_sessions: any[] }> => {
+  getPriorDiscipline: async (csrId: number): Promise<PriorDisciplineData> => {
     const res = await api.get(`/writeups/prior-discipline/${csrId}`)
     return res.data.data ?? res.data
   },

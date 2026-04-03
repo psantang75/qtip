@@ -4,6 +4,7 @@ import userService, { type User } from '@/services/userService'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { TableErrorState } from '@/components/common/TableErrorState'
+import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 
 const ROLE_META: Record<number, { name: string; description: string; access: string[] }> = {
   1: {
@@ -34,7 +35,7 @@ const ROLE_META: Record<number, { name: string; description: string; access: str
 }
 
 export default function AdminRolesPage() {
-  const { data: users = [], isError, refetch } = useQuery({
+  const { data: users, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-users-all'],
     queryFn:  () => userService.getUsers(1, 100),
     select:   d => d.items,
@@ -42,9 +43,21 @@ export default function AdminRolesPage() {
 
   // Count per role
   const counts: Record<number, number> = {}
-  users.forEach((u: User) => {
+  ;(users ?? []).forEach((u: User) => {
     counts[u.role_id] = (counts[u.role_id] ?? 0) + 1
   })
+
+  if (isLoading) return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Roles</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">System-defined roles and their access levels</p>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <TableLoadingSkeleton rows={5} />
+      </div>
+    </div>
+  )
 
   if (isError) return <TableErrorState message="Failed to load user counts." onRetry={refetch} />
 

@@ -1,31 +1,10 @@
 import { Request, Response } from 'express'
 import prisma from '../config/prisma'
 import { Prisma } from '../generated/prisma/client'
+import { insertIncidents, shapePriorDiscipline, splitSep, type IncidentInput } from '../services/writeup.service'
 
 interface AuthReq extends Request {
   user?: { user_id: number; role: string }
-}
-
-interface IncidentInput {
-  description: string
-  sort_order?: number
-  violations?: ViolationInput[]
-}
-
-interface ViolationInput {
-  policy_violated: string
-  reference_material?: string
-  sort_order?: number
-  examples?: ExampleInput[]
-}
-
-interface ExampleInput {
-  example_date?: string
-  description: string
-  source?: string
-  qa_submission_id?: number
-  qa_question_id?: number
-  sort_order?: number
 }
 
 const canSeeAll = (role: string) => ['Admin', 'QA', 'Manager'].includes(role)
@@ -37,47 +16,6 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   AWAITING_SIGNATURE:  ['DELIVERED', 'SIGNED'],
   SIGNED:              ['CLOSED', 'FOLLOW_UP_PENDING'],
   FOLLOW_UP_PENDING:   ['CLOSED'],
-}
-
-// ── Shared helper: insert nested incidents → violations → examples ────────────
-
-async function insertIncidents(
-  tx: Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>,
-  writeUpId: number,
-  incidents: IncidentInput[]
-) {
-  for (const inc of incidents) {
-    const incident = await tx.writeUpIncident.create({
-      data: {
-        write_up_id: writeUpId,
-        description: inc.description,
-        sort_order:  inc.sort_order ?? 0,
-      },
-    })
-    for (const viol of (inc.violations ?? [])) {
-      const violation = await tx.writeUpViolation.create({
-        data: {
-          incident_id: incident.id,
-          policy_violated: viol.policy_violated,
-          reference_material: viol.reference_material ?? null,
-          sort_order: viol.sort_order ?? 0,
-        },
-      })
-      for (const ex of (viol.examples ?? [])) {
-        await tx.writeUpExample.create({
-          data: {
-            violation_id: violation.id,
-            example_date: ex.example_date ? new Date(ex.example_date) : null,
-            description: ex.description,
-            source: (ex.source as any) ?? 'MANUAL',
-            qa_submission_id: ex.qa_submission_id ?? null,
-            qa_question_id: ex.qa_question_id ?? null,
-            sort_order: ex.sort_order ?? 0,
-          },
-        })
-      }
-    }
-  }
 }
 
 // ── 1. getWriteUps ────────────────────────────────────────────────────────────
@@ -133,8 +71,10 @@ export const getWriteUps = async (req: AuthReq, res: Response) => {
       ),
     ])
 
+    const total = Number(countRows[0]?.total ?? 0)
+    const totalPages = Math.max(1, Math.ceil(total / limit))
     const items = rows.map(r => ({ ...r, incident_count: Number(r.incident_count) }))
-    res.json({ success: true, data: { items, total: Number(countRows[0]?.total ?? 0), page, limit } })
+    res.json({ success: true, data: { items, total, page, limit, totalPages } })
   } catch (error) {
     console.error('[WRITEUP] getWriteUps error:', error)
     res.status(500).json({ success: false, message: 'Internal server error' })
@@ -188,8 +128,6 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
       incident.violations = violations
     }
 
-    const splitSep = (val: string | null) => val ? val.split('~|~').filter(Boolean) : []
-
     const linkedCoachingRaw = writeUp.linked_coaching_id
       ? await prisma.$queryRaw<any[]>(Prisma.sql`
           SELECT cs.id, cs.coaching_purpose, cs.status, cs.session_date,
@@ -237,23 +175,7 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
       prisma.$queryRaw<any[]>(Prisma.sql`SELECT * FROM write_up_attachments WHERE write_up_id = ${writeUpId} ORDER BY created_at ASC`),
     ])
 
-    const priorDiscipline = priorDisciplineRaw.map((pd: any) => ({
-      reference_type: pd.reference_type,
-      reference_id:   Number(pd.reference_id),
-      ...(pd.reference_type === 'write_up' ? {
-        document_type:         pd.document_type,
-        status:                pd.wu_status,
-        date:                  pd.meeting_date,
-        policies_violated:     splitSep(pd.policies_violated),
-        incident_descriptions: splitSep(pd.incident_descriptions),
-      } : {
-        coaching_purpose: pd.coaching_purpose,
-        status:           pd.cs_status,
-        date:             pd.session_date,
-        notes:            pd.cs_notes,
-        topic_names:      splitSep(pd.topic_names),
-      }),
-    }))
+    const priorDiscipline = shapePriorDiscipline(priorDisciplineRaw)
 
     res.json({
       success: true,

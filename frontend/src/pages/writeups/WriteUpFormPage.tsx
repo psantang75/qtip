@@ -2,13 +2,16 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/hooks/use-toast'
-import writeupService from '@/services/writeupService'
+import writeupService, { type WriteUpPayload } from '@/services/writeupService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
+import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { emptyForm, type WriteUpFormState } from './writeup-form/types'
-import { EmployeeSection, CorrectiveSection, AttachmentsSection, MeetingNotesSection } from './writeup-form/BasicSections'
+import { EmployeeSection } from './writeup-form/EmployeeSection'
+import { CorrectiveSection } from './writeup-form/CorrectiveSection'
+import { AttachmentsSection, MeetingNotesSection } from './writeup-form/BasicSections'
 import { IncidentsSection } from './writeup-form/IncidentsSection'
 import { PriorDisciplineSection } from './writeup-form/PriorDisciplineSection'
 
@@ -26,7 +29,7 @@ export default function WriteUpFormPage() {
 
   // ── Load existing in edit mode ─────────────────────────────────────────────
 
-  const { data: existing, isError: loadError, refetch: loadRefetch } = useQuery({
+  const { data: existing, isLoading: isLoadingEdit, isError: loadError, refetch: loadRefetch } = useQuery({
     queryKey: ['writeup', id],
     queryFn:  () => writeupService.getWriteUpById(Number(id)),
     enabled:  isEdit,
@@ -122,7 +125,7 @@ export default function WriteUpFormPage() {
     return null
   }
 
-  const buildPayload = () => ({
+  const buildPayload = (): WriteUpPayload => ({
     csr_id:              form.csr_id,
     document_type:       form.document_type,
     meeting_date:        form.meeting_date || null,
@@ -150,10 +153,10 @@ export default function WriteUpFormPage() {
       const payload = buildPayload()
       let savedId: number
       if (isEdit) {
-        await writeupService.updateWriteUp(Number(id), payload as any)
+        await writeupService.updateWriteUp(Number(id), payload)
         savedId = Number(id)
       } else {
-        const result = await writeupService.createWriteUp(payload as any)
+        const result = await writeupService.createWriteUp(payload)
         savedId = result.id
       }
       if (form.attachment_files.length > 0) {
@@ -180,10 +183,10 @@ export default function WriteUpFormPage() {
       const payload = buildPayload()
       let savedId: number
       if (isEdit) {
-        await writeupService.updateWriteUp(Number(id), payload as any)
+        await writeupService.updateWriteUp(Number(id), payload)
         savedId = Number(id)
       } else {
-        const result = await writeupService.createWriteUp(payload as any)
+        const result = await writeupService.createWriteUp(payload)
         savedId = result.id
       }
       if (form.attachment_files.length > 0) {
@@ -213,6 +216,10 @@ export default function WriteUpFormPage() {
   const showMeetingNotes = isEdit && existing?.status === 'DELIVERED'
 
   const LOCKED_STATUSES = ['AWAITING_SIGNATURE', 'SIGNED', 'FOLLOW_UP_PENDING', 'CLOSED']
+
+  if (isEdit && isLoadingEdit) {
+    return <QualityListPage><TableLoadingSkeleton rows={8} /></QualityListPage>
+  }
 
   if (isEdit && loadError) {
     return (

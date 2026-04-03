@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useForm, type FieldError } from 'react-hook-form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
+import { ROLE_IDS } from '@/hooks/useQualityRole'
 import { useToast } from '@/hooks/use-toast'
 import trainingService from '@/services/trainingService'
 import listService from '@/services/listService'
@@ -113,8 +114,8 @@ export default function CoachingSessionFormPage() {
       notes:                 s.notes ?? '',
       topic_ids:             s.topic_ids ?? [],
       required_action:       s.required_action ?? '',
-      kb_resource_ids:       (s.kb_resources ?? []).map((r: any) => r.id),
-      quiz_ids:              (s.quizzes ?? []).map((q: any) => q.id),
+      kb_resource_ids:       (s.kb_resources ?? []).map(r => r.id),
+      quiz_ids:              (s.quizzes ?? []).map(q => q.id),
       require_acknowledgment: s.require_acknowledgment !== undefined ? !!s.require_acknowledgment : true,
       require_action_plan:    s.require_action_plan    !== undefined ? !!s.require_action_plan    : true,
       due_date:               s.due_date?.slice(0, 10)       ?? '',
@@ -197,7 +198,7 @@ export default function CoachingSessionFormPage() {
       toast({ title: edited ? 'Session saved' : (count > 1 ? `${count} draft sessions created` : 'Draft saved') })
       navigate('/app/training/coaching')
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       if (err?.message !== 'validation')
         toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
     },
@@ -236,7 +237,7 @@ export default function CoachingSessionFormPage() {
         navigate(singleId ? `/app/training/coaching/${singleId}` : '/app/training/coaching')
       }
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       if (err?.message !== 'validation')
         toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
     },
@@ -275,7 +276,7 @@ export default function CoachingSessionFormPage() {
             quizzes={quizzes} topicIdMap={topicIdMap} update={update}
           />
           <AccountabilitySection form={form} errors={errors} update={update} />
-          {[1, 4, 5].includes(user?.role_id ?? 0) && (
+          {[ROLE_IDS.ADMIN, ROLE_IDS.TRAINER, ROLE_IDS.MANAGER].includes(user?.role_id ?? 0) && (
             <InternalNotesSection form={form} flagItems={flagItems} update={update} />
           )}
           <AttachmentSection

@@ -49,11 +49,8 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(null);
       setIsAuthenticated(false);
       
-      // Show user notification
-      alert('Your session has expired. Please log in again.');
-      
-      // Redirect to login page
-      window.location.href = '/login';
+      // Redirect to login with expired flag so the login page can surface a message
+      window.location.replace('/login?expired=1');
     }, logoutTime);
     
     setSessionTimeoutId(timeoutId);
