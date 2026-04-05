@@ -162,6 +162,33 @@ export const ROUTE_CONFIG: RouteConfig[] = [
     icon: HiOutlineChatAlt,
     category: 'admin',
   },
+  {
+    id: 'admin-insights-kpis',
+    path: '/admin/insights/kpis',
+    label: 'Insights KPIs',
+    description: 'Manage KPI registry',
+    permissions: { roles: [UserRole.ADMIN], requiresAuth: true },
+    icon: HiOutlineChartBar,
+    category: 'admin',
+  },
+  {
+    id: 'admin-insights-pages',
+    path: '/admin/insights/pages',
+    label: 'Insights Pages',
+    description: 'Manage page access control',
+    permissions: { roles: [UserRole.ADMIN], requiresAuth: true },
+    icon: HiOutlineDocumentText,
+    category: 'admin',
+  },
+  {
+    id: 'admin-insights-ingestion',
+    path: '/admin/insights/ingestion',
+    label: 'Ingestion Log',
+    description: 'Pipeline run history',
+    permissions: { roles: [UserRole.ADMIN], requiresAuth: true },
+    icon: HiOutlineCog,
+    category: 'admin',
+  },
 
   // QA routes
   {

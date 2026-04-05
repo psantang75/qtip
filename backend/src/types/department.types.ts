@@ -6,6 +6,7 @@ export interface Department {
   id: number;
   department_name: string;
   is_active: boolean;
+  parent_id?: number | null;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -23,16 +24,19 @@ export interface DepartmentManager {
 export interface DepartmentWithDetails extends Department {
   managers: DepartmentManager[];
   user_count: number;
+  parent_name?: string | null;
 }
 
 export interface DepartmentCreateRequest {
   department_name: string;
   manager_ids?: number[];
+  parent_id?: number | null;
 }
 
 export interface DepartmentUpdateRequest {
   department_name?: string;
   manager_ids?: number[];
+  parent_id?: number | null;
 }
 
 export interface DepartmentManagerAssignmentRequest {

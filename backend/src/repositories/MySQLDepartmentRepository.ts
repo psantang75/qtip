@@ -55,6 +55,7 @@ export class MySQLDepartmentRepository {
           where,
           include: {
             users: { where: { is_active: true }, select: { id: true } },
+            parent: { select: { id: true, department_name: true } },
           },
           orderBy: { department_name: 'asc' },
           skip: offset,
@@ -69,6 +70,8 @@ export class MySQLDepartmentRepository {
             id: dept.id,
             department_name: dept.department_name,
             is_active: dept.is_active,
+            parent_id: dept.parent_id ?? null,
+            parent_name: (dept as any).parent?.department_name ?? null,
             user_count: dept.users.length,
             managers,
           } as DepartmentWithDetails;
@@ -95,6 +98,7 @@ export class MySQLDepartmentRepository {
         where: { id },
         include: {
           users: { where: { is_active: true }, select: { id: true } },
+          parent: { select: { id: true, department_name: true } },
         },
       });
 
@@ -110,6 +114,8 @@ export class MySQLDepartmentRepository {
         id: dept.id,
         department_name: dept.department_name,
         is_active: dept.is_active,
+        parent_id: dept.parent_id ?? null,
+        parent_name: dept.parent?.department_name ?? null,
         user_count: dept.users.length,
         managers,
       } as DepartmentWithDetails;
@@ -133,7 +139,10 @@ export class MySQLDepartmentRepository {
     try {
       await prisma.$transaction(async (tx) => {
         const dept = await tx.department.create({
-          data: { department_name: departmentData.department_name },
+          data: {
+            department_name: departmentData.department_name,
+            parent_id: (departmentData as any).parent_id ?? null,
+          },
         });
 
         if (departmentData.manager_ids && departmentData.manager_ids.length > 0) {
@@ -178,11 +187,15 @@ export class MySQLDepartmentRepository {
       if (!currentDepartment) throw new Error('Department not found');
 
       await prisma.$transaction(async (tx) => {
+        const updateData: Record<string, any> = {};
         if (departmentData.department_name !== undefined) {
-          await tx.department.update({
-            where: { id },
-            data: { department_name: departmentData.department_name },
-          });
+          updateData.department_name = departmentData.department_name;
+        }
+        if ((departmentData as any).parent_id !== undefined) {
+          updateData.parent_id = (departmentData as any).parent_id;
+        }
+        if (Object.keys(updateData).length > 0) {
+          await tx.department.update({ where: { id }, data: updateData });
         }
 
         if (departmentData.manager_ids !== undefined) {

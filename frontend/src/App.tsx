@@ -21,6 +21,9 @@ import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage'
 import AdminRolesPage       from './pages/admin/AdminRolesPage'
 import ProfilePage          from './pages/admin/ProfilePage'
 import ListManagementPage   from './pages/admin/ListManagementPage'
+import InsightsKpiManagementPage  from './pages/admin/InsightsKpiManagementPage'
+import InsightsPageManagementPage from './pages/admin/InsightsPageManagementPage'
+import InsightsIngestionLogPage   from './pages/admin/InsightsIngestionLogPage'
 
 // Lazy-loaded page components
 const FormsPage             = React.lazy(() => import('./pages/quality/FormsPage'))
@@ -181,6 +184,9 @@ export default function App() {
                 <Route path="departments"      element={<AdminDepartmentsPage />} />
                 <Route path="roles"            element={<AdminRolesPage />} />
                 <Route path="list-management"  element={<ListManagementPage />} />
+                <Route path="insights/kpis"       element={<InsightsKpiManagementPage />} />
+                <Route path="insights/pages"      element={<InsightsPageManagementPage />} />
+                <Route path="insights/ingestion"  element={<InsightsIngestionLogPage />} />
               </Route>
 
               <Route element={<AppShell />}>

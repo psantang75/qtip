@@ -19,17 +19,21 @@ export interface Department {
   managers: DepartmentManager[];
   user_count: number;
   is_active: boolean;
+  parent_id: number | null;
+  parent_name: string | null;
   created_at: string;
 }
 
 export interface DepartmentCreateDTO {
   department_name: string;
   manager_ids?: number[];
+  parent_id?: number | null;
 }
 
 export interface DepartmentUpdateDTO {
   department_name?: string;
   manager_ids?: number[];
+  parent_id?: number | null;
 }
 
 export interface DepartmentFilters {
@@ -111,6 +115,11 @@ const departmentService = {
 
   getDepartmentManagers: async (departmentId: number): Promise<DepartmentManager[]> => {
     const response = await api.get(`/departments/${departmentId}/managers`)
+    return response.data
+  },
+
+  getDepartmentDescendants: async (departmentId: number): Promise<number[]> => {
+    const response = await api.get(`/departments/${departmentId}/descendants`)
     return response.data
   },
 }

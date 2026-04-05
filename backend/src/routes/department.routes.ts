@@ -9,7 +9,8 @@ import {
   toggleDepartmentStatus,
   deleteDepartment,
   assignUsers,
-  getAssignableUsers
+  getAssignableUsers,
+  getDepartmentDescendants
 } from '../controllers/department.controller';
 
 const router = Router();
@@ -27,6 +28,13 @@ router.get('/users/assignable',
   authenticate as unknown as RequestHandler,
   authorizeAdmin as unknown as RequestHandler,
   getAssignableUsers as unknown as RequestHandler
+);
+
+// Get descendant IDs for circular reference prevention
+router.get('/:id/descendants',
+  authenticate as unknown as RequestHandler,
+  authorizeAdmin as unknown as RequestHandler,
+  getDepartmentDescendants as unknown as RequestHandler
 );
 
 // Get a single department — authenticated users only

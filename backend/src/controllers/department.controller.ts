@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { DepartmentService, DepartmentServiceError } from '../services/DepartmentService';
 import { MySQLDepartmentRepository } from '../repositories/MySQLDepartmentRepository';
+import { getDescendantDepartmentIds } from '../utils/departmentHierarchy';
 
-// Initialize department service
 const departmentRepository = new MySQLDepartmentRepository();
 const departmentService = new DepartmentService(departmentRepository);
 
@@ -21,7 +21,8 @@ export const createDepartment = async (req: Request, res: Response) => {
 
     const departmentData = {
       department_name: req.body.department_name,
-      manager_ids: req.body.manager_ids || []
+      manager_ids: req.body.manager_ids || [],
+      parent_id: req.body.parent_id ?? null,
     };
 
     const newDepartment = await departmentService.createDepartment(departmentData, user_id);
@@ -100,9 +101,22 @@ export const updateDepartment = async (req: Request, res: Response) => {
     }
 
     const id = parseInt(req.params.id);
+    const parentId = req.body.parent_id;
+
+    if (parentId !== undefined && parentId !== null) {
+      if (parentId === id) {
+        return res.status(400).json({ message: 'A department cannot be its own parent' });
+      }
+      const descendants = await getDescendantDepartmentIds(id);
+      if (descendants.includes(parentId)) {
+        return res.status(400).json({ message: 'Cannot set parent to a child department (circular reference)' });
+      }
+    }
+
     const departmentData = {
       department_name: req.body.department_name,
-      manager_ids: req.body.manager_ids !== undefined ? req.body.manager_ids : undefined
+      manager_ids: req.body.manager_ids !== undefined ? req.body.manager_ids : undefined,
+      parent_id: parentId !== undefined ? parentId : undefined,
     };
 
     const updatedDepartment = await departmentService.updateDepartment(id, departmentData, user_id);
@@ -216,5 +230,22 @@ export const getAssignableUsers = async (req: Request, res: Response) => {
     
     console.error('[DEPT CONTROLLER] Error in department service:', error);
     res.status(500).json({ message: 'Failed to fetch assignable users' });
+  }
+};
+
+/**
+ * Get descendant department IDs (for circular reference prevention)
+ * @route GET /api/departments/:id/descendants
+ */
+export const getDepartmentDescendants = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: 'Invalid department ID' });
+
+    const descendants = await getDescendantDepartmentIds(id);
+    res.status(200).json(descendants);
+  } catch (error) {
+    console.error('[DEPT CONTROLLER] Error getting descendants:', error);
+    res.status(500).json({ message: 'Failed to get department descendants' });
   }
 }; 

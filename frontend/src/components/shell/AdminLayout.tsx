@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Users, Building2, ShieldCheck, List } from 'lucide-react'
+import { Users, Building2, ShieldCheck, List, BarChart3, FileText, Activity } from 'lucide-react'
 import TopBar from './TopBar'
 import { cn } from '@/lib/utils'
 
@@ -8,6 +8,12 @@ const ADMIN_NAV = [
   { label: 'Departments',     path: '/app/admin/departments',      icon: Building2 },
   { label: 'Roles',           path: '/app/admin/roles',            icon: ShieldCheck },
   { label: 'List Management', path: '/app/admin/list-management',  icon: List },
+]
+
+const INSIGHTS_NAV = [
+  { label: 'KPIs',            path: '/app/admin/insights/kpis',       icon: BarChart3 },
+  { label: 'Pages & Access',  path: '/app/admin/insights/pages',      icon: FileText },
+  { label: 'Ingestion Log',   path: '/app/admin/insights/ingestion',  icon: Activity },
 ]
 
 const ACTIVE   = 'border-l-[3px] border-l-primary bg-primary/[0.08] text-primary font-semibold'
@@ -28,8 +34,29 @@ export default function AdminLayout() {
               Administration
             </span>
           </div>
-          <nav className="flex-1 px-2 pb-4 space-y-0.5">
+          <nav className="flex-1 px-2 pb-4 space-y-0.5 overflow-y-auto">
             {ADMIN_NAV.map(({ label, path, icon: Icon }) => (
+              <NavLink
+                key={path}
+                to={path}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-2.5 px-3 py-2.5 rounded-r-md text-[14px] transition-colors',
+                    isActive ? ACTIVE : INACTIVE,
+                  )
+                }
+              >
+                <Icon size={16} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
+
+            <div className="pt-4 pb-1 px-3">
+              <span className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
+                Insights Engine
+              </span>
+            </div>
+            {INSIGHTS_NAV.map(({ label, path, icon: Icon }) => (
               <NavLink
                 key={path}
                 to={path}

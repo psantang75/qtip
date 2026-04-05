@@ -59,6 +59,7 @@ const deptSchema = z.object({
   department_name: z.string().min(2, 'Min 2 characters'),
   manager_ids:     z.array(z.number()).optional(),
   is_active:       z.boolean().optional(),
+  parent_id:       z.number().nullable().optional(),
 })
 
 type FormValues = z.infer<typeof deptSchema>
@@ -123,7 +124,7 @@ export default function AdminDepartmentsPage() {
   // ── Form ─────────────────────────────────────────────────────────────────
   const form = useForm<FormValues>({
     resolver: zodResolver(deptSchema),
-    defaultValues: { department_name: '', manager_ids: [] },
+    defaultValues: { department_name: '', manager_ids: [], parent_id: null },
   })
 
   const selectedIds = form.watch('manager_ids') ?? []
@@ -134,6 +135,7 @@ export default function AdminDepartmentsPage() {
       departmentService.createDepartment({
         department_name: v.department_name,
         manager_ids:     v.manager_ids ?? [],
+        parent_id:       v.parent_id ?? null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-departments'] })
@@ -145,10 +147,10 @@ export default function AdminDepartmentsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (v: FormValues) => {
-      // Update name and managers
       await departmentService.updateDepartment(editDept!.id, {
         department_name: v.department_name,
         manager_ids:     v.manager_ids ?? [],
+        parent_id:       v.parent_id ?? null,
       })
       // Toggle active status only if it changed
       const newActive = v.is_active ?? editDept!.is_active
@@ -175,7 +177,7 @@ export default function AdminDepartmentsPage() {
   function openCreate() {
     setEditDept(null)
     setApiError(null)
-    form.reset({ department_name: '', manager_ids: [], is_active: true })
+    form.reset({ department_name: '', manager_ids: [], is_active: true, parent_id: null })
     setSheetOpen(true)
   }
 
@@ -190,6 +192,7 @@ export default function AdminDepartmentsPage() {
       department_name: d.department_name ?? '',
       manager_ids: managerIds,
       is_active: d.is_active,
+      parent_id: d.parent_id ?? null,
     })
     setSheetOpen(true)
   }
@@ -288,6 +291,7 @@ export default function AdminDepartmentsPage() {
           <TableHeader>
             <StandardTableHeaderRow>
               <DeptSortHead field="department_name" sortField={sortField} sortDir={sortDir} onSort={deptSort}>Department</DeptSortHead>
+              <TableHead className="py-4">Parent</TableHead>
               <TableHead className="py-4">Users</TableHead>
               <TableHead className="py-4">Managers</TableHead>
               <DeptSortHead field="is_active" sortField={sortField} sortDir={sortDir} onSort={deptSort}>Status</DeptSortHead>
@@ -297,17 +301,20 @@ export default function AdminDepartmentsPage() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">Loading…</TableCell>
+                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">Loading…</TableCell>
               </TableRow>
             ) : isError ? (
-              <TableRow><TableCell colSpan={5} className="py-4"><TableErrorState message="Failed to load departments." onRetry={refetch} /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="py-4"><TableErrorState message="Failed to load departments." onRetry={refetch} /></TableCell></TableRow>
             ) : departments.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No departments found</TableCell>
+                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No departments found</TableCell>
               </TableRow>
             ) : departments.map(d => (
               <TableRow key={d.id} className="hover:bg-slate-50/50">
                 <TableCell className="font-medium text-[14px]">{d.department_name}</TableCell>
+                <TableCell className="text-[13px] text-slate-600">
+                  {d.parent_name ?? <span className="text-muted-foreground">—</span>}
+                </TableCell>
                 <TableCell className="text-[13px] text-slate-600">{d.user_count ?? 0}</TableCell>
                 <TableCell className="text-[13px] text-slate-600">
                   {d.managers && d.managers.length > 0
@@ -358,6 +365,33 @@ export default function AdminDepartmentsPage() {
                 <FormItem>
                   <FormLabel>Department Name</FormLabel>
                   <FormControl><Input placeholder="e.g. Customer Service" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="parent_id" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Parent Department</FormLabel>
+                  <Select
+                    value={field.value != null ? String(field.value) : '__none__'}
+                    onValueChange={(v) => field.onChange(v === '__none__' ? null : Number(v))}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="None (Top-Level Department)" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="__none__">None (Top-Level Department)</SelectItem>
+                      {allDepartments
+                        .filter(d => d.id !== editDept?.id)
+                        .map(d => (
+                          <SelectItem key={d.id} value={String(d.id)}>
+                            {d.department_name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )} />
