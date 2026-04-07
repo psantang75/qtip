@@ -75,22 +75,6 @@ class TrainerService {
   }
 
   /**
-   * Fetch trainee progress with pagination
-   * @param page Current page number
-   * @param pageSize Number of items per page
-   * @returns Promise with trainee progress and pagination info
-   */
-  async getTraineeProgress(page = 1, pageSize = 10): Promise<{
-    trainees: TraineeProgress[];
-    total: number;
-  }> {
-    const response = await apiClient.get('/trainer/enrollments', {
-      params: { page, pageSize }
-    });
-    return response.data;
-  }
-
-  /**
    * Create a new course
    * @param courseData Course data to create
    * @returns Promise with created course data

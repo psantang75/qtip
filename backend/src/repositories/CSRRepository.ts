@@ -215,29 +215,7 @@ export class CSRRepository {
   }
 
   static async getCSRTrainingStats(csr_id: number): Promise<{ completed: number; assigned: number }> {
-    const startTime = Date.now();
-
-    try {
-      const cached = cacheService.getCSRTrainingStats(csr_id);
-      if (cached) {
-        logger.debug('CSR training stats served from cache', { csr_id, duration: Date.now() - startTime });
-        return cached;
-      }
-
-      const [completedCount, assignedCount] = await prisma.$transaction([
-        prisma.enrollment.count({ where: { user_id: csr_id, status: 'COMPLETED' } }),
-        prisma.enrollment.count({ where: { user_id: csr_id } }),
-      ]);
-
-      const stats = { completed: completedCount, assigned: assignedCount };
-
-      cacheService.setCSRTrainingStats(csr_id, stats);
-      logger.debug('CSR training stats retrieved from database', { csr_id, stats, duration: Date.now() - startTime, cacheSet: true });
-      return stats;
-    } catch (error: any) {
-      logger.error('Error fetching CSR training stats', { csr_id, error: error.message, duration: Date.now() - startTime });
-      throw handleDatabaseError(error, { csr_id, operation: 'getCSRTrainingStats' });
-    }
+    return { completed: 0, assigned: 0 };
   }
 
   static invalidateCSRCache(csr_id: number): void {

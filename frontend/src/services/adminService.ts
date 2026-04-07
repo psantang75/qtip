@@ -54,7 +54,6 @@ export interface DashboardStats {
   };
   training: {
     activeCourses: number;
-    enrollments: number;
     completionRate: number;
   };
   disputes: {

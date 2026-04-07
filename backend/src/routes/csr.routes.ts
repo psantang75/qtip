@@ -14,16 +14,7 @@ import {
   finalizeSubmission
 } from '../controllers/csrAudit.controller';
 import { 
-  getTrainingCourses,
-  getTrainingSummary,
-  submitQuizAnswers,
-  updateCourseProgress,
-  completeCourse,
-  getCertificate,
-  getCertificates,
-  getCourseContentForCSR,
-  getLastViewedPosition,
-  updateLastViewedPosition
+  submitQuizAnswers
 } from '../controllers/csr.controller';
 import { 
   getCSRCoachingSessions,
@@ -128,28 +119,8 @@ router.put('/audits/:id/finalize',
   finalizeSubmission as unknown as RequestHandler
 );
 
-// Training
-router.get('/training/summary', getTrainingSummary as unknown as RequestHandler);
-router.get('/enrollments', getTrainingCourses as unknown as RequestHandler);
-
-// Course Content
-router.get('/courses/:course_id', getCourseContentForCSR as unknown as RequestHandler);
-router.get('/enrollments/:enrollment_id/course', getCourseContentForCSR as unknown as RequestHandler);
-
-// Position Tracking
-router.get('/enrollments/:enrollment_id/position', getLastViewedPosition as unknown as RequestHandler);
-router.put('/enrollments/:enrollment_id/position', updateLastViewedPosition as unknown as RequestHandler);
-
-// Course Progress and Completion
-router.put('/enrollments/:enrollment_id/progress', updateCourseProgress as unknown as RequestHandler);
-router.put('/enrollments/:enrollment_id/complete', completeCourse as unknown as RequestHandler);
-
 // Quiz
 router.post('/quizzes/:quiz_id/submit', submitQuizAnswers as unknown as RequestHandler);
-
-// Certificates
-router.get('/certificates', getCertificates as unknown as RequestHandler);
-router.get('/certificates/:certificate_id', getCertificate as unknown as RequestHandler);
 
 // Disputes
 router.get('/disputes/history', getDisputeHistory as unknown as RequestHandler);

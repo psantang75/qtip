@@ -2,10 +2,8 @@ import apiClient from './apiClient';
 import type { 
   ManagerStats, 
   TeamAudit, 
-  TeamTraining,
   ManagerDashboardData,
   PaginatedAudits,
-  PaginatedTraining,
   ManagerTeamAudit,
   ManagerTeamAuditDetails,
   PaginatedTeamAudits,
@@ -77,27 +75,6 @@ class ManagerService {
       params: { page, limit: pageSize }
     });
     return response.data;
-  }
-
-  /**
-   * Fetch team training progress with pagination
-   * @param page Current page number
-   * @param pageSize Number of items per page
-   * @returns Promise with team training and pagination info
-   */
-  async getTeamTraining(page = 1, pageSize = 5): Promise<PaginatedTraining> {
-    const response = await apiClient.get('/manager/enrollments', {
-      params: { page, pageSize }
-    });
-    
-    // Transform the response to match the expected interface
-    return {
-      training: response.data.data || [],
-      total: response.data.total || 0,
-      page: response.data.page || page,
-      pageSize: response.data.limit || pageSize,
-      totalPages: Math.ceil((response.data.total || 0) / pageSize)
-    };
   }
 
   /**

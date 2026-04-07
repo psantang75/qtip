@@ -1,10 +1,5 @@
 import express, { RequestHandler } from 'express';
 import {
-  getPublishedCourses,
-  getTrainingPaths,
-  getAssignmentTargets
-} from '../controllers/enrollment.controller';
-import {
   getFilterOptions,
   generateReport,
   exportReport,
@@ -77,16 +72,12 @@ const trainer = authorizeTrainer as unknown as RequestHandler;
 // Health check (no auth)
 router.get('/health', getTrainerHealthCheck as unknown as RequestHandler);
 
-// ─── Training / Enrollment ───────────────────────────────────────────────────
-router.get('/courses', auth, trainer, getPublishedCourses as unknown as RequestHandler);
-router.get('/paths', auth, trainer, getTrainingPaths as unknown as RequestHandler);
-router.get('/targets', auth, trainer, getAssignmentTargets as unknown as RequestHandler);
+// ─── Training Reports ────────────────────────────────────────────────────────
 router.get('/filters', auth, trainer, getFilterOptions as unknown as RequestHandler);
 router.post('/reports', auth, trainer, generateReport as unknown as RequestHandler);
 router.get('/export/:report_id', auth, trainer, exportReport as unknown as RequestHandler);
 router.get('/export/current', auth, trainer, exportReport as unknown as RequestHandler);
 router.get('/stats', auth, trainer, getTrainingStats as unknown as RequestHandler);
-router.get('/enrollments', auth, trainer, getTraineeProgress as unknown as RequestHandler);
 router.get('/team-csrs', auth, coaching, getTrainerTeamCSRs as unknown as RequestHandler);
 router.get('/dashboard-stats', auth, coaching, getTrainerDashboardStats as unknown as RequestHandler);
 router.get('/csr-activity', auth, coaching, getTrainerCSRActivity as unknown as RequestHandler);

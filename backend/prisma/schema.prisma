@@ -31,7 +31,6 @@ model Department {
   calls                         Call[]
   performance_goals             PerformanceGoal[]
   performance_goal_departments  PerformanceGoalDepartment[]
-  enrollments                   Enrollment[]
   agent_activity                AgentActivity[]
   metric_departments            MetricDepartment[]
   metric_thresholds             MetricThreshold[]
@@ -59,7 +58,6 @@ model User {
   manager        User?       @relation("UserManager", fields: [manager_id], references: [id], onDelete: SetNull)
   direct_reports User[]      @relation("UserManager")
 
-  training_paths_created                TrainingPath[]
   forms_created                         Form[]
   performance_goals_created             PerformanceGoal[]           @relation("GoalCreatedBy")
   performance_goals_updated             PerformanceGoal[]           @relation("GoalUpdatedBy")
@@ -69,7 +67,6 @@ model User {
   department_managers_mgr               DepartmentManager[]         @relation("DeptManagerMgr")
   department_managers_assigned          DepartmentManager[]         @relation("DeptManagerAssignedBy")
   courses_created                       Course[]
-  training_logs                         TrainingLog[]
   coaching_sessions_csr                 CoachingSession[]           @relation("CoachingCsr")
   coaching_sessions_created             CoachingSession[]           @relation("CoachingCreatedBy")
   calls                                 Call[]
@@ -82,8 +79,6 @@ model User {
   audit_assignments_created             AuditAssignment[]           @relation("AuditAssignmentCreatedBy")
   audit_assignments_qa                  AuditAssignment[]           @relation("AuditAssignmentQA")
   agent_activity                        AgentActivity[]
-  enrollments                           Enrollment[]
-  certificates                          Certificate[]
   report_definitions_created            ReportDefinition[]
   import_logs                           ImportLog[]
   alert_rules_created                   AlertRule[]
@@ -123,18 +118,6 @@ model ListItem {
   @@map("list_items")
 }
 
-model TrainingPath {
-  id         Int      @id @default(autoincrement())
-  path_name  String   @db.VarChar(100)
-  created_by Int
-  created_at DateTime @default(now()) @db.DateTime(0)
-
-  creator               User                 @relation(fields: [created_by], references: [id], onDelete: Cascade)
-  training_path_courses TrainingPathCourse[]
-  enrollments           Enrollment[]
-
-  @@map("training_paths")
-}
 
 model Form {
   id                Int                 @id @default(autoincrement())
@@ -375,42 +358,13 @@ model Course {
   created_at  DateTime @default(now()) @db.DateTime(0)
   is_draft    Boolean  @default(true) @db.TinyInt
 
-  creator               User                 @relation(fields: [created_by], references: [id], onDelete: Cascade)
-  training_path_courses TrainingPathCourse[]
-  training_logs         TrainingLog[]
-  quizzes               Quiz[]
-  enrollments           Enrollment[]
-  certificates          Certificate[]
-  course_pages          CoursePage[]
+  creator User    @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  quizzes Quiz[]
 
   @@map("courses")
 }
 
-model TrainingPathCourse {
-  id           Int @id @default(autoincrement())
-  path_id      Int
-  course_id    Int
-  course_order Int
 
-  path   TrainingPath @relation(fields: [path_id], references: [id], onDelete: Cascade)
-  course Course       @relation(fields: [course_id], references: [id], onDelete: Cascade)
-
-  @@map("training_path_courses")
-}
-
-model TrainingLog {
-  id         Int      @id @default(autoincrement())
-  user_id    Int
-  course_id  Int?
-  action     String   @db.VarChar(100)
-  details    String?  @db.Text
-  created_at DateTime @default(now()) @db.DateTime(0)
-
-  user   User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  course Course? @relation(fields: [course_id], references: [id], onDelete: SetNull)
-
-  @@map("training_logs")
-}
 
 model Quiz {
   id         Int     @id @default(autoincrement())
@@ -455,57 +409,8 @@ model QuizQuestion {
   @@map("quiz_questions")
 }
 
-model Enrollment {
-  id              Int                      @id @default(autoincrement())
-  course_id       Int?
-  user_id         Int?
-  status          EnrollmentStatus         @default(IN_PROGRESS)
-  progress        Decimal                  @default(0.00) @db.Decimal(5, 2)
-  due_date        DateTime?                @db.DateTime(0)
-  created_at      DateTime                 @default(now()) @db.DateTime(0)
-  path_id         Int?
-  department_id   Int?
-  assignment_type EnrollmentAssignmentType @default(COURSE)
-  target_type     EnrollmentTargetType     @default(USER)
 
-  course       Course?       @relation(fields: [course_id], references: [id], onDelete: Cascade)
-  user         User?         @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  path         TrainingPath? @relation(fields: [path_id], references: [id], onDelete: Cascade)
-  department   Department?   @relation(fields: [department_id], references: [id], onDelete: Cascade)
-  certificates Certificate[]
 
-  @@map("enrollments")
-}
-
-model Certificate {
-  id            Int       @id @default(autoincrement())
-  user_id       Int
-  course_id     Int
-  issue_date    DateTime  @default(now()) @db.DateTime(0)
-  expiry_date   DateTime? @db.DateTime(0)
-  enrollment_id Int?
-
-  user       User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  course     Course      @relation(fields: [course_id], references: [id], onDelete: Cascade)
-  enrollment Enrollment? @relation(fields: [enrollment_id], references: [id], onDelete: Cascade)
-
-  @@index([enrollment_id])
-  @@map("certificates")
-}
-
-model CoursePage {
-  id           Int                   @id @default(autoincrement())
-  course_id    Int
-  page_title   String                @db.VarChar(100)
-  content_type CoursePageContentType
-  content_url  String?               @db.VarChar(255)
-  content_text String?               @db.Text
-  page_order   Int
-
-  course Course @relation(fields: [course_id], references: [id], onDelete: Cascade)
-
-  @@map("course_pages")
-}
 
 model QuizAttempt {
   id                  Int              @id @default(autoincrement())
@@ -1544,26 +1449,6 @@ enum AuditAssignmentTargetType {
   DEPARTMENT
 }
 
-enum EnrollmentStatus {
-  IN_PROGRESS
-  COMPLETED
-}
-
-enum EnrollmentAssignmentType {
-  COURSE
-  TRAINING_PATH
-}
-
-enum EnrollmentTargetType {
-  USER
-  DEPARTMENT
-}
-
-enum CoursePageContentType {
-  TEXT
-  VIDEO
-  PDF
-}
 
 enum CoachingPurpose {
   WEEKLY

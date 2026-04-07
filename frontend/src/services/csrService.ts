@@ -1,5 +1,5 @@
 import apiClient from './apiClient';
-import type { CSRDashboardData, CSRAudit, CSRTrainingCourse, CSRAuditDetail, CSRDispute } from '../types/csr.types';
+import type { CSRDashboardData, CSRAudit, CSRAuditDetail, CSRDispute } from '../types/csr.types';
 
 // Base URL for all CSR endpoints - apiClient already adds /api prefix
 const BASE_URL = '';
@@ -155,19 +155,6 @@ export const isAuditDisputable = async (submissionId: number): Promise<boolean> 
     return response.data.disputable;
   } catch (error) {
     console.error('Error checking if audit is disputable:', error);
-    throw error;
-  }
-};
-
-// Fetch training courses for CSR
-export const fetchCSRTraining = async (): Promise<{
-  courses: CSRTrainingCourse[];
-}> => {
-  try {
-    const response = await apiClient.get(`${BASE_URL}/csr/enrollments`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching CSR training courses:', error);
     throw error;
   }
 };
