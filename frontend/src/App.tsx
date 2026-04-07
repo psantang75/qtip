@@ -58,6 +58,11 @@ const DataExplorerPage      = React.lazy(() => import('./pages/insights/DataExpl
 const ExportPage            = React.lazy(() => import('./pages/insights/ExportPage'))
 const ImportCenterPage      = React.lazy(() => import('./pages/insights/ImportCenterPage'))
 const ImportHistoryPage     = React.lazy(() => import('./pages/insights/ImportHistoryPage'))
+const QCOverviewPage        = React.lazy(() => import('./pages/insights/QCOverviewPage'))
+const QCQualityPage         = React.lazy(() => import('./pages/insights/QCQualityPage'))
+const QCCoachingPage        = React.lazy(() => import('./pages/insights/QCCoachingPage'))
+const QCWarningsPage        = React.lazy(() => import('./pages/insights/QCWarningsPage'))
+const QCAgentsPage          = React.lazy(() => import('./pages/insights/QCAgentsPage'))
 
 const NotFoundPage          = React.lazy(() => import('./pages/NotFoundPage'))
 
@@ -82,12 +87,12 @@ function RoleRedirect() {
   React.useEffect(() => {
     if (!user) return
     const destinations: Record<number, string> = {
-      [ROLE_IDS.ADMIN]:    '/app/insights/dashboard',
+      [ROLE_IDS.ADMIN]:    '/app/insights/qc-overview',
       [ROLE_IDS.QA]:       '/app/quality/submissions',
       [ROLE_IDS.CSR]:      '/app/quality/submissions',
       [ROLE_IDS.TRAINER]:  '/app/training/coaching',
       [ROLE_IDS.MANAGER]:  '/app/quality/submissions',
-      [ROLE_IDS.DIRECTOR]: '/app/insights/dashboard',
+      [ROLE_IDS.DIRECTOR]: '/app/insights/qc-overview',
     }
     const dest = destinations[user.role_id] ?? '/app/quality/submissions'
     navigate(dest, { replace: true })
@@ -277,7 +282,12 @@ export default function App() {
 
                 {/* Insights */}
                 <Route path="/app/insights">
-                  <Route index element={<Navigate to="dashboard" replace />} />
+                  <Route index element={<Navigate to="qc-overview" replace />} />
+                  <Route path="qc-overview" element={<PageLoader><QCOverviewPage /></PageLoader>} />
+                  <Route path="qc-quality"  element={<PageLoader><QCQualityPage /></PageLoader>} />
+                  <Route path="qc-coaching" element={<PageLoader><QCCoachingPage /></PageLoader>} />
+                  <Route path="qc-warnings" element={<PageLoader><QCWarningsPage /></PageLoader>} />
+                  <Route path="qc-agents"   element={<PageLoader><QCAgentsPage /></PageLoader>} />
                   <Route path="dashboard" element={<PageLoader><DashboardPage /></PageLoader>} />
                   <Route path="team"      element={<PageLoader><TeamDashboardPage /></PageLoader>} />
                   <Route path="builder"   element={<PageLoader><ReportBuilderPage /></PageLoader>} />
@@ -288,10 +298,10 @@ export default function App() {
                   <Route path="history"   element={<PageLoader><ImportHistoryPage /></PageLoader>} />
                 </Route>
 
-                {/* Analytics */}
+                {/* Analytics — legacy routes redirect to Insights equivalents */}
                 <Route path="/app/analytics">
-                  <Route index element={<Navigate to="quality" replace />} />
-                  <Route path="quality" element={<PageLoader><QualityAnalyticsPage /></PageLoader>} />
+                  <Route index element={<Navigate to="/app/insights/qc-quality" replace />} />
+                  <Route path="quality" element={<Navigate to="/app/insights/qc-quality" replace />} />
                 </Route>
 
                 {/* Profile — all authenticated users */}

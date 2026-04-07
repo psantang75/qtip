@@ -1,4 +1,4 @@
-export type NavSection = 'quality' | 'training' | 'writeups' | 'insights' | 'analytics'
+export type NavSection = 'quality' | 'training' | 'writeups' | 'insights'
 
 export interface NavItem {
   label: string
@@ -6,6 +6,7 @@ export interface NavItem {
   icon: string
   roles: number[]
   badge?: string
+  group?: string
 }
 
 export interface SectionConfig {
@@ -65,27 +66,21 @@ export const NAV_CONFIG: SectionConfig[] = [
     label: 'Insights',
     icon: 'BarChart2',
     color: '#00aeef',
-    defaultPath: '/app/insights/dashboard',
+    defaultPath: '/app/insights/qc-overview',
     items: [
-      { label: 'My Dashboard',      path: '/app/insights/dashboard',     icon: 'LayoutDashboard', roles: [1,2,3,4,5] },
-      { label: 'Team Dashboard',    path: '/app/insights/team',          icon: 'Users',           roles: [1,5]       },
-      { label: 'Training Reports',  path: '/app/training/reports',       icon: 'GraduationCap',   roles: [1,4,5]     },
-      { label: 'Report Builder',    path: '/app/insights/builder',       icon: 'PenSquare',       roles: [1]         },
-      { label: 'Saved Reports',     path: '/app/insights/reports',       icon: 'FileBarChart',    roles: [1,5]       },
-      { label: 'Data Explorer',     path: '/app/insights/explorer',      icon: 'Search',          roles: [1,5]       },
-      { label: 'Raw Export',        path: '/app/insights/export',        icon: 'Download',        roles: [1,3,5]     },
-      { label: 'Import Center',     path: '/app/insights/import',        icon: 'Upload',          roles: [1]         },
-      { label: 'Import History',    path: '/app/insights/history',       icon: 'History',         roles: [1]         },
-    ],
-  },
-  {
-    id: 'analytics',
-    label: 'Analytics',
-    icon: 'BarChart3',
-    color: '#00aeef',
-    defaultPath: '/app/analytics/quality',
-    items: [
-      { label: 'QA Analytics', path: '/app/analytics/quality', icon: 'BarChart3', roles: [1,2,5] },
+      // ── Quality, Coaching & Performance Warnings ──
+      { label: 'Overview',             path: '/app/insights/qc-overview', icon: 'LayoutDashboard', roles: [1,2,4,5], group: 'Quality, Coaching & Performance Warnings' },
+      { label: 'Quality Deep Dive',    path: '/app/insights/qc-quality',  icon: 'Target',          roles: [1,2,5],   group: 'Quality, Coaching & Performance Warnings' },
+      { label: 'Coaching',             path: '/app/insights/qc-coaching', icon: 'BookOpen',        roles: [1,2,4,5], group: 'Quality, Coaching & Performance Warnings' },
+      { label: 'Performance Warnings', path: '/app/insights/qc-warnings', icon: 'AlertTriangle',   roles: [1,2,5],   group: 'Quality, Coaching & Performance Warnings' },
+      { label: 'Agent Performance',    path: '/app/insights/qc-agents',   icon: 'Users',           roles: [1,2,4,5], group: 'Quality, Coaching & Performance Warnings' },
+      // ── Data Management ──
+      { label: 'Report Builder', path: '/app/insights/builder',  icon: 'PenSquare',    roles: [1],     group: 'Data Management' },
+      { label: 'Saved Reports',  path: '/app/insights/reports',  icon: 'FileBarChart', roles: [1,5],   group: 'Data Management' },
+      { label: 'Data Explorer',  path: '/app/insights/explorer', icon: 'Search',       roles: [1,5],   group: 'Data Management' },
+      { label: 'Raw Export',     path: '/app/insights/export',   icon: 'Download',     roles: [1,3,5], group: 'Data Management' },
+      { label: 'Import Center',  path: '/app/insights/import',   icon: 'Upload',       roles: [1],     group: 'Data Management' },
+      { label: 'Import History', path: '/app/insights/history',  icon: 'History',      roles: [1],     group: 'Data Management' },
     ],
   },
 ]
@@ -100,11 +95,11 @@ export function getNavItemsForRole(section: NavSection, roleId: number): NavItem
 }
 
 export function getSectionFromPath(pathname: string): NavSection | null {
-  if (pathname.startsWith('/app/quality')) return 'quality'
+  if (pathname.startsWith('/app/quality'))  return 'quality'
   if (pathname.startsWith('/app/training')) return 'training'
   if (pathname.startsWith('/app/writeups')) return 'writeups'
   if (pathname.startsWith('/app/insights')) return 'insights'
-  if (pathname.startsWith('/app/analytics')) return 'analytics'
+  if (pathname.startsWith('/app/analytics')) return 'insights' // legacy — shows insights sidebar
   return null
 }
 
