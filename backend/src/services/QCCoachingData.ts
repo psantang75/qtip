@@ -1,10 +1,7 @@
 import pool from '../config/database'
 import { RowDataPacket } from 'mysql2'
 import type { PeriodRanges } from '../utils/periodUtils'
-
-function fmt(d: Date): string {
-  return d.toISOString().slice(0, 19).replace('T', ' ')
-}
+import { fmtDatetime as fmt } from '../utils/dateHelpers'
 function deptClause(f: number[], alias = 'u'): { sql: string; params: number[] } {
   if (f.length === 0) return { sql: '', params: [] }
   return { sql: `AND ${alias}.department_id IN (${f.map(() => '?').join(',')})`, params: f }
@@ -23,11 +20,11 @@ export async function getCoachingTopicAgents(
        MAX(DATE_FORMAT(cs.session_date,'%b %d')) AS lastCoached,
        CASE WHEN COUNT(DISTINCT cs.id) >= 2 THEN 1 ELSE 0 END AS repeat_flag
      FROM coaching_session_topics cst
-     JOIN topics t  ON cst.topic_id = t.id
+     JOIN list_items li_t ON cst.topic_id = li_t.id
      JOIN coaching_sessions cs ON cst.coaching_session_id = cs.id
      JOIN users u ON cs.csr_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
-     WHERE t.topic_name = ? AND cs.created_at BETWEEN ? AND ? ${dc.sql}
+     WHERE li_t.label = ? AND cs.created_at BETWEEN ? AND ? ${dc.sql}
      GROUP BY u.id ORDER BY sessions DESC`,
     [topic, s, e, ...dc.params],
   )
@@ -51,12 +48,12 @@ export async function getRepeatCoachingAgentsWithTopics(
     `SELECT u.id AS userId, u.username AS name,
        COALESCE(d.department_name,'Unknown') AS dept,
        COUNT(DISTINCT cs.id) AS sessions,
-       COUNT(DISTINCT t.id) AS uniqueTopics
+       COUNT(DISTINCT li_t.id) AS uniqueTopics
      FROM coaching_sessions cs
      JOIN users u ON cs.csr_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
      LEFT JOIN coaching_session_topics cst ON cst.coaching_session_id = cs.id
-     LEFT JOIN topics t ON cst.topic_id = t.id
+     LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
      WHERE cs.created_at BETWEEN ? AND ? ${dc.sql}
      GROUP BY u.id HAVING sessions >= 3 ORDER BY sessions DESC LIMIT 10`,
     [s, e, ...dc.params],
@@ -66,12 +63,12 @@ export async function getRepeatCoachingAgentsWithTopics(
   const userIds = rows.map(r => r.userId as number)
   const ph      = userIds.map(() => '?').join(',')
   const [topicRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT cs.csr_id AS userId, t.topic_name AS topic, COUNT(*) AS cnt
+    `SELECT cs.csr_id AS userId, li_t.label AS topic, COUNT(*) AS cnt
      FROM coaching_session_topics cst
-     JOIN topics t ON cst.topic_id = t.id
+     JOIN list_items li_t ON cst.topic_id = li_t.id
      JOIN coaching_sessions cs ON cst.coaching_session_id = cs.id
      WHERE cs.csr_id IN (${ph}) AND cs.created_at BETWEEN ? AND ?
-     GROUP BY cs.csr_id, t.id ORDER BY cs.csr_id, cnt DESC`,
+     GROUP BY cs.csr_id, li_t.id ORDER BY cs.csr_id, cnt DESC`,
     [...userIds, s, e],
   )
 
@@ -93,6 +90,131 @@ export async function getRepeatCoachingAgentsWithTopics(
       uniqueTopics: parseInt(r.uniqueTopics, 10),
       repeatTopics,
       topics,
+    }
+  })
+}
+
+/** Coaching sessions grouped by status with agent details */
+export async function getSessionsByStatus(deptFilter: number[], ranges: PeriodRanges) {
+  const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
+  const dc = deptClause(deptFilter, 'u')
+
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT cs.status,
+       u.id AS userId, u.username AS name,
+       COALESCE(d.department_name,'Unknown') AS dept,
+       cs.coaching_purpose AS purpose,
+       cs.coaching_format AS format,
+       COUNT(*) AS sessions
+     FROM coaching_sessions cs
+     JOIN users u ON cs.csr_id = u.id
+     LEFT JOIN departments d ON u.department_id = d.id
+     WHERE cs.session_date BETWEEN ? AND ? ${dc.sql}
+     GROUP BY cs.status, u.id, cs.coaching_purpose, cs.coaching_format
+     ORDER BY cs.status, sessions DESC`,
+    [s, e, ...dc.params],
+  )
+
+  const [topicRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT cs.status, cs.csr_id AS userId, li_t.label AS topic
+     FROM coaching_sessions cs
+     JOIN coaching_session_topics cst ON cst.coaching_session_id = cs.id
+     JOIN list_items li_t ON cst.topic_id = li_t.id
+     JOIN users u ON cs.csr_id = u.id
+     WHERE cs.session_date BETWEEN ? AND ? ${dc.sql}
+     GROUP BY cs.status, cs.csr_id, li_t.id`,
+    [s, e, ...dc.params],
+  )
+
+  type AgentEntry = { userId: number; name: string; dept: string; purpose: string; format: string; sessions: number; topics: string[] }
+  type StatusEntry = { count: number; agents: AgentEntry[]; topics: Set<string> }
+  const statusMap = new Map<string, StatusEntry>()
+
+  for (const r of rows) {
+    const status = r.status as string
+    const entry = statusMap.get(status) ?? { count: 0, agents: [], topics: new Set() }
+    const sess = parseInt(r.sessions, 10)
+    entry.count += sess
+    entry.agents.push({
+      userId: r.userId as number, name: r.name as string, dept: r.dept as string,
+      purpose: r.purpose as string, format: r.format as string, sessions: sess, topics: [],
+    })
+    statusMap.set(status, entry)
+  }
+
+  for (const tr of topicRows) {
+    const status = tr.status as string
+    const topic = tr.topic as string
+    const userId = tr.userId as number
+    const entry = statusMap.get(status)
+    if (!entry) continue
+    entry.topics.add(topic)
+    const agent = entry.agents.find(a => a.userId === userId)
+    if (agent && !agent.topics.includes(topic)) agent.topics.push(topic)
+  }
+
+  return Array.from(statusMap.entries()).map(([status, data]) => ({
+    status,
+    count: data.count,
+    topics: Array.from(data.topics),
+    agents: data.agents,
+  }))
+}
+
+/** Quiz breakdown with per-agent results for the expandable detail view */
+export async function getQuizBreakdownWithAgents(deptFilter: number[], ranges: PeriodRanges) {
+  const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
+  const dc = deptClause(deptFilter, 'u')
+
+  const [quizRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT qz.id AS quizId, qz.quiz_title AS quiz, COUNT(qa.id) AS attempts,
+       SUM(qa.passed) AS passed, AVG(qa.score) AS avgScore
+     FROM quiz_attempts qa
+     JOIN quizzes qz ON qa.quiz_id = qz.id
+     JOIN users u ON qa.user_id = u.id
+     WHERE qa.submitted_at BETWEEN ? AND ? ${dc.sql}
+     GROUP BY qz.id, qz.quiz_title ORDER BY attempts DESC`,
+    [s, e, ...dc.params],
+  )
+
+  if (quizRows.length === 0) return []
+
+  const quizIds = quizRows.map(r => r.quizId as number)
+  const ph = quizIds.map(() => '?').join(',')
+  const [agentRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT qa.quiz_id AS quizId, u.id AS userId, u.username AS name,
+       COALESCE(d.department_name,'Unknown') AS dept,
+       MAX(qa.score) AS bestScore, MAX(qa.passed) AS passed, COUNT(*) AS attempts
+     FROM quiz_attempts qa
+     JOIN users u ON qa.user_id = u.id
+     LEFT JOIN departments d ON u.department_id = d.id
+     WHERE qa.quiz_id IN (${ph}) AND qa.submitted_at BETWEEN ? AND ? ${dc.sql}
+     GROUP BY qa.quiz_id, u.id
+     ORDER BY qa.quiz_id, passed ASC, bestScore ASC`,
+    [...quizIds, s, e, ...dc.params],
+  )
+
+  const agentMap = new Map<number, Array<{ userId: number; name: string; dept: string; score: number; passed: boolean; attempts: number }>>()
+  for (const r of agentRows) {
+    const qid = r.quizId as number
+    const list = agentMap.get(qid) ?? []
+    list.push({
+      userId: r.userId as number, name: r.name as string, dept: r.dept as string,
+      score: parseFloat(r.bestScore), passed: Boolean(r.passed), attempts: parseInt(r.attempts, 10),
+    })
+    agentMap.set(qid, list)
+  }
+
+  return quizRows.map(r => {
+    const att = parseInt(r.attempts, 10)
+    const pass = parseInt(r.passed ?? '0', 10)
+    return {
+      quiz: r.quiz as string,
+      attempts: att,
+      passed: pass,
+      avgScore: r.avgScore != null ? parseFloat(r.avgScore) : null,
+      passRate: att > 0 ? Math.round((pass / att) * 1000) / 10 : 0,
+      agents: agentMap.get(r.quizId as number) ?? [],
     }
   })
 }

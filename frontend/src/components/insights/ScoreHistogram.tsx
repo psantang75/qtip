@@ -1,10 +1,11 @@
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 interface Bucket { bucket: string; count: number }
 
 interface ScoreHistogramProps {
   data: Bucket[]
-  goalScore?: number   // score threshold — buckets at/above this score get brand color
+  goalScore?: number
 }
 
 function bucketMin(bucket: string): number {
@@ -13,12 +14,19 @@ function bucketMin(bucket: string): number {
 }
 
 export default function ScoreHistogram({ data, goalScore = 90 }: ScoreHistogramProps) {
-  const maxCount = Math.max(...data.map(d => d.count), 1)
-  const total    = data.reduce((s, d) => s + d.count, 0)
+  const sorted   = [...data].sort((a, b) => bucketMin(a.bucket) - bucketMin(b.bucket))
+  const maxCount = Math.max(...sorted.map(d => d.count), 1)
+  const total    = sorted.reduce((s, d) => s + d.count, 0)
+
+  const [animate, setAnimate] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setAnimate(true))
+    return () => { cancelAnimationFrame(id); setAnimate(false) }
+  }, [data])
 
   return (
     <div className="space-y-1.5">
-      {data.map(bucket => {
+      {sorted.map((bucket, i) => {
         const pct      = (bucket.count / maxCount) * 100
         const isAbove  = bucketMin(bucket.bucket) >= goalScore
         const sharePct = total > 0 ? Math.round((bucket.count / total) * 100) : 0
@@ -28,8 +36,8 @@ export default function ScoreHistogram({ data, goalScore = 90 }: ScoreHistogramP
             <span className="w-14 shrink-0 text-right text-slate-500 font-mono">{bucket.bucket}</span>
             <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden">
               <div
-                className={cn('h-full rounded-full transition-all', isAbove ? 'bg-[#00aeef]/70' : 'bg-slate-300')}
-                style={{ width: `${pct}%` }}
+                className={cn('h-full rounded-full transition-all duration-700 ease-out', isAbove ? 'bg-[#00aeef]/70' : 'bg-slate-300')}
+                style={{ width: animate ? `${pct}%` : '0%', transitionDelay: `${i * 60}ms` }}
               />
             </div>
             <span className="w-10 text-right text-slate-600 shrink-0">{bucket.count}</span>
@@ -44,7 +52,7 @@ export default function ScoreHistogram({ data, goalScore = 90 }: ScoreHistogramP
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-2 rounded bg-slate-300" /> &lt; {goalScore}
         </span>
-        <span className="ml-auto">n = {total}</span>
+        <span className="ml-auto">Total: {total}</span>
       </div>
     </div>
   )

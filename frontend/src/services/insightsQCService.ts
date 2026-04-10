@@ -13,7 +13,8 @@ export interface QCParams {
 // ── Response types ────────────────────────────────────────────────────────────
 
 export type KpiValues = Record<string, number | null>
-export interface QCKpiResponse  { current: KpiValues; prior: KpiValues }
+export interface KpiMeta       { businessDays: number; paceTarget: number | null }
+export interface QCKpiResponse { current: KpiValues; prior: KpiValues; meta: KpiMeta; priorMeta: KpiMeta }
 export type TrendRow            = Record<string, number | string | null>
 
 export interface AgentSummary {
@@ -37,9 +38,9 @@ export interface AgentProfile {
 }
 
 export interface ScoreBucket    { bucket: string; count: number }
-export interface CategoryScore  { category: string; audits: number; avgScore: number | null }
-export interface MissedQuestionAgent { userId: number; name: string; dept: string }
-export interface MissedQuestion { questionId: number; question: string; form: string; missRate: number; agents: MissedQuestionAgent[] }
+export interface CategoryScore  { category: string; form: string; audits: number; avgScore: number | null; priorScore: number | null }
+export interface MissedQuestionAgent { userId: number; name: string; dept: string; missed: number; total: number }
+export interface MissedQuestion { questionId: number; question: string; form: string; missRate: number; missed: number; total: number; agents: MissedQuestionAgent[] }
 export interface FormScore { id: number; form: string; submissions: number; avgScore: number | null }
 export interface DeptQualityRow { dept: string; audits: number; avgScore: number | null; disputes: number }
 
@@ -48,7 +49,10 @@ export interface CoachingTopicAgent   { userId: number; name: string; dept: stri
 export interface RepeatOffenderTopic  { topic: string; count: number }
 export interface RepeatOffender       { userId: number; name: string; dept: string; sessions: number; uniqueTopics: number; repeatTopics: number; topics: RepeatOffenderTopic[] }
 export interface AgentFailedQuizzes   { userId: number; name: string; dept: string; failed: number; quizzes: string[]; avgScore: number | null }
-export interface QuizBreakdown        { quiz: string; attempts: number; passed: number; avgScore: number | null; passRate: number }
+export interface QuizAgentResult       { userId: number; name: string; dept: string; score: number; passed: boolean; attempts: number }
+export interface QuizBreakdown        { quiz: string; attempts: number; passed: number; avgScore: number | null; passRate: number; agents?: QuizAgentResult[] }
+export interface SessionStatusAgent    { userId: number; name: string; dept: string; purpose: string; format: string; sessions: number; topics: string[] }
+export interface SessionStatusGroup   { status: string; count: number; topics: string[]; agents: SessionStatusAgent[] }
 export interface DeptCoachingRow      { dept: string; sessions: number; completed: number; avgDays: number | null }
 
 export interface WriteUpPipeline {
@@ -64,7 +68,12 @@ export interface PolicyViolationAgent { userId: number; name: string; dept: stri
 export interface PolicyViolation { policy: string; count: number; agentCount: number; agentDetails: PolicyViolationAgent[] }
 export interface DeptWarningsRow { dept: string; writeups: number; closed: number; resolutionRate: number }
 
+export interface FilterOptions { departments: string[]; forms: string[] }
+
 // ── API functions ─────────────────────────────────────────────────────────────
+
+export const getFilterOptions = async (p: QCParams): Promise<FilterOptions> =>
+  (await api.get('/insights/qc/filter-options', { params: p })).data
 
 export const getQCKpis = async (p: QCParams): Promise<QCKpiResponse> =>
   (await api.get('/insights/qc/kpis', { params: p })).data
@@ -107,6 +116,9 @@ export const getAgentsFailedQuizzes = async (p: QCParams): Promise<AgentFailedQu
 
 export const getQuizBreakdown = async (p: QCParams): Promise<QuizBreakdown[]> =>
   (await api.get('/insights/qc/coaching/quizzes', { params: p })).data
+
+export const getSessionsByStatus = async (p: QCParams): Promise<SessionStatusGroup[]> =>
+  (await api.get('/insights/qc/coaching/sessions-by-status', { params: p })).data
 
 export const getCoachingDeptComparison = async (p: QCParams): Promise<DeptCoachingRow[]> =>
   (await api.get('/insights/qc/coaching/dept-comparison', { params: p })).data

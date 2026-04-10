@@ -1,13 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { InsightsFilterBar, InsightsSection, KpiTile, StatRow, StatusBadge, ExpandableRow, QCPageSkeleton, ErrorCard } from '@/components/insights'
 import { useQCFilters } from '@/hooks/useQCFilters'
+import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
 import {
   getQCKpis, getWriteUpPipeline, getActiveWriteUps,
   getEscalationData, getPolicyViolations, getWarningsDeptComparison,
 } from '@/services/insightsQCService'
-import departmentService from '@/services/departmentService'
 
 const TYPE_LABEL: Record<string, string> = { VERBAL_WARNING: 'Verbal', WRITTEN_WARNING: 'Written', FINAL_WARNING: 'Final' }
 const TYPE_COLOR: Record<string, string> = { VERBAL_WARNING: 'text-yellow-600 bg-yellow-50 border-yellow-200', WRITTEN_WARNING: 'text-orange-600 bg-orange-50 border-orange-200', FINAL_WARNING: 'text-red-600 bg-red-50 border-red-200' }
@@ -25,18 +25,13 @@ function fmt(v: number | null | undefined, suffix = ''): string {
 export default function QCWarningsPage() {
   const navigate = useNavigate()
   const { departments, setDepartments, period, setPeriod,
-          customStart, setCustomStart, customEnd, setCustomEnd, params } = useQCFilters()
+          customStart, setCustomStart, customEnd, setCustomEnd,
+          resetFilters, params } = useQCFilters()
   const [expandedPolicy, setExpandedPolicy] = useState<string | null>(null)
 
-  const { data: deptsData } = useQuery({ queryKey: ['dept-list-filter'], queryFn: () => departmentService.getDepartments(1, 100, { is_active: true }), staleTime: 10 * 60 * 1000 })
-  const deptOptions = deptsData?.items.map(d => d.department_name) ?? []
-  const nameToId    = useMemo(() => Object.fromEntries((deptsData?.items ?? []).map(d => [d.department_name, d.id])), [deptsData])
+  const apiParams = useMemo(() => ({ ...params }), [params])
 
-  const apiParams = useMemo(() => ({
-    ...params,
-    departments: departments.length ? departments.map(n => nameToId[n]).filter(Boolean).join(',') : undefined,
-  }), [params, departments, nameToId])
-
+  const { data: kpiConfig } = useKpiConfig()
   const { data: kpiData, isLoading, isError, refetch } = useQuery({ queryKey: ['qc-kpis', apiParams], queryFn: () => getQCKpis(apiParams) })
   const { data: pipeline }      = useQuery({ queryKey: ['qc-pipeline', apiParams],        queryFn: () => getWriteUpPipeline(apiParams) })
   const { data: activeWUs = []} = useQuery({ queryKey: ['qc-active-wu', apiParams],       queryFn: () => getActiveWriteUps(apiParams) })
@@ -44,8 +39,10 @@ export default function QCWarningsPage() {
   const { data: policies = [] } = useQuery({ queryKey: ['qc-policies', apiParams],        queryFn: () => getPolicyViolations(apiParams) })
   const { data: deptComp = [] } = useQuery({ queryKey: ['qc-warn-dept', apiParams],       queryFn: () => getWarningsDeptComparison(apiParams) })
 
-  const cur = kpiData?.current ?? {}
-  const prv = kpiData?.prior   ?? {}
+  const cur       = kpiData?.current   ?? {}
+  const prv       = kpiData?.prior     ?? {}
+  const meta      = kpiData?.meta
+  const priorMeta = kpiData?.priorMeta
 
   const byStatus   = pipeline?.byStatus ?? {}
   const byType     = pipeline?.byType   ?? {}
@@ -54,6 +51,12 @@ export default function QCWarningsPage() {
   const maxPolicy  = Math.max(...policies.map(p => p.count), 1)
 
   const navAgent = (userId: number) => navigate('/app/insights/qc-agents', { state: { preselectedUserId: userId } })
+
+  const [animateBars, setAnimateBars] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setAnimateBars(true))
+    return () => { cancelAnimationFrame(id); setAnimateBars(false) }
+  }, [byType])
 
   const PIPELINE_STATUSES = [
     { key: 'DRAFT',             label: 'Draft',             dotCls: 'bg-slate-400'   },
@@ -67,38 +70,37 @@ export default function QCWarningsPage() {
 
   return (
     <div>
-      <div className="-mx-6 -mt-6 mb-5">
-        <InsightsFilterBar
-          selectedDepts={departments} onDeptsChange={setDepartments} availableDepts={deptOptions}
-          period={period} onPeriodChange={setPeriod}
-          customStart={customStart} customEnd={customEnd}
-          onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
-        />
-      </div>
+      <InsightsFilterBar
+        selectedDepts={departments} onDeptsChange={setDepartments} availableDepts={[]}
+        period={period} onPeriodChange={setPeriod}
+        customStart={customStart} customEnd={customEnd}
+        onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
+        businessDays={meta?.businessDays} priorBusinessDays={priorMeta?.businessDays}
+        priorDateRange={priorMeta?.startDate ? { start: priorMeta.startDate, end: priorMeta.endDate } : undefined}
+        onReset={resetFilters}
+      />
       {isLoading && <QCPageSkeleton tiles={3} />}
       {isError   && <ErrorCard onRetry={refetch} />}
       {!isLoading && !isError && <div className="space-y-5">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Performance Warnings</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Tracking write-ups, escalations, and resolution across the organization.</p>
+          <p className="text-sm text-slate-500 mt-0.5">Tracking performance warnings, escalations, and resolution across the organization.</p>
         </div>
 
         {/* KPI tiles */}
-        <div className="grid grid-cols-3 gap-3 max-w-2xl">
+        <div className="grid grid-cols-3 gap-3">
           {['total_writeups_issued','escalation_rate','repeat_offender_rate'].map(code => (
-            <KpiTile key={code} kpiCode={code} value={cur[code] ?? null} priorValue={prv[code] ?? undefined} />
+            <KpiTile key={code} kpiCode={code} value={cur[code] ?? null} priorValue={prv[code] ?? undefined}
+              thresholds={resolveThresholds(code, kpiConfig)} />
           ))}
         </div>
 
         {/* Pipeline + Type Distribution */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <InsightsSection title="Write-Up Status Pipeline" description="Current state of all write-ups in the selected period.">
+          <InsightsSection title="Performance Warning Status Pipeline" description="Current state of all performance warnings in the selected period.">
             {PIPELINE_STATUSES.map((s, i) => (
               <div key={s.key} className={`flex items-center justify-between py-2 ${i < PIPELINE_STATUSES.length - 1 ? 'border-b border-slate-100' : ''}`}>
-                <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.dotCls}`} />
-                  <span className="text-sm font-medium text-slate-700">{s.label}</span>
-                </div>
+                <span className="text-sm font-medium text-slate-700">{s.label}</span>
                 <span className={`text-sm font-bold ${(byStatus[s.key] ?? 0) > 0 ? s.dotCls.replace('bg-', 'text-').replace('50', '600') : 'text-slate-300'}`}>
                   {byStatus[s.key] ?? 0}
                 </span>
@@ -110,12 +112,12 @@ export default function QCWarningsPage() {
             </div>
           </InsightsSection>
 
-          <InsightsSection title="Write-Up Type Distribution" description="Severity breakdown across the escalation path.">
+          <InsightsSection title="Type Distribution" description="Severity breakdown across the escalation path.">
             {[
-              { key: 'VERBAL_WARNING',  label: 'Verbal Warning',  barCls: 'bg-yellow-400' },
-              { key: 'WRITTEN_WARNING', label: 'Written Warning', barCls: 'bg-orange-500'  },
-              { key: 'FINAL_WARNING',   label: 'Final Warning',   barCls: 'bg-red-500'     },
-            ].map(t => {
+              { key: 'VERBAL_WARNING',  label: 'Verbal Warning' },
+              { key: 'WRITTEN_WARNING', label: 'Written Warning' },
+              { key: 'FINAL_WARNING',   label: 'Final Warning' },
+            ].map((t, i) => {
               const count = byType[t.key] ?? 0
               const pct   = totalType > 0 ? Math.round((count / totalType) * 100) : 0
               return (
@@ -125,7 +127,10 @@ export default function QCWarningsPage() {
                     <span className="text-slate-400">{count} ({pct}%)</span>
                   </div>
                   <div className="h-5 bg-slate-100 rounded overflow-hidden">
-                    <div className={`h-full rounded transition-all ${t.barCls}`} style={{ width: `${pct}%` }} />
+                    <div
+                      className="h-full rounded bg-[#00aeef]/70 transition-all duration-700 ease-out"
+                      style={{ width: animateBars ? `${pct}%` : '0%', transitionDelay: `${i * 80}ms` }}
+                    />
                   </div>
                 </div>
               )
@@ -138,10 +143,10 @@ export default function QCWarningsPage() {
           </InsightsSection>
         </div>
 
-        {/* Active Write-Ups */}
-        <InsightsSection title="Active Write-Ups" description="Click a row to view the agent's performance profile.">
+        {/* Active Performance Warnings */}
+        <InsightsSection title="Active Performance Warnings" description="Click a row to view the agent's performance profile.">
           {activeWUs.length === 0
-            ? <p className="text-sm text-slate-400 text-center py-4">No active write-ups for this period.</p>
+            ? <p className="text-sm text-slate-400 text-center py-4">No active performance warnings for this period.</p>
             : (
               <table className="w-full text-sm">
                 <thead><tr className="text-xs text-slate-400 border-b border-slate-200">
@@ -195,7 +200,7 @@ export default function QCWarningsPage() {
             <StatRow label="Agents on Final Warning" value={String(escalation?.final ?? 0)} valueColor={(escalation?.final ?? 0) > 0 ? 'text-red-600' : undefined} />
           </InsightsSection>
 
-          <InsightsSection title="Repeat Write-Up Agents" description="Agents with prior write-ups within the period.">
+          <InsightsSection title="Repeat Warning Agents" description="Agents with prior performance warnings within the period.">
             {repeatWUs.length === 0
               ? <p className="text-sm text-slate-400 py-4">No repeat agents in this period.</p>
               : repeatWUs.map(w => (
@@ -254,10 +259,10 @@ export default function QCWarningsPage() {
         </InsightsSection>
 
         {/* Dept Comparison */}
-        <InsightsSection title="Department Write-Up Comparison">
+        <InsightsSection title="Department Performance Warning Comparison">
           <table className="w-full text-sm">
             <thead><tr className="text-xs text-slate-400 border-b border-slate-200">
-              {['Department','Write-Ups','Closed','Resolution Rate'].map(h => <th key={h} className="text-left pb-2 font-medium pr-4">{h}</th>)}
+              {['Department','Warnings','Closed','Resolution Rate'].map(h => <th key={h} className="text-left pb-2 font-medium pr-4">{h}</th>)}
             </tr></thead>
             <tbody>
               {deptComp.map(row => (

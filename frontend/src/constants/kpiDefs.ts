@@ -34,16 +34,16 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     format: 'PERCENT', direction: 'DOWN_IS_GOOD', goal: 5, warn: 10, crit: 20,
   },
   dispute_upheld_rate: {
-    code: 'dispute_upheld_rate', name: 'Dispute Upheld Rate',
-    format: 'PERCENT', direction: 'DOWN_IS_GOOD', goal: 10, warn: 20, crit: 35,
+    code: 'dispute_upheld_rate', name: 'Upheld (Score Kept)',
+    format: 'PERCENT', direction: 'NEUTRAL',
   },
   dispute_not_upheld_rate: {
     code: 'dispute_not_upheld_rate', name: 'Dispute Rejected Rate',
     format: 'PERCENT', direction: 'NEUTRAL',
   },
   dispute_adjusted_rate: {
-    code: 'dispute_adjusted_rate', name: 'Dispute Adjusted Rate',
-    format: 'PERCENT', direction: 'DOWN_IS_GOOD', goal: 3, warn: 8, crit: 15,
+    code: 'dispute_adjusted_rate', name: 'Adjusted (Score Changed)',
+    format: 'PERCENT', direction: 'DOWN_IS_GOOD', goal: 30, warn: 40, crit: 50,
   },
   avg_dispute_resolution_time: {
     code: 'avg_dispute_resolution_time', name: 'Avg Resolution Time',
@@ -66,8 +66,16 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     code: 'coaching_sessions_assigned', name: 'Sessions Assigned',
     format: 'NUMBER', direction: 'NEUTRAL',
   },
+  coaching_sessions_scheduled: {
+    code: 'coaching_sessions_scheduled', name: 'Sessions Scheduled',
+    format: 'NUMBER', direction: 'NEUTRAL',
+  },
   coaching_sessions_completed: {
     code: 'coaching_sessions_completed', name: 'Sessions Completed',
+    format: 'NUMBER', direction: 'UP_IS_GOOD',
+  },
+  coaching_sessions_closed: {
+    code: 'coaching_sessions_closed', name: 'Sessions Closed',
     format: 'NUMBER', direction: 'UP_IS_GOOD',
   },
   coaching_completion_rate: {
@@ -94,7 +102,15 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     code: 'time_to_coaching', name: 'Time to Coaching',
     format: 'NUMBER', direction: 'DOWN_IS_GOOD', goal: 5, warn: 10, crit: 21,
   },
-  // ── Quiz (3) ──────────────────────────────────────────────────────────────
+  // ── Quiz ───────────────────────────────────────────────────────────────────
+  quizzes_assigned: {
+    code: 'quizzes_assigned', name: 'Quizzes Assigned',
+    format: 'NUMBER', direction: 'NEUTRAL',
+  },
+  quizzes_passed: {
+    code: 'quizzes_passed', name: 'Quizzes Passed',
+    format: 'NUMBER', direction: 'UP_IS_GOOD',
+  },
   quiz_pass_rate: {
     code: 'quiz_pass_rate', name: 'Quiz Pass Rate',
     format: 'PERCENT', direction: 'UP_IS_GOOD', goal: 85, warn: 70, crit: 55,

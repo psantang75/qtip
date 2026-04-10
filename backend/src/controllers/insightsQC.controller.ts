@@ -27,8 +27,16 @@ async function resolveDeptFilter(
 ): Promise<number[]> {
   if (access.dataScope === 'ALL') {
     if (reqDepts) {
-      const ids = reqDepts.split(',').map(Number).filter(n => !isNaN(n) && n > 0)
-      return ids
+      const parts = reqDepts.split(',').map(s => s.trim()).filter(Boolean)
+      const numericIds = parts.map(Number).filter(n => !isNaN(n) && n > 0)
+      if (numericIds.length === parts.length) return numericIds
+      // Resolve department names to IDs
+      const ph = parts.map(() => '?').join(',')
+      const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT id FROM departments WHERE department_name IN (${ph})`,
+        parts,
+      )
+      return rows.map(r => r.id as number)
     }
     return []
   }
@@ -104,29 +112,36 @@ export const getQCAgentProfile = qcHandler('qc_agents', (deptFilter, ranges, req
   return qcAnalyticsService.getAgentProfile(userId, ranges)
 })
 
+// ── Filter options ────────────────────────────────────────────────────────────
+
+export const getFilterOptions = qcHandler('qc_quality', (deptFilter, ranges, req) => {
+  const formNames = req.query.forms
+    ? (req.query.forms as string).split(',').map(s => s.trim()).filter(Boolean)
+    : []
+  return qcData.getFilterOptions(deptFilter, formNames, ranges)
+})
+
 // ── Quality deep-dive ─────────────────────────────────────────────────────────
 
-export const getScoreDistribution = qcHandler('qc_quality', (deptFilter, ranges, req) => {
-  const formIds = req.query.forms
-    ? (req.query.forms as string).split(',').map(Number).filter(n => !isNaN(n) && n > 0)
-    : []
-  return qcData.getScoreDistribution(deptFilter, formIds, ranges)
-})
+function parseFormNames(req: Request): string[] {
+  const raw = req.query.forms as string | undefined
+  return raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : []
+}
 
-export const getCategoryScores = qcHandler('qc_quality', (deptFilter, ranges, req) => {
-  const formId = req.query.form ? parseInt(req.query.form as string, 10) : null
-  return qcData.getCategoryScores(deptFilter, formId, ranges)
-})
+export const getScoreDistribution = qcHandler('qc_quality', (deptFilter, ranges, req) =>
+  qcData.getScoreDistribution(deptFilter, parseFormNames(req), ranges),
+)
 
-export const getMissedQuestions = qcHandler('qc_quality', (deptFilter, ranges, req) => {
-  const formIds = req.query.forms
-    ? (req.query.forms as string).split(',').map(Number).filter(n => !isNaN(n) && n > 0)
-    : []
-  return qcData.getMissedQuestions(deptFilter, formIds, ranges)
-})
+export const getCategoryScores = qcHandler('qc_quality', (deptFilter, ranges, req) =>
+  qcData.getCategoryScores(deptFilter, parseFormNames(req), ranges),
+)
 
-export const getQualityDeptComparison = qcHandler('qc_quality', (_deptFilter, ranges) =>
-  qcData.getQualityDeptComparison(ranges),
+export const getMissedQuestions = qcHandler('qc_quality', (deptFilter, ranges, req) =>
+  qcData.getMissedQuestions(deptFilter, parseFormNames(req), ranges),
+)
+
+export const getQualityDeptComparison = qcHandler('qc_quality', (deptFilter, ranges) =>
+  qcData.getQualityDeptComparison(deptFilter, ranges),
 )
 
 export const getFormScores = qcHandler('qc_quality', (deptFilter, ranges) =>
@@ -154,7 +169,11 @@ export const getAgentsFailedQuizzes = qcHandler('qc_coaching', (deptFilter, rang
 )
 
 export const getQuizBreakdown = qcHandler('qc_coaching', (deptFilter, ranges) =>
-  qcData.getQuizBreakdown(deptFilter, ranges),
+  qcCoaching.getQuizBreakdownWithAgents(deptFilter, ranges),
+)
+
+export const getSessionsByStatus = qcHandler('qc_coaching', (deptFilter, ranges) =>
+  qcCoaching.getSessionsByStatus(deptFilter, ranges),
 )
 
 export const getCoachingDeptComparison = qcHandler('qc_coaching', (_deptFilter, ranges) =>

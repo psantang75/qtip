@@ -31,10 +31,10 @@ export default function KpiTile({
   thresholds: thresholdsProp,
 }: KpiTileProps) {
   const def = getKpiDef(kpiCode)
-  const name      = def?.name      ?? kpiCode
-  const format    = def?.format    ?? 'NUMBER'
-  const direction = def?.direction ?? 'NEUTRAL'
+  const name   = def?.name   ?? kpiCode
+  const format = def?.format ?? 'NUMBER'
 
+  // Prefer live IE thresholds from the prop; fall back to static kpiDefs
   const thresholds: Pick<KpiDef, 'goal' | 'warn' | 'crit' | 'direction'> =
     thresholdsProp ?? {
       goal:      def?.goal,
@@ -42,6 +42,8 @@ export default function KpiTile({
       crit:      def?.crit,
       direction: def?.direction ?? 'NEUTRAL',
     }
+
+  const direction = thresholds.direction ?? def?.direction ?? 'NEUTRAL'
 
   const status = value !== null && value !== undefined
     ? getThresholdStatus(value, thresholds)
@@ -55,7 +57,6 @@ export default function KpiTile({
       deltaEl = <span className="text-[10px] text-slate-400">— flat</span>
     } else {
       const isPositive = delta > 0
-      // For UP_IS_GOOD: positive = green; for DOWN_IS_GOOD: positive = red
       const isGood =
         direction === 'UP_IS_GOOD'   ? isPositive :
         direction === 'DOWN_IS_GOOD' ? !isPositive :
@@ -75,7 +76,7 @@ export default function KpiTile({
     }
   }
 
-  const goalDisplay = thresholds.goal !== undefined
+  const goalDisplay = thresholds.goal != null
     ? `Goal: ${format === 'PERCENT' ? `${thresholds.goal}%` : thresholds.goal}`
     : null
 
@@ -115,7 +116,7 @@ export default function KpiTile({
         'font-bold text-slate-900 leading-none',
         small ? 'text-xl' : 'text-2xl',
       )}>
-        {formatKpiValue(value, format)}
+        {formatKpiValue(value, format, format === 'NUMBER' ? 0 : 1)}
       </div>
 
       {/* Goal */}

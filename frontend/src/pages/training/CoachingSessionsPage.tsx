@@ -50,7 +50,7 @@ const FORMAT_STYLES: Record<CoachingFormat, string> = {
 
 export const STATUS_LABELS: Record<string, string> = {
   SCHEDULED: 'Draft', IN_PROCESS: 'In Process',
-  AWAITING_CSR_ACTION: 'Awaiting CSR',
+  AWAITING_CSR_ACTION: 'Awaiting CSR', QUIZ_PENDING: 'Quiz Pending',
   COMPLETED: 'Completed', FOLLOW_UP_REQUIRED: 'Follow-Up', CLOSED: 'Closed',
 }
 const ALL_STATUSES = Object.keys(STATUS_LABELS)
@@ -181,10 +181,7 @@ export default function CoachingSessionsPage() {
     return Array.from(new Set(all)).sort()
   }, [data?.items])
 
-  const statusOptions = useMemo(() => {
-    const present = new Set<string>((data?.items ?? []).map(s => s.status as string).filter(Boolean))
-    return ALL_STATUSES.filter(s => present.has(s)).map(s => STATUS_LABELS[s])
-  }, [data?.items])
+  const statusOptions = ALL_STATUSES.map(s => STATUS_LABELS[s])
 
   // Default: all visible statuses except Closed. When user explicitly selects, use that instead.
   const allExceptClosed = useMemo(() => statusOptions.filter(s => s !== 'Closed'), [statusOptions])
