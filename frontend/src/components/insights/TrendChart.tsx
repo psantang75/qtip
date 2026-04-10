@@ -31,18 +31,20 @@ export default function TrendChart({
     if (values.length === 0) return [0, isPercentage ? 100 : 10]
     const lo = Math.min(...values, goalValue ?? Infinity)
     const hi = Math.max(...values, goalValue ?? -Infinity)
-    const pad = Math.max((hi - lo) * 0.15, 2)
-    const yLo = Math.max(0, Math.floor(lo - pad))
-    const yHi = Math.ceil(hi + pad)
+    const range = hi - lo
+    const topPad = Math.max(range * 0.15, 2)
+    const bottomPad = Math.max(range * 0.25, 4)
+    const yLo = Math.max(0, Math.floor(lo - bottomPad))
+    const yHi = Math.ceil(hi + topPad)
     return [yLo, isPercentage ? Math.min(100, yHi) : yHi]
   }, [data, goalValue, isPercentage])
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -24 }}>
+      <LineChart data={data} margin={{ top: 4, right: 8, bottom: 14, left: -24 }}>
         <XAxis
           dataKey="label"
-          tick={{ fontSize: 10, fill: '#94a3b8' }}
+          tick={{ fontSize: 10, fill: '#94a3b8', dy: 8 }}
           tickLine={false}
           axisLine={false}
         />

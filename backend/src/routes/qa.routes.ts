@@ -1,7 +1,5 @@
 import express from 'express';
 import { authenticate, authorizeQA, authorizeQAOrTrainer } from '../middleware/auth';
-// Rate limiting imports removed - rate limiting disabled
-// import { lenientRateLimit, standardRateLimit, strictRateLimit } from '../middleware/rateLimiter';
 import { 
   getCompletedSubmissions, 
   getSubmissionDetails,

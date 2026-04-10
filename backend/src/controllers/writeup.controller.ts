@@ -1,7 +1,8 @@
 import { Request, Response } from 'express'
+import { unlink } from 'fs/promises'
 import prisma from '../config/prisma'
 import { Prisma } from '../generated/prisma/client'
-import { insertIncidents, shapePriorDiscipline, splitSep, type IncidentInput } from '../services/writeup.service'
+import { insertIncidents, shapePriorDiscipline, type IncidentInput } from '../services/writeup.service'
 
 interface AuthReq extends Request {
   user?: { user_id: number; role: string }
@@ -661,6 +662,10 @@ export const deleteAttachment = async (req: AuthReq, res: Response) => {
     if (!attachment) return res.status(404).json({ success: false, message: 'Attachment not found' })
 
     await prisma.writeUpAttachment.delete({ where: { id: attachmentId } })
+
+    if (attachment.file_path) {
+      try { await unlink(attachment.file_path) } catch { /* file may already be gone */ }
+    }
 
     res.json({ success: true })
   } catch (error) {

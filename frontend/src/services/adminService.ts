@@ -104,23 +104,6 @@ const adminService = {
     }
   },
   
-  // Legacy method for backward compatibility
-  getRecentActivity: async (page: number = 1, limit: number = 10): Promise<PaginatedResponse<ActivityItem>> => {
-    try {
-      // This would need to be implemented if still needed
-      // For now, return empty data
-      return {
-        items: [],
-        totalItems: 0,
-        totalPages: 0,
-        currentPage: page
-      };
-    } catch (error) {
-      console.error('Error fetching recent activity:', error);
-      throw error;
-    }
-  },
-
   // Coaching Session Methods
 
   /**

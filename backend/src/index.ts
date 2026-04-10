@@ -1,7 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import multer from 'multer';
 import swaggerUi from 'swagger-ui-express';
 import cookieParser from 'cookie-parser';
 import csurf from 'csurf';
@@ -122,14 +121,6 @@ app.use((req, res, next) => {
 // Add this endpoint to allow frontend to fetch CSRF token
 app.get('/api/csrf-token', (req, res) => {
   res.json({ csrfToken: req.csrfToken() });
-});
-
-// Set up multer for handling file uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: config.MAX_FILE_SIZE,
-  },
 });
 
 // Serve static files from uploads directory

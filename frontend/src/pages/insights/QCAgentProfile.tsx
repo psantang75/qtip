@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { InsightsFilterBar, InsightsSection, KpiTile, StatusBadge } from '@/components/insights'
 import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
-import { getQCAgentProfile, getCategoryScores, getFormScores } from '@/services/insightsQCService'
+import { getQCAgentProfile, getQCTrends, getCategoryScores, getFormScores } from '@/services/insightsQCService'
 import type { AgentSummary, QCParams } from '@/services/insightsQCService'
 import { scoreColor } from '@/components/insights/agentProfileHelpers'
 import type { FormSummaryItem } from '@/components/insights/agentProfileHelpers'
@@ -33,6 +33,7 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
   const quizWarn = quizThresh.warn ?? 70
 
   const { data: profile }       = useQuery({ queryKey: ['qc-agent-profile', agent.userId, apiParams], queryFn: () => getQCAgentProfile(agent.userId, apiParams) })
+  const { data: trendData }    = useQuery({ queryKey: ['qc-trends-qa', agent.userId, apiParams], queryFn: () => getQCTrends({ ...apiParams, kpis: 'avg_qa_score', userId: String(agent.userId) }) })
   const { data: formScoresData = [] } = useQuery({ queryKey: ['qc-forms', apiParams], queryFn: () => getFormScores(apiParams) })
 
   const selectedFormId = useMemo(() => {
@@ -43,22 +44,7 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
   const catParams = useMemo(() => ({ ...apiParams, ...(selectedFormId ? { form: selectedFormId } : {}) }), [apiParams, selectedFormId])
   const { data: catScores = [] } = useQuery({ queryKey: ['qc-cats', catParams], queryFn: () => getCategoryScores(catParams), enabled: !!profile })
 
-  const qaTrend = useMemo(() => {
-    if (!profile) return []
-    const monthly = new Map<string, number[]>()
-    for (const a of profile.recentAudits) {
-      if (a.score == null) continue
-      const key = a.date.slice(0, 7)
-      if (!monthly.has(key)) monthly.set(key, [])
-      monthly.get(key)!.push(a.score)
-    }
-    return [...monthly.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, scores]) => ({
-        label: new Date(month + '-01T00:00:00').toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-        value: Math.round(scores.reduce((s, v) => s + v, 0) / scores.length * 10) / 10,
-      }))
-  }, [profile])
+  const qaTrend = trendData?.map(r => ({ label: String(r.label ?? ''), value: r['avg_qa_score'] != null ? Number(r['avg_qa_score']) : null })) ?? []
 
   const formSummary: FormSummaryItem[] = useMemo(() => {
     if (!profile) return []

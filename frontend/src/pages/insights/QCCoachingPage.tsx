@@ -68,7 +68,7 @@ export default function QCCoachingPage() {
   const prv       = kpiData?.prior     ?? {}
   const meta      = kpiData?.meta
   const priorMeta = kpiData?.priorMeta
-  const navAgent = (userId: number) => navigate('/app/insights/qc-agents', { state: { preselectedUserId: userId } })
+  const navAgent = (userId: number) => navigate(`/app/insights/qc-agents?agent=${userId}`)
 
   const coachThresh = resolveThresholds('coaching_completion_rate', kpiConfig)
   const schedGoal = resolveThresholds('coaching_sessions_scheduled', kpiConfig).goal ?? undefined

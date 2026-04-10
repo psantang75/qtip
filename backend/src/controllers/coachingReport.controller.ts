@@ -20,7 +20,7 @@ export const getReportsSummary = async (req: AuthReq, res: Response) => {
     }
     if (coaching_types) {
       const types = (coaching_types as string).split(',').filter(Boolean);
-      if (types.length) conditions.push(Prisma.sql`cs.coaching_type IN (${Prisma.join(types)})`);
+      if (types.length) conditions.push(Prisma.sql`cs.coaching_purpose IN (${Prisma.join(types)})`);
     }
     if (topic_ids) {
       const ids = (topic_ids as string).split(',').map(Number).filter(Boolean);
@@ -43,7 +43,7 @@ export const getReportsSummary = async (req: AuthReq, res: Response) => {
         Prisma.sql`SELECT cs.status, COUNT(*) as count FROM coaching_sessions cs ${whereClause} GROUP BY cs.status`
       ),
       prisma.$queryRaw<any[]>(
-        Prisma.sql`SELECT cs.coaching_type, COUNT(*) as count FROM coaching_sessions cs ${whereClause} GROUP BY cs.coaching_type ORDER BY count DESC`
+        Prisma.sql`SELECT cs.coaching_purpose, COUNT(*) as count FROM coaching_sessions cs ${whereClause} GROUP BY cs.coaching_purpose ORDER BY count DESC`
       ),
       prisma.$queryRaw<any[]>(
         Prisma.sql`
@@ -90,7 +90,7 @@ export const getReportsSummary = async (req: AuthReq, res: Response) => {
         avg_days_to_completion: total.avg_days_to_completion != null ? parseFloat(Number(total.avg_days_to_completion).toFixed(1)) : null,
         quiz_pass_rate: quizPassRate,
         sessions_by_status: byStatus.map((r: any) => ({ status: r.status, count: Number(r.count) })),
-        sessions_by_type: byType.map((r: any) => ({ coaching_type: r.coaching_type, count: Number(r.count) })),
+        sessions_by_type: byType.map((r: any) => ({ coaching_purpose: r.coaching_purpose, count: Number(r.count) })),
         top_topics: topTopics.map((r: any) => ({ topic_name: r.topic_name, count: Number(r.count) })),
         sessions_by_week: byWeek.map((r: any) => ({ week: r.week, count: Number(r.count) })),
       },

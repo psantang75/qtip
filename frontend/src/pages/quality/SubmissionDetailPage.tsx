@@ -117,7 +117,7 @@ export default function SubmissionDetailPage() {
 
   // Build read-only answers map for ScoreRenderer
   const answersMap: Record<number, any> = {}
-  detail.answers.forEach((a: any) => {
+  ;(detail.answers ?? []).forEach((a: any) => {
     if (a.question_id) answersMap[a.question_id] = { answer: a.answer, score: a.score, notes: '' }
   })
 
@@ -165,7 +165,7 @@ export default function SubmissionDetailPage() {
   const enterResolutionMode = () => {
     if (!formData) return
     const initial: Record<number, any> = {}
-    detail.answers.forEach((a: any) => {
+    ;(detail.answers ?? []).forEach((a: any) => {
       if (a.question_id) initial[a.question_id] = { question_id: a.question_id, answer: a.answer || '', score: a.score || 0, notes: a.notes || '' }
     })
     setEditedAnswers(initial)

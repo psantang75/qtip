@@ -28,11 +28,9 @@ import { cn } from '@/lib/utils'
 
 // Chart colors mapped to Tailwind palette equivalents
 const TYPE_COLORS: Record<string, string> = {
-  WEEKLY_COACHING:     'var(--color-chart-blue,   #60a5fa)',
-  PERFORMANCE_COACHING:'var(--color-chart-amber,  #fbbf24)',
-  ESCALATION:          'var(--color-chart-red,    #f87171)',
-  SIDE_BY_SIDE:        'var(--color-chart-teal,   #2dd4bf)',
-  TEAM_SESSION:        'var(--color-chart-indigo, #818cf8)',
+  WEEKLY:      'var(--color-chart-blue,   #60a5fa)',
+  PERFORMANCE: 'var(--color-chart-amber,  #fbbf24)',
+  ONBOARDING:  'var(--color-chart-teal,   #2dd4bf)',
 }
 const STATUS_COLORS: Record<string, string> = {
   SCHEDULED:           'var(--color-chart-slate,  #94a3b8)',

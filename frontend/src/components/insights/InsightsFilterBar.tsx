@@ -1,5 +1,5 @@
 import { ArrowLeft, CalendarDays, RotateCcw } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
+import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
@@ -77,21 +77,19 @@ export default function InsightsFilterBar({
       <div className="flex gap-3 items-center flex-wrap">
 
         {/* Department filter */}
-        {availableDepts.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 shrink-0">Dept</span>
-            <StagedMultiSelect
-              options={availableDepts}
-              selected={selectedDepts}
-              onApply={onDeptsChange}
-              placeholder="All Departments"
-              width="w-[200px]"
-            />
-          </div>
-        )}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-slate-500 shrink-0">Department</span>
+          <StagedMultiSelect
+            options={availableDepts}
+            selected={selectedDepts}
+            onApply={onDeptsChange}
+            placeholder="All Departments"
+            width="w-[200px]"
+          />
+        </div>
 
         {/* Form filter */}
-        {showFormFilter && availableForms.length > 0 && (
+        {showFormFilter && (
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-slate-500 shrink-0">Form</span>
             <StagedMultiSelect

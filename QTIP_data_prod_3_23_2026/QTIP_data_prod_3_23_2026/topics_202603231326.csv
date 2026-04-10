@@ -1,0 +1,40 @@
+﻿id,topic_name,is_active,sort_order,created_at,updated_at
+1,Call Transfer/Hold Procedures,1,1,1/9/2026 11:06:33 PM,1/9/2026 11:06:33 PM
+2,Contact Management/Methods of Contact,0,2,1/9/2026 11:06:33 PM,1/19/2026 6:15:56 PM
+3,CRM / Knowledge Base,0,3,1/9/2026 11:06:33 PM,1/19/2026 6:14:02 PM
+4,Methods of Contact,1,4,1/9/2026 11:06:33 PM,1/9/2026 11:06:33 PM
+5,Multi-Category,0,5,1/9/2026 11:06:33 PM,1/19/2026 6:17:17 PM
+6,Policy - Minimum Queue Availability & Phone Status,0,6,1/9/2026 11:06:33 PM,1/19/2026 6:50:58 PM
+7,Policy - Minimum Queue Availability Policy - Minimum Queue Availability & Phone Status,0,7,1/9/2026 11:06:33 PM,1/19/2026 6:53:13 PM
+8,Policy - Minimum Queue Availability Policy & Phone Status,0,8,1/9/2026 11:06:33 PM,1/19/2026 6:52:51 PM
+9,Policy - Time Away from Desk,1,9,1/9/2026 11:06:33 PM,1/9/2026 11:07:11 PM
+10,Policy - Work from Home,1,10,1/9/2026 11:06:33 PM,1/9/2026 11:07:15 PM
+11,QA Review,0,11,1/9/2026 11:06:33 PM,1/19/2026 6:17:27 PM
+12,QA Review/QTIP Check,0,12,1/9/2026 11:06:33 PM,1/19/2026 6:17:34 PM
+16,Initial Greeting,1,7,1/19/2026 5:49:53 PM,1/19/2026 6:05:02 PM
+17,Contact Management,1,3,1/19/2026 5:50:15 PM,1/19/2026 6:03:09 PM
+18,CRM Usage,1,4,1/19/2026 5:51:28 PM,1/19/2026 6:03:33 PM
+19,Knowledge Base Usage,1,8,1/19/2026 5:51:44 PM,1/19/2026 6:05:13 PM
+20,Script Usage,1,12,1/19/2026 5:51:51 PM,1/19/2026 6:06:46 PM
+21,Product Knowledge,1,10,1/19/2026 5:52:02 PM,1/19/2026 6:06:00 PM
+22,Service Knowledge,1,13,1/19/2026 5:52:10 PM,1/19/2026 6:07:22 PM
+23,Problem Solving Ability,1,9,1/19/2026 5:52:19 PM,1/19/2026 6:06:24 PM
+24,Transfer Procedure,1,15,1/19/2026 5:52:45 PM,1/19/2026 6:19:12 PM
+25,Hold Procedure,1,6,1/19/2026 5:52:53 PM,1/19/2026 6:04:31 PM
+26,Wrap Up Process,0,23,1/19/2026 5:53:04 PM,1/19/2026 6:19:51 PM
+27,Customer Verification,1,5,1/19/2026 5:53:25 PM,1/19/2026 6:03:52 PM
+28,Wrap-Up Process,1,25,1/19/2026 5:53:46 PM,1/19/2026 5:53:46 PM
+29,Professionalism / Rapport,1,11,1/19/2026 5:54:09 PM,1/19/2026 6:06:36 PM
+30,Ticket / Task Documentation,1,14,1/19/2026 5:54:24 PM,1/19/2026 6:18:55 PM
+31,Automated Attendant,1,1,1/19/2026 5:56:13 PM,1/19/2026 6:07:55 PM
+32,Policy - Attendance,1,29,1/19/2026 5:59:35 PM,1/19/2026 5:59:35 PM
+33,Policy - Minimum Queue Availability,1,30,1/19/2026 6:50:43 PM,1/19/2026 6:50:43 PM
+34,Policy - Phone Status,1,31,1/19/2026 6:50:53 PM,1/19/2026 6:50:53 PM
+35,Policy - Punch Clock,1,32,2/2/2026 8:01:12 PM,2/2/2026 8:01:12 PM
+36,Policy - Methods for Making Contact,1,33,2/2/2026 8:29:17 PM,2/2/2026 8:29:17 PM
+37,Policy - Prompt QTIP Submission Review,1,34,2/3/2026 6:51:05 PM,2/3/2026 6:51:05 PM
+38,Policy - Corrective Action Tickets,1,35,2/17/2026 1:31:53 PM,2/17/2026 1:31:53 PM
+39,Policy - False Information,1,36,2/17/2026 1:52:44 PM,2/17/2026 1:52:44 PM
+40,Policy - Asking Questions and Providing Answers,1,37,2/17/2026 2:37:34 PM,2/17/2026 2:37:34 PM
+41,Ticket Handling,1,16,2/20/2026 8:48:24 PM,2/20/2026 8:48:24 PM
+42,Policy - Meeting Attendance & Notification Requirements,1,38,3/12/2026 1:18:44 PM,3/12/2026 1:18:44 PM

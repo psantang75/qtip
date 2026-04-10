@@ -68,9 +68,7 @@ export default function QCMissedQuestions({ questions }: Props) {
                           key={agent.userId}
                           className="border-b border-slate-100 last:border-0 hover:bg-slate-100 cursor-pointer"
                           onClick={() =>
-                            navigate('/app/insights/qc-agents', {
-                              state: { preselectedUserId: agent.userId },
-                            })
+                            navigate(`/app/insights/qc-agents?agent=${agent.userId}`)
                           }
                         >
                           <td className="py-1.5 text-primary hover:underline">{agent.name}</td>

@@ -12,10 +12,16 @@ export interface AgentSummary {
 }
 export interface AgentProfile {
   user: { id: number; name: string; dept: string; title: string | null }
-  recentAudits: Array<{ id: number; form: string; score: number | null; date: string; status: string }>
+  qaTrend: Array<{ label: string; value: number }>
+  recentAudits: Array<{ id: number; form: string; score: number | null; date: string; callDate: string | null; status: string }>
   coachingSessions: Array<{ id: number; date: string; purpose: string; format: string; status: string; topics: string[] }>
   quizzes: Array<{ id: number; quiz: string; score: number; passed: boolean; date: string; attempts: number }>
-  writeUps: Array<{ id: number; type: string; status: string; date: string }>
+  writeUps: Array<{
+    id: number; type: string; status: string; date: string
+    meetingDate: string | null; followUpDate: string | null
+    linkedCoaching: boolean; priorCount: number; policies: string[]; managerName: string | null
+  }>
+  disputeStats: { total: number; upheld: number; adjusted: number; open: number; avgResolutionDays: number | null }
 }
 
 export class QCAnalyticsService {
@@ -94,6 +100,12 @@ export class QCAnalyticsService {
     const s = fmt(ranges.current.start)
     const e = fmt(ranges.current.end)
 
+    const trendStart = new Date(ranges.current.end)
+    trendStart.setMonth(trendStart.getMonth() - 6)
+    trendStart.setDate(1)
+    trendStart.setHours(0, 0, 0, 0)
+    const ts = fmt(trendStart)
+
     const [[userRow], [audits], [sessions], [quizRows], [wuRows], [dispRow]] = await Promise.all([
       pool.execute<RowDataPacket[]>(
         `SELECT u.id, u.username AS name, u.title,
@@ -114,7 +126,7 @@ export class QCAnalyticsService {
          JOIN forms f ON s.form_id = f.id
          WHERE CAST(sm_csr.value AS UNSIGNED) = ? AND s.status = 'FINALIZED'
            AND s.submitted_at BETWEEN ? AND ?
-         ORDER BY s.submitted_at DESC LIMIT 100`, [userId, s, e],
+         ORDER BY s.submitted_at DESC`, [userId, ts, e],
       ),
       pool.execute<RowDataPacket[]>(
         `SELECT cs.id, DATE_FORMAT(cs.session_date,'%Y-%m-%d') AS date,
@@ -167,13 +179,33 @@ export class QCAnalyticsService {
       ),
     ])
 
+    // Build trend from full 6-month audit data; filter to period range for display
+    const allAudits = audits as RowDataPacket[]
+    const periodStart = s
+    const monthlyMap = new Map<string, number[]>()
+    for (const r of allAudits) {
+      const score = r.score != null ? parseFloat(r.score) : null
+      if (score === null) continue
+      const month = (r.date as string).slice(0, 7)
+      if (!monthlyMap.has(month)) monthlyMap.set(month, [])
+      monthlyMap.get(month)!.push(score)
+    }
+    const qaTrend = [...monthlyMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, scores]) => ({
+        label: new Date(month + '-01T00:00:00').toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+        value: Math.round(scores.reduce((sum, v) => sum + v, 0) / scores.length * 10) / 10,
+      }))
+    const periodAudits = allAudits.filter(r => r.date >= periodStart.slice(0, 10))
+
     const user = userRow[0]
     if (!user) throw new Error(`User ${userId} not found`)
 
     const ds = dispRow[0] ?? {}
     return {
       user: { id: user.id, name: user.name, dept: user.dept, title: user.title ?? null },
-      recentAudits: (audits as RowDataPacket[]).map(r => ({
+      qaTrend,
+      recentAudits: periodAudits.map(r => ({
         id: r.id, form: r.form,
         score: r.score != null ? parseFloat(r.score) : null,
         date: r.date, callDate: r.callDate ?? null, status: r.status,

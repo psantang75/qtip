@@ -13,9 +13,6 @@ export type CoachingFormat =
   | 'SIDE_BY_SIDE'
   | 'TEAM_SESSION'
 
-/** @deprecated use CoachingPurpose + CoachingFormat */
-export type CoachingType = CoachingPurpose
-
 export type CoachingSourceType =
   | 'QA_AUDIT'
   | 'MANAGER_OBSERVATION'
@@ -388,18 +385,6 @@ export const trainingService = {
   },
 
   // ── Stats / Reports ────────────────────────────────────────────────────────
-
-  async getCoachingStats(): Promise<CoachingStats> {
-    const { data } = await api.get('/trainer/reports/summary')
-    const d = data?.data ?? data
-    return {
-      sessionsThisMonth: d?.total_sessions   ?? 0,
-      awaitingCsrAction: d?.awaiting_csr     ?? 0,
-      overdueSessions:   d?.overdue          ?? 0,
-      quizPassRate:      d?.quiz_pass_rate   ?? 0,
-      completionRate:    d?.completion_rate  ?? 0,
-    }
-  },
 
   async getReportsSummary(params?: Record<string, any>): Promise<any> {
     const { data } = await api.get('/trainer/reports/summary', { params })

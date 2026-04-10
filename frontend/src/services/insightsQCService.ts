@@ -29,6 +29,7 @@ export interface AgentSummary {
 
 export interface AgentProfile {
   user: { id: number; name: string; dept: string; title: string | null }
+  qaTrend: Array<{ label: string; value: number }>
   recentAudits: Array<{ id: number; form: string; score: number | null; date: string; callDate: string | null; status: string }>
   coachingSessions: Array<{ id: number; date: string; purpose: string; format: string; status: string; topics: string[] }>
   quizzes: Array<{ id: number; quiz: string; score: number; passed: boolean; date: string; attempts: number }>
@@ -81,7 +82,7 @@ export const getFilterOptions = async (p: QCParams): Promise<FilterOptions> =>
 export const getQCKpis = async (p: QCParams): Promise<QCKpiResponse> =>
   (await api.get('/insights/qc/kpis', { params: p })).data
 
-export const getQCTrends = async (p: QCParams & { kpis?: string }): Promise<TrendRow[]> =>
+export const getQCTrends = async (p: QCParams & { kpis?: string; userId?: string }): Promise<TrendRow[]> =>
   (await api.get('/insights/qc/trends', { params: p })).data
 
 export const getQCAgents = async (p: QCParams): Promise<AgentSummary[]> =>

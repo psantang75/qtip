@@ -1,0 +1,29 @@
+﻿id,username,email,password_hash,role_id,department_id,is_active,last_login,created_at,updated_at
+1,PG Admin,pgadmin@test.com,$2b$10$371Z6jTm21YUAaKcvfoKguXp6pkur5BpZAuZ/Jc2Qg5WaO9LD04Tm,1,null,1,3/17/2026 3:55:57 PM,10/7/2025 9:35:00 PM,3/17/2026 3:55:57 PM
+2,PG QA,pgqa@test.com,$2b$10$371Z6jTm21YUAaKcvfoKguXp6pkur5BpZAuZ/Jc2Qg5WaO9LD04Tm,2,null,1,1/9/2026 11:44:33 PM,10/7/2025 9:35:00 PM,1/9/2026 11:44:33 PM
+3,PG CSR,pgcsr@test.com,$2b$10$/J97ofrGVkOcm17FEuOJ0e7VvTdgAY5eLKWOthpzBM1njjWr3AxTS,3,1,1,11/11/2025 9:47:38 PM,10/7/2025 9:35:00 PM,11/11/2025 9:47:38 PM
+4,PG Trainer,pgtrainer@test.com,$2b$10$tBOgGM4miRn2j7RytfVbh.5eksB7BH/X4HOukYxaYpDcLafd9102e,4,null,1,11/7/2025 5:25:16 PM,10/7/2025 9:35:00 PM,11/7/2025 5:25:16 PM
+5,PG Manager,pgmanager@test.com,$2b$10$9MnWCnCtKWONv/IBM785W.Lxfa6icoLCUt2NKi0ytSfNcPH6DNjQ.,5,null,1,11/7/2025 8:16:50 PM,10/7/2025 9:35:00 PM,11/7/2025 8:16:50 PM
+6,Pete Santangelo,PSantangelo@dm-us.com,$2b$10$41syrIr7XYyMn6XACjqlbevnxlpVG9XfyrCK8eD6XSBwvNTZDuiDi,1,null,1,2/19/2026 2:35:26 PM,10/8/2025 8:23:52 PM,2/19/2026 2:35:26 PM
+7,Levi Roose,lroose@dm-us.com,$2b$10$GqvEGEZV97U/aUKZV.KzV.F9byZJGlzmt2GAavKlraEmpGOYLWwIS,1,null,1,3/20/2026 2:26:06 PM,10/9/2025 7:13:59 PM,3/20/2026 2:26:06 PM
+8,Patricia Fuller,pfuller@dm-us.com,$2b$10$g7oUNszM7IOB4ZwrumK4D.UW3tOPUvcVpuC9kHINxB2GpacmUvZQa,5,null,1,3/19/2026 4:08:20 PM,10/9/2025 7:15:42 PM,3/19/2026 4:08:20 PM
+9,Ian Terry,iterry@dm-us.com,$2b$10$T99tZ9v8chpXPoCDUtuDvueIW1suoMtkdfbPAZmBMZxR2Cc6sbkF.,4,null,1,3/23/2026 11:59:10 AM,10/9/2025 7:20:50 PM,3/23/2026 11:59:10 AM
+10,Cheryl Campbell,ccampbell@dm-us.com,$2b$10$L2yMl8qBr8zc98FE43XmnuY0QgHUsan2lPqU/Wq8Dejp7jAtfF/P2,2,null,1,3/23/2026 12:08:02 PM,10/9/2025 7:21:18 PM,3/23/2026 12:08:02 PM
+11,Stephen Florentine,sflorentine@dm-us.com,$2b$10$s3FKaqDUtnNPWv19zc1ctu27VSILppuCCcrylx0ky9p8iCLaNcGNC,3,3,1,10/14/2025 6:55:33 PM,10/9/2025 7:35:21 PM,10/28/2025 6:11:14 PM
+12,Bethany Tuimala,btuimala@dm-us.com,$2b$10$ts4NVbds70UUiJRH3YrjHOUbmJfWalSW4C8IsguWniLYi2mjAgTmi,3,2,1,3/23/2026 3:56:11 PM,10/9/2025 7:36:12 PM,3/23/2026 3:56:11 PM
+13,Japrintis Jenkins,jjenkins@dm-us.com,$2b$10$8lrOaj7.hU8idsIXjstoPuGXyiH/aD7kHJfJpcbISma/EZ/CQ9lee,3,2,1,3/23/2026 12:39:32 PM,10/9/2025 7:36:49 PM,3/23/2026 12:39:32 PM
+14,Omar Sumpter,osumpter@dm-us.com,$2b$10$rKCoo1kTEFg48kp5ziO0he7ZqCvAe01aa7dytP8zIsYyfYF1ogx66,3,2,1,null,10/9/2025 7:37:44 PM,10/28/2025 6:10:42 PM
+15,Mieko Smith,msmith@dm-us.com,$2b$10$EqtBIBOqLWIUnY5B164QKu8/8R5us.Kb7Ik.3in4tUZZNQrIUMXNC,3,4,1,10/14/2025 6:56:24 PM,10/9/2025 7:38:50 PM,10/28/2025 6:10:25 PM
+16,Adrian Gaston,agaston@dm-us.com,$2b$10$.CLr1BQ8GhCLhL.doRuMKeQDOEtn1EfvWpMMVqtoNLDx5ZURH/Qs6,3,1,1,3/20/2026 9:01:31 PM,10/9/2025 7:40:15 PM,3/20/2026 9:01:31 PM
+17,Aerial Skinner,askinner@dm-us.com,$2b$10$Iz85Wlq9DPBcln1A6pSOVu6KDgMXU1ZpEVgyNYYRxhI6RV4l3B3KG,3,1,1,3/20/2026 3:17:15 PM,10/9/2025 7:40:40 PM,3/20/2026 3:17:15 PM
+18,Amanda Cowans,acowans@dm-us.com,$2b$10$d3YHKa9kxizEUB81Do51T.yQjozKcljcCwSiXGyi/B58lSKYViTou,3,1,1,3/20/2026 5:45:09 PM,10/9/2025 7:41:06 PM,3/20/2026 5:45:09 PM
+19,Astrid Peasant,apeasant@dm-us.com,$2b$10$k9w5KjK3Y6pbMe1/3bOCq.Cf.ECFdEv2S96mj0bUADwnNkl/hgPcK,3,1,1,3/23/2026 12:42:15 PM,10/9/2025 7:41:34 PM,3/23/2026 12:42:15 PM
+20,Brian Bettis,bbettis@dm-us.com,$2b$10$SayEef264TZfM9.YtiMl0u0JuCaWy.7t9JrgAgaEkH5SSkyeNlXCm,3,1,1,3/23/2026 1:13:29 PM,10/9/2025 7:42:10 PM,3/23/2026 1:13:29 PM
+21,Deonna White,dwhite@dm-us.com,$2b$10$R3XCbYKeZeFeku4mlsVPsu/lEFHW6rJ/RsVkgTIraA5KtpeyJF2/C,3,1,1,3/23/2026 1:42:26 PM,10/9/2025 7:42:42 PM,3/23/2026 1:42:26 PM
+22,Ladonnsa Ford,lford@dm-us.com,$2b$10$uugBGeoUVmIqISTnhd.VNO4O2BT6Jkf/UaZwWeowf4U7KikKFhN9K,3,1,1,3/20/2026 2:57:46 PM,10/9/2025 7:43:12 PM,3/20/2026 2:57:46 PM
+23,Marc Joseph,mjoseph@dm-us.com,$2b$10$3aWQP6G31xGnlrRTiJLKmOlyGonqgQrLJVElqs5L4wze1kDXMAhlS,3,2,1,3/23/2026 1:27:33 PM,10/9/2025 7:43:38 PM,3/23/2026 1:27:33 PM
+24,Matthew Santangelo,msantangelo@dm-us.com,$2b$10$OTR6iITZtXLMp1rLQEkarux3ixS1NwHm8BDCyeDzuzfsu1ekUnnja,3,1,1,3/23/2026 12:34:52 PM,10/9/2025 7:44:04 PM,3/23/2026 12:34:52 PM
+25,Elijah Zeigler,ezeigler@dm-us.com,$2b$10$yJq..H/EACbmVw1TGDdnl.QEDqOwPr7KagsIiVB2lVfGW4yrOynjO,3,2,1,3/23/2026 12:35:58 PM,10/10/2025 12:14:20 PM,3/23/2026 12:35:58 PM
+26,Tahjaee McGarity,tmcgarity@dm-us.com,$2b$10$8QSTdzVgMeym84IoU.JPh.4II7B5XXwWe3q2kDsKYn8YG8HW/CUGu,3,5,1,null,10/10/2025 12:14:56 PM,10/28/2025 6:08:15 PM
+27,Justin Wright,jwright@dm-us.com,$2b$10$isVUS4KbL..P13Sud6Xu3OypsU0iabLQVpSeHx3p/44KvCvLTGy22,1,null,1,3/23/2026 3:30:04 PM,2/10/2026 3:13:59 PM,3/23/2026 3:30:04 PM
+28,Carl Taite,ctaite@dm-us.com,$2b$10$ONRtRu82WigjqggiXLLr6.Racyv6lnOyt15TEtHA4GbqRtBEx.Go.,3,2,1,3/23/2026 4:38:33 PM,2/16/2026 5:45:19 PM,3/23/2026 4:38:33 PM

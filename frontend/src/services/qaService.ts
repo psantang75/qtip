@@ -8,12 +8,6 @@ export function scoreColor(score: number): string {
   return 'text-red-600'
 }
 
-export function scoreBg(score: number): string {
-  if (score >= 85) return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  if (score >= 70) return 'bg-amber-50 text-amber-700 border-amber-200'
-  return 'bg-red-50 text-red-700 border-red-200'
-}
-
 // ── Pagination helpers ────────────────────────────────────────────────────────
 
 /**
@@ -53,14 +47,6 @@ export function normalizePaginated<T>(
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-export interface DashboardStats {
-  totalAudits: number
-  avgScore: number
-  openDisputes: number
-  auditsThisWeek: number
-  [key: string]: unknown
-}
 
 export interface CSRActivityRow {
   csr_id: number
@@ -222,10 +208,7 @@ function normalizeSubmission(item: any): any {
 const qaService = {
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
-  getQAStats:           () => api.get('/qa/stats').then(r => r.data as DashboardStats),
-  getQACsrActivity:     (period: 'week' | 'month' = 'week') =>
-    api.get(`/qa/csr-activity?period=${period}`).then(r => r.data as CSRActivityRow[]),
-  getManagerStats:      () => api.get('/manager/dashboard-stats').then(r => r.data as DashboardStats),
+  getManagerStats:      () => api.get('/manager/dashboard-stats').then(r => r.data),
   getManagerCsrActivity:(period: 'week' | 'month' = 'week') =>
     api.get(`/manager/csr-activity?period=${period}`).then(r => {
       // Backend returns {id, name, department, audits_week, audits_month, disputes_week, ...}
@@ -245,7 +228,7 @@ const qaService = {
         last_audit_date: row.last_audit_date,
       }))
     }),
-  getCSRStats:          () => api.get('/csr/dashboard-stats').then(r => r.data as DashboardStats),
+  getCSRStats:          () => api.get('/csr/dashboard-stats').then(r => r.data),
 
   // ── Submissions ────────────────────────────────────────────────────────────
   getSubmissions: (params: {

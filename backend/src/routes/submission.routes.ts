@@ -2,7 +2,6 @@ import express, { Request, Response, RequestHandler } from 'express';
 import { authenticate } from '../middleware/auth';
 import { SubmissionService, SubmissionServiceError } from '../services/SubmissionService';
 import { MySQLSubmissionRepository } from '../repositories/MySQLSubmissionRepository';
-import { finalizeSubmission } from '../controllers/qa.controller';
 import { serviceLogger } from '../config/logger';
 
 const router = express.Router();
@@ -190,12 +189,5 @@ router.post('/draft', authenticate as unknown as RequestHandler, saveDraft);
  * @access Private (CSR, QA Analyst)
  */
 router.post('/flag', authenticate as unknown as RequestHandler, flagSubmission);
-
-/**
- * @route PUT /api/submissions/:id/finalize
- * @desc Finalize a submission (QA/Manager/Admin)
- * @access Private (QA, Manager, Admin)
- */
-router.put('/:id/finalize', authenticate as unknown as RequestHandler, finalizeSubmission as unknown as RequestHandler);
 
 export default router; 

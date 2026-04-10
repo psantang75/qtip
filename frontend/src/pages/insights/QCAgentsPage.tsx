@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   useReactTable, getCoreRowModel, getSortedRowModel,
@@ -82,13 +82,12 @@ const COLUMNS = [
 ]
 
 export default function QCAgentsPage() {
-  const location = useLocation()
-  const preselectedUserId = (location.state as { preselectedUserId?: number } | null)?.preselectedUserId
+  const [searchParams, setSearchParams] = useSearchParams()
+  const agentId = searchParams.get('agent') ? parseInt(searchParams.get('agent')!, 10) : null
 
   const { departments, setDepartments, period, setPeriod,
           customStart, setCustomStart, customEnd, setCustomEnd,
           resetFilters, params } = useQCFilters()
-  const [selectedAgent, setSelectedAgent] = useState<AgentSummary | null>(null)
   const [selectedForms, setSelectedForms]  = useState<string[]>([])
   const [sorting, setSorting]              = useState<SortingState>([{ id: 'qa', desc: false }])
 
@@ -98,19 +97,25 @@ export default function QCAgentsPage() {
   const deptOptions = filterOpts?.departments ?? []
   const { data: agents = [], isLoading, isError, refetch } = useQuery({ queryKey: ['qc-agents', apiParams], queryFn: () => getQCAgents(apiParams) })
 
-  useEffect(() => {
-    if (preselectedUserId && agents.length > 0 && !selectedAgent) {
-      const found = agents.find(a => a.userId === preselectedUserId)
-      if (found) { setSelectedAgent(found); window.scrollTo(0, 0) }
-    }
-  }, [preselectedUserId, agents, selectedAgent])
+  const selectedAgent = useMemo(() => {
+    if (!agentId) return null
+    return agents.find(a => a.userId === agentId) ?? null
+  }, [agentId, agents])
 
   useEffect(() => {
-    if (!preselectedUserId && selectedAgent) {
-      setSelectedAgent(null)
-      setSelectedForms([])
+    if (agentId) {
+      document.querySelector('main')?.scrollTo({ top: 0 })
     }
-  }, [location.pathname, preselectedUserId, selectedAgent])
+  }, [agentId])
+
+  function selectAgent(agent: AgentSummary) {
+    setSearchParams({ agent: String(agent.userId) })
+  }
+
+  function clearAgent() {
+    setSelectedForms([])
+    setSearchParams({})
+  }
 
   const table = useReactTable({
     data: agents, columns: COLUMNS,
@@ -127,7 +132,7 @@ export default function QCAgentsPage() {
         apiParams={apiParams}
         selectedForms={selectedForms}
         onFormsChange={setSelectedForms}
-        onBack={() => { setSelectedAgent(null); setSelectedForms([]) }}
+        onBack={clearAgent}
         deptOptions={deptOptions}
         departments={departments}
         setDepartments={setDepartments}
@@ -174,7 +179,7 @@ export default function QCAgentsPage() {
             <tbody>
               {table.getRowModel().rows.map(row => (
                 <tr key={row.id} className="border-b border-slate-100 last:border-0 hover:bg-[#eff6ff] cursor-pointer"
-                  onClick={() => { setSelectedAgent(row.original); window.scrollTo(0, 0) }}>
+                  onClick={() => selectAgent(row.original)}>
                   {row.getVisibleCells().map(cell => (
                     <td key={cell.id} className="py-2.5 pr-4">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}

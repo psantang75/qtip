@@ -43,11 +43,14 @@ export class QCKpiService {
   async computeKpisForRange(
     deptFilter: number[],
     range: DateRange,
+    userId?: number,
   ): Promise<{ kpis: Record<string, number | null>; meta: KpiMeta }> {
     const s = fmt(range.start)
     const e = fmt(range.end)
     const dc = deptClause(deptFilter)
     const dp = dc.params
+    const userSql = userId ? 'AND csr.id = ?' : ''
+    const userParams = userId ? [userId] : []
 
     const [businessDays, paceTarget] = await Promise.all([
       countBusinessDays(range.start, range.end),
@@ -62,8 +65,8 @@ export class QCKpiService {
          FROM submissions s
          LEFT JOIN score_snapshots ss ON ss.submission_id = s.id
          ${CSR_JOIN}
-         WHERE s.status = 'FINALIZED' AND s.submitted_at BETWEEN ? AND ? ${dc.sql}`,
-        [s, e, ...dp],
+         WHERE s.status = 'FINALIZED' AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${userSql}`,
+        [s, e, ...dp, ...userParams],
       ),
       scalar(
         `SELECT COUNT(*) AS value FROM submissions s
@@ -341,12 +344,13 @@ export class QCKpiService {
     deptFilter: number[],
     kpiCodes: string[],
     endDate: Date,
+    userId?: number,
   ): Promise<Array<Record<string, number | string | null>>> {
     let anchor = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
     for (let probe = 0; probe < 3; probe++) {
       const mStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
       const mEnd   = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0, 23, 59, 59, 999)
-      const { kpis } = await this.computeKpisForRange(deptFilter, { start: mStart, end: mEnd })
+      const { kpis } = await this.computeKpisForRange(deptFilter, { start: mStart, end: mEnd }, userId)
       const hasData = kpiCodes.some(c => kpis[c] !== null)
       if (hasData) break
       anchor = new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1)
@@ -356,7 +360,7 @@ export class QCKpiService {
     for (let i = 5; i >= 0; i--) {
       const start = new Date(anchor.getFullYear(), anchor.getMonth() - i, 1)
       const end   = new Date(anchor.getFullYear(), anchor.getMonth() - i + 1, 0, 23, 59, 59, 999)
-      const { kpis } = await this.computeKpisForRange(deptFilter, { start, end })
+      const { kpis } = await this.computeKpisForRange(deptFilter, { start, end }, userId)
       const row: Record<string, number | string | null> = {
         label: start.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
       }

@@ -14,6 +14,7 @@ import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifi
 import { CSS } from '@dnd-kit/utilities'
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
 import { Plus, Pencil, Eye, EyeOff, Check, X, GripVertical, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import listService, { type ListItem } from '@/services/listService'
@@ -57,8 +58,8 @@ function SortableListItem({ item, onSave, onToggle, onDelete, showItemKey, avail
         <input className={cn(inp, 'flex-1 bg-white')} value={label} autoFocus placeholder="Label"
           onChange={e => setLabel(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel() }} />
-        <button type="button" onClick={commit} className="text-emerald-600 hover:text-emerald-700"><Check className="h-4 w-4" /></button>
-        <button type="button" onClick={cancel}  className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+        <Button type="button" variant="ghost" size="sm" onClick={commit} className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700"><Check className="h-4 w-4" /></Button>
+        <Button type="button" variant="ghost" size="sm" onClick={cancel} className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></Button>
       </div>
     )
   }
@@ -67,25 +68,25 @@ function SortableListItem({ item, onSave, onToggle, onDelete, showItemKey, avail
     <div ref={setNodeRef} style={style}
       className={cn('flex items-center gap-2 py-2.5 px-3 rounded-lg group bg-white',
         isDragging && 'shadow-md opacity-80 z-10', !item.is_active && 'opacity-40')}>
-      <button {...attributes} {...listeners} type="button"
-        className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-400 shrink-0 touch-none">
+      <Button {...attributes} {...listeners} type="button" variant="ghost" size="sm"
+        className="h-8 w-8 shrink-0 cursor-grab touch-none p-0 text-slate-300 hover:text-slate-400 active:cursor-grabbing">
         <GripVertical className="h-4 w-4" />
-      </button>
+      </Button>
       <span className="text-[13px] text-slate-700 flex-1">{item.label}</span>
       {showItemKey && item.item_key && <span className="text-[11px] text-slate-400 font-mono">{item.item_key}</span>}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button type="button" onClick={() => setEditing(true)} className="p-1 text-slate-400 hover:text-primary rounded"><Pencil className="h-3.5 w-3.5" /></button>
-        <button type="button" onClick={() => onToggle(item.id)} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+        <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)} className="h-8 w-8 p-0 text-slate-400 hover:text-primary"><Pencil className="h-3.5 w-3.5" /></Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => onToggle(item.id)} className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600">
           {item.is_active ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-        </button>
+        </Button>
         {confirming ? (
           <>
             <span className="text-[11px] text-red-500 font-medium">Delete?</span>
-            <button type="button" onClick={() => { onDelete(item.id); setConfirming(false) }} className="p-1 text-red-500 hover:text-red-700 rounded"><Check className="h-3.5 w-3.5" /></button>
-            <button type="button" onClick={() => setConfirming(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded"><X className="h-3.5 w-3.5" /></button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => { onDelete(item.id); setConfirming(false) }} className="h-8 w-8 p-0 text-red-500 hover:text-red-700"><Check className="h-3.5 w-3.5" /></Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(false)} className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"><X className="h-3.5 w-3.5" /></Button>
           </>
         ) : (
-          <button type="button" onClick={() => setConfirming(true)} className="p-1 text-slate-300 hover:text-red-500 rounded"><Trash2 className="h-3.5 w-3.5" /></button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(true)} className="h-8 w-8 p-0 text-slate-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></Button>
         )}
       </div>
     </div>
@@ -121,26 +122,26 @@ function CategoryBlock({ cat, items, addingIn, onStartAdd, onAdd, onCloseAdd,
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
         <div className="flex items-center gap-2">
-          <button {...dragHandleProps} type="button" className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 touch-none">
+          <Button {...dragHandleProps} type="button" variant="ghost" size="sm" className="h-8 w-8 shrink-0 cursor-grab touch-none p-0 text-slate-300 hover:text-slate-500 active:cursor-grabbing">
             <GripVertical className="h-4 w-4" />
-          </button>
+          </Button>
           <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">{cat}</p>
           <span className="text-[10px] text-slate-400">{items.length}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => onStartAdd(cat)} className="flex items-center gap-1 text-[12px] text-primary hover:text-primary/80 font-medium">
+          <Button type="button" variant="default" size="sm" onClick={() => onStartAdd(cat)} className="flex items-center gap-1 text-[12px] font-medium">
             <Plus className="h-3.5 w-3.5" /> Add
-          </button>
+          </Button>
           {confirmingRemove ? (
             <>
               <span className="text-[11px] text-red-500 font-medium">Remove category?</span>
-              <button type="button" onClick={() => { onRemoveCategory(cat); setConfirmingRemove(false) }} className="p-1 text-red-500 hover:text-red-700 rounded"><Check className="h-3.5 w-3.5" /></button>
-              <button type="button" onClick={() => setConfirmingRemove(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded"><X className="h-3.5 w-3.5" /></button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => { onRemoveCategory(cat); setConfirmingRemove(false) }} className="h-8 w-8 p-0 text-red-500 hover:text-red-700"><Check className="h-3.5 w-3.5" /></Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmingRemove(false)} className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"><X className="h-3.5 w-3.5" /></Button>
             </>
           ) : (
-            <button type="button" onClick={() => setConfirmingRemove(true)} className="text-slate-300 hover:text-red-500 transition-colors" title="Remove category">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmingRemove(true)} className="h-8 w-8 p-0 text-slate-300 transition-colors hover:text-red-500" title="Remove category">
               <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -164,7 +165,7 @@ function CategoryBlock({ cat, items, addingIn, onStartAdd, onAdd, onCloseAdd,
                   onAdd((e.target as HTMLInputElement).value.trim())
                 if (e.key === 'Escape') onCloseAdd()
               }} />
-            <button type="button" onClick={onCloseAdd} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+            <Button type="button" variant="ghost" size="sm" onClick={onCloseAdd} className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></Button>
           </div>
         )}
       </div>
@@ -334,13 +335,13 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
           {hasCategories && <span><span className="font-semibold text-slate-700">{categories.length}</span> categories</span>}
         </div>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => setShowCatForm(v => !v)} className="flex items-center gap-1 text-[12px] text-slate-500 hover:text-primary font-medium">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setShowCatForm(v => !v)} className="flex items-center gap-1 text-[12px] font-medium text-slate-500 hover:text-primary">
             <Plus className="h-3.5 w-3.5" /> New Category
-          </button>
+          </Button>
           {!hasCategories && (
-            <button type="button" onClick={() => setAddingFlat(v => !v)} className="flex items-center gap-1 text-[12px] text-primary hover:text-primary/80 font-medium">
+            <Button type="button" variant="default" size="sm" onClick={() => setAddingFlat(v => !v)} className="flex items-center gap-1 text-[12px] font-medium">
               <Plus className="h-3.5 w-3.5" /> Add Option
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -358,7 +359,7 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
               if (e.key === 'Escape') { setShowCatForm(false); setNewCategory('') }
             }} />
           <span className="text-[12px] text-slate-400">Press Enter, then add items</span>
-          <button type="button" onClick={() => { setShowCatForm(false); setNewCategory('') }} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => { setShowCatForm(false); setNewCategory('') }} className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></Button>
         </div>
       )}
 
@@ -371,7 +372,7 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
               if (e.key === 'Escape') { setAddingFlat(false); setNewLabel('') }
             }} />
           <span className="text-[12px] text-slate-400">Press Enter to add</span>
-          <button type="button" onClick={() => { setAddingFlat(false); setNewLabel('') }} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => { setAddingFlat(false); setNewLabel('') }} className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></Button>
         </div>
       )}
 

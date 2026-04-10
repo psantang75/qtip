@@ -324,7 +324,7 @@ function ThresholdSection({ kpiId, kpiCode }: { kpiId: number; kpiCode: string }
         </Button>
       </div>
       {isPaceBased && (
-        <p className="text-[12px] text-[#00aeef] bg-blue-50 border border-blue-100 rounded-md px-3 py-2">
+        <p className="text-[12px] text-primary bg-blue-50 border border-blue-100 rounded-md px-3 py-2">
           <strong>Pace-based KPI:</strong> Goal Value = target audits per business day.
           The system multiplies this by the number of business days in the selected period to compute the assigned count.
         </p>
@@ -357,7 +357,7 @@ function ThresholdSection({ kpiId, kpiCode }: { kpiId: number; kpiCode: string }
                     <button
                       onClick={() => openEdit(t)}
                       disabled={formMode !== 'closed'}
-                      className="p-1 text-slate-400 hover:text-[#00aeef] disabled:opacity-30 transition-colors"
+                      className="p-1 text-slate-400 hover:text-primary disabled:opacity-30 transition-colors"
                       title="Edit"
                     >
                       <Pencil size={13} />

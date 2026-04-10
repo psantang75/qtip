@@ -65,7 +65,7 @@ function AgentTable({ agents, highlight, qaGoal, qaWarn }: { agents: AgentSummar
           <tr
             key={a.userId}
             className={`border-b border-slate-100 last:border-0 ${hoverCls} cursor-pointer`}
-            onClick={() => navigate('/app/insights/qc-agents', { state: { preselectedUserId: a.userId } })}
+            onClick={() => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
           >
             <td className="py-2 pr-2 text-slate-400">{i + 1}</td>
             <td className="py-2 pr-2 font-medium text-slate-800">{a.name}</td>

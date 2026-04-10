@@ -24,8 +24,11 @@ export default function AgentQualitySection({
       <div className="text-sm font-bold text-slate-800 pb-1.5 border-b-2 border-primary">Quality</div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <InsightsSection title="QA Score Trend">
-          <TrendChart data={qaTrend} color="#00aeef" goalValue={qaGoal} height={110} metricLabel="%" />
+        <InsightsSection title="QA Score Trend (6 Months)">
+          {qaTrend.length > 0
+            ? <TrendChart data={qaTrend} color="#00aeef" goalValue={qaGoal} height={110} metricLabel="%" />
+            : <p className="text-sm text-slate-400 py-6 text-center">No QA score data in the last 6 months.</p>
+          }
         </InsightsSection>
         <InsightsSection title="Dispute Activity">
           <StatRow label="Total Disputes Filed"           value={String(ds?.total ?? 0)} valueColor={(ds?.total ?? 0) > 0 ? 'text-orange-500' : 'text-emerald-600'} />

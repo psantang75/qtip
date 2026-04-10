@@ -4,7 +4,6 @@ import {
   generateReport,
   exportReport,
   getTrainingStats,
-  getTraineeProgress,
   getTrainerTeamCSRs,
   getTrainerDashboardStats,
   getTrainerCSRActivity,

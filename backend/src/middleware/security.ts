@@ -127,19 +127,6 @@ export const apiLimiter = rateLimit({
   }
 });
 
-export const uploadLimiter = rateLimit({
-  windowMs: config.RATE_LIMIT_WINDOW_MS, // 15 minutes
-  max: 10, // limit each IP to 10 uploads per windowMs
-  message: {
-    error: 'Too many upload attempts, please try again later',
-    code: 'UPLOAD_RATE_LIMIT_EXCEEDED',
-    retryAfter: Math.ceil(config.RATE_LIMIT_WINDOW_MS / 1000)
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: rateLimitKeyGenerator
-});
-
 /**
  * Request validation middleware
  */
@@ -194,38 +181,6 @@ export const validateRequest = (req: Request, res: Response, next: NextFunction)
 };
 
 /**
- * IP filtering middleware
- */
-export const ipFilter = (req: Request, res: Response, next: NextFunction): void => {
-  const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
-  
-  // In production, you might want to implement IP blacklisting
-  const blacklistedIps: string[] = [
-    // Add blacklisted IPs here
-  ];
-
-  if (blacklistedIps.includes(clientIp)) {
-    console.warn(`[SECURITY] Blocked request from blacklisted IP: ${clientIp}`);
-    res.status(403).json({
-      success: false,
-      error: {
-        message: 'Access denied',
-        code: 'IP_BLOCKED'
-      }
-    });
-    return;
-  }
-
-  // Log suspicious activity
-  if (req.headers['user-agent']?.includes('bot') && 
-      !req.headers['user-agent']?.includes('legitimate-bot')) {
-    console.warn(`[SECURITY] Potential bot access from ${clientIp}: ${req.headers['user-agent']}`);
-  }
-
-  next();
-};
-
-/**
  * CORS configuration for production
  */
 export const corsConfig = {
@@ -245,14 +200,3 @@ export const corsConfig = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['X-Total-Count', 'X-Page-Count', 'X-RateLimit-Limit', 'X-RateLimit-Remaining']
 };
-
-/**
- * Health check bypass for monitoring
- */
-export const bypassHealthCheck = (req: Request, res: Response, next: NextFunction): void => {
-  if (req.path === '/health' || req.path === '/metrics' || req.path === '/status') {
-    // Skip authentication and rate limiting for monitoring endpoints
-    return next();
-  }
-  next();
-}; 

@@ -106,7 +106,8 @@ export const getQCTrends = qcHandler('qc_overview', (deptFilter, ranges, req) =>
   const codes = req.query.kpis
     ? (req.query.kpis as string).split(',')
     : ['avg_qa_score', 'coaching_completion_rate', 'quiz_pass_rate']
-  return qcKpiService.getTrends(deptFilter, codes, ranges.current.end)
+  const userId = req.query.userId ? parseInt(req.query.userId as string, 10) : undefined
+  return qcKpiService.getTrends(deptFilter, codes, ranges.current.end, userId)
 })
 
 // ── Agents ────────────────────────────────────────────────────────────────────

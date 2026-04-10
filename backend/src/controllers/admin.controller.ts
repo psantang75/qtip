@@ -578,7 +578,6 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
     let { csr_id, session_date, topic_ids, coaching_purpose, coaching_format, notes, status } = req.body;
     coaching_purpose = coaching_purpose || 'WEEKLY';
     coaching_format  = coaching_format  || 'ONE_ON_ONE';
-    const coaching_type = coaching_purpose; // alias for legacy raw SQL
     const attachment = req.file as Express.Multer.File | undefined;
 
     if (topic_ids !== undefined) {
@@ -713,7 +712,7 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
           action: 'CREATE',
           target_id: session.id,
           target_type: 'coaching_session',
-          details: JSON.stringify({ csr_id, topic_ids, coaching_type, status, has_attachment: !!attachment })
+          details: JSON.stringify({ csr_id, topic_ids, coaching_purpose, status, has_attachment: !!attachment })
         }
       });
 
@@ -722,7 +721,7 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
 
     const createdSession = await prisma.$queryRaw<any[]>`
       SELECT
-        cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_type, cs.notes, cs.status,
+        cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_purpose, cs.notes, cs.status,
         cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
         cs.created_at, creator.username as created_by_name,
         GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
@@ -765,7 +764,7 @@ export const getAdminCoachingSessions = async (req: AuthenticatedRequest, res: R
     const searchTerm = req.query.search as string || '';
     const csr_id = req.query.csr_id as string || '';
     const status = req.query.status as string || '';
-    const coaching_type = req.query.coaching_type as string || '';
+    const coaching_purpose = req.query.coaching_purpose as string || '';
     const start_date = req.query.start_date as string || '';
     const end_date = req.query.end_date as string || '';
 
@@ -805,7 +804,7 @@ export const getAdminCoachingSessions = async (req: AuthenticatedRequest, res: R
 
     if (csr_id) conditions.push(Prisma.sql`cs.csr_id = ${parseInt(csr_id)}`);
     if (status) conditions.push(Prisma.sql`cs.status = ${status}`);
-    if (coaching_type) conditions.push(Prisma.sql`cs.coaching_type = ${coaching_type}`);
+    if (coaching_purpose) conditions.push(Prisma.sql`cs.coaching_purpose = ${coaching_purpose}`);
     if (start_date) conditions.push(Prisma.sql`DATE(cs.session_date) >= ${start_date}`);
     if (end_date) conditions.push(Prisma.sql`DATE(cs.session_date) <= ${end_date}`);
 
@@ -821,7 +820,7 @@ export const getAdminCoachingSessions = async (req: AuthenticatedRequest, res: R
       `,
       prisma.$queryRaw<any[]>`
         SELECT
-          cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_type, cs.notes, cs.status,
+          cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_purpose, cs.notes, cs.status,
           cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
           cs.created_at, creator.username as created_by_name,
           GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
@@ -865,7 +864,7 @@ export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res
     const searchTerm = req.query.search as string || '';
     const csr_id = req.query.csr_id as string || '';
     const status = req.query.status as string || '';
-    const coaching_type = req.query.coaching_type as string || '';
+    const coaching_purpose = req.query.coaching_purpose as string || '';
     const start_date = req.query.start_date as string || '';
     const end_date = req.query.end_date as string || '';
 
@@ -900,7 +899,7 @@ export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res
 
     if (csr_id) conditions.push(Prisma.sql`cs.csr_id = ${parseInt(csr_id)}`);
     if (status) conditions.push(Prisma.sql`cs.status = ${status}`);
-    if (coaching_type) conditions.push(Prisma.sql`cs.coaching_type = ${coaching_type}`);
+    if (coaching_purpose) conditions.push(Prisma.sql`cs.coaching_purpose = ${coaching_purpose}`);
     if (start_date) conditions.push(Prisma.sql`DATE(cs.session_date) >= ${start_date}`);
     if (end_date) conditions.push(Prisma.sql`DATE(cs.session_date) <= ${end_date}`);
 
@@ -908,7 +907,7 @@ export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res
 
     const sessions = await prisma.$queryRaw<any[]>`
       SELECT
-        cs.id, cs.session_date, cs.coaching_type, cs.notes, cs.status, cs.attachment_filename,
+        cs.id, cs.session_date, cs.coaching_purpose, cs.notes, cs.status, cs.attachment_filename,
         cs.created_at, u.username as csr_name, creator.username as created_by_name,
         GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics
       FROM coaching_sessions cs
@@ -928,7 +927,7 @@ export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res
     worksheet.columns = [
       { header: 'Session ID', key: 'id', width: 14 },
       { header: 'Status', key: 'status', width: 14 },
-      { header: 'Coaching Type', key: 'coaching_type', width: 20 },
+      { header: 'Coaching Purpose', key: 'coaching_purpose', width: 20 },
       { header: 'CSR Name', key: 'csr_name', width: 24 },
       { header: 'Topics', key: 'topics', width: 36 },
       { header: 'Manager/Trainer', key: 'created_by_name', width: 24 },
@@ -947,7 +946,7 @@ export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res
       worksheet.addRow({
         id: `#${session.id}`,
         status: session.status ? session.status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c: string) => c.toUpperCase()) : '',
-        coaching_type: session.coaching_type || '',
+        coaching_purpose: session.coaching_purpose || '',
         csr_name: session.csr_name || '',
         topics: session.topics || '',
         created_by_name: session.created_by_name || 'Unknown',
@@ -1009,7 +1008,7 @@ export const getAdminCoachingSessionDetails = async (req: AuthenticatedRequest, 
     const sessionRows = await prisma.$queryRaw<any[]>`
       SELECT
         cs.id, cs.csr_id, u.username as csr_name, u.email as csr_email,
-        d.department_name as csr_department, cs.session_date, cs.coaching_type, cs.notes, cs.status,
+        d.department_name as csr_department, cs.session_date, cs.coaching_purpose, cs.notes, cs.status,
         cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
         cs.created_at, creator.username as created_by_name,
         GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
@@ -1056,7 +1055,6 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
     const adminId = req.user?.user_id;
     const sessionId = parseInt(req.params.sessionId);
     let { csr_id, session_date, topic_ids, coaching_purpose, coaching_format, notes, status } = req.body;
-    const coaching_type = coaching_purpose; // alias for legacy code
     const attachment = req.file as Express.Multer.File | undefined;
 
     if (topic_ids !== undefined) {
@@ -1107,7 +1105,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
       const hasOtherFieldUpdates = csr_id !== undefined ||
         session_date !== undefined ||
         topic_ids !== undefined ||
-        coaching_type !== undefined ||
+        coaching_purpose !== undefined ||
         (notes !== undefined && notes !== '') ||
         attachment !== undefined;
 
@@ -1168,10 +1166,10 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
       return;
     }
 
-    if (coaching_type) {
-      const validCoachingTypes = ['Classroom', 'Side-by-Side', 'Team Session', '1-on-1', 'PIP', 'Verbal Warning', 'Written Warning'];
-      if (!validCoachingTypes.includes(coaching_type)) {
-        res.status(400).json({ success: false, message: 'Invalid coaching type' });
+    if (coaching_purpose) {
+      const validCoachingPurposes = ['WEEKLY', 'PERFORMANCE', 'ONBOARDING'];
+      if (!validCoachingPurposes.includes(coaching_purpose)) {
+        res.status(400).json({ success: false, message: 'Invalid coaching purpose' });
         return;
       }
     }
@@ -1266,7 +1264,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
 
     const updatedSession = await prisma.$queryRaw<any[]>`
       SELECT
-        cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_type, cs.notes, cs.status,
+        cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_purpose, cs.notes, cs.status,
         cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
         cs.created_at, creator.username as created_by_name,
         GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
@@ -1357,7 +1355,7 @@ export const completeAdminCoachingSession = async (req: AuthenticatedRequest, re
 
     const updatedSession = await prisma.$queryRaw<any[]>`
       SELECT
-        cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_type, cs.notes, cs.status,
+        cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_purpose, cs.notes, cs.status,
         cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
         cs.created_at, creator.username as created_by_name,
         GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
@@ -1448,7 +1446,7 @@ export const reopenAdminCoachingSession = async (req: AuthenticatedRequest, res:
 
     const updatedSession = await prisma.$queryRaw<any[]>`
       SELECT
-        cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_type, cs.notes, cs.status,
+        cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_purpose, cs.notes, cs.status,
         cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
         cs.created_at, creator.username as created_by_name,
         GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,

@@ -50,7 +50,7 @@ export default function QCWarningsPage() {
 
   const maxPolicy  = Math.max(...policies.map(p => p.count), 1)
 
-  const navAgent = (userId: number) => navigate('/app/insights/qc-agents', { state: { preselectedUserId: userId } })
+  const navAgent = (userId: number) => navigate(`/app/insights/qc-agents?agent=${userId}`)
 
   return (
     <div>
