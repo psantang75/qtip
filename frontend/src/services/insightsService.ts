@@ -1,5 +1,11 @@
 import { api } from './authService'
 
+// ── Shared enums ─────────────────────────────────────────────────────────────
+
+export type DataScope = 'ALL' | 'DIVISION' | 'DEPARTMENT' | 'SELF'
+export type KpiDirection = 'UP_IS_GOOD' | 'DOWN_IS_GOOD' | 'NEUTRAL'
+export type KpiFormatType = 'PERCENT' | 'NUMBER'
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface InsightsNavItem {
@@ -18,7 +24,7 @@ export interface InsightsNavCategory {
 
 export interface InsightsAccessResult {
   canAccess: boolean
-  dataScope: 'ALL' | 'DIVISION' | 'DEPARTMENT' | 'SELF' | null
+  dataScope: DataScope | null
 }
 
 export interface DataFreshnessEntry {
@@ -36,9 +42,9 @@ export interface IeKpi {
   formula_type: string
   formula: string
   source_table: string | null
-  format_type: string
+  format_type: KpiFormatType
   decimal_places: number
-  direction: string
+  direction: KpiDirection
   unit_label: string | null
   is_active: boolean
   sort_order: number
@@ -77,7 +83,7 @@ export interface IePageRoleAccess {
   role_id: number
   role_name: string
   can_access: boolean
-  data_scope: string
+  data_scope: DataScope
 }
 
 export interface IePageUserOverride {
@@ -86,7 +92,7 @@ export interface IePageUserOverride {
   user_id: number
   user_name: string
   can_access: boolean
-  data_scope: string | null
+  data_scope: DataScope | null
   granted_by: number
   granter_name: string
   granted_at: string
@@ -94,7 +100,26 @@ export interface IePageUserOverride {
   reason: string | null
 }
 
+// ── KPI Config (live thresholds from ie_kpi + ie_kpi_threshold) ──────────────
+
+export interface KpiConfigEntry {
+  name:           string
+  format:         KpiFormatType
+  direction:      KpiDirection
+  decimal_places: number
+  goal:           number | null
+  warn:           number | null
+  crit:           number | null
+}
+
+export type KpiConfig = Record<string, KpiConfigEntry>
+
 // ── Navigation & Access ───────────────────────────────────────────────────────
+
+export const getKpiConfig = async (): Promise<KpiConfig> => {
+  const response = await api.get('/insights/kpi-config')
+  return response.data
+}
 
 export const getInsightsNavigation = async (): Promise<InsightsNavCategory[]> => {
   const response = await api.get('/insights/navigation')
@@ -138,6 +163,15 @@ export const setThreshold = async (kpiId: number, data: Partial<IeKpiThreshold>)
   return response.data
 }
 
+export const updateThreshold = async (kpiId: number, thresholdId: number, data: Partial<IeKpiThreshold>): Promise<IeKpiThreshold> => {
+  const response = await api.put(`/insights/admin/kpis/${kpiId}/thresholds/${thresholdId}`, data)
+  return response.data
+}
+
+export const deleteThreshold = async (kpiId: number, thresholdId: number): Promise<void> => {
+  await api.delete(`/insights/admin/kpis/${kpiId}/thresholds/${thresholdId}`)
+}
+
 // ── Admin: Pages & Access ─────────────────────────────────────────────────────
 
 export const listPages = async (): Promise<IePage[]> => {
@@ -147,7 +181,7 @@ export const listPages = async (): Promise<IePage[]> => {
 
 export const updatePageAccess = async (
   pageId: number,
-  roles: Array<{ role_id: number; can_access: boolean; data_scope: string }>
+  roles: Array<{ role_id: number; can_access: boolean; data_scope: DataScope }>
 ): Promise<void> => {
   await api.put(`/insights/admin/pages/${pageId}/access`, { roles })
 }
@@ -166,4 +200,56 @@ export const createOverride = async (
 
 export const deleteOverride = async (pageId: number, overrideId: number): Promise<void> => {
   await api.delete(`/insights/admin/pages/${pageId}/overrides/${overrideId}`)
+}
+
+// ── Business Calendar ─────────────────────────────────────────────────────────
+
+export type BusinessDayType = 'WORKDAY' | 'WEEKEND' | 'HOLIDAY' | 'CLOSURE' | 'ADJUSTMENT'
+
+export interface CalendarDayEntry {
+  calendar_date:   string           // YYYY-MM-DD
+  day_type:        BusinessDayType
+  is_business_day: boolean
+  note:            string | null
+  is_stored:       boolean          // false = synthesized default
+}
+
+export interface BusinessDaySummary {
+  totalDays:       number
+  businessDays:    number
+  nonBusinessDays: number
+}
+
+export interface CalendarMonthResponse {
+  days:    CalendarDayEntry[]
+  summary: BusinessDaySummary
+}
+
+export interface CalendarUpdatePayload {
+  day_type: BusinessDayType
+  note?:    string | null
+}
+
+export const getCalendar = async (
+  year: number,
+  month: number,
+): Promise<CalendarMonthResponse> => {
+  const response = await api.get('/insights/admin/calendar', { params: { year, month } })
+  return response.data
+}
+
+export const updateCalendarDay = async (
+  date:    string,
+  payload: CalendarUpdatePayload,
+): Promise<CalendarDayEntry> => {
+  const response = await api.put(`/insights/admin/calendar/${date}`, payload)
+  return response.data
+}
+
+export const saveCalendarMonthDefaults = async (
+  year:  number,
+  month: number,
+): Promise<{ year: number; month: number; daysCreated: number; summary: BusinessDaySummary }> => {
+  const response = await api.post('/insights/admin/calendar/save-month', { year, month })
+  return response.data
 }

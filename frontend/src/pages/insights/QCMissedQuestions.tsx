@@ -21,14 +21,14 @@ export default function QCMissedQuestions({ questions }: Props) {
   }
 
   return (
-    <InsightsSection title="Top Missed Questions" description="Questions with the highest failure rate across finalized audits.">
-      {questions.map((q, idx) => {
+    <InsightsSection title="Top Missed Questions">
+      {questions.map((q) => {
         const barPct = Math.min(q.missRate, 100)
         return (
           <ExpandableRow
             key={q.questionId}
-            isExpanded={expanded === idx}
-            onToggle={() => setExpanded(expanded === idx ? null : idx)}
+            isExpanded={expanded === q.questionId}
+            onToggle={() => setExpanded(expanded === q.questionId ? null : q.questionId)}
             summary={
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <span className="text-[13px] font-medium text-slate-800 truncate flex-1">{q.question}</span>
@@ -41,6 +41,7 @@ export default function QCMissedQuestions({ questions }: Props) {
                     />
                   </div>
                   <span className="text-xs font-semibold text-red-600 w-10 text-right">{q.missRate}%</span>
+                  <span className="text-[11px] text-slate-400 w-14 text-right">{q.missed}/{q.total}</span>
                 </div>
               </div>
             }
@@ -58,6 +59,7 @@ export default function QCMissedQuestions({ questions }: Props) {
                       <tr className="text-slate-400 border-b border-slate-200">
                         <th className="text-left py-1 font-medium">Agent</th>
                         <th className="text-left py-1 font-medium">Department</th>
+                        <th className="text-right py-1 font-medium">Missed / Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -71,8 +73,9 @@ export default function QCMissedQuestions({ questions }: Props) {
                             })
                           }
                         >
-                          <td className="py-1.5 text-[#00aeef] hover:underline">{agent.name}</td>
+                          <td className="py-1.5 text-primary hover:underline">{agent.name}</td>
                           <td className="py-1.5 text-slate-500">{agent.dept}</td>
+                          <td className="py-1.5 text-right text-slate-600 font-medium">{agent.missed}/{agent.total}</td>
                         </tr>
                       ))}
                     </tbody>

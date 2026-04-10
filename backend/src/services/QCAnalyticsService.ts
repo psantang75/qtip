@@ -2,10 +2,7 @@ import pool from '../config/database'
 import { RowDataPacket } from 'mysql2'
 import type { PeriodRanges } from '../utils/periodUtils'
 import { fmtDatetime as fmt } from '../utils/dateHelpers'
-function deptClause(f: number[], alias = 'u'): { sql: string; params: number[] } {
-  if (f.length === 0) return { sql: '', params: [] }
-  return { sql: `AND ${alias}.department_id IN (${f.map(() => '?').join(',')})`, params: f }
-}
+import { deptClause } from './qcQueryHelpers'
 
 export interface AgentSummary {
   userId: number; name: string; dept: string

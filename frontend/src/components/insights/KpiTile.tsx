@@ -5,6 +5,7 @@ import {
   getThresholdStatus,
 } from '@/constants/kpiDefs'
 import type { KpiDef } from '@/constants/kpiDefs'
+import { THRESHOLD_BG } from './thresholdColors'
 
 interface KpiTileProps {
   kpiCode: string
@@ -13,13 +14,6 @@ interface KpiTileProps {
   small?: boolean
   onClick?: () => void
   thresholds?: Pick<KpiDef, 'goal' | 'warn' | 'crit' | 'direction'>
-}
-
-const STATUS_DOT: Record<string, string> = {
-  good:     'bg-emerald-500',
-  warning:  'bg-orange-400',
-  critical: 'bg-red-500',
-  neutral:  'bg-slate-300',
 }
 
 export default function KpiTile({
@@ -92,7 +86,7 @@ export default function KpiTile({
         'bg-white border rounded-xl transition-all',
         small ? 'p-3' : 'p-4',
         isClickable
-          ? 'cursor-pointer border-slate-200 hover:border-[#00aeef] hover:shadow-md hover:shadow-[#00aeef]/10'
+          ? 'cursor-pointer border-slate-200 hover:border-primary hover:shadow-md hover:shadow-primary/10'
           : 'border-slate-200',
       )}
     >
@@ -107,7 +101,7 @@ export default function KpiTile({
         <span className={cn(
           'inline-block rounded-full shrink-0 mt-0.5',
           small ? 'w-1.5 h-1.5' : 'w-2 h-2',
-          STATUS_DOT[status],
+          THRESHOLD_BG[status],
         )} />
       </div>
 

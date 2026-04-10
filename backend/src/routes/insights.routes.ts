@@ -4,6 +4,7 @@ import {
   getInsightsNavigation,
   getInsightsAccess,
   getDataFreshness,
+  getKpiConfig,
 } from '../controllers/insights.controller';
 import qcRouter from './insightsQC.routes';
 
@@ -22,6 +23,11 @@ router.get('/access/:pageKey',
 router.get('/data-freshness',
   authenticate as unknown as RequestHandler,
   getDataFreshness as unknown as RequestHandler
+);
+
+router.get('/kpi-config',
+  authenticate as unknown as RequestHandler,
+  getKpiConfig as unknown as RequestHandler
 );
 
 // QC analytics — authenticate applied per-handler (via qcHandler wrapper)

@@ -15,7 +15,10 @@ export interface QCParams {
 export type KpiValues = Record<string, number | null>
 export interface KpiMeta       { businessDays: number; paceTarget: number | null }
 export interface QCKpiResponse { current: KpiValues; prior: KpiValues; meta: KpiMeta; priorMeta: KpiMeta }
-export type TrendRow            = Record<string, number | string | null>
+export interface TrendRow {
+  label: string
+  [kpiCode: string]: number | string | null
+}
 
 export interface AgentSummary {
   userId: number; name: string; dept: string

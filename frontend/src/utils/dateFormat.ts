@@ -43,8 +43,12 @@ export function defaultDateRange90(): { start: string; end: string } {
   const end   = new Date(today)
   start.setDate(today.getDate() - 90)
   end.setDate(today.getDate() + 30)
-  const fmt = (d: Date) => d.toISOString().split('T')[0]
-  return { start: fmt(start), end: fmt(end) }
+  return { start: fmtLocal(start), end: fmtLocal(end) }
+}
+
+/** Format a Date as YYYY-MM-DD using local components (no UTC shift). */
+export function fmtLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /**

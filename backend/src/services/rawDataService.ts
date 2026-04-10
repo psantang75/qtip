@@ -377,7 +377,7 @@ export async function exportRawData(params: RawDataQueryParams): Promise<Buffer>
     for (const col of selectedColumns) {
       const v = row[col];
       if (v instanceof Date) {
-        out[col] = v.toISOString().split('T')[0];
+        out[col] = `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;
       } else if (v !== null && typeof v === 'object' && typeof v.toNumber === 'function') {
         out[col] = v.toNumber();
       } else {

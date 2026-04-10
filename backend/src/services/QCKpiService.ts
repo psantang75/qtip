@@ -4,20 +4,7 @@ import type { DateRange, PeriodRanges } from '../utils/periodUtils'
 import { countBusinessDays } from '../utils/businessCalendar'
 import { fmtDatetime as fmt, fmtDate } from '../utils/dateHelpers'
 
-function deptClause(
-  deptFilter: number[],
-  alias = 'csr',
-): { sql: string; params: number[] } {
-  if (deptFilter.length === 0) return { sql: '', params: [] }
-  const ph = deptFilter.map(() => '?').join(',')
-  return { sql: `AND ${alias}.department_id IN (${ph})`, params: deptFilter }
-}
-
-// Reusable CSR metadata join for submission-based queries
-const CSR_JOIN = `
-  JOIN submission_metadata sm_csr ON sm_csr.submission_id = s.id
-  JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
-  JOIN users csr ON csr.id = CAST(sm_csr.value AS UNSIGNED)`
+import { deptClause, CSR_JOIN } from './qcQueryHelpers'
 
 async function scalar(sql: string, params: unknown[]): Promise<number | null> {
   const [rows] = await pool.execute<RowDataPacket[]>(sql, params)

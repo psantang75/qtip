@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Users, Building2, ShieldCheck, List, BarChart3, FileText, Activity } from 'lucide-react'
+import { Users, Building2, ShieldCheck, List, BarChart3, FileText, Activity, CalendarDays } from 'lucide-react'
 import TopBar from './TopBar'
 import { cn } from '@/lib/utils'
 
@@ -11,9 +11,10 @@ const ADMIN_NAV = [
 ]
 
 const INSIGHTS_NAV = [
-  { label: 'KPIs',            path: '/app/admin/insights/kpis',       icon: BarChart3 },
-  { label: 'Pages & Access',  path: '/app/admin/insights/pages',      icon: FileText },
-  { label: 'Ingestion Log',   path: '/app/admin/insights/ingestion',  icon: Activity },
+  { label: 'KPIs',              path: '/app/admin/insights/kpis',       icon: BarChart3 },
+  { label: 'Pages & Access',    path: '/app/admin/insights/pages',      icon: FileText },
+  { label: 'Business Calendar', path: '/app/admin/insights/calendar',   icon: CalendarDays },
+  { label: 'Ingestion Log',     path: '/app/admin/insights/ingestion',  icon: Activity },
 ]
 
 const ACTIVE   = 'border-l-[3px] border-l-primary bg-primary/[0.08] text-primary font-semibold'

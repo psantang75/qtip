@@ -5,6 +5,7 @@ import { InsightsPermissionService } from '../services/InsightsPermissionService
 import type { InsightsAccessResult } from '../services/InsightsPermissionService'
 import { resolvePeriod } from '../utils/periodUtils'
 import type { PeriodRanges } from '../utils/periodUtils'
+import { getInsightsRoleId } from '../utils/insightsRoleMap'
 import { qcKpiService } from '../services/QCKpiService'
 import { qcAnalyticsService } from '../services/QCAnalyticsService'
 import * as qcData from '../services/QCInsightsData'
@@ -12,12 +13,11 @@ import * as qcCoaching from '../services/QCCoachingData'
 
 const permissionService = new InsightsPermissionService()
 
-const ROLE_ID_MAP: Record<string, number> = {
-  Admin: 1, QA: 2, CSR: 3, Trainer: 4, Manager: 5, Director: 6,
-}
-
-function getRoleId(role: string): number {
-  return ROLE_ID_MAP[role] ?? 3
+class BadRequestError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BadRequestError'
+  }
 }
 
 async function resolveDeptFilter(
@@ -67,8 +67,13 @@ function qcHandler(
         res.status(401).json({ error: 'Authentication required' })
         return
       }
+      const roleId = getInsightsRoleId(req.user.role)
+      if (roleId === null) {
+        res.status(403).json({ error: 'Unknown role' })
+        return
+      }
       const access = await permissionService.resolveAccess(
-        req.user.user_id, getRoleId(req.user.role), pageKey,
+        req.user.user_id, roleId, pageKey,
       )
       if (!access.canAccess) {
         res.status(403).json({ error: 'Access denied' })
@@ -81,6 +86,10 @@ function qcHandler(
       const data   = await fn(deptFilter, ranges, req)
       res.json(data)
     } catch (err) {
+      if (err instanceof BadRequestError) {
+        res.status(400).json({ error: err.message })
+        return
+      }
       console.error(`insightsQC [${pageKey}] error:`, err)
       res.status(500).json({ error: 'Internal server error' })
     }
@@ -108,7 +117,7 @@ export const getQCAgents = qcHandler('qc_agents', (deptFilter, ranges) =>
 
 export const getQCAgentProfile = qcHandler('qc_agents', (deptFilter, ranges, req) => {
   const userId = parseInt(req.params.userId, 10)
-  if (isNaN(userId)) throw new Error('Invalid userId')
+  if (isNaN(userId)) throw new BadRequestError('Invalid userId')
   return qcAnalyticsService.getAgentProfile(userId, ranges)
 })
 
@@ -160,7 +169,7 @@ export const getRepeatOffenders = qcHandler('qc_coaching', (deptFilter, ranges) 
 
 export const getCoachingTopicAgents = qcHandler('qc_coaching', (deptFilter, ranges, req) => {
   const topic = req.query.topic as string
-  if (!topic) throw new Error('topic query parameter is required')
+  if (!topic) throw new BadRequestError('topic query parameter is required')
   return qcCoaching.getCoachingTopicAgents(topic, deptFilter, ranges)
 })
 

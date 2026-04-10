@@ -15,8 +15,7 @@ import {
   HiOutlineUserGroup,
   HiOutlineExclamation,
   HiOutlineShieldCheck,
-  HiOutlineChat,
-  HiOutlineTag
+  HiOutlineChat
 } from 'react-icons/hi';
 
 /**
@@ -62,15 +61,6 @@ const createNavigationItems = (): Record<UserRoleId, NavigationItem[]> => {
         roles: [USER_ROLES.ADMIN],
         group: 'management',
         order: 2
-      },
-      {
-        id: 'admin-topics',
-        label: 'Topics',
-        path: '/admin/topics',
-        icon: HiOutlineTag,
-        roles: [USER_ROLES.ADMIN],
-        group: 'management',
-        order: 3
       },
       {
         id: 'admin-forms',

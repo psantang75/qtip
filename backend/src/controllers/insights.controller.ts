@@ -2,12 +2,9 @@ import { Request, Response } from 'express';
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import { InsightsPermissionService } from '../services/InsightsPermissionService';
+import { getInsightsRoleId } from '../utils/insightsRoleMap';
 
 const permissionService = new InsightsPermissionService();
-
-const roleNameToId: Record<string, number> = {
-  Admin: 1, QA: 2, CSR: 3, Trainer: 4, Manager: 5, Director: 6,
-};
 
 /**
  * GET /api/insights/navigation
@@ -18,7 +15,8 @@ export const getInsightsNavigation = async (req: Request, res: Response): Promis
     if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }
 
     const userId = req.user.user_id;
-    const roleId = roleNameToId[req.user.role] ?? 0;
+    const roleId = getInsightsRoleId(req.user.role);
+    if (roleId === null) { res.status(403).json({ error: 'Unknown role' }); return; }
 
     const [pages] = await pool.execute<RowDataPacket[]>(
       'SELECT id, page_key, page_name, category, route_path, icon, sort_order FROM ie_page WHERE is_active = 1 ORDER BY category, sort_order'
@@ -67,7 +65,8 @@ export const getInsightsAccess = async (req: Request, res: Response): Promise<vo
     if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }
 
     const pageKey = req.params.pageKey;
-    const roleId = roleNameToId[req.user.role] ?? 0;
+    const roleId = getInsightsRoleId(req.user.role);
+    if (roleId === null) { res.status(403).json({ error: 'Unknown role' }); return; }
     const access = await permissionService.resolveAccess(req.user.user_id, roleId, pageKey);
 
     res.json({ canAccess: access.canAccess, dataScope: access.dataScope });
@@ -76,6 +75,59 @@ export const getInsightsAccess = async (req: Request, res: Response): Promise<vo
     res.status(500).json({ error: 'Failed to check insights access' });
   }
 };
+
+/**
+ * GET /api/insights/kpi-config
+ * Returns all active KPI definitions with their currently active global thresholds.
+ * Used by the frontend to drive KPI tile colors and goal lines from the IE settings
+ * rather than hardcoded values in kpiDefs.ts.
+ * Accessible to any authenticated user (not admin-gated).
+ */
+export const getKpiConfig = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT
+         k.kpi_code,
+         k.kpi_name,
+         k.format_type,
+         k.direction,
+         k.decimal_places,
+         t.goal_value,
+         t.warning_value,
+         t.critical_value
+       FROM ie_kpi k
+       LEFT JOIN ie_kpi_threshold t
+         ON t.kpi_id = k.id
+         AND t.department_key IS NULL
+         AND DATE(t.effective_from) <= CURDATE()
+         AND (t.effective_to IS NULL OR DATE(t.effective_to) >= CURDATE())
+       WHERE k.is_active = 1
+       ORDER BY k.category, k.sort_order`,
+    )
+
+    const config: Record<string, {
+      name: string; format: string; direction: string; decimal_places: number
+      goal: number | null; warn: number | null; crit: number | null
+    }> = {}
+
+    for (const row of rows) {
+      config[row.kpi_code as string] = {
+        name:           row.kpi_name as string,
+        format:         row.format_type as string,
+        direction:      row.direction as string,
+        decimal_places: row.decimal_places as number,
+        goal:  row.goal_value     != null ? parseFloat(row.goal_value)     : null,
+        warn:  row.warning_value  != null ? parseFloat(row.warning_value)  : null,
+        crit:  row.critical_value != null ? parseFloat(row.critical_value) : null,
+      }
+    }
+
+    res.json(config)
+  } catch (error) {
+    console.error('getKpiConfig error:', error)
+    res.status(500).json({ error: 'Failed to load KPI config' })
+  }
+}
 
 /**
  * GET /api/insights/data-freshness

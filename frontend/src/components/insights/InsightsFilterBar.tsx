@@ -156,7 +156,7 @@ export default function InsightsFilterBar({
               variant="ghost"
               size="sm"
               onClick={onBack}
-              className="h-8 px-3 text-[#00aeef] hover:text-[#00aeef] hover:bg-[#00aeef]/10"
+              className="h-8 px-3 text-primary hover:text-primary hover:bg-primary/10"
             >
               <ArrowLeft size={14} className="mr-1" />
               Back to List
@@ -170,16 +170,16 @@ export default function InsightsFilterBar({
         <div className="flex gap-10 items-center mt-4 pt-3 border-t border-slate-200 text-xs text-slate-500">
           {businessDays != null && (
             <span className="flex items-center gap-1.5">
-              <CalendarDays size={13} className="text-[#00aeef]" />
+              <CalendarDays size={13} className="text-primary" />
               Business Days: <strong className="text-slate-700">{businessDays}</strong> current,{' '}
               <strong className="text-slate-700">{priorBusinessDays ?? '…'}</strong> prior
             </span>
           )}
           {priorDateRange && (
             <span className="flex items-center gap-1.5 ml-2">
-              <CalendarDays size={13} className="text-[#00aeef]" />
-              <span className="w-2.5 h-px bg-[#00aeef] inline-block" />
-              <CalendarDays size={13} className="text-[#00aeef]" />
+              <CalendarDays size={13} className="text-primary" />
+              <span className="w-2.5 h-px bg-primary inline-block" />
+              <CalendarDays size={13} className="text-primary" />
               <span className="ml-1">Prior Date Range:</span>
               <strong className="text-slate-700">{priorDateRange.start}</strong>
               <span className="text-slate-400">to</span>

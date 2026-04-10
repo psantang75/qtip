@@ -36,7 +36,7 @@ export default function ScoreHistogram({ data, goalScore = 90 }: ScoreHistogramP
             <span className="w-14 shrink-0 text-right text-slate-500 font-mono">{bucket.bucket}</span>
             <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden">
               <div
-                className={cn('h-full rounded-full transition-all duration-700 ease-out', isAbove ? 'bg-[#00aeef]/70' : 'bg-slate-300')}
+                className={cn('h-full rounded-full transition-all duration-700 ease-out', isAbove ? 'bg-primary/70' : 'bg-slate-300')}
                 style={{ width: animate ? `${pct}%` : '0%', transitionDelay: `${i * 60}ms` }}
               />
             </div>
@@ -47,7 +47,7 @@ export default function ScoreHistogram({ data, goalScore = 90 }: ScoreHistogramP
       })}
       <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-[11px] text-slate-400">
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-2 rounded bg-[#00aeef]/70" /> ≥ {goalScore} (goal)
+          <span className="inline-block w-3 h-2 rounded bg-primary/70" /> ≥ {goalScore} (goal)
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-2 rounded bg-slate-300" /> &lt; {goalScore}

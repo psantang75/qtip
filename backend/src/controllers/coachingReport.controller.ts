@@ -47,12 +47,12 @@ export const getReportsSummary = async (req: AuthReq, res: Response) => {
       ),
       prisma.$queryRaw<any[]>(
         Prisma.sql`
-          SELECT t.topic_name, COUNT(DISTINCT cst.coaching_session_id) as count
+          SELECT li_t.label as topic_name, COUNT(DISTINCT cst.coaching_session_id) as count
           FROM coaching_session_topics cst
-          JOIN topics t ON cst.topic_id = t.id
+          JOIN list_items li_t ON cst.topic_id = li_t.id
           JOIN coaching_sessions cs ON cst.coaching_session_id = cs.id
           ${whereClause}
-          GROUP BY t.id ORDER BY count DESC LIMIT 10
+          GROUP BY li_t.id ORDER BY count DESC LIMIT 10
         `
       ),
       prisma.$queryRaw<any[]>(
@@ -143,12 +143,12 @@ export const getCSRCoachingList = async (req: AuthReq, res: Response) => {
     if (csrIds.length) {
       const topicRows = await prisma.$queryRaw<any[]>(
         Prisma.sql`
-          SELECT cs.csr_id, t.topic_name, COUNT(*) as cnt
+          SELECT cs.csr_id, li_t.label as topic_name, COUNT(*) as cnt
           FROM coaching_sessions cs
           JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-          JOIN topics t ON cst.topic_id = t.id
+          JOIN list_items li_t ON cst.topic_id = li_t.id
           WHERE cs.csr_id IN (${Prisma.join(csrIds)})
-          GROUP BY cs.csr_id, t.id
+          GROUP BY cs.csr_id, li_t.id
           ORDER BY cs.csr_id, cnt DESC
         `
       );

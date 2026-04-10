@@ -2,10 +2,7 @@ import pool from '../config/database'
 import { RowDataPacket } from 'mysql2'
 import type { PeriodRanges } from '../utils/periodUtils'
 import { fmtDatetime as fmt } from '../utils/dateHelpers'
-function deptClause(f: number[], alias = 'u'): { sql: string; params: number[] } {
-  if (f.length === 0) return { sql: '', params: [] }
-  return { sql: `AND ${alias}.department_id IN (${f.map(() => '?').join(',')})`, params: f }
-}
+import { deptClause } from './qcQueryHelpers'
 
 /** Agents coached on a specific topic in the period */
 export async function getCoachingTopicAgents(
@@ -244,5 +241,46 @@ export async function getAgentsFailedQuizzes(deptFilter: number[], ranges: Perio
     failed:   parseInt(r.failed, 10),
     quizzes:  r.quizNames ? (r.quizNames as string).split('||') : [],
     avgScore: r.avgScore != null ? parseFloat(r.avgScore) : null,
+  }))
+}
+
+// ── Coaching insight summaries (moved from QCInsightsData) ───────────────────
+
+export async function getCoachingTopics(deptFilter: number[], ranges: PeriodRanges) {
+  const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
+  const dc = deptClause(deptFilter)
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT li_t.label AS topic, COUNT(DISTINCT cs.id) AS sessions,
+       COUNT(DISTINCT cs.csr_id) AS agents
+     FROM coaching_session_topics cst
+     JOIN list_items li_t ON cst.topic_id = li_t.id
+     JOIN coaching_sessions cs ON cst.coaching_session_id = cs.id
+     JOIN users csr ON cs.csr_id = csr.id
+     WHERE cs.created_at BETWEEN ? AND ? ${dc.sql}
+     GROUP BY li_t.id, li_t.label ORDER BY sessions DESC LIMIT 10`,
+    [s, e, ...dc.params],
+  )
+  return rows.map(r => ({ topic: r.topic, sessions: parseInt(r.sessions, 10), agents: parseInt(r.agents, 10) }))
+}
+
+export async function getCoachingDeptComparison(ranges: PeriodRanges) {
+  const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT d.department_name AS dept,
+       COUNT(cs.id) AS sessions,
+       SUM(CASE WHEN cs.status IN ('COMPLETED','CLOSED') THEN 1 ELSE 0 END) AS completed,
+       AVG(DATEDIFF(cs.completed_at, cs.created_at)) AS avgDays
+     FROM departments d
+     JOIN users u ON u.department_id = d.id
+     LEFT JOIN coaching_sessions cs ON cs.csr_id = u.id AND cs.created_at BETWEEN ? AND ?
+     WHERE u.role_id = 3
+     GROUP BY d.id, d.department_name ORDER BY completed DESC`,
+    [s, e],
+  )
+  return rows.map(r => ({
+    dept: r.dept,
+    sessions: parseInt(r.sessions, 10),
+    completed: parseInt(r.completed ?? '0', 10),
+    avgDays: r.avgDays != null ? parseFloat(r.avgDays) : null,
   }))
 }

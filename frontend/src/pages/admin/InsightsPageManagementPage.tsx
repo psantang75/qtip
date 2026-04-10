@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
@@ -55,8 +55,8 @@ export default function InsightsPageManagementPage() {
             ) : pages.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No pages registered yet. Pages are added when section blueprints are deployed.</TableCell></TableRow>
             ) : pages.map(p => (
-              <>
-                <TableRow key={p.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}>
+              <React.Fragment key={p.id}>
+                <TableRow className="hover:bg-slate-50/50 cursor-pointer" onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}>
                   <TableCell>{expandedId === p.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</TableCell>
                   <TableCell className="font-mono text-[13px]">{p.page_key}</TableCell>
                   <TableCell className="font-medium text-[14px]">{p.page_name}</TableCell>
@@ -67,13 +67,13 @@ export default function InsightsPageManagementPage() {
                   </TableCell>
                 </TableRow>
                 {expandedId === p.id && (
-                  <TableRow key={`${p.id}-detail`}>
+                  <TableRow>
                     <TableCell colSpan={6} className="bg-slate-50 px-6 py-4">
                       <PageDetailSection page={p} />
                     </TableCell>
                   </TableRow>
                 )}
-              </>
+              </React.Fragment>
             ))}
           </TableBody>
         </Table>

@@ -568,9 +568,9 @@ const getTrainerCoachingSessions = async (req: AuthenticatedRequest, res: Respon
           u.username LIKE ${'%' + searchTerm + '%'} 
           OR EXISTS (
             SELECT 1 FROM coaching_session_topics cst 
-            JOIN topics t ON cst.topic_id = t.id 
+            JOIN list_items li_t ON cst.topic_id = li_t.id 
             WHERE cst.coaching_session_id = cs.id 
-            AND t.topic_name LIKE ${'%' + searchTerm + '%'}
+            AND li_t.label LIKE ${'%' + searchTerm + '%'}
           )
         )`
       );
@@ -624,13 +624,13 @@ const getTrainerCoachingSessions = async (req: AuthenticatedRequest, res: Respon
           cs.attachment_size,
           cs.attachment_mime_type,
           cs.created_at,
-          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topics,
-          GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids
+          GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
+          GROUP_CONCAT(DISTINCT li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
         JOIN departments d ON u.department_id = d.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         ${whereClause}
         GROUP BY cs.id
         ORDER BY cs.session_date DESC
@@ -725,13 +725,13 @@ const getTrainerCoachingSessionDetails = async (req: AuthenticatedRequest, res: 
           cs.attachment_size,
           cs.attachment_mime_type,
           cs.created_at,
-          GROUP_CONCAT(t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topics,
-          GROUP_CONCAT(t.id ORDER BY t.id SEPARATOR ',') as topic_ids
+          GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
+          GROUP_CONCAT(li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
         JOIN departments d ON u.department_id = d.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         WHERE cs.id = ${sessionId} 
         AND cs.created_by = ${trainerId}
         AND u.role_id = ${csrRoleId}
@@ -838,7 +838,7 @@ const createTrainerCoachingSession = async (req: AuthenticatedRequest, res: Resp
     }
 
     const topicRows = await prisma.$queryRaw<{id: number}[]>(
-      Prisma.sql`SELECT id FROM topics WHERE id IN (${Prisma.join(topic_ids)}) AND is_active = 1`
+      Prisma.sql`SELECT id FROM list_items WHERE id IN (${Prisma.join(topic_ids)}) AND is_active = 1 AND list_type = 'training_topic'`
     );
     
     if (!topicRows || topicRows.length !== topic_ids.length) {
@@ -938,12 +938,12 @@ const createTrainerCoachingSession = async (req: AuthenticatedRequest, res: Resp
           cs.attachment_size,
           cs.attachment_mime_type,
           cs.created_at,
-          GROUP_CONCAT(t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topics,
-          GROUP_CONCAT(t.id ORDER BY t.id SEPARATOR ',') as topic_ids
+          GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
+          GROUP_CONCAT(li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         WHERE cs.id = ${newSessionId}
         GROUP BY cs.id
       `
@@ -1071,7 +1071,7 @@ const updateTrainerCoachingSession = async (req: AuthenticatedRequest, res: Resp
       }
 
       const topicRows = await prisma.$queryRaw<{id: number}[]>(
-        Prisma.sql`SELECT id FROM topics WHERE id IN (${Prisma.join(validTopicIds)}) AND is_active = 1`
+        Prisma.sql`SELECT id FROM list_items WHERE id IN (${Prisma.join(validTopicIds)}) AND is_active = 1 AND list_type = 'training_topic'`
       );
       const activeTopicIds = (topicRows || []).map((r: { id: number }) => r.id);
 
@@ -1173,16 +1173,10 @@ const updateTrainerCoachingSession = async (req: AuthenticatedRequest, res: Resp
       );
 
       if (topic_ids !== undefined) {
-        await tx.coachingSessionTopic.deleteMany({
-          where: { coaching_session_id: sessionId }
-        });
-
-        await tx.coachingSessionTopic.createMany({
-          data: topic_ids.map((topicId: number) => ({
-            coaching_session_id: sessionId,
-            topic_id: topicId
-          }))
-        });
+        await tx.$executeRaw(Prisma.sql`DELETE FROM coaching_session_topics WHERE coaching_session_id = ${sessionId}`);
+        for (const topicId of topic_ids) {
+          await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sessionId}, ${topicId})`);
+        }
       }
 
       await tx.auditLog.create({
@@ -1211,12 +1205,12 @@ const updateTrainerCoachingSession = async (req: AuthenticatedRequest, res: Resp
           cs.attachment_size,
           cs.attachment_mime_type,
           cs.created_at,
-          GROUP_CONCAT(t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topics,
-          GROUP_CONCAT(t.id ORDER BY t.id SEPARATOR ',') as topic_ids
+          GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
+          GROUP_CONCAT(li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         WHERE cs.id = ${sessionId}
         GROUP BY cs.id
       `
@@ -1312,12 +1306,12 @@ const completeTrainerCoachingSession = async (req: AuthenticatedRequest, res: Re
           cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_type, cs.notes,
           cs.status, cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
           cs.created_at,
-          GROUP_CONCAT(t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topics,
-          GROUP_CONCAT(t.id ORDER BY t.id SEPARATOR ',') as topic_ids
+          GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
+          GROUP_CONCAT(li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         WHERE cs.id = ${sessionId}
         GROUP BY cs.id
       `
@@ -1413,12 +1407,12 @@ const reopenTrainerCoachingSession = async (req: AuthenticatedRequest, res: Resp
           cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_type, cs.notes,
           cs.status, cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
           cs.created_at,
-          GROUP_CONCAT(t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topics,
-          GROUP_CONCAT(t.id ORDER BY t.id SEPARATOR ',') as topic_ids
+          GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
+          GROUP_CONCAT(li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         WHERE cs.id = ${sessionId}
         GROUP BY cs.id
       `

@@ -371,30 +371,15 @@ model Quiz {
   course_id  Int
   quiz_title String  @db.VarChar(100)
   pass_score Decimal @db.Decimal(5, 2)
-  topic_id   Int?
   is_active  Boolean @default(true) @db.TinyInt
 
   course            Course            @relation(fields: [course_id], references: [id], onDelete: Cascade)
-  topic             Topic?            @relation(fields: [topic_id], references: [id], onDelete: SetNull)
   quiz_questions    QuizQuestion[]
   coaching_sessions CoachingSession[] @relation("CoachingSessionQuiz")
   quiz_attempts     QuizAttempt[]
-  quiz_topics       QuizTopic[]
 
   @@index([is_active])
   @@map("quizzes")
-}
-
-model QuizTopic {
-  quiz_id  Int
-  topic_id Int
-
-  quiz  Quiz  @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
-  topic Topic @relation(fields: [topic_id], references: [id], onDelete: Cascade)
-
-  @@id([quiz_id, topic_id])
-  @@index([topic_id])
-  @@map("quiz_topics")
 }
 
 model QuizQuestion {
@@ -449,22 +434,9 @@ model TrainingResource {
 
   creator         User                    @relation(fields: [created_by], references: [id], onDelete: Cascade)
   coaching_sessions CoachingSession[]
-  resource_topics TrainingResourceTopic[]
 
   @@index([is_active])
   @@map("training_resources")
-}
-
-model TrainingResourceTopic {
-  resource_id Int
-  topic_id    Int
-
-  resource TrainingResource @relation(fields: [resource_id], references: [id], onDelete: Cascade)
-  topic    Topic            @relation(fields: [topic_id], references: [id], onDelete: Cascade)
-
-  @@id([resource_id, topic_id])
-  @@index([topic_id])
-  @@map("training_resource_topics")
 }
 
 model CoachingSession {
@@ -505,7 +477,6 @@ model CoachingSession {
   kb_resource TrainingResource? @relation(fields: [kb_resource_id], references: [id], onDelete: SetNull)
   quiz        Quiz?             @relation("CoachingSessionQuiz", fields: [quiz_id], references: [id], onDelete: SetNull)
 
-  coaching_session_topics CoachingSessionTopic[]
   quiz_attempts           QuizAttempt[]
   write_ups               WriteUp[]
 
@@ -815,41 +786,6 @@ model AgentActivity {
 
   @@index([activity_date])
   @@map("agent_activity")
-}
-
-model Topic {
-  id         Int      @id @default(autoincrement())
-  topic_name String   @unique @db.VarChar(255)
-  is_active  Boolean  @default(true) @db.TinyInt
-  sort_order Int      @default(0)
-  category   String?  @db.VarChar(100)
-  created_at DateTime @default(now()) @db.Timestamp(0)
-  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(0)
-
-  coaching_session_topics CoachingSessionTopic[]
-  quizzes                 Quiz[]
-  quiz_topics             QuizTopic[]
-  resource_topics         TrainingResourceTopic[]
-
-  @@index([is_active])
-  @@index([sort_order])
-  @@map("topics")
-}
-
-model CoachingSessionTopic {
-  id                  Int      @id @default(autoincrement())
-  coaching_session_id Int
-  topic_id            Int
-  created_at          DateTime @default(now()) @db.Timestamp(0)
-  updated_at          DateTime @default(now()) @updatedAt @db.Timestamp(0)
-
-  coaching_session CoachingSession @relation(fields: [coaching_session_id], references: [id], onDelete: Cascade)
-  topic            Topic           @relation(fields: [topic_id], references: [id], onDelete: Cascade)
-
-  @@unique([coaching_session_id, topic_id], name: "unique_session_topic")
-  @@index([coaching_session_id])
-  @@index([topic_id])
-  @@map("coaching_session_topics")
 }
 
 model AuthLog {

@@ -92,7 +92,7 @@ function CategoryPerformance({ catData, auditGoal, auditWarn, qaThresh }: {
           {sorted.length > 5 && (
             <button
               onClick={() => setShowAll(!showAll)}
-              className="mt-3 text-xs text-[#00aeef] hover:underline"
+              className="mt-3 text-xs text-primary hover:underline"
             >
               {showAll ? 'Show bottom 5 only' : `Show all ${sorted.length} categories`}
             </button>
@@ -235,7 +235,7 @@ export default function QCQualityPage() {
                     return (
                       <tr
                         key={row.id}
-                        className={`border-b border-slate-100 last:border-0 cursor-pointer transition-colors ${isSelected ? 'bg-[#00aeef]/5 border-l-2 border-l-[#00aeef]' : 'hover:bg-slate-50'}`}
+                        className={`border-b border-slate-100 last:border-0 cursor-pointer transition-colors ${isSelected ? 'bg-primary/5 border-l-2 border-l-primary' : 'hover:bg-slate-50'}`}
                         onClick={() => {
                           if (isSelected) setForms(forms.filter(f => f !== row.form))
                           else setForms([...forms, row.form])

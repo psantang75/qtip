@@ -157,19 +157,19 @@ export default function QCOverviewPage() {
           </p>
         </div>
 
-        <KpiSection icon={<Target size={15} className="text-[#00aeef]" />} label="Quality — click to drill down"
+        <KpiSection icon={<Target size={15} className="text-primary" />} label="Quality — click to drill down"
           path="/app/insights/qc-quality" cols={5}
           codes={['audits_assigned','audits_completed','audit_completion_rate','avg_qa_score','critical_fail_rate']}
           cur={cur} prv={prv} kpiConfig={kpiConfig}
         />
 
-        <KpiSection icon={<BookOpen size={15} className="text-[#00aeef]" />} label="Coaching — click to drill down"
+        <KpiSection icon={<BookOpen size={15} className="text-primary" />} label="Coaching — click to drill down"
           path="/app/insights/qc-coaching" cols={4}
           codes={['coaching_sessions_assigned','coaching_sessions_completed','coaching_completion_rate','quiz_pass_rate']}
           cur={cur} prv={prv} kpiConfig={kpiConfig}
         />
 
-        <KpiSection icon={<AlertTriangle size={15} className="text-[#00aeef]" />} label="Performance Warnings — click to drill down"
+        <KpiSection icon={<AlertTriangle size={15} className="text-primary" />} label="Performance Warnings — click to drill down"
           path="/app/insights/qc-warnings" cols={3}
           codes={['total_writeups_issued','escalation_rate','repeat_offender_rate']}
           cur={cur} prv={prv} kpiConfig={kpiConfig}
@@ -208,7 +208,7 @@ export default function QCOverviewPage() {
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 text-right">
-            <Link to="/app/insights/qc-agents" className="text-xs text-[#00aeef] hover:underline">
+            <Link to="/app/insights/qc-agents" className="text-xs text-primary hover:underline">
               View full agent leaderboard →
             </Link>
           </div>

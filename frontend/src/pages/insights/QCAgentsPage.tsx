@@ -18,7 +18,7 @@ const col = createColumnHelper<AgentSummary>()
 const COLUMNS = [
   col.accessor('name', {
     header: 'Agent',
-    cell: i => <span className="font-medium text-[#00aeef]">{i.getValue()}</span>,
+    cell: i => <span className="font-medium text-primary">{i.getValue()}</span>,
   }),
   col.accessor('dept', { header: 'Department', cell: i => <span className="text-slate-500 text-xs">{i.getValue()}</span> }),
   col.accessor('qa', {
@@ -54,7 +54,7 @@ const COLUMNS = [
       const v = i.getValue()
       return (
         <span className="flex items-center gap-1">
-          <StatusDot value={v} thresholds={{ direction: 'UP_IS_GOOD', goal: 82, warn: 70, crit: 60 }} />
+          <StatusDot value={v} thresholds={getKpiDef('avg_quiz_score') ?? { direction: 'UP_IS_GOOD', goal: 82, warn: 70, crit: 60 }} />
           <span className="text-sm">{v}%</span>
         </span>
       )
@@ -110,7 +110,7 @@ export default function QCAgentsPage() {
       setSelectedAgent(null)
       setSelectedForms([])
     }
-  }, [location.pathname])
+  }, [location.pathname, preselectedUserId, selectedAgent])
 
   const table = useReactTable({
     data: agents, columns: COLUMNS,

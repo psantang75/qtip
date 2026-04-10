@@ -37,10 +37,6 @@ interface BehaviorFlagRow {
   [key: string]: unknown;
 }
 
-interface TopicNameRow {
-  topic_name: string;
-}
-
 interface RecentSessionRow {
   [key: string]: unknown;
   topics?: string | null;
@@ -58,27 +54,6 @@ const roleCondition = (role: string, userId: number): Prisma.Sql => {
   if (role === 'QA') return Prisma.sql`cs.created_by = ${userId}`;
   return Prisma.sql`cs.created_by = ${userId}`;
 };
-
-// ── Topic ID bridge: list_items.id ↔ topics.id via item_key ──────────────────
-
-/** Convert list_items.id values → topics.id values for FK storage. */
-async function listItemIdsToTopicIds(listItemIds: number[]): Promise<number[]> {
-  if (!listItemIds.length) return [];
-  const rows = await prisma.$queryRaw<{ item_key: string }[]>(
-    Prisma.sql`SELECT item_key FROM list_items WHERE id IN (${Prisma.join(listItemIds.map(id => Prisma.sql`${id}`))}) AND list_type = 'training_topic' AND item_key IS NOT NULL`
-  );
-  return rows.map(r => parseInt(r.item_key)).filter(n => !isNaN(n));
-}
-
-/** Convert topics.id values → list_items.id values for frontend consumption. */
-async function topicIdsToListItemIds(topicIds: number[]): Promise<number[]> {
-  if (!topicIds.length) return [];
-  const topicIdStrs = topicIds.map(String);
-  const rows = await prisma.$queryRaw<{ id: number }[]>(
-    Prisma.sql`SELECT id FROM list_items WHERE item_key IN (${Prisma.join(topicIdStrs.map(s => Prisma.sql`${s}`))}) AND list_type = 'training_topic'`
-  );
-  return rows.map(r => r.id);
-}
 
 export const getCoachingSessions = async (req: AuthReq, res: Response) => {
   try {
@@ -126,8 +101,8 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
           SELECT cs.id, cs.batch_id, cs.csr_id, u.username as csr_name, cs.coaching_purpose, cs.coaching_format, cs.source_type,
             cs.status, cs.session_date, cs.due_date, cs.follow_up_date, cs.follow_up_required,
             cs.notes, cs.created_at, cb.username as created_by_name, cs.attachment_filename,
-            GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics,
-            GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids,
+            GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ',') as topics,
+            GROUP_CONCAT(DISTINCT li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids,
             CASE WHEN cs.due_date IS NOT NULL AND cs.due_date < NOW() AND cs.status NOT IN ('COMPLETED','CLOSED') THEN 1 ELSE 0 END as is_overdue,
             (SELECT COUNT(*) FROM coaching_session_quizzes WHERE coaching_session_id = cs.id) as quiz_count,
             (SELECT COUNT(DISTINCT csq2.quiz_id) FROM coaching_session_quizzes csq2
@@ -141,7 +116,7 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
           JOIN users u ON cs.csr_id = u.id
           LEFT JOIN users cb ON cs.created_by = cb.id
           LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-          LEFT JOIN topics t ON cst.topic_id = t.id
+          LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
           ${whereClause}
           GROUP BY cs.id ORDER BY cs.session_date DESC
           LIMIT ${limit} OFFSET ${offset}
@@ -149,28 +124,13 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
       ),
     ]);
 
-    const rawData = sessions.map((s: SessionRow) => ({
+    const data = sessions.map((s: SessionRow) => ({
       ...s,
       topics: s.topics ? s.topics.split(',') : [],
       topic_ids: s.topic_ids ? s.topic_ids.split(',').map(Number) : [],
       is_overdue: !!s.is_overdue,
       quiz_count: Number(s.quiz_count ?? 0),
       quiz_passed_count: Number(s.quiz_passed_count ?? 0),
-    }));
-
-    // Convert topics.id → list_items.id for frontend
-    const allTopicIds = [...new Set(rawData.flatMap(s => s.topic_ids))];
-    const topicIdToListItemId = new Map<number, number>();
-    if (allTopicIds.length) {
-      const rows = await prisma.$queryRaw<{ id: number; item_key: string }[]>(
-        Prisma.sql`SELECT id, item_key FROM list_items WHERE item_key IN (${Prisma.join(allTopicIds.map(String).map(s => Prisma.sql`${s}`))}) AND list_type = 'training_topic'`
-      );
-      rows.forEach(r => topicIdToListItemId.set(parseInt(r.item_key), r.id));
-    }
-
-    const data = rawData.map(s => ({
-      ...s,
-      topic_ids: s.topic_ids.map((tid: number) => topicIdToListItemId.get(tid) ?? tid),
     }));
 
     res.json({ success: true, data: { sessions: data, totalCount: Number(countRows[0]?.total ?? 0), page, limit } });
@@ -194,14 +154,14 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
       Prisma.sql`
         SELECT cs.*, u.username as csr_name, u.email as csr_email,
           d.department_name as csr_department, cb.username as created_by_name,
-          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics,
-          GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids
+          GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ',') as topics,
+          GROUP_CONCAT(DISTINCT li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
         LEFT JOIN departments d ON u.department_id = d.id
         LEFT JOIN users cb ON cs.created_by = cb.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         ${whereClause}
         GROUP BY cs.id
       `
@@ -209,16 +169,13 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
 
     if (!rows?.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
 
-    const rawTopicIds: number[] = rows[0].topic_ids ? rows[0].topic_ids.split(',').map(Number) : [];
-    const listItemTopicIds = await topicIdsToListItemIds(rawTopicIds);
-
     const session = {
       ...rows[0],
       require_acknowledgment: Boolean(Number(rows[0].require_acknowledgment)),
       require_action_plan:    Boolean(Number(rows[0].require_action_plan)),
       follow_up_required:     Boolean(Number(rows[0].follow_up_required)),
       topics:    rows[0].topics    ? rows[0].topics.split(',')            : [],
-      topic_ids: listItemTopicIds,
+      topic_ids: rows[0].topic_ids ? rows[0].topic_ids.split(',').map(Number) : [],
     };
 
     const behaviorFlagRows = await prisma.$queryRaw<any[]>(
@@ -244,10 +201,10 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
       prisma.$queryRaw<any[]>(
         Prisma.sql`
           SELECT cs2.id, cs2.session_date, cs2.coaching_purpose, cs2.coaching_format, cs2.status,
-            GROUP_CONCAT(DISTINCT t2.topic_name ORDER BY t2.topic_name SEPARATOR ',') as topics
+            GROUP_CONCAT(DISTINCT li_t2.label ORDER BY li_t2.label SEPARATOR ',') as topics
           FROM coaching_sessions cs2
           LEFT JOIN coaching_session_topics cst2 ON cs2.id = cst2.coaching_session_id
-          LEFT JOIN topics t2 ON cst2.topic_id = t2.id
+          LEFT JOIN list_items li_t2 ON cst2.topic_id = li_t2.id
           WHERE cs2.csr_id = ${session.csr_id} AND cs2.id != ${sessionId}
           GROUP BY cs2.id ORDER BY cs2.session_date DESC LIMIT 3
         `
@@ -336,7 +293,7 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
       if (!csrCheck.length) return res.status(403).json({ success: false, message: `CSR ${csrId} not found or inactive` });
     }
 
-    const topicCheck = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM topics WHERE id IN (${Prisma.join(topic_ids)}) AND is_active = 1`);
+    const topicCheck = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM list_items WHERE id IN (${Prisma.join(topic_ids)}) AND is_active = 1 AND list_type = 'training_topic'`);
     if (topicCheck.length !== topic_ids.length) return res.status(400).json({ success: false, message: 'One or more topics are invalid or inactive' });
 
     let attFilename = null, attPath = null, attSize = null, attMime = null;
@@ -373,8 +330,7 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
         );
         const [{ id }] = await tx.$queryRaw<{ id: bigint }[]>(Prisma.sql`SELECT LAST_INSERT_ID() as id`);
         const sessionId = Number(id);
-        const fkTopicIds = await listItemIdsToTopicIds(topic_ids);
-        for (const topicId of fkTopicIds) {
+        for (const topicId of topic_ids) {
           await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sessionId}, ${topicId})`);
         }
         for (const resourceId of parsedResourceIds) {
@@ -497,9 +453,8 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
       for (const sid of batchSessionIds) {
       if (parts.length) await tx.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET ${Prisma.join(parts, ', ')} WHERE id = ${sid}`);
       if (Array.isArray(topic_ids) && topic_ids.length) {
-        const fkTopicIds = await listItemIdsToTopicIds(topic_ids);
-        await tx.coachingSessionTopic.deleteMany({ where: { coaching_session_id: sid } });
-        for (const tid of fkTopicIds) await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sid}, ${tid})`);
+        await tx.$executeRaw(Prisma.sql`DELETE FROM coaching_session_topics WHERE coaching_session_id = ${sid}`);
+        for (const tid of topic_ids) await tx.$executeRaw(Prisma.sql`INSERT INTO coaching_session_topics (coaching_session_id, topic_id) VALUES (${sid}, ${tid})`);
       }
       if (updateResourceIds !== undefined) {
         await tx.$executeRaw(Prisma.sql`DELETE FROM coaching_session_resources WHERE coaching_session_id = ${sid}`);
@@ -744,11 +699,11 @@ export const getCSRCoachingHistory = async (req: AuthReq, res: Response) => {
     const sessions = await prisma.$queryRaw<any[]>(
       Prisma.sql`
         SELECT cs.id, cs.session_date, cs.coaching_purpose, cs.coaching_format, cs.status,
-          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics
+          GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ',') as topics
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         ${whereClause}
         GROUP BY cs.id ORDER BY cs.session_date DESC LIMIT 5
       `
@@ -757,24 +712,25 @@ export const getCSRCoachingHistory = async (req: AuthReq, res: Response) => {
     const sessionsWithTopics = sessions.map((s: SessionRow) => ({ ...s, topics: s.topics ? s.topics.split(',') : [] }));
 
     const ninetyDaysAgo = new Date(); ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const ninetyDaysStr = `${ninetyDaysAgo.getFullYear()}-${String(ninetyDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(ninetyDaysAgo.getDate()).padStart(2, '0')}`;
     const repeatConditions: Prisma.Sql[] = [
       Prisma.sql`cs.csr_id = ${csrId}`,
       Prisma.sql`u.is_active = 1`,
-      Prisma.sql`cs.session_date >= ${ninetyDaysAgo.toISOString().slice(0, 10)}`,
+      Prisma.sql`cs.session_date >= ${ninetyDaysStr}`,
       roleCondition(role, userId),
     ];
     const recentTopicRows = await prisma.$queryRaw<any[]>(
       Prisma.sql`
-        SELECT t.topic_name, COUNT(DISTINCT cs.id) as session_count
+        SELECT li_t.label, COUNT(DISTINCT cs.id) as session_count
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
         JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        JOIN topics t ON cst.topic_id = t.id
+        JOIN list_items li_t ON cst.topic_id = li_t.id
         WHERE ${Prisma.join(repeatConditions, ' AND ')}
-        GROUP BY t.id HAVING session_count >= 2
+        GROUP BY li_t.id HAVING session_count >= 2
       `
     );
-    const repeatTopics = recentTopicRows.map((r: TopicNameRow) => r.topic_name);
+    const repeatTopics = recentTopicRows.map((r: { label: string }) => r.label);
 
     res.json({ success: true, data: { sessions: sessionsWithTopics, repeat_topics: repeatTopics } });
   } catch (error) {

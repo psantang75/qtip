@@ -1240,9 +1240,9 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
           OR creator.username LIKE ${searchTerm}
           OR EXISTS (
             SELECT 1 FROM coaching_session_topics cst 
-            JOIN topics t ON cst.topic_id = t.id 
+            JOIN list_items li_t ON cst.topic_id = li_t.id 
             WHERE cst.coaching_session_id = cs.id 
-            AND t.topic_name LIKE ${searchTerm}
+            AND li_t.label LIKE ${searchTerm}
           )
         )`
       );
@@ -1256,7 +1256,7 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
         FROM coaching_sessions cs
         LEFT JOIN users creator ON cs.created_by = creator.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         ${whereClause}
       `
     );
@@ -1278,8 +1278,8 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
           cs.follow_up_date,
           creator.username as manager_name,
           cs.created_at,
-          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topics,
-          GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids,
+          GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
+          GROUP_CONCAT(DISTINCT li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids,
           (SELECT COUNT(*) FROM coaching_session_quizzes WHERE coaching_session_id = cs.id) as quiz_count,
           (SELECT COUNT(DISTINCT csq2.quiz_id) FROM coaching_session_quizzes csq2
            WHERE csq2.coaching_session_id = cs.id
@@ -1291,7 +1291,7 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
         FROM coaching_sessions cs
         LEFT JOIN users creator ON cs.created_by = creator.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         ${whereClause}
         GROUP BY 
           cs.id, cs.session_date, cs.coaching_purpose, cs.coaching_format,
@@ -1374,12 +1374,12 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
           cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
           cs.due_date, cs.follow_up_required, cs.follow_up_date, cs.created_at,
           creator.username as created_by_name,
-          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ',') as topics,
-          GROUP_CONCAT(DISTINCT t.id ORDER BY t.id SEPARATOR ',') as topic_ids
+          GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ',') as topics,
+          GROUP_CONCAT(DISTINCT li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         LEFT JOIN users creator ON cs.created_by = creator.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         WHERE cs.id = ${sessionId} AND cs.csr_id = ${userId}
         GROUP BY cs.id
       `

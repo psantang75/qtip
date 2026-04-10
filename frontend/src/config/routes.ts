@@ -14,8 +14,7 @@ import {
   HiOutlineDocumentText,
   HiOutlineUserGroup,
   HiOutlineExclamationCircle,
-  HiOutlineChatAlt,
-  HiOutlineTag
+  HiOutlineChatAlt
 } from 'react-icons/hi';
 
 /**
@@ -106,15 +105,6 @@ export const ROUTE_CONFIG: RouteConfig[] = [
     description: 'Manage departments',
     permissions: { roles: [UserRole.ADMIN], requiresAuth: true },
     icon: HiOutlineUserGroup,
-    category: 'admin',
-  },
-  {
-    id: 'admin-topics',
-    path: '/admin/topics',
-    label: 'Topics',
-    description: 'Manage topics',
-    permissions: { roles: [UserRole.ADMIN], requiresAuth: true },
-    icon: HiOutlineTag,
     category: 'admin',
   },
   {

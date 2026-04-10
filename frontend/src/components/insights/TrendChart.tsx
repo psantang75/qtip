@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   ResponsiveContainer,
   LineChart,
@@ -9,11 +10,12 @@ import {
 } from 'recharts'
 
 interface TrendChartProps {
-  data: Array<{ label: string; value: number }>
+  data: Array<{ label: string; value: number | null }>
   color: string
   goalValue?: number
   height?: number
   metricLabel?: string
+  isPercentage?: boolean
 }
 
 export default function TrendChart({
@@ -22,7 +24,19 @@ export default function TrendChart({
   goalValue,
   height = 100,
   metricLabel,
+  isPercentage = true,
 }: TrendChartProps) {
+  const [yMin, yMax] = useMemo(() => {
+    const values = data.map(d => d.value).filter((v): v is number => v !== null)
+    if (values.length === 0) return [0, isPercentage ? 100 : 10]
+    const lo = Math.min(...values, goalValue ?? Infinity)
+    const hi = Math.max(...values, goalValue ?? -Infinity)
+    const pad = Math.max((hi - lo) * 0.15, 2)
+    const yLo = Math.max(0, Math.floor(lo - pad))
+    const yHi = Math.ceil(hi + pad)
+    return [yLo, isPercentage ? Math.min(100, yHi) : yHi]
+  }, [data, goalValue, isPercentage])
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -24 }}>
@@ -33,7 +47,7 @@ export default function TrendChart({
           axisLine={false}
         />
         <YAxis
-          domain={[0, 100]}
+          domain={[yMin, yMax]}
           tick={{ fontSize: 10, fill: '#94a3b8' }}
           tickLine={false}
           axisLine={false}
@@ -67,6 +81,7 @@ export default function TrendChart({
           strokeWidth={2}
           dot={{ r: 3, fill: color, strokeWidth: 0 }}
           activeDot={{ r: 5 }}
+          connectNulls
         />
       </LineChart>
     </ResponsiveContainer>

@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import { getInsightsAccess } from '@/services/insightsService'
+import type { DataScope } from '@/services/insightsService'
 
 interface InsightsAccess {
   canAccess: boolean
-  dataScope: 'ALL' | 'DIVISION' | 'DEPARTMENT' | 'SELF'
+  dataScope: DataScope | null
   isLoading: boolean
   error: Error | null
 }
@@ -21,7 +22,7 @@ export function useInsightsAccess(pageKey: string): InsightsAccess {
 
   return {
     canAccess: data?.canAccess ?? false,
-    dataScope: data?.dataScope ?? 'SELF',
+    dataScope: data?.dataScope ?? null,
     isLoading,
     error: error as Error | null,
   }

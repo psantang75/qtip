@@ -132,10 +132,10 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
       ? await prisma.$queryRaw<any[]>(Prisma.sql`
           SELECT cs.id, cs.coaching_purpose, cs.status, cs.session_date,
             SUBSTRING(cs.notes, 1, 500) as notes,
-            GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR '~|~') as topic_names
+            GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR '~|~') as topic_names
           FROM coaching_sessions cs
           LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-          LEFT JOIN topics t ON cst.topic_id = t.id
+          LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
           WHERE cs.id = ${writeUp.linked_coaching_id}
           GROUP BY cs.id
         `)
@@ -160,14 +160,14 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
           SUBSTRING(cs.notes, 1, 500) as cs_notes,
           GROUP_CONCAT(DISTINCT wuv.policy_violated ORDER BY wuv.policy_violated SEPARATOR '~|~') as policies_violated,
           GROUP_CONCAT(DISTINCT SUBSTRING(wui.description, 1, 200) SEPARATOR '~|~') as incident_descriptions,
-          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR '~|~') as topic_names
+          GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR '~|~') as topic_names
         FROM write_up_prior_discipline pd
         LEFT JOIN write_ups wu            ON pd.reference_type = 'write_up' AND pd.reference_id = wu.id
         LEFT JOIN write_up_incidents wui  ON wu.id = wui.write_up_id
         LEFT JOIN write_up_violations wuv ON wui.id = wuv.incident_id
         LEFT JOIN coaching_sessions cs    ON pd.reference_type = 'coaching_session' AND pd.reference_id = cs.id
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t                ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t         ON cst.topic_id = li_t.id
         WHERE pd.write_up_id = ${writeUpId}
         GROUP BY pd.reference_type, pd.reference_id
         ORDER BY MIN(pd.id) ASC
@@ -499,7 +499,7 @@ export const searchCoachingSessions = async (req: AuthReq, res: Response) => {
     if (date_from) conditions.push(Prisma.sql`DATE(cs.session_date) >= ${date_from}`)
     if (date_to)   conditions.push(Prisma.sql`DATE(cs.session_date) <= ${date_to}`)
     if (topicNames.length > 0) {
-      const orConds = topicNames.map(n => Prisma.sql`t.topic_name LIKE ${'%' + n + '%'}`)
+      const orConds = topicNames.map(n => Prisma.sql`li_t.label LIKE ${'%' + n + '%'}`)
       conditions.push(
         orConds.length === 1
           ? orConds[0]
@@ -511,10 +511,10 @@ export const searchCoachingSessions = async (req: AuthReq, res: Response) => {
 
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT cs.id as session_id, cs.session_date, cs.coaching_purpose, cs.status, cs.notes,
-        GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR ', ') as topic_names
+        GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ', ') as topic_names
       FROM coaching_sessions cs
       LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-      LEFT JOIN topics t ON cst.topic_id = t.id
+      LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
       ${whereClause}
       GROUP BY cs.id
       ORDER BY cs.session_date DESC
@@ -551,10 +551,10 @@ export const getPriorDiscipline = async (req: AuthReq, res: Response) => {
       prisma.$queryRaw<any[]>(Prisma.sql`
         SELECT cs.id, cs.session_date, cs.coaching_purpose, cs.status,
           SUBSTRING(cs.notes, 1, 500) as notes,
-          GROUP_CONCAT(DISTINCT t.topic_name ORDER BY t.topic_name SEPARATOR '~|~') as topic_names
+          GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR '~|~') as topic_names
         FROM coaching_sessions cs
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN topics t ON cst.topic_id = t.id
+        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         WHERE cs.csr_id = ${csrId}
         GROUP BY cs.id
         ORDER BY cs.session_date DESC
@@ -698,7 +698,7 @@ export const createLinkedCoachingSession = async (req: AuthReq, res: Response) =
     if (Array.isArray(topic_names) && topic_names.length > 0) {
       for (const topicName of topic_names) {
         const topicRows = await prisma.$queryRaw<[{ id: number }]>(
-          Prisma.sql`SELECT id FROM topics WHERE topic_name = ${topicName} LIMIT 1`
+          Prisma.sql`SELECT id FROM list_items WHERE label = ${topicName} AND list_type = 'training_topic' LIMIT 1`
         )
         if (topicRows?.[0]?.id) {
           await prisma.$executeRaw(

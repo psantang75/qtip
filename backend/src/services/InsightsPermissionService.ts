@@ -66,6 +66,7 @@ export class InsightsPermissionService {
 
     if (!canAccess) return { ...NO_ACCESS, pageId };
 
+    if (!dataScope) return { ...NO_ACCESS, pageId };
     const scope = dataScope as 'ALL' | 'DIVISION' | 'DEPARTMENT' | 'SELF';
     return this.resolveScope(userId, scope, pageId);
   }

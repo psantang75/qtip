@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Pencil, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Pencil, AlertCircle, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { listKpis, createKpi, updateKpi, getThresholds, setThreshold } from '@/services/insightsService'
+import { listKpis, createKpi, updateKpi, getThresholds, setThreshold, updateThreshold, deleteThreshold } from '@/services/insightsService'
 import type { IeKpi, IeKpiThreshold } from '@/services/insightsService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -116,8 +116,8 @@ export default function InsightsKpiManagementPage() {
             ) : kpis.length === 0 ? (
               <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No KPIs registered yet</TableCell></TableRow>
             ) : kpis.map(k => (
-              <>
-                <TableRow key={k.id} className="hover:bg-slate-50/50">
+              <React.Fragment key={k.id}>
+                <TableRow className="hover:bg-slate-50/50">
                   <TableCell>
                     <button onClick={() => setExpandedId(expandedId === k.id ? null : k.id)} className="p-0.5">
                       {expandedId === k.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -139,13 +139,13 @@ export default function InsightsKpiManagementPage() {
                   </TableCell>
                 </TableRow>
                 {expandedId === k.id && (
-                  <TableRow key={`${k.id}-thresholds`}>
+                  <TableRow>
                     <TableCell colSpan={9} className="bg-slate-50 px-6 py-4">
-                      <ThresholdSection kpiId={k.id} />
+                      <ThresholdSection kpiId={k.id} kpiCode={k.kpi_code} />
                     </TableCell>
                   </TableRow>
                 )}
-              </>
+              </React.Fragment>
             ))}
           </TableBody>
         </Table>
@@ -259,10 +259,14 @@ export default function InsightsKpiManagementPage() {
   )
 }
 
-function ThresholdSection({ kpiId }: { kpiId: number }) {
+const PACE_BASED_KPIS = new Set(['audits_assigned', 'coaching_sessions_assigned'])
+
+function ThresholdSection({ kpiId, kpiCode }: { kpiId: number; kpiCode: string }) {
   const qc = useQueryClient()
   const { toast } = useToast()
-  const [adding, setAdding] = useState(false)
+  const [formMode, setFormMode] = useState<'closed' | 'add' | 'edit'>('closed')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const isPaceBased = PACE_BASED_KPIS.has(kpiCode)
 
   const { data: thresholds = [] } = useQuery({ queryKey: ['ie-thresholds', kpiId], queryFn: () => getThresholds(kpiId) })
 
@@ -271,52 +275,118 @@ function ThresholdSection({ kpiId }: { kpiId: number }) {
     defaultValues: { effective_from: new Date().toISOString().split('T')[0] },
   })
 
+  function openAdd() {
+    form.reset({ effective_from: new Date().toISOString().split('T')[0] })
+    setEditingId(null)
+    setFormMode('add')
+  }
+
+  function openEdit(t: IeKpiThreshold) {
+    form.reset({
+      goal_value:     t.goal_value     ?? undefined,
+      warning_value:  t.warning_value  ?? undefined,
+      critical_value: t.critical_value ?? undefined,
+      effective_from: t.effective_from,
+      effective_to:   t.effective_to   ?? undefined,
+    })
+    setEditingId(t.id)
+    setFormMode('edit')
+  }
+
+  function closeForm() { setFormMode('closed'); setEditingId(null); form.reset() }
+
   const saveMut = useMutation({
-    mutationFn: (v: ThresholdForm) => setThreshold(kpiId, v),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ie-thresholds', kpiId] }); toast({ title: 'Threshold saved' }); setAdding(false); form.reset() },
+    mutationFn: (v: ThresholdForm) =>
+      formMode === 'edit' && editingId !== null
+        ? updateThreshold(kpiId, editingId, v)
+        : setThreshold(kpiId, v),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ie-thresholds', kpiId] })
+      toast({ title: formMode === 'edit' ? 'Threshold updated' : 'Threshold saved' })
+      closeForm()
+    },
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (thresholdId: number) => deleteThreshold(kpiId, thresholdId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ie-thresholds', kpiId] })
+      toast({ title: 'Threshold deleted' })
+    },
   })
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold text-slate-700">Thresholds</h4>
-        <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => setAdding(!adding)}>
+        <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={openAdd} disabled={formMode !== 'closed'}>
           <Plus size={12} className="mr-1" /> Add Threshold
         </Button>
       </div>
-      {thresholds.length === 0 && !adding && (
+      {isPaceBased && (
+        <p className="text-[12px] text-[#00aeef] bg-blue-50 border border-blue-100 rounded-md px-3 py-2">
+          <strong>Pace-based KPI:</strong> Goal Value = target audits per business day.
+          The system multiplies this by the number of business days in the selected period to compute the assigned count.
+        </p>
+      )}
+      {thresholds.length === 0 && formMode === 'closed' && (
         <p className="text-[13px] text-muted-foreground">No thresholds configured for this KPI.</p>
       )}
       {thresholds.length > 0 && (
         <Table>
           <TableHeader><TableRow className="bg-white">
             <TableHead className="py-2 text-[12px]">Department</TableHead>
-            <TableHead className="py-2 text-[12px]">Goal</TableHead>
+            <TableHead className="py-2 text-[12px]">{isPaceBased ? 'Per Business Day' : 'Goal'}</TableHead>
             <TableHead className="py-2 text-[12px]">Warning</TableHead>
             <TableHead className="py-2 text-[12px]">Critical</TableHead>
             <TableHead className="py-2 text-[12px]">From</TableHead>
             <TableHead className="py-2 text-[12px]">To</TableHead>
+            <TableHead className="py-2 w-16" />
           </TableRow></TableHeader>
           <TableBody>
             {thresholds.map((t: IeKpiThreshold) => (
-              <TableRow key={t.id}>
+              <TableRow key={t.id} className={editingId === t.id ? 'bg-blue-50' : undefined}>
                 <TableCell className="text-[13px]">{t.department_name ?? 'Global'}</TableCell>
                 <TableCell className="text-[13px]">{t.goal_value ?? '—'}</TableCell>
                 <TableCell className="text-[13px]">{t.warning_value ?? '—'}</TableCell>
                 <TableCell className="text-[13px]">{t.critical_value ?? '—'}</TableCell>
                 <TableCell className="text-[13px]">{t.effective_from}</TableCell>
                 <TableCell className="text-[13px]">{t.effective_to ?? '—'}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openEdit(t)}
+                      disabled={formMode !== 'closed'}
+                      className="p-1 text-slate-400 hover:text-[#00aeef] disabled:opacity-30 transition-colors"
+                      title="Edit"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => deleteMut.mutate(t.id)}
+                      disabled={deleteMut.isPending}
+                      className="p-1 text-slate-400 hover:text-red-500 disabled:opacity-30 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       )}
-      {adding && (
+      {formMode !== 'closed' && (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(v => saveMut.mutate(v))} className="bg-white rounded-lg border p-3 space-y-3">
+            <p className="text-[12px] font-medium text-slate-600">{formMode === 'edit' ? 'Edit Threshold' : 'New Threshold'}</p>
             <div className="grid grid-cols-3 gap-3">
               <FormField control={form.control} name="goal_value" render={({ field }) => (
-                <FormItem><FormLabel className="text-[12px]">Goal</FormLabel><FormControl><Input type="number" step="any" {...field} value={field.value ?? ''} /></FormControl></FormItem>
+                <FormItem>
+                  <FormLabel className="text-[12px]">{isPaceBased ? 'Per Business Day' : 'Goal'}</FormLabel>
+                  <FormControl><Input type="number" step="any" {...field} value={field.value ?? ''} /></FormControl>
+                </FormItem>
               )} />
               <FormField control={form.control} name="warning_value" render={({ field }) => (
                 <FormItem><FormLabel className="text-[12px]">Warning</FormLabel><FormControl><Input type="number" step="any" {...field} value={field.value ?? ''} /></FormControl></FormItem>
@@ -334,8 +404,10 @@ function ThresholdSection({ kpiId }: { kpiId: number }) {
               )} />
             </div>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setAdding(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={saveMut.isPending}>{saveMut.isPending ? 'Saving...' : 'Save'}</Button>
+              <Button type="button" variant="outline" size="sm" onClick={closeForm}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={saveMut.isPending}>
+                {saveMut.isPending ? 'Saving...' : formMode === 'edit' ? 'Update' : 'Save'}
+              </Button>
             </div>
           </form>
         </Form>
