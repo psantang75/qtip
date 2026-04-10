@@ -67,9 +67,10 @@ export default function QCCoachingPage() {
   const priorMeta = kpiData?.priorMeta
   const navAgent = (userId: number) => navigate('/app/insights/qc-agents', { state: { preselectedUserId: userId } })
 
-  const coachGoal = resolveThresholds('coaching_completion_rate', kpiConfig).goal ?? 92
+  const coachThresh = resolveThresholds('coaching_completion_rate', kpiConfig)
   const schedGoal = resolveThresholds('coaching_sessions_scheduled', kpiConfig).goal ?? undefined
   const compGoal  = resolveThresholds('coaching_sessions_completed', kpiConfig).goal ?? undefined
+  const quizScoreThresh = resolveThresholds('avg_quiz_score', kpiConfig)
   const schedTrends = scheduledTrend?.map(r => ({ label: String(r.label ?? ''), value: r['coaching_sessions_scheduled'] != null ? Number(r['coaching_sessions_scheduled']) : null })) ?? []
   const compTrends  = completedTrend?.map(r => ({ label: String(r.label ?? ''), value: r['coaching_sessions_completed'] != null ? Number(r['coaching_sessions_completed']) : null })) ?? []
   const statusMap = new Map(statusGroups.map(g => [g.status, g]))
@@ -112,10 +113,10 @@ export default function QCCoachingPage() {
 
         {/* 2. Trend charts — Scheduled + Completed side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <InsightsSection title="Sessions Scheduled" description="6-month trend">
+          <InsightsSection title="Sessions Scheduled">
             <TrendChart data={schedTrends} color="#00aeef" goalValue={schedGoal} height={120} />
           </InsightsSection>
-          <InsightsSection title="Sessions Completed" description="6-month trend">
+          <InsightsSection title="Sessions Completed">
             <TrendChart data={compTrends} color="#00aeef" goalValue={compGoal} height={120} />
           </InsightsSection>
         </div>
@@ -255,7 +256,7 @@ export default function QCCoachingPage() {
                       {topicAgents && expandedTopic === t.topic && (
                         <table className="w-full text-xs">
                           <thead><tr className="text-slate-400 border-b border-slate-200">
-                            {['Agent','Dept','Sessions','Last Coached','Repeat?'].map(h => <th key={h} className="text-left py-1.5 font-medium pr-3">{h}</th>)}
+                            {['Agent','Department','Sessions','Last Coached','Repeat?'].map(h => <th key={h} className="text-left py-1.5 font-medium pr-3">{h}</th>)}
                           </tr></thead>
                           <tbody>
                             {topicAgents.map(a => (
@@ -326,7 +327,7 @@ export default function QCCoachingPage() {
                       >
                         <span className="text-[#00aeef] hover:underline font-medium truncate">{a.name}</span>
                         <span className="text-slate-500 truncate">{a.dept}</span>
-                        <span className={`text-right font-semibold ${a.score >= 80 ? 'text-emerald-600' : a.score >= 65 ? 'text-orange-500' : 'text-red-600'}`}>{a.score.toFixed(0)}%</span>
+                        <span className={`text-right font-semibold ${a.score >= (quizScoreThresh.goal ?? 80) ? 'text-emerald-600' : a.score >= (quizScoreThresh.warn ?? 65) ? 'text-orange-500' : 'text-red-600'}`}>{a.score.toFixed(0)}%</span>
                         <span className="text-right"><StatusBadge label={a.passed ? 'Passed' : 'Failed'} variant={a.passed ? 'good' : 'bad'} /></span>
                         <span className="text-slate-600 text-right">{a.attempts}</span>
                       </div>
@@ -349,7 +350,7 @@ export default function QCCoachingPage() {
           <InsightsSection title="Department Coaching Comparison">
             <table className="w-full text-sm">
               <thead><tr className="text-xs text-slate-400 border-b border-slate-200">
-                {['Dept','Sessions','Completed','Completion %','Avg Days to Close'].map(h => <th key={h} className="text-left pb-2 font-medium pr-4">{h}</th>)}
+                {['Department','Sessions','Completed','Completion %','Avg Days to Close'].map(h => <th key={h} className="text-left pb-2 font-medium pr-4">{h}</th>)}
               </tr></thead>
               <tbody>
                 {deptWithData.map(row => (
@@ -359,7 +360,7 @@ export default function QCCoachingPage() {
                     <td className="py-2.5 pr-4 text-slate-600">{row.completed}</td>
                     <td className="py-2.5 pr-4">
                       <span className="flex items-center gap-1.5">
-                        <StatusDot value={row.completed > 0 ? (row.completed / row.sessions) * 100 : 0} thresholds={{ direction: 'UP_IS_GOOD', goal: coachGoal, warn: coachGoal - 12, crit: coachGoal - 27 }} />
+                        <StatusDot value={row.completed > 0 ? (row.completed / row.sessions) * 100 : 0} thresholds={coachThresh} />
                         {row.sessions > 0 ? `${Math.round((row.completed / row.sessions) * 100)}%` : '—'}
                       </span>
                     </td>

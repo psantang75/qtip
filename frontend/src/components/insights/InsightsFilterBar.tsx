@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, CalendarDays, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import {
   Select,
@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
+import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 
 export const PERIOD_OPTIONS = [
   'Current Week',
@@ -39,6 +40,10 @@ interface InsightsFilterBarProps {
   availableForms?: string[]
   showBackButton?: boolean
   onBack?: () => void
+  businessDays?: number
+  priorBusinessDays?: number
+  priorDateRange?: { start: string; end: string }
+  onReset?: () => void
 }
 
 export default function InsightsFilterBar({
@@ -57,97 +62,130 @@ export default function InsightsFilterBar({
   availableForms = [],
   showBackButton = false,
   onBack,
+  businessDays,
+  priorBusinessDays,
+  priorDateRange,
+  onReset,
 }: InsightsFilterBarProps) {
-  const deptValue  = selectedDepts.length === 1 ? selectedDepts[0] : 'all'
-  const formValue  = selectedForms.length === 1  ? selectedForms[0] : 'all'
-  const isCustom   = period === 'Custom'
+  const isCustom = period === 'Custom'
+  const hasInfoRow = businessDays != null || priorDateRange
 
   return (
-    <div className="sticky top-0 z-40 bg-slate-50 border-b border-slate-200 px-6 py-3 flex gap-3 items-center flex-wrap">
+    <div className="sticky -top-6 z-40 bg-slate-50 border-b border-slate-200 px-6 py-3 -mx-6 -mt-6 mb-5">
 
-      {showBackButton && onBack && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onBack}
-          className="h-8 px-2 text-slate-600 hover:text-slate-900"
-        >
-          <ArrowLeft size={14} className="mr-1" />
-          Back
-        </Button>
-      )}
+      {/* Row 1: Filters */}
+      <div className="flex gap-3 items-center flex-wrap">
 
-      {/* Department filter */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs text-slate-500 shrink-0">Dept</span>
-        <Select
-          value={deptValue}
-          onValueChange={(v) => onDeptsChange(v === 'all' ? [] : [v])}
-        >
-          <SelectTrigger className="h-8 text-xs w-[170px] bg-white">
-            <SelectValue placeholder="All Departments" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Departments</SelectItem>
-            {availableDepts.map(d => (
-              <SelectItem key={d} value={d}>{d}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        {/* Department filter */}
+        {availableDepts.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 shrink-0">Dept</span>
+            <StagedMultiSelect
+              options={availableDepts}
+              selected={selectedDepts}
+              onApply={onDeptsChange}
+              placeholder="All Departments"
+              width="w-[200px]"
+            />
+          </div>
+        )}
 
-      {/* Time period filter */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs text-slate-500 shrink-0">Period</span>
-        <Select value={period} onValueChange={onPeriodChange}>
-          <SelectTrigger className="h-8 text-xs w-[160px] bg-white">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PERIOD_OPTIONS.map(p => (
-              <SelectItem key={p} value={p}>{p}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        {/* Form filter */}
+        {showFormFilter && availableForms.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 shrink-0">Form</span>
+            <StagedMultiSelect
+              options={availableForms}
+              selected={selectedForms}
+              onApply={(v) => onFormsChange?.(v)}
+              placeholder="All Forms"
+              width="w-[230px]"
+            />
+          </div>
+        )}
 
-      {/* Custom date range */}
-      {isCustom && (
+        {/* Time period filter */}
         <div className="flex items-center gap-1.5">
-          <Input
-            type="date"
-            value={customStart ?? ''}
-            onChange={(e) => onCustomStartChange?.(e.target.value)}
-            className="h-8 text-xs w-[130px] bg-white"
-          />
-          <span className="text-xs text-slate-400">to</span>
-          <Input
-            type="date"
-            value={customEnd ?? ''}
-            onChange={(e) => onCustomEndChange?.(e.target.value)}
-            className="h-8 text-xs w-[130px] bg-white"
-          />
-        </div>
-      )}
-
-      {/* Form filter — optional */}
-      {showFormFilter && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-500 shrink-0">Form</span>
-          <Select
-            value={formValue}
-            onValueChange={(v) => onFormsChange?.(v === 'all' ? [] : [v])}
-          >
-            <SelectTrigger className="h-8 text-xs w-[190px] bg-white">
-              <SelectValue placeholder="All Forms" />
+          <span className="text-xs text-slate-500 shrink-0">Period</span>
+          <Select value={period} onValueChange={onPeriodChange}>
+            <SelectTrigger className="h-8 text-xs w-[175px] bg-white">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Forms</SelectItem>
-              {availableForms.map(f => (
-                <SelectItem key={f} value={f}>{f}</SelectItem>
+              {PERIOD_OPTIONS.map(p => (
+                <SelectItem key={p} value={p}>{p}</SelectItem>
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Custom date range */}
+        {isCustom && (
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="date"
+              value={customStart ?? ''}
+              onChange={(e) => onCustomStartChange?.(e.target.value)}
+              className="h-8 text-xs w-[150px] bg-white"
+            />
+            <span className="text-xs text-slate-400">to</span>
+            <Input
+              type="date"
+              value={customEnd ?? ''}
+              onChange={(e) => onCustomEndChange?.(e.target.value)}
+              className="h-8 text-xs w-[150px] bg-white"
+            />
+          </div>
+        )}
+
+        {/* Right-side actions */}
+        <div className="ml-auto flex items-center gap-2">
+          {onReset && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onReset}
+              className="h-8 px-2 text-slate-500 hover:text-slate-800"
+            >
+              <RotateCcw size={13} className="mr-1" />
+              Reset
+            </Button>
+          )}
+          {showBackButton && onBack && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onBack}
+              className="h-8 px-3 text-[#00aeef] hover:text-[#00aeef] hover:bg-[#00aeef]/10"
+            >
+              <ArrowLeft size={14} className="mr-1" />
+              Back to List
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Row 2: Business days + prior date range */}
+      {hasInfoRow && (
+        <div className="flex gap-10 items-center mt-4 pt-3 border-t border-slate-200 text-xs text-slate-500">
+          {businessDays != null && (
+            <span className="flex items-center gap-1.5">
+              <CalendarDays size={13} className="text-[#00aeef]" />
+              Business Days: <strong className="text-slate-700">{businessDays}</strong> current,{' '}
+              <strong className="text-slate-700">{priorBusinessDays ?? '…'}</strong> prior
+            </span>
+          )}
+          {priorDateRange && (
+            <span className="flex items-center gap-1.5 ml-2">
+              <CalendarDays size={13} className="text-[#00aeef]" />
+              <span className="w-2.5 h-px bg-[#00aeef] inline-block" />
+              <CalendarDays size={13} className="text-[#00aeef]" />
+              <span className="ml-1">Prior Date Range:</span>
+              <strong className="text-slate-700">{priorDateRange.start}</strong>
+              <span className="text-slate-400">to</span>
+              <strong className="text-slate-700">{priorDateRange.end}</strong>
+            </span>
+          )}
         </div>
       )}
     </div>

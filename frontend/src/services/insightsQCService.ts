@@ -27,14 +27,14 @@ export interface AgentSummary {
 export interface AgentProfile {
   user: { id: number; name: string; dept: string; title: string | null }
   recentAudits: Array<{ id: number; form: string; score: number | null; date: string; callDate: string | null; status: string }>
-  coachingSessions: Array<{ id: number; date: string; purpose: string; status: string; topics: string[] }>
+  coachingSessions: Array<{ id: number; date: string; purpose: string; format: string; status: string; topics: string[] }>
   quizzes: Array<{ id: number; quiz: string; score: number; passed: boolean; date: string; attempts: number }>
   writeUps: Array<{
     id: number; type: string; status: string; date: string
     meetingDate: string | null; followUpDate: string | null
     linkedCoaching: boolean; priorCount: number; policies: string[]; managerName: string | null
   }>
-  disputeStats: { total: number; upheld: number; rejected: number; adjusted: number; avgResolutionDays: number | null }
+  disputeStats: { total: number; upheld: number; adjusted: number; open: number; avgResolutionDays: number | null }
 }
 
 export interface ScoreBucket    { bucket: string; count: number }

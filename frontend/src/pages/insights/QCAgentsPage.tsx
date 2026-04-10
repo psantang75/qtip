@@ -8,9 +8,9 @@ import {
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { InsightsFilterBar, InsightsSection, StatusBadge, StatusDot, SkeletonTable, ErrorCard } from '@/components/insights'
 import { useQCFilters } from '@/hooks/useQCFilters'
-import { getQCAgents } from '@/services/insightsQCService'
+import { getKpiDef } from '@/constants/kpiDefs'
+import { getQCAgents, getFilterOptions } from '@/services/insightsQCService'
 import type { AgentSummary } from '@/services/insightsQCService'
-import departmentService from '@/services/departmentService'
 import QCAgentProfile from './QCAgentProfile'
 
 const col = createColumnHelper<AgentSummary>()
@@ -27,7 +27,7 @@ const COLUMNS = [
       const v = i.getValue()
       return v != null ? (
         <span className="flex items-center gap-1">
-          <StatusDot value={v} thresholds={{ direction: 'UP_IS_GOOD', goal: 90, warn: 80, crit: 70 }} />
+          <StatusDot value={v} thresholds={getKpiDef('avg_qa_score') ?? { direction: 'UP_IS_GOOD', goal: 90, warn: 80, crit: 70 }} />
           <span className="font-semibold">{v.toFixed(1)}%</span>
         </span>
       ) : <span className="text-slate-400">—</span>
@@ -69,7 +69,7 @@ const COLUMNS = [
     },
   }),
   col.accessor('writeups', {
-    header: 'Write-Ups',
+    header: 'Warnings',
     cell: i => {
       const v = i.getValue()
       return v > 0 ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-50 text-red-600 border border-red-200">{v}</span> : <span className="text-slate-400">0</span>
@@ -86,20 +86,16 @@ export default function QCAgentsPage() {
   const preselectedUserId = (location.state as { preselectedUserId?: number } | null)?.preselectedUserId
 
   const { departments, setDepartments, period, setPeriod,
-          customStart, setCustomStart, customEnd, setCustomEnd, params } = useQCFilters()
+          customStart, setCustomStart, customEnd, setCustomEnd,
+          resetFilters, params } = useQCFilters()
   const [selectedAgent, setSelectedAgent] = useState<AgentSummary | null>(null)
   const [selectedForms, setSelectedForms]  = useState<string[]>([])
   const [sorting, setSorting]              = useState<SortingState>([{ id: 'qa', desc: false }])
 
-  const { data: deptsData } = useQuery({ queryKey: ['dept-list-filter'], queryFn: () => departmentService.getDepartments(1, 100, { is_active: true }), staleTime: 10 * 60 * 1000 })
-  const deptOptions = deptsData?.items.map(d => d.department_name) ?? []
-  const nameToId    = useMemo(() => Object.fromEntries((deptsData?.items ?? []).map(d => [d.department_name, d.id])), [deptsData])
+  const apiParams = useMemo(() => ({ ...params }), [params])
 
-  const apiParams = useMemo(() => ({
-    ...params,
-    departments: departments.length ? departments.map(n => nameToId[n]).filter(Boolean).join(',') : undefined,
-  }), [params, departments, nameToId])
-
+  const { data: filterOpts } = useQuery({ queryKey: ['qc-filter-opts', apiParams], queryFn: () => getFilterOptions(apiParams) })
+  const deptOptions = filterOpts?.departments ?? []
   const { data: agents = [], isLoading, isError, refetch } = useQuery({ queryKey: ['qc-agents', apiParams], queryFn: () => getQCAgents(apiParams) })
 
   useEffect(() => {
@@ -108,6 +104,13 @@ export default function QCAgentsPage() {
       if (found) { setSelectedAgent(found); window.scrollTo(0, 0) }
     }
   }, [preselectedUserId, agents, selectedAgent])
+
+  useEffect(() => {
+    if (!preselectedUserId && selectedAgent) {
+      setSelectedAgent(null)
+      setSelectedForms([])
+    }
+  }, [location.pathname])
 
   const table = useReactTable({
     data: agents, columns: COLUMNS,
@@ -137,14 +140,13 @@ export default function QCAgentsPage() {
 
   return (
     <div>
-      <div className="-mx-6 -mt-6 mb-5">
-        <InsightsFilterBar
-          selectedDepts={departments} onDeptsChange={setDepartments} availableDepts={deptOptions}
-          period={period} onPeriodChange={setPeriod}
-          customStart={customStart} customEnd={customEnd}
-          onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
-        />
-      </div>
+      <InsightsFilterBar
+        selectedDepts={departments} onDeptsChange={setDepartments} availableDepts={deptOptions}
+        period={period} onPeriodChange={setPeriod}
+        customStart={customStart} customEnd={customEnd}
+        onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
+        onReset={resetFilters}
+      />
       <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Agent Performance</h1>

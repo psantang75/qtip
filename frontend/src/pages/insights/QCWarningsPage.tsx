@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { InsightsFilterBar, InsightsSection, KpiTile, StatRow, StatusBadge, ExpandableRow, QCPageSkeleton, ErrorCard } from '@/components/insights'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { ShieldCheck } from 'lucide-react'
 import { useQCFilters } from '@/hooks/useQCFilters'
 import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
 import {
-  getQCKpis, getWriteUpPipeline, getActiveWriteUps,
+  getQCKpis, getFilterOptions, getWriteUpPipeline, getActiveWriteUps,
   getEscalationData, getPolicyViolations, getWarningsDeptComparison,
 } from '@/services/insightsQCService'
 
@@ -28,10 +30,13 @@ export default function QCWarningsPage() {
           customStart, setCustomStart, customEnd, setCustomEnd,
           resetFilters, params } = useQCFilters()
   const [expandedPolicy, setExpandedPolicy] = useState<string | null>(null)
+  const [showAllPolicies, setShowAllPolicies] = useState(false)
 
   const apiParams = useMemo(() => ({ ...params }), [params])
 
   const { data: kpiConfig } = useKpiConfig()
+  const { data: filterOpts } = useQuery({ queryKey: ['qc-filter-opts', apiParams], queryFn: () => getFilterOptions(apiParams) })
+  const deptOptions = filterOpts?.departments ?? []
   const { data: kpiData, isLoading, isError, refetch } = useQuery({ queryKey: ['qc-kpis', apiParams], queryFn: () => getQCKpis(apiParams) })
   const { data: pipeline }      = useQuery({ queryKey: ['qc-pipeline', apiParams],        queryFn: () => getWriteUpPipeline(apiParams) })
   const { data: activeWUs = []} = useQuery({ queryKey: ['qc-active-wu', apiParams],       queryFn: () => getActiveWriteUps(apiParams) })
@@ -59,19 +64,20 @@ export default function QCWarningsPage() {
   }, [byType])
 
   const PIPELINE_STATUSES = [
-    { key: 'DRAFT',             label: 'Draft',             dotCls: 'bg-slate-400'   },
-    { key: 'SCHEDULED',         label: 'Scheduled',         dotCls: 'bg-purple-500'  },
-    { key: 'DELIVERED',         label: 'Delivered',         dotCls: 'bg-[#00aeef]'   },
-    { key: 'AWAITING_SIGNATURE',label: 'Awaiting Signature',dotCls: 'bg-orange-500'  },
-    { key: 'SIGNED',            label: 'Signed',            dotCls: 'bg-yellow-500'  },
-    { key: 'FOLLOW_UP_PENDING', label: 'Follow-Up Pending', dotCls: 'bg-red-500'     },
-    { key: 'CLOSED',            label: 'Closed',            dotCls: 'bg-emerald-500' },
+    { key: 'DRAFT',              label: 'Draft' },
+    { key: 'SCHEDULED',          label: 'Scheduled' },
+    { key: 'DELIVERED',          label: 'Delivered' },
+    { key: 'AWAITING_SIGNATURE', label: 'Awaiting Signature' },
+    { key: 'SIGNED',             label: 'Signed' },
+    { key: 'FOLLOW_UP_PENDING',  label: 'Follow-Up Pending' },
+    { key: 'CLOSED',             label: 'Closed' },
   ]
 
   return (
     <div>
       <InsightsFilterBar
-        selectedDepts={departments} onDeptsChange={setDepartments} availableDepts={[]}
+        selectedDepts={departments} onDeptsChange={setDepartments}
+        availableDepts={deptOptions}
         period={period} onPeriodChange={setPeriod}
         customStart={customStart} customEnd={customEnd}
         onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
@@ -97,11 +103,11 @@ export default function QCWarningsPage() {
 
         {/* Pipeline + Type Distribution */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <InsightsSection title="Performance Warning Status Pipeline" description="Current state of all performance warnings in the selected period.">
+          <InsightsSection title="Status Pipeline">
             {PIPELINE_STATUSES.map((s, i) => (
               <div key={s.key} className={`flex items-center justify-between py-2 ${i < PIPELINE_STATUSES.length - 1 ? 'border-b border-slate-100' : ''}`}>
                 <span className="text-sm font-medium text-slate-700">{s.label}</span>
-                <span className={`text-sm font-bold ${(byStatus[s.key] ?? 0) > 0 ? s.dotCls.replace('bg-', 'text-').replace('50', '600') : 'text-slate-300'}`}>
+                <span className={`text-sm font-bold ${(byStatus[s.key] ?? 0) > 0 ? 'text-slate-800' : 'text-slate-300'}`}>
                   {byStatus[s.key] ?? 0}
                 </span>
               </div>
@@ -112,7 +118,7 @@ export default function QCWarningsPage() {
             </div>
           </InsightsSection>
 
-          <InsightsSection title="Type Distribution" description="Severity breakdown across the escalation path.">
+          <InsightsSection title="Type Distribution">
             {[
               { key: 'VERBAL_WARNING',  label: 'Verbal Warning' },
               { key: 'WRITTEN_WARNING', label: 'Written Warning' },
@@ -144,18 +150,24 @@ export default function QCWarningsPage() {
         </div>
 
         {/* Active Performance Warnings */}
-        <InsightsSection title="Active Performance Warnings" description="Click a row to view the agent's performance profile.">
+        <InsightsSection title="Active Performance Warnings">
           {activeWUs.length === 0
-            ? <p className="text-sm text-slate-400 text-center py-4">No active performance warnings for this period.</p>
+            ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <ShieldCheck size={28} className="text-[#00aeef] mb-2" />
+                <p className="text-sm font-medium text-slate-600">No active performance warnings for this period</p>
+              </div>
+            )
             : (
               <table className="w-full text-sm">
                 <thead><tr className="text-xs text-slate-400 border-b border-slate-200">
-                  {['Agent','Dept','Type','Status','Created','Meeting','Follow-Up','Prior','Policies'].map(h => <th key={h} className="text-left pb-2 font-medium pr-3 last:pr-0">{h}</th>)}
+                  {['Agent','Department','Type','Status','Created','Meeting','Follow-Up','Prior','Policies'].map(h => <th key={h} className="text-left pb-2 font-medium pr-3 last:pr-0">{h}</th>)}
                 </tr></thead>
+                <TooltipProvider delayDuration={200}>
                 <tbody>
                   {activeWUs.map(w => (
-                    <tr key={w.id} className="border-b border-slate-100 last:border-0 hover:bg-red-50 cursor-pointer" onClick={() => navAgent(w.userId)}>
-                      <td className="py-2.5 pr-3 font-medium text-[#00aeef]">{w.agent}</td>
+                    <tr key={w.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      <td className="py-2.5 pr-3 font-medium text-[#00aeef] hover:underline cursor-pointer" onClick={() => navAgent(w.userId)}>{w.agent}</td>
                       <td className="py-2.5 pr-3 text-xs text-slate-500">{w.dept}</td>
                       <td className="py-2.5 pr-3"><TypeBadge type={w.type} /></td>
                       <td className="py-2.5 pr-3">
@@ -168,10 +180,28 @@ export default function QCWarningsPage() {
                       <td className="py-2.5 pr-3 text-xs text-slate-500">{w.meetingDate ?? '—'}</td>
                       <td className={`py-2.5 pr-3 text-xs ${w.followUpDate ? 'text-orange-500 font-medium' : 'text-slate-400'}`}>{w.followUpDate ?? '—'}</td>
                       <td className={`py-2.5 pr-3 font-bold ${w.priorCount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{w.priorCount}</td>
-                      <td className="py-2.5 text-xs text-slate-500 max-w-[160px] truncate">{w.policies.join(', ') || '—'}</td>
+                      <td className="py-2.5 text-xs text-slate-500 max-w-[160px]">
+                        {w.policies.length > 0 ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="truncate block cursor-default">{w.policies.join(', ')}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" sideOffset={6} className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                              <ul className="space-y-1">
+                                {w.policies.map((p, i) => (
+                                  <li key={`${p}-${i}`} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{p}
+                                  </li>
+                                ))}
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
+                </TooltipProvider>
               </table>
             )
           }
@@ -180,48 +210,58 @@ export default function QCWarningsPage() {
         {/* Escalation + Repeat Agents */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <InsightsSection title="Escalation Path">
-            <div className="flex items-center gap-3 py-3 mb-3">
+            <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center py-4 mb-3 gap-x-5">
               {[
                 { label: 'Verbal',  count: escalation?.verbal  ?? 0, ring: 'border-yellow-400', bg: 'bg-yellow-50',  text: 'text-yellow-600' },
                 { label: 'Written', count: escalation?.written ?? 0, ring: 'border-orange-400', bg: 'bg-orange-50',  text: 'text-orange-600' },
                 { label: 'Final',   count: escalation?.final   ?? 0, ring: 'border-red-400',    bg: 'bg-red-50',     text: 'text-red-600'    },
-              ].map((b, i) => (
-                <span key={b.label} className="flex items-center gap-2">
-                  <div className={`${b.bg} border ${b.ring} rounded-lg px-4 py-2.5 text-center min-w-[70px]`}>
-                    <div className="text-[11px] text-slate-500">{b.label}</div>
-                    <div className={`text-2xl font-bold ${b.text}`}>{b.count}</div>
-                  </div>
-                  {i < 2 && <span className="text-slate-400 text-lg">→</span>}
-                </span>
-              ))}
+              ].flatMap((b, i) => [
+                <div key={b.label} className={`${b.bg} border-2 ${b.ring} rounded-xl py-5 text-center`}>
+                  <div className="text-xs text-slate-500 mb-1">{b.label}</div>
+                  <div className={`text-3xl font-bold ${b.text}`}>{b.count}</div>
+                </div>,
+                ...(i < 2 ? [<span key={`arrow-${i}`} className="text-slate-300 text-2xl">→</span>] : []),
+              ])}
             </div>
             <StatRow label="Escalation Rate" value={fmt(cur.escalation_rate, '%')} />
             <StatRow label="Repeat Offender Rate" value={fmt(cur.repeat_offender_rate, '%')} />
             <StatRow label="Agents on Final Warning" value={String(escalation?.final ?? 0)} valueColor={(escalation?.final ?? 0) > 0 ? 'text-red-600' : undefined} />
           </InsightsSection>
 
-          <InsightsSection title="Repeat Warning Agents" description="Agents with prior performance warnings within the period.">
+          <InsightsSection title="Repeat Warning Agents">
             {repeatWUs.length === 0
-              ? <p className="text-sm text-slate-400 py-4">No repeat agents in this period.</p>
-              : repeatWUs.map(w => (
-                <div key={w.id} className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0 hover:bg-red-50 cursor-pointer rounded" onClick={() => navAgent(w.userId)}>
-                  <span className="text-sm font-medium text-[#00aeef]">{w.agent}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400">Prior: {w.priorCount}</span>
-                    <span className="text-slate-300">·</span>
-                    <TypeBadge type={w.type} />
-                    <span className="text-xs text-slate-500">{STATUS_LABEL[w.status] ?? w.status}</span>
-                  </div>
+              ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <ShieldCheck size={32} className="text-[#00aeef] mb-3" />
+                  <p className="text-sm font-medium text-slate-600">No repeat warnings during the selected period</p>
                 </div>
-              ))
+              )
+              : (
+                <table className="w-full text-sm">
+                  <thead><tr className="text-xs text-slate-400 border-b border-slate-200">
+                    {['Agent','Department','Type','Status','Prior Warnings'].map(h => <th key={h} className="text-left pb-2 font-medium pr-3 last:pr-0">{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {repeatWUs.map(w => (
+                      <tr key={w.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                        <td className="py-2.5 pr-3 font-medium text-[#00aeef] hover:underline cursor-pointer" onClick={() => navAgent(w.userId)}>{w.agent}</td>
+                        <td className="py-2.5 pr-3 text-xs text-slate-500">{w.dept}</td>
+                        <td className="py-2.5 pr-3"><TypeBadge type={w.type} /></td>
+                        <td className="py-2.5 pr-3 text-xs text-slate-600">{STATUS_LABEL[w.status] ?? w.status}</td>
+                        <td className={`py-2.5 font-bold ${w.priorCount >= 2 ? 'text-red-600' : 'text-orange-500'}`}>{w.priorCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
             }
           </InsightsSection>
         </div>
 
         {/* Most Violated Policies */}
-        <InsightsSection title="Most Violated Policies" description="Click a policy to see which agents were cited.">
+        <InsightsSection title="Most Violated Policies">
           {policies.length === 0 && <p className="text-sm text-slate-400 text-center py-4">No policy violations data for this period.</p>}
-          {policies.map(pol => (
+          {(showAllPolicies ? policies : policies.slice(0, 5)).map(pol => (
             <ExpandableRow
               key={pol.policy}
               isExpanded={expandedPolicy === pol.policy}
@@ -231,7 +271,7 @@ export default function QCWarningsPage() {
                   <span className="text-sm font-medium text-slate-800 flex-1 truncate">{pol.policy}</span>
                   <span className="text-xs text-slate-400 shrink-0">{pol.count} violations · {pol.agentCount} agents</span>
                   <div className="w-28 h-2 bg-slate-100 rounded-full overflow-hidden shrink-0">
-                    <div className={`h-full rounded-full ${pol.count >= 3 ? 'bg-red-400' : pol.count >= 2 ? 'bg-orange-400' : 'bg-[#00aeef]/70'}`} style={{ width: `${(pol.count / maxPolicy) * 100}%` }} />
+                    <div className="h-full rounded-full bg-[#00aeef]/70" style={{ width: `${(pol.count / maxPolicy) * 100}%` }} />
                   </div>
                 </div>
               }
@@ -239,7 +279,7 @@ export default function QCWarningsPage() {
                 pol.agentDetails.length === 0 ? <p className="text-xs text-slate-400">No agent data available.</p> : (
                   <table className="w-full text-xs">
                     <thead><tr className="text-slate-400 border-b border-slate-200">
-                      {['Agent','Dept','Type','Status'].map(h => <th key={h} className="text-left py-1.5 font-medium pr-3">{h}</th>)}
+                      {['Agent','Department','Type','Status'].map(h => <th key={h} className="text-left py-1.5 font-medium pr-3">{h}</th>)}
                     </tr></thead>
                     <tbody>
                       {pol.agentDetails.map(a => (
@@ -256,6 +296,11 @@ export default function QCWarningsPage() {
               }
             />
           ))}
+          {policies.length > 5 && (
+            <button onClick={() => setShowAllPolicies(!showAllPolicies)} className="mt-3 text-xs text-[#00aeef] hover:underline">
+              {showAllPolicies ? 'Show top 5 only' : `Show all ${policies.length} policies`}
+            </button>
+          )}
         </InsightsSection>
 
         {/* Dept Comparison */}
@@ -271,9 +316,13 @@ export default function QCWarningsPage() {
                   <td className="py-2.5 pr-4 text-slate-600">{row.writeups}</td>
                   <td className="py-2.5 pr-4 text-emerald-600">{row.closed}</td>
                   <td className="py-2.5">
-                    <span className={`font-medium ${row.resolutionRate >= 90 ? 'text-emerald-600' : row.resolutionRate >= 75 ? 'text-orange-500' : 'text-red-600'}`}>
-                      {fmt(row.resolutionRate, '%')}
-                    </span>
+                    {(() => {
+                      const th = resolveThresholds('writeup_resolution_rate', kpiConfig)
+                      const v = row.resolutionRate
+                      const color = th.goal != null && v >= th.goal ? 'text-emerald-600'
+                        : th.warn != null && v >= th.warn ? 'text-orange-500' : 'text-red-600'
+                      return <span className={`font-medium ${color}`}>{fmt(v, '%')}</span>
+                    })()}
                   </td>
                 </tr>
               ))}

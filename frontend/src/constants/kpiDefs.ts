@@ -125,11 +125,11 @@ export const KPI_DEFS: Record<string, KpiDef> = {
   },
   // ── Discipline (5) ────────────────────────────────────────────────────────
   total_writeups_issued: {
-    code: 'total_writeups_issued', name: 'Write-Ups Issued',
+    code: 'total_writeups_issued', name: 'Warnings Issued',
     format: 'NUMBER', direction: 'DOWN_IS_GOOD',
   },
   writeup_rate: {
-    code: 'writeup_rate', name: 'Write-Up Rate',
+    code: 'writeup_rate', name: 'Warning Rate',
     format: 'NUMBER', direction: 'NEUTRAL',
   },
   escalation_rate: {
@@ -141,7 +141,7 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     format: 'PERCENT', direction: 'DOWN_IS_GOOD', goal: 10, warn: 20, crit: 35,
   },
   writeup_resolution_rate: {
-    code: 'writeup_resolution_rate', name: 'Write-Up Resolution',
+    code: 'writeup_resolution_rate', name: 'Warning Resolution',
     format: 'PERCENT', direction: 'UP_IS_GOOD', goal: 90, warn: 75, crit: 60,
   },
 }

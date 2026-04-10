@@ -1,10 +1,7 @@
 import pool from '../config/database'
 import { RowDataPacket } from 'mysql2'
 import type { PeriodRanges } from '../utils/periodUtils'
-
-function fmt(d: Date): string {
-  return d.toISOString().slice(0, 19).replace('T', ' ')
-}
+import { fmtDatetime as fmt } from '../utils/dateHelpers'
 function deptClause(f: number[], alias = 'u'): { sql: string; params: number[] } {
   if (f.length === 0) return { sql: '', params: [] }
   return { sql: `AND ${alias}.department_id IN (${f.map(() => '?').join(',')})`, params: f }
@@ -19,7 +16,7 @@ export interface AgentSummary {
 export interface AgentProfile {
   user: { id: number; name: string; dept: string; title: string | null }
   recentAudits: Array<{ id: number; form: string; score: number | null; date: string; status: string }>
-  coachingSessions: Array<{ id: number; date: string; purpose: string; status: string; topics: string[] }>
+  coachingSessions: Array<{ id: number; date: string; purpose: string; format: string; status: string; topics: string[] }>
   quizzes: Array<{ id: number; quiz: string; score: number; passed: boolean; date: string; attempts: number }>
   writeUps: Array<{ id: number; type: string; status: string; date: string }>
 }
@@ -36,17 +33,19 @@ export class QCAnalyticsService {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT u.id AS userId, u.username AS name,
          COALESCE(d.department_name, 'Unknown') AS dept,
-         AVG(sub.total_score) AS qa,
+         AVG(COALESCE(sub.total_score, ss.score)) AS qa,
          COUNT(DISTINCT cs.id)   AS coaching,
          COUNT(DISTINCT qa.id)   AS quiz,
          COUNT(DISTINCT disp.id) AS disputes,
          COUNT(DISTINCT wu.id)   AS writeups
        FROM users u
        LEFT JOIN departments d ON u.department_id = d.id
-       LEFT JOIN calls c ON c.csr_id = u.id
+       LEFT JOIN submission_metadata sm_csr ON CAST(sm_csr.value AS UNSIGNED) = u.id
+       LEFT JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
        LEFT JOIN submissions sub
-         ON sub.call_id = c.id AND sub.status = 'FINALIZED'
+         ON sub.id = sm_csr.submission_id AND sub.status = 'FINALIZED'
          AND sub.submitted_at BETWEEN ? AND ?
+       LEFT JOIN score_snapshots ss ON ss.submission_id = sub.id
        LEFT JOIN coaching_sessions cs ON cs.csr_id = u.id AND cs.created_at BETWEEN ? AND ?
        LEFT JOIN quiz_attempts qa ON qa.user_id = u.id AND qa.submitted_at BETWEEN ? AND ?
        LEFT JOIN disputes disp ON disp.submission_id = sub.id
@@ -58,10 +57,14 @@ export class QCAnalyticsService {
 
     // Prior-period QA for trend
     const [priorRows] = await pool.execute<RowDataPacket[]>(
-      `SELECT c.csr_id AS userId, AVG(sub.total_score) AS qa
-       FROM submissions sub JOIN calls c ON sub.call_id = c.id
+      `SELECT CAST(sm_csr.value AS UNSIGNED) AS userId,
+         AVG(COALESCE(sub.total_score, ss.score)) AS qa
+       FROM submissions sub
+       JOIN submission_metadata sm_csr ON sm_csr.submission_id = sub.id
+       JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
+       LEFT JOIN score_snapshots ss ON ss.submission_id = sub.id
        WHERE sub.status = 'FINALIZED' AND sub.submitted_at BETWEEN ? AND ?
-       GROUP BY c.csr_id`,
+       GROUP BY CAST(sm_csr.value AS UNSIGNED)`,
       [ps, pe],
     )
     const priorMap = new Map<number, number>()
@@ -102,23 +105,27 @@ export class QCAnalyticsService {
          WHERE u.id = ?`, [userId],
       ),
       pool.execute<RowDataPacket[]>(
-        `SELECT s.id, f.form_name AS form, s.total_score AS score,
+        `SELECT s.id, f.form_name AS form,
+           COALESCE(s.total_score, ss.score) AS score,
            DATE_FORMAT(s.submitted_at,'%Y-%m-%d') AS date,
            DATE_FORMAT(c.call_date,'%Y-%m-%d') AS callDate, s.status
          FROM submissions s
+         JOIN submission_metadata sm_csr ON sm_csr.submission_id = s.id
+         JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
+         LEFT JOIN score_snapshots ss ON ss.submission_id = s.id
          LEFT JOIN calls c ON s.call_id = c.id
          JOIN forms f ON s.form_id = f.id
-         WHERE c.csr_id = ? AND s.status = 'FINALIZED'
+         WHERE CAST(sm_csr.value AS UNSIGNED) = ? AND s.status = 'FINALIZED'
            AND s.submitted_at BETWEEN ? AND ?
          ORDER BY s.submitted_at DESC LIMIT 100`, [userId, s, e],
       ),
       pool.execute<RowDataPacket[]>(
         `SELECT cs.id, DATE_FORMAT(cs.session_date,'%Y-%m-%d') AS date,
-           cs.coaching_purpose AS purpose, cs.status,
-           GROUP_CONCAT(t.topic_name ORDER BY t.topic_name SEPARATOR '||') AS topics
+           cs.coaching_purpose AS purpose, cs.coaching_format AS format, cs.status,
+           GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR '||') AS topics
          FROM coaching_sessions cs
          LEFT JOIN coaching_session_topics cst ON cst.coaching_session_id = cs.id
-         LEFT JOIN topics t ON t.id = cst.topic_id
+         LEFT JOIN list_items li_t ON li_t.id = cst.topic_id
          WHERE cs.csr_id = ? AND cs.created_at BETWEEN ? AND ?
          GROUP BY cs.id ORDER BY cs.session_date DESC LIMIT 50`, [userId, s, e],
       ),
@@ -150,15 +157,16 @@ export class QCAnalyticsService {
       ),
       pool.execute<RowDataPacket[]>(
         `SELECT COUNT(*) AS total,
-           SUM(CASE WHEN d.status='UPHELD'   THEN 1 ELSE 0 END) AS upheld,
-           SUM(CASE WHEN d.status='REJECTED' THEN 1 ELSE 0 END) AS rejected,
+           SUM(CASE WHEN d.status IN ('UPHELD','REJECTED') THEN 1 ELSE 0 END) AS upheld,
            SUM(CASE WHEN d.status='ADJUSTED' THEN 1 ELSE 0 END) AS adjusted,
+           SUM(CASE WHEN d.status='OPEN' THEN 1 ELSE 0 END) AS open_count,
            AVG(CASE WHEN d.resolved_at IS NOT NULL
                THEN DATEDIFF(d.resolved_at, d.created_at) END) AS avgResolutionDays
          FROM disputes d
          JOIN submissions s ON d.submission_id = s.id
-         JOIN calls c ON s.call_id = c.id
-         WHERE c.csr_id = ? AND d.created_at BETWEEN ? AND ?`, [userId, s, e],
+         JOIN submission_metadata sm_csr ON sm_csr.submission_id = s.id
+         JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
+         WHERE CAST(sm_csr.value AS UNSIGNED) = ? AND d.created_at BETWEEN ? AND ?`, [userId, s, e],
       ),
     ])
 
@@ -174,7 +182,7 @@ export class QCAnalyticsService {
         date: r.date, callDate: r.callDate ?? null, status: r.status,
       })),
       coachingSessions: (sessions as RowDataPacket[]).map(r => ({
-        id: r.id, date: r.date, purpose: r.purpose, status: r.status,
+        id: r.id, date: r.date, purpose: r.purpose, format: r.format ?? '', status: r.status,
         topics: r.topics ? r.topics.split('||') : [],
       })),
       quizzes: (quizRows as RowDataPacket[]).map(r => ({
@@ -194,8 +202,8 @@ export class QCAnalyticsService {
       disputeStats: {
         total:             parseInt(ds.total ?? '0', 10),
         upheld:            parseInt(ds.upheld ?? '0', 10),
-        rejected:          parseInt(ds.rejected ?? '0', 10),
         adjusted:          parseInt(ds.adjusted ?? '0', 10),
+        open:              parseInt(ds.open_count ?? '0', 10),
         avgResolutionDays: ds.avgResolutionDays != null ? parseFloat(ds.avgResolutionDays) : null,
       },
     }

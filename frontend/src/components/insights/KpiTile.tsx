@@ -119,9 +119,9 @@ export default function KpiTile({
         {formatKpiValue(value, format, format === 'NUMBER' ? 0 : 1)}
       </div>
 
-      {/* Goal */}
-      {goalDisplay && !small && (
-        <div className="mt-1 text-[10px] text-slate-400">{goalDisplay}</div>
+      {/* Goal — always reserve the line height so delta stays aligned */}
+      {!small && (
+        <div className="mt-1 text-[10px] text-slate-400">{goalDisplay ?? '\u00A0'}</div>
       )}
 
       {/* Delta + label */}
