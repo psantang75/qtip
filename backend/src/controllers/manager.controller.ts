@@ -1443,12 +1443,18 @@ export const getManagerTeamAuditDetails = async (req: AuthenticatedRequest, res:
         });
         
         response.form.categories = categoriesWithQuestions;
-        
-        return res.status(200).json(response);
       } catch (formError) {
         serviceLogger.error('MANAGER', 'Error fetching form structure:', formError as Error);
-        return res.status(200).json(response);
       }
+
+      try {
+        const { getScoreBreakdown } = await import('../utils/scoringUtil');
+        response.scoreBreakdown = await getScoreBreakdown(null, submissionId);
+      } catch (sbErr) {
+        serviceLogger.error('MANAGER', 'Error getting score breakdown:', sbErr as Error);
+      }
+
+      return res.status(200).json(response);
       
     } catch (queryError) {
       serviceLogger.error('MANAGER', 'Error executing audit details queries:', queryError as Error);

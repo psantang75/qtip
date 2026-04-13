@@ -117,7 +117,7 @@ function DraftActions({ writeup, id, transition, busy }: { writeup: WriteUpDetai
         </Button>
       )}
       <Button variant="outline" className="w-full h-9 text-[13px]"
-        onClick={() => navigate(`/app/writeups/${id}/edit`)}>
+        onClick={() => navigate(`/app/performancewarnings/${id}/edit`)}>
         Edit Write-Up
       </Button>
     </div>
@@ -157,7 +157,7 @@ function ScheduledActions({ writeup, id, transition, busy }: { writeup: WriteUpD
         </Button>
       )}
       <Button variant="outline" className="w-full h-9 text-[13px]"
-        onClick={() => navigate(`/app/writeups/${id}/edit`)}>
+        onClick={() => navigate(`/app/performancewarnings/${id}/edit`)}>
         Edit Write-Up
       </Button>
     </div>
@@ -175,7 +175,7 @@ function DeliveredActions({ writeup, id, transition, busy }: { writeup: WriteUpD
         Finalize &amp; Send to Agent
       </Button>
       <Button variant="outline" className="w-full h-9 text-[13px]"
-        onClick={() => navigate(`/app/writeups/${id}/edit`)}>
+        onClick={() => navigate(`/app/performancewarnings/${id}/edit`)}>
         Edit / Add Notes
       </Button>
       <ConfirmDialog
@@ -207,7 +207,7 @@ function AwaitingSignatureActions({ writeup, id, transition, busy }: { writeup: 
         Recall Document
       </Button>
       <Button variant="outline" className="w-full h-9 text-[13px]"
-        onClick={() => navigate(`/app/writeups/my/${id}`)}>
+        onClick={() => navigate(`/app/performancewarnings/my/${id}`)}>
         Preview Agent View
       </Button>
       <ConfirmDialog

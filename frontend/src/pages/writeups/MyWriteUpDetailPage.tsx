@@ -311,7 +311,7 @@ export default function MyWriteUpDetailPage() {
           <SignatureSection
             id={Number(id)}
             csrName={writeup.csr_name}
-            onSigned={() => { invalidate(); navigate('/app/writeups/my') }}
+            onSigned={() => { invalidate(); navigate('/app/performancewarnings/my') }}
           />
         )}
         {writeup.status === 'SIGNED' && <SignedSection writeup={writeup} />}
@@ -320,7 +320,7 @@ export default function MyWriteUpDetailPage() {
       {/* ── Footer (screen only) ──────────────────────────────────────────── */}
       <div className="print:hidden mx-auto max-w-3xl px-4">
         <div className="flex items-center justify-between pt-2">
-          <Button variant="outline" onClick={() => navigate('/app/writeups/my')}>
+          <Button variant="outline" onClick={() => navigate('/app/performancewarnings/my')}>
             ← Back to My Write-Ups
           </Button>
           <Button variant="outline" onClick={() => window.print()}>

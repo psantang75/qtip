@@ -154,7 +154,7 @@ export default function MyWriteUpsPage() {
                     'cursor-pointer hover:bg-slate-50/50',
                     w.status === 'AWAITING_SIGNATURE' && 'bg-amber-50/40 border-l-2 border-l-amber-400',
                   )}
-                  onClick={() => navigate(`/app/writeups/my/${w.id}`)}
+                  onClick={() => navigate(`/app/performancewarnings/my/${w.id}`)}
                 >
                   <TableCell><WriteUpTypeBadge type={w.document_type} /></TableCell>
                   <TableCell><StatusBadge status={w.status} /></TableCell>
@@ -166,7 +166,7 @@ export default function MyWriteUpsPage() {
                   <TableCell className="text-[13px] text-slate-600">{w.created_by_name}</TableCell>
                   <TableCell onClick={e => e.stopPropagation()}>
                     <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
-                      onClick={() => navigate(`/app/writeups/my/${w.id}`)}>
+                      onClick={() => navigate(`/app/performancewarnings/my/${w.id}`)}>
                       <Eye className="h-3.5 w-3.5" />
                       {w.status === 'AWAITING_SIGNATURE' ? 'Sign' : 'View'}
                     </Button>

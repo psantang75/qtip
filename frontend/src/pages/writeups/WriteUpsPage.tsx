@@ -124,7 +124,7 @@ export default function WriteUpsPage() {
           canCreate ? (
             <Button
               className="bg-primary hover:bg-primary/90 text-white"
-              onClick={() => navigate('/app/writeups/new')}
+              onClick={() => navigate('/app/performancewarnings/new')}
             >
               <Plus className="h-4 w-4 mr-1" /> New Write-Up
             </Button>
@@ -208,13 +208,13 @@ export default function WriteUpsPage() {
                   icon={FileWarning}
                   title="No write-ups found"
                   description={canCreate ? 'Create a new write-up to get started' : 'No write-ups have been issued yet'}
-                  action={canCreate ? { label: 'New Write-Up', onClick: () => navigate('/app/writeups/new') } : undefined}
+                  action={canCreate ? { label: 'New Write-Up', onClick: () => navigate('/app/performancewarnings/new') } : undefined}
                 />
               ) : sorted.map((w: WriteUp) => (
                 <TableRow
                   key={w.id}
                   className="cursor-pointer hover:bg-slate-50/50"
-                  onClick={() => navigate(`/app/writeups/${w.id}`)}
+                  onClick={() => navigate(`/app/performancewarnings/${w.id}`)}
                 >
                   <TableCell className="text-[11px] text-slate-400 font-mono">#{w.id}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">{WRITE_UP_TYPE_LABELS[w.document_type] ?? w.document_type}</TableCell>
@@ -232,7 +232,7 @@ export default function WriteUpsPage() {
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2 text-[12px] text-slate-600 gap-1"
-                      onClick={() => navigate(`/app/writeups/${w.id}`)}
+                      onClick={() => navigate(`/app/performancewarnings/${w.id}`)}
                     >
                       <Eye className="h-3.5 w-3.5" /> View
                     </Button>

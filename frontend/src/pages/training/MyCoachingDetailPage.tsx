@@ -118,7 +118,7 @@ export default function MyCoachingDetailPage() {
   }
 
   if (isLoading) return <QualityListPage><TableLoadingSkeleton rows={8} /></QualityListPage>
-  if (isError || !session) return <QualityListPage><TableErrorState message="Failed to load coaching session." onRetry={refetch} /></QualityListPage>
+  if (isError || !session) return <QualityListPage><TableErrorState message="Failed to load training session." onRetry={refetch} /></QualityListPage>
 
   const { status, require_action_plan, require_acknowledgment } = session
   const quizzes          = session.quizzes ?? []
@@ -134,7 +134,7 @@ export default function MyCoachingDetailPage() {
 
   const progressItems: { label: string }[] = [
     ...(require_action_plan   ? [{ label: 'Submit your action plan' }] : []),
-    ...(require_acknowledgment ? [{ label: 'Acknowledge the coaching session' }] : []),
+    ...(require_acknowledgment ? [{ label: 'Acknowledge the training session' }] : []),
     ...(quizzes.length > 0    ? [{ label: 'Complete the assigned quiz' }] : []),
   ]
 
@@ -143,7 +143,7 @@ export default function MyCoachingDetailPage() {
   return (
     <QualityListPage>
       <QualityPageHeader
-        title="Coaching Session"
+        title="Training Session"
         actions={
           <Button variant="outline" onClick={() => navigate('/app/training/my-coaching')}>← Back</Button>
         }
@@ -153,7 +153,7 @@ export default function MyCoachingDetailPage() {
       {isScheduled && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
           <p className="text-[13px] font-medium text-slate-700">
-            Your coaching session is scheduled. Notes and any required actions will be shared after your meeting.
+            Your training session is scheduled. Notes and any required actions will be shared after your meeting.
           </p>
           {progressItems.length > 0 && (
             <div className="text-[12px] text-slate-500 space-y-1 pt-2 mt-2 border-t border-slate-200">
@@ -461,7 +461,7 @@ export default function MyCoachingDetailPage() {
                       onChange={e => setAcknowledged(e.target.checked)}
                       className="mt-0.5 rounded border-slate-300 text-primary" />
                     <span className="text-[13px] text-slate-700">
-                      I have reviewed this coaching session, understand the feedback, and commit to the actions outlined.
+                      I have reviewed this training session, understand the feedback, and commit to the actions outlined.
                     </span>
                   </label>
                 )

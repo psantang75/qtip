@@ -1,4 +1,7 @@
-export type NavSection = 'quality' | 'training' | 'writeups' | 'insights'
+export type NavSection = 'quality' | 'training' | 'performancewarnings' | 'insights'
+
+/** Client route base for performance warning (write-up) documents — API remains `/api/writeups`. */
+export const PERFORMANCE_WARNINGS_APP_BASE = '/app/performancewarnings'
 
 export interface NavItem {
   label: string
@@ -43,22 +46,22 @@ export const NAV_CONFIG: SectionConfig[] = [
     color: '#00aeef',
     defaultPath: '/app/training',
     items: [
-      { label: 'Coaching Sessions', path: '/app/training/coaching',          icon: 'MessageSquare',   roles: [1,2,4,5]   },
-      { label: 'My Coaching',       path: '/app/training/my-coaching',       icon: 'BookOpen',        roles: [3]         },
+      { label: 'Training Sessions', path: '/app/training/coaching',          icon: 'MessageSquare',   roles: [1,2,4,5]   },
+      { label: 'My Training',       path: '/app/training/my-coaching',       icon: 'BookOpen',        roles: [3]         },
       { label: 'Training Topics',   path: '/app/training/library/topics',    icon: 'Tag',             roles: [1,4]       },
       { label: 'Quizzes',           path: '/app/training/library/quizzes',   icon: 'HelpCircle',      roles: [1,4]       },
       { label: 'Resources',         path: '/app/training/library/resources', icon: 'BookMarked',      roles: [1,4]       },
     ],
   },
   {
-    id: 'writeups',
-    label: 'Write-Ups',
-    icon: 'FileWarning',
+    id: 'performancewarnings',
+    label: 'Performance Warnings',
+    icon: 'AlertTriangle',
     color: '#00aeef',
-    defaultPath: '/app/writeups',
+    defaultPath: PERFORMANCE_WARNINGS_APP_BASE,
     items: [
-      { label: 'Write-Ups',    path: '/app/writeups',     icon: 'FileWarning', roles: [1, 2, 5] },
-      { label: 'My Write-Ups', path: '/app/writeups/my',  icon: 'FileText',    roles: [3] },
+      { label: 'Performance Warnings', path: PERFORMANCE_WARNINGS_APP_BASE, icon: 'AlertTriangle', roles: [1, 2, 5] },
+      { label: 'My Performance Warnings', path: `${PERFORMANCE_WARNINGS_APP_BASE}/my`, icon: 'FileText', roles: [3] },
     ],
   },
   {
@@ -70,7 +73,7 @@ export const NAV_CONFIG: SectionConfig[] = [
     items: [
       // ── Quality, Coaching & Performance Warnings ──
       { label: 'Overview',             path: '/app/insights/qc-overview', icon: 'LayoutDashboard', roles: [1,2,4,5], group: 'Quality, Coaching & Performance Warnings' },
-      { label: 'Quality Deep Dive',    path: '/app/insights/qc-quality',  icon: 'Target',          roles: [1,2,5],   group: 'Quality, Coaching & Performance Warnings' },
+      { label: 'Quality',    path: '/app/insights/qc-quality',  icon: 'Target',          roles: [1,2,5],   group: 'Quality, Coaching & Performance Warnings' },
       { label: 'Coaching',             path: '/app/insights/qc-coaching', icon: 'BookOpen',        roles: [1,2,4,5], group: 'Quality, Coaching & Performance Warnings' },
       { label: 'Performance Warnings', path: '/app/insights/qc-warnings', icon: 'AlertTriangle',   roles: [1,2,5],   group: 'Quality, Coaching & Performance Warnings' },
       { label: 'Agent Performance',    path: '/app/insights/qc-agents',   icon: 'Users',           roles: [1,2,4,5], group: 'Quality, Coaching & Performance Warnings' },
@@ -97,7 +100,7 @@ export function getNavItemsForRole(section: NavSection, roleId: number): NavItem
 export function getSectionFromPath(pathname: string): NavSection | null {
   if (pathname.startsWith('/app/quality'))  return 'quality'
   if (pathname.startsWith('/app/training')) return 'training'
-  if (pathname.startsWith('/app/writeups')) return 'writeups'
+  if (pathname.startsWith('/app/performancewarnings') || pathname.startsWith('/app/writeups')) return 'performancewarnings'
   if (pathname.startsWith('/app/insights')) return 'insights'
   if (pathname.startsWith('/app/analytics')) return 'insights' // legacy — shows insights sidebar
   return null

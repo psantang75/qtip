@@ -92,6 +92,7 @@ export interface CoachingSession {
   status: CoachingStatus
   delivered_at?: string
   completed_at?: string
+  closed_at?: string
   csr_action_plan?: string
   csr_root_cause?: string
   csr_support_needed?: string

@@ -314,6 +314,7 @@ export default function SubmissionDetailPage() {
             answersMap={answersMap}
             roleId={roleId}
             detail={detail}
+            scoreBreakdown={detail.scoreBreakdown}
             onEditAnswer={handleEditAnswer}
           />
         </div>

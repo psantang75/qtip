@@ -24,7 +24,7 @@ import { QuizStatusBadge, PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './Coach
 import { StatusBadge } from '@/components/common/StatusBadge'
 
 
-const SORT_PRIORITY: Record<string, number> = { IN_PROCESS: 0, AWAITING_CSR_ACTION: 0 }
+const SORT_PRIORITY: Record<string, number> = { SCHEDULED: 0, AWAITING_CSR_ACTION: 0 }
 
 export default function MyCoachingPage() {
   const navigate = useNavigate()
@@ -109,7 +109,7 @@ export default function MyCoachingPage() {
 
   return (
     <QualityListPage>
-      <QualityPageHeader title="My Coaching" />
+      <QualityPageHeader title="My Training" />
 
 
       <QualityFilterBar
@@ -160,7 +160,7 @@ export default function MyCoachingPage() {
         {isLoading ? (
           <TableLoadingSkeleton rows={5} />
         ) : isError ? (
-          <TableErrorState message="Failed to load coaching sessions." onRetry={refetch} />
+          <TableErrorState message="Failed to load training sessions." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>
@@ -179,7 +179,7 @@ export default function MyCoachingPage() {
             <TableBody>
               {sessions.length === 0 ? (
                 <TableEmptyState colSpan={9} icon={BookOpen}
-                  title="No coaching sessions found"
+                  title="No training sessions found"
                   description={hasFilters ? 'Try adjusting your filters' : 'Your sessions will appear here'} />
               ) : sessions.map(s => (
                 <TableRow key={s.id} className="cursor-pointer hover:bg-slate-50/50"

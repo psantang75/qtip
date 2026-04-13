@@ -43,7 +43,7 @@ export function PriorDisciplineSection({ writeup }: DetailSectionProps) {
               const statusLabel  = isWriteUp ? (STATUS_LABELS[pd.status] ?? pd.status) : (COACHING_STATUS_LABELS[pd.status ?? ''] ?? pd.status)
               const subtypeLabel = isWriteUp ? (TYPE_LABELS[pd.document_type] ?? pd.document_type) : (PURPOSE_LABELS[pd.coaching_purpose ?? ''] ?? pd.coaching_purpose)
               const date         = pd.date ? String(pd.date).slice(0, 10) : undefined
-              const href         = isWriteUp ? `/app/writeups/${pd.reference_id}` : `/app/training/coaching/${pd.reference_id}`
+              const href         = isWriteUp ? `/app/performancewarnings/${pd.reference_id}` : `/app/training/coaching/${pd.reference_id}`
 
               return (
                 <tr key={i} className="hover:bg-slate-50/60">

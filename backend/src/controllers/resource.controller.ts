@@ -68,9 +68,13 @@ export const getResources = async (req: AuthReq, res: Response) => {
           SELECT tr.id, tr.title, tr.resource_type, tr.url,
             tr.file_name, tr.file_size, tr.file_mime_type,
             tr.description, tr.is_active, tr.created_at,
-            u.username as created_by_name
+            u.username as created_by_name,
+            GROUP_CONCAT(DISTINCT rt.topic_id ORDER BY rt.topic_id) as topic_id_list,
+            GROUP_CONCAT(DISTINCT li.label ORDER BY li.label SEPARATOR '||') as topic_name_list
           FROM training_resources tr
           LEFT JOIN users u ON tr.created_by = u.id
+          LEFT JOIN resource_topics rt ON tr.id = rt.resource_id
+          LEFT JOIN list_items li ON rt.topic_id = li.id
           ${whereClause}
           GROUP BY tr.id
           ORDER BY tr.created_at DESC
@@ -79,7 +83,11 @@ export const getResources = async (req: AuthReq, res: Response) => {
       ),
     ]);
 
-    const resources = rows;
+    const resources = rows.map(r => ({
+      ...r,
+      topic_ids:   r.topic_id_list ? String(r.topic_id_list).split(',').map(Number) : [],
+      topic_names: r.topic_name_list ? String(r.topic_name_list).split('||') : [],
+    }));
 
     res.json({ success: true, data: { resources, totalCount: Number(countRows[0]?.total ?? 0), page, limit } });
   } catch (error) {
@@ -95,8 +103,6 @@ export const createResource = async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const { title, resource_type, url, description, topic_ids: rawTopicIds, is_active } = req.body;
     const file = req.file;
-    const _topicIds = parseTopicIds(rawTopicIds);
-
     if (!title) return res.status(400).json({ success: false, message: 'title is required' });
 
     const type = resource_type ?? (file ? detectResourceType(file.mimetype) : 'URL');
@@ -117,6 +123,8 @@ export const createResource = async (req: AuthReq, res: Response) => {
       fileName = file.originalname; fileSize = file.size; fileMime = file.mimetype;
     }
 
+    const topicIds = parseTopicIds(rawTopicIds);
+
     const newId = await prisma.$transaction(async tx => {
       await tx.$executeRaw(
         Prisma.sql`INSERT INTO training_resources
@@ -125,7 +133,11 @@ export const createResource = async (req: AuthReq, res: Response) => {
                   ${description || null}, ${is_active === false || is_active === 'false' ? 0 : 1}, ${userId})`
       );
       const [{ id }] = await tx.$queryRaw<{ id: bigint }[]>(Prisma.sql`SELECT LAST_INSERT_ID() as id`);
-      return Number(id);
+      const resourceId = Number(id);
+      for (const tid of topicIds) {
+        await tx.$executeRaw(Prisma.sql`INSERT INTO resource_topics (resource_id, topic_id) VALUES (${resourceId}, ${tid})`);
+      }
+      return resourceId;
     });
 
     res.status(201).json({ success: true, data: { id: newId }, message: 'Resource created' });
@@ -140,7 +152,7 @@ export const createResource = async (req: AuthReq, res: Response) => {
 export const updateResource = async (req: AuthReq, res: Response) => {
   try {
     const resourceId = parseInt(req.params.id);
-    const { title, resource_type, url, description, is_active } = req.body;
+    const { title, resource_type, url, description, is_active, topic_ids: rawTopicIds } = req.body;
     const file = req.file;
 
     const existing = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM training_resources WHERE id = ${resourceId}`);
@@ -165,9 +177,19 @@ export const updateResource = async (req: AuthReq, res: Response) => {
       parts.push(Prisma.sql`resource_type = ${detectResourceType(file.mimetype)}`);
     }
 
-    if (parts.length) {
-      await prisma.$executeRaw(Prisma.sql`UPDATE training_resources SET ${Prisma.join(parts, ', ')}, updated_at = NOW() WHERE id = ${resourceId}`);
-    }
+    await prisma.$transaction(async tx => {
+      if (parts.length) {
+        await tx.$executeRaw(Prisma.sql`UPDATE training_resources SET ${Prisma.join(parts, ', ')}, updated_at = NOW() WHERE id = ${resourceId}`);
+      }
+
+      if (rawTopicIds !== undefined) {
+        const topicIds = parseTopicIds(rawTopicIds);
+        await tx.$executeRaw(Prisma.sql`DELETE FROM resource_topics WHERE resource_id = ${resourceId}`);
+        for (const tid of topicIds) {
+          await tx.$executeRaw(Prisma.sql`INSERT INTO resource_topics (resource_id, topic_id) VALUES (${resourceId}, ${tid})`);
+        }
+      }
+    });
 
     res.json({ success: true, message: 'Resource updated' });
   } catch (error) {

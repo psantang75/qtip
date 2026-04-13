@@ -33,8 +33,8 @@ const TYPE_COLORS: Record<string, string> = {
   ONBOARDING:  'var(--color-chart-teal,   #2dd4bf)',
 }
 const STATUS_COLORS: Record<string, string> = {
-  SCHEDULED:           'var(--color-chart-slate,  #94a3b8)',
-  IN_PROCESS:          'var(--color-chart-blue,   #3b82f6)',
+  DRAFT:               'var(--color-chart-slate,  #94a3b8)',
+  SCHEDULED:           'var(--color-chart-indigo, #6366f1)',
   AWAITING_CSR_ACTION: 'var(--color-chart-amber,  #f59e0b)',
   COMPLETED:           'var(--color-chart-green,  #10b981)',
   FOLLOW_UP_REQUIRED:  'var(--color-chart-orange, #f97316)',
@@ -140,7 +140,7 @@ export default function TrainingReportsPage() {
 
   // Tremor DonutChart needs colors as Tremor color names; map status to closest Tremor color
   const donutColors: string[] = statusData.map((d: { name: string }) =>
-    ({ SCHEDULED: 'slate', IN_PROCESS: 'blue', AWAITING_CSR_ACTION: 'amber',
+    ({ DRAFT: 'slate', SCHEDULED: 'indigo', AWAITING_CSR_ACTION: 'amber',
        COMPLETED: 'emerald', FOLLOW_UP_REQUIRED: 'orange', CLOSED: 'gray' } as Record<string, string>
     )[d.name] ?? 'slate'
   )

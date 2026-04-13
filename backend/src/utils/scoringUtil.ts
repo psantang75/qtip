@@ -18,7 +18,7 @@ interface Question {
   id: number;
   category_id: number;
   question_text: string;
-  question_type: 'YES_NO' | 'SCALE' | 'TEXT' | 'INFO_BLOCK' | 'RADIO' | 'SUB_CATEGORY';
+  question_type: 'YES_NO' | 'SCALE' | 'TEXT' | 'INFO_BLOCK' | 'RADIO' | 'SUB_CATEGORY' | 'MULTI_SELECT' | 'N_A';
   yes_value?: number;
   no_value?: number;
   na_value?: number;
@@ -233,33 +233,9 @@ export async function calculateFormScore(
 
   let total_score = 0;
   if (totalWeightedDenominator > 0) {
-    let totalIncludedWeight = 0;
-    categories.forEach((category) => {
-      const categoryQuestions = questionsByCategory[category.id] || [];
-      let categoryPossiblePoints = 0;
-      categoryQuestions.forEach((question) => {
-        if (visibilityMap[question.id]) {
-          categoryPossiblePoints += getMaxPossibleScore(question, radioOptionsMap);
-        }
-      });
-      if (categoryPossiblePoints > 0) totalIncludedWeight += Number(category.weight);
-    });
-
-    let totalWeightedEarned = 0;
-    let totalWeightedPossible = 0;
-
-    Object.entries(categoryScores).forEach(([category_id, scores]) => {
-      if (scores.possiblePoints > 0) {
-        const category = categories.find((c) => c.id === parseInt(category_id));
-        const originalWeight = category ? Number(category.weight) : 0;
-        const normalizedWeight = originalWeight / totalIncludedWeight;
-        totalWeightedEarned += Math.round(scores.earnedPoints * normalizedWeight * 100) / 100;
-        totalWeightedPossible += Math.round(scores.possiblePoints * normalizedWeight * 100) / 100;
-      }
-    });
-
-    total_score = totalWeightedPossible > 0 ? (totalWeightedEarned / totalWeightedPossible) * 100 : 0;
+    total_score = (totalWeightedNumerator / totalWeightedDenominator) * 100;
   }
+  total_score = Math.round(total_score * 100) / 100;
 
   return { total_score, categoryScores };
 }
@@ -290,6 +266,17 @@ function getQuestionScore(
       }
       return 0;
     }
+    case 'multi_select': {
+      const multiOpts = radioOptionsMap[question.id] || [];
+      if (multiOpts.length > 0 && answer) {
+        const selected = answer.split(',').map((v: string) => v.trim()).filter(Boolean);
+        return selected.reduce((sum: number, val: string) => {
+          const opt = multiOpts.find((o) => o.option_value === val || o.option_text === val);
+          return sum + (opt?.score || 0);
+        }, 0);
+      }
+      return 0;
+    }
     default:
       return 0;
   }
@@ -307,6 +294,10 @@ function getMaxPossibleScore(question: Question, radioOptionsMap: Record<number,
       const radioOptions = radioOptionsMap[question.id] || [];
       if (radioOptions.length > 0) return Math.max(...radioOptions.map((opt) => opt.score || 0));
       return 0;
+    }
+    case 'multi_select': {
+      const multiOpts = radioOptionsMap[question.id] || [];
+      return multiOpts.reduce((sum: number, opt) => sum + Math.max(0, opt.score || 0), 0);
     }
     default:
       return 0;
@@ -338,28 +329,18 @@ export async function calculateFormScoreBySubmissionId(
 
     const result = await calculateFormScore(null, submission.form_id, answers);
 
-    let totalIncludedWeight = 0;
-    Object.entries(result.categoryScores).forEach(([category_id, scores]) => {
-      if (scores.possiblePoints > 0) {
-        const category = categories.find((c) => c.id === parseInt(category_id));
-        if (category) totalIncludedWeight += Number(category.weight);
-      }
-    });
-
     const scoreSnapshot = Object.entries(result.categoryScores).map(([category_id, scores]) => {
       const category = categories.find((c) => c.id === parseInt(category_id));
-      const originalWeight = category ? Number(category.weight) : 0;
-      const normalizedWeight =
-        scores.possiblePoints > 0 && totalIncludedWeight > 0 ? originalWeight / totalIncludedWeight : 0;
+      const categoryWeight = category ? Number(category.weight) : 0;
 
       return {
         category_id: parseInt(category_id),
         raw_score: scores.raw,
-        weighted_score: scores.earnedPoints * normalizedWeight,
-        weighted_possible: scores.possiblePoints * normalizedWeight,
+        weighted_score: scores.weightedNumerator,
+        weighted_possible: scores.weightedDenominator,
         earned_points: scores.earnedPoints,
         possible_points: scores.possiblePoints,
-        category_weight: normalizedWeight,
+        category_weight: categoryWeight,
       };
     });
 

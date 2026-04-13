@@ -54,7 +54,7 @@ export default function LibraryQuizFormPage() {
       pass_score: Number(existingDetail.pass_score),
       is_active:  existingDetail.is_active !== false,
       topic_id:   existingDetail.topic_id,
-      topic_ids:  (existingDetail.topic_ids ?? []).map(Number),
+      topic_ids:  existingDetail.topic_ids.map(Number),
       questions:  (existingDetail.questions ?? []).map((q: QuizQuestion) => ({
         question_text:  q.question_text,
         options:        Array.isArray(q.options) ? q.options : JSON.parse(q.options || '[]'),

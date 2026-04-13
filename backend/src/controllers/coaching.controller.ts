@@ -318,7 +318,7 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
              internal_notes, behavior_flags,
              attachment_filename, attachment_path, attachment_size, attachment_mime_type, created_by)
             VALUES
-            (${batchId}, ${csrId}, ${session_date}, ${coaching_purpose}, ${coaching_format}, ${source_type}, ${notes || null}, 'SCHEDULED',
+            (${batchId}, ${csrId}, ${session_date}, ${coaching_purpose}, ${coaching_format}, ${source_type}, ${notes || null}, 'DRAFT',
              ${required_action || null}, ${kb_url || null},
              ${require_acknowledgment === 'false' || require_acknowledgment === false ? 0 : 1},
              ${require_action_plan === 'false' || require_action_plan === false ? 0 : 1},
@@ -479,19 +479,16 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
       Prisma.sql`SELECT status FROM coaching_sessions WHERE id = ${sessionId}`
     );
     const currentStatus = statusRow?.status;
-    if (['IN_PROCESS', 'AWAITING_CSR_ACTION'].includes(currentStatus)) {
+    if (['SCHEDULED', 'AWAITING_CSR_ACTION'].includes(currentStatus)) {
       const needsCSR = await hasCsrRequirements(sessionId);
 
-      if (needsCSR && currentStatus === 'IN_PROCESS') {
-        // Requirements added — escalate to Awaiting CSR Action
+      if (needsCSR && currentStatus === 'SCHEDULED') {
         await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'AWAITING_CSR_ACTION' WHERE id = ${sessionId}`);
-        await prisma.auditLog.create({ data: { user_id: userId, action: 'AUTO_STATUS_ADVANCE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ from: 'IN_PROCESS', to: 'AWAITING_CSR_ACTION', reason: 'requirements_added_on_edit' }) } });
+        await prisma.auditLog.create({ data: { user_id: userId, action: 'AUTO_STATUS_ADVANCE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ from: 'SCHEDULED', to: 'AWAITING_CSR_ACTION', reason: 'requirements_added_on_edit' }) } });
       } else if (!needsCSR && currentStatus === 'AWAITING_CSR_ACTION') {
-        // Requirements removed — revert to In Process
-        await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'IN_PROCESS' WHERE id = ${sessionId}`);
-        await prisma.auditLog.create({ data: { user_id: userId, action: 'AUTO_STATUS_REVERT', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ from: 'AWAITING_CSR_ACTION', to: 'IN_PROCESS', reason: 'requirements_removed_on_edit' }) } });
+        await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'SCHEDULED' WHERE id = ${sessionId}`);
+        await prisma.auditLog.create({ data: { user_id: userId, action: 'AUTO_STATUS_REVERT', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ from: 'AWAITING_CSR_ACTION', to: 'SCHEDULED', reason: 'requirements_removed_on_edit' }) } });
       } else if (needsCSR) {
-        // Requirements still exist — check if all complete (e.g. CSR already responded)
         await applyAutoAdvance(sessionId, userId);
       }
     }
@@ -514,15 +511,14 @@ export const deliverCoachingSession = async (req: AuthReq, res: Response) => {
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.id, cs.status FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
 
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
-    if (rows[0].status !== 'SCHEDULED') return res.status(400).json({ success: false, message: 'Can only deliver a SCHEDULED session' });
+    if (rows[0].status !== 'DRAFT') return res.status(400).json({ success: false, message: 'Can only schedule a DRAFT session' });
 
-    // Auto-advance: if session has CSR requirements, go straight to AWAITING_CSR_ACTION
     const needsCSR = await hasCsrRequirements(sessionId);
-    const deliveredStatus = needsCSR ? 'AWAITING_CSR_ACTION' : 'IN_PROCESS';
+    const deliveredStatus = needsCSR ? 'AWAITING_CSR_ACTION' : 'SCHEDULED';
 
     await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = ${deliveredStatus}, delivered_at = NOW() WHERE id = ${sessionId}`);
     await prisma.auditLog.create({ data: { user_id: userId, action: 'DELIVERED', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ status: deliveredStatus }) } });
-    res.json({ success: true, message: `Session delivered — status: ${deliveredStatus}` });
+    res.json({ success: true, message: `Session scheduled — status: ${deliveredStatus}` });
   } catch (error) {
     console.error('[COACHING] deliverCoachingSession error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
@@ -588,7 +584,7 @@ export const closeCoachingSession = async (req: AuthReq, res: Response) => {
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
     if (rows[0].status === 'CLOSED') return res.status(400).json({ success: false, message: 'Session is already closed' });
 
-    await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'CLOSED' WHERE id = ${sessionId}`);
+    await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'CLOSED', closed_at = NOW() WHERE id = ${sessionId}`);
     await prisma.auditLog.create({ data: { user_id: userId, action: 'CLOSE', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
     res.json({ success: true, message: 'Session closed' });
   } catch (error) {
@@ -635,7 +631,7 @@ export const setSessionStatus = async (req: AuthReq, res: Response) => {
     const sessionId = parseInt(req.params.id);
     const { status } = req.body as { status: string };
 
-    const validStatuses = ['SCHEDULED', 'IN_PROCESS', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED'];
+    const validStatuses = ['DRAFT', 'SCHEDULED', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
@@ -656,8 +652,9 @@ export const setSessionStatus = async (req: AuthReq, res: Response) => {
     }
 
     const parts: Prisma.Sql[] = [Prisma.sql`status = ${status}`];
-    if (status === 'IN_PROCESS') parts.push(Prisma.sql`delivered_at = COALESCE(delivered_at, NOW())`);
+    if (status === 'SCHEDULED') parts.push(Prisma.sql`delivered_at = COALESCE(delivered_at, NOW())`);
     if (status === 'COMPLETED')  parts.push(Prisma.sql`completed_at = COALESCE(completed_at, NOW())`);
+    if (status === 'CLOSED')     parts.push(Prisma.sql`closed_at = COALESCE(closed_at, NOW())`);
 
     await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET ${Prisma.join(parts, ', ')} WHERE id = ${sessionId}`);
     await prisma.auditLog.create({

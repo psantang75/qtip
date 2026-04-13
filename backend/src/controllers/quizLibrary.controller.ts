@@ -31,15 +31,23 @@ export const getQuizLibrary = async (req: AuthReq, res: Response) => {
       Prisma.sql`
         SELECT q.id, q.quiz_title, q.pass_score, q.course_id, q.is_active,
           (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id = q.id) as question_count,
-          (SELECT COUNT(*) FROM coaching_sessions cs WHERE cs.quiz_id = q.id) as times_used
+          (SELECT COUNT(*) FROM coaching_sessions cs WHERE cs.quiz_id = q.id) as times_used,
+          GROUP_CONCAT(DISTINCT qt.topic_id ORDER BY qt.topic_id) as topic_id_list,
+          GROUP_CONCAT(DISTINCT li.label ORDER BY li.label SEPARATOR '||') as topic_name_list
         FROM quizzes q
+        LEFT JOIN quiz_topics qt ON q.id = qt.quiz_id
+        LEFT JOIN list_items li ON qt.topic_id = li.id
         ${whereClause}
         GROUP BY q.id
         ORDER BY q.quiz_title ASC
       `
     );
 
-    res.json({ success: true, data: quizzes.map(mapQuiz) });
+    res.json({ success: true, data: quizzes.map(q => ({
+      ...mapQuiz(q),
+      topic_ids:   q.topic_id_list ? String(q.topic_id_list).split(',').map(Number) : [],
+      topic_names: q.topic_name_list ? String(q.topic_name_list).split('||') : [],
+    }))});
   } catch (error) {
     console.error('[QUIZ_LIB] getQuizLibrary error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
@@ -51,8 +59,12 @@ export const getLibraryQuizDetail = async (req: AuthReq, res: Response) => {
     const quizId = parseInt(req.params.id);
     const rows = await prisma.$queryRaw<any[]>(
       Prisma.sql`
-        SELECT q.id, q.quiz_title, q.pass_score, q.course_id, q.is_active
+        SELECT q.id, q.quiz_title, q.pass_score, q.course_id, q.is_active,
+          GROUP_CONCAT(DISTINCT qt.topic_id ORDER BY qt.topic_id) as topic_id_list,
+          GROUP_CONCAT(DISTINCT li.label ORDER BY li.label SEPARATOR '||') as topic_name_list
         FROM quizzes q
+        LEFT JOIN quiz_topics qt ON q.id = qt.quiz_id
+        LEFT JOIN list_items li ON qt.topic_id = li.id
         WHERE q.id = ${quizId}
         GROUP BY q.id
       `
@@ -63,8 +75,11 @@ export const getLibraryQuizDetail = async (req: AuthReq, res: Response) => {
       Prisma.sql`SELECT id, question_text, options, correct_option FROM quiz_questions WHERE quiz_id = ${quizId} ORDER BY id`
     );
 
+    const row = rows[0];
     const quiz = {
-      ...mapQuiz(rows[0]),
+      ...mapQuiz(row),
+      topic_ids:   row.topic_id_list ? String(row.topic_id_list).split(',').map(Number) : [],
+      topic_names: row.topic_name_list ? String(row.topic_name_list).split('||') : [],
       questions: questions.map((q: any) => ({
         ...q,
         id:             Number(q.id),
@@ -82,7 +97,7 @@ export const getLibraryQuizDetail = async (req: AuthReq, res: Response) => {
 
 export const createLibraryQuiz = async (req: AuthReq, res: Response) => {
   try {
-    const { quiz_title, pass_score, course_id, is_active, questions } = req.body;
+    const { quiz_title, pass_score, course_id, is_active, questions, topic_ids } = req.body;
     const active   = is_active === false || is_active === 'false' ? 0 : 1;
 
     if (!quiz_title) return res.status(400).json({ success: false, message: 'quiz_title is required' });
@@ -98,6 +113,8 @@ export const createLibraryQuiz = async (req: AuthReq, res: Response) => {
     const resolvedCourseId = course_id ? parseInt(course_id) : await getDefaultCourseId();
     if (!resolvedCourseId) return res.status(400).json({ success: false, message: 'No published course found for quiz assignment' });
 
+    const parsedTopicIds: number[] = Array.isArray(topic_ids) ? topic_ids.map(Number).filter(Boolean) : [];
+
     const newId = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw(
         Prisma.sql`INSERT INTO quizzes (course_id, quiz_title, pass_score, is_active) VALUES (${resolvedCourseId}, ${quiz_title}, ${parseFloat(pass_score)}, ${active})`
@@ -106,6 +123,9 @@ export const createLibraryQuiz = async (req: AuthReq, res: Response) => {
       const quizId = Number(id);
       for (const q of questions) {
         await tx.$executeRaw(Prisma.sql`INSERT INTO quiz_questions (quiz_id, question_text, options, correct_option) VALUES (${quizId}, ${q.question_text}, ${JSON.stringify(q.options)}, ${q.correct_option})`);
+      }
+      for (const tid of parsedTopicIds) {
+        await tx.$executeRaw(Prisma.sql`INSERT INTO quiz_topics (quiz_id, topic_id) VALUES (${quizId}, ${tid})`);
       }
       return quizId;
     });
@@ -120,7 +140,7 @@ export const createLibraryQuiz = async (req: AuthReq, res: Response) => {
 export const updateLibraryQuiz = async (req: AuthReq, res: Response) => {
   try {
     const quizId = parseInt(req.params.id);
-    const { quiz_title, pass_score, is_active, questions } = req.body;
+    const { quiz_title, pass_score, is_active, questions, topic_ids } = req.body;
 
     const existing = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM quizzes WHERE id = ${quizId}`);
     if (!existing.length) return res.status(404).json({ success: false, message: 'Quiz not found' });
@@ -149,6 +169,12 @@ export const updateLibraryQuiz = async (req: AuthReq, res: Response) => {
         }
       }
 
+      if (Array.isArray(topic_ids)) {
+        await tx.$executeRaw(Prisma.sql`DELETE FROM quiz_topics WHERE quiz_id = ${quizId}`);
+        for (const tid of topic_ids.map(Number).filter(Boolean)) {
+          await tx.$executeRaw(Prisma.sql`INSERT INTO quiz_topics (quiz_id, topic_id) VALUES (${quizId}, ${tid})`);
+        }
+      }
     });
 
     res.json({ success: true, message: 'Quiz updated' });

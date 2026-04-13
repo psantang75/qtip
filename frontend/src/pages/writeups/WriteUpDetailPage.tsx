@@ -51,7 +51,7 @@ export default function WriteUpDetailPage() {
     },
     onSuccess: ({ id: newId }) => {
       toast({ title: 'Write-up duplicated as new draft' })
-      navigate(`/app/writeups/${newId}`)
+      navigate(`/app/performancewarnings/${newId}`)
     },
     onError: () => toast({ title: 'Duplicate failed', variant: 'destructive' }),
   })
@@ -73,12 +73,12 @@ export default function WriteUpDetailPage() {
         title={`Write-Up #${writeup.id}`}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate('/app/writeups')}>
+            <Button variant="outline" size="sm" onClick={() => navigate('/app/performancewarnings')}>
               ← Write-Ups
             </Button>
             {canEdit && isEditable && (
               <Button variant="outline" size="sm"
-                onClick={() => navigate(`/app/writeups/${id}/edit`)}>
+                onClick={() => navigate(`/app/performancewarnings/${id}/edit`)}>
                 <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
               </Button>
             )}

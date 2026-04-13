@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, Send, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getFormById } from '@/services/formService'
+import { normalizeFormMetadata } from '@/pages/quality/form-builder/formBuilderUtils'
 import submissionService from '@/services/submissionService'
 import MultipleCallSelector from '@/components/common/MultipleCallSelector'
 import type { Call } from '@/services/callService'
@@ -41,22 +42,30 @@ export default function AuditFormPage() {
 
   const qc = useQueryClient()
 
-  const { data: form, isLoading: loading, isError: formError, refetch: refetchForm } = useQuery({
+  const { data: formRaw, isLoading: loading, isError: formError, refetch: refetchForm } = useQuery({
     queryKey: ['audit-form', formId],
     queryFn: () => getFormById(Number(formId)),
     enabled: !!formId,
     staleTime: 60 * 1000,
   })
 
-  const { data: csrUsersData } = useQuery({
+  const form = useMemo(
+    () => (formRaw ? normalizeFormMetadata(formRaw) : null),
+    [formRaw],
+  )
+
+  const { data: csrUsers = [] } = useQuery({
     queryKey: ['csr-dropdown-users'],
-    queryFn:  () => userService.getUsers(1, 100, { role_id: 3 }),
+    queryFn:  () => userService.fetchActiveCsrsForDropdown(),
     staleTime: 5 * 60 * 1000,
     retry: 1,
   })
-  const csrUserOptions = (csrUsersData?.items ?? [])
-    .map(u => ({ id: u.id, username: u.username }))
-    .sort((a, b) => a.username.localeCompare(b.username))
+  const csrUserOptions = useMemo(
+    () => csrUsers
+      .map(u => ({ id: u.id, username: u.username }))
+      .sort((a, b) => a.username.localeCompare(b.username)),
+    [csrUsers],
+  )
 
   const [score, setScore] = useState(0)
   const [answers, setAnswers] = useState<Record<number, AnswerType>>({})

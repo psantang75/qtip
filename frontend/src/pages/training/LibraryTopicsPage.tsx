@@ -76,11 +76,10 @@ export default function LibraryTopicsPage() {
 
   const hasFilters = search.trim().length > 0
 
-  // Build resource/quiz maps keyed by topics.id (from item_key) for FK alignment
   const resourcesByTopic = useMemo(() => {
     const map = new Map<number, TrainingResource[]>()
     for (const r of allResources) {
-      for (const tid of (r.topic_ids ?? [])) {
+      for (const tid of r.topic_ids) {
         if (!map.has(tid)) map.set(tid, [])
         map.get(tid)!.push(r)
       }
@@ -91,7 +90,7 @@ export default function LibraryTopicsPage() {
   const quizzesByTopic = useMemo(() => {
     const map = new Map<number, LibraryQuiz[]>()
     for (const q of allQuizzes) {
-      for (const tid of (q.topic_ids ?? [])) {
+      for (const tid of q.topic_ids) {
         if (!map.has(tid)) map.set(tid, [])
         map.get(tid)!.push(q)
       }
@@ -117,32 +116,30 @@ export default function LibraryTopicsPage() {
 
   const saveMut = useMutation({
     mutationFn: async (f: TopicForm & { id: number; fkTopicId: number }) => {
-      const fkTopicId = f.fkTopicId   // topics.id for FK references
+      const topicId = f.fkTopicId
 
-      // Sync resource links
-      const origResIds = resourcesByTopic.get(fkTopicId)?.map(r => r.id) ?? []
+      const origResIds = resourcesByTopic.get(topicId)?.map(r => r.id) ?? []
       const toLink   = f.linkedResourceIds.filter(id => !origResIds.includes(id))
       const toUnlink = origResIds.filter(id => !f.linkedResourceIds.includes(id))
       for (const rid of toLink) {
         const res = (resourcesData?.items ?? []).find(r => r.id === rid)
-        if (res) await trainingService.updateResource(rid, { topic_ids: [...(res.topic_ids ?? []), fkTopicId] })
+        if (res) await trainingService.updateResource(rid, { topic_ids: [...res.topic_ids, topicId] })
       }
       for (const rid of toUnlink) {
         const res = (resourcesData?.items ?? []).find(r => r.id === rid)
-        if (res) await trainingService.updateResource(rid, { topic_ids: (res.topic_ids ?? []).filter(x => x !== fkTopicId) })
+        if (res) await trainingService.updateResource(rid, { topic_ids: res.topic_ids.filter(x => x !== topicId) })
       }
 
-      // Sync quiz links
-      const origQuizIds = quizzesByTopic.get(fkTopicId)?.map(q => q.id) ?? []
+      const origQuizIds = quizzesByTopic.get(topicId)?.map(q => q.id) ?? []
       const toLinkQ   = f.linkedQuizIds.filter(id => !origQuizIds.includes(id))
       const toUnlinkQ = origQuizIds.filter(id => !f.linkedQuizIds.includes(id))
       for (const qid of toLinkQ) {
         const quiz = allQuizzes.find(q => q.id === qid)
-        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: [...(quiz.topic_ids ?? []), fkTopicId] })
+        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: [...quiz.topic_ids, topicId] })
       }
       for (const qid of toUnlinkQ) {
         const quiz = allQuizzes.find(q => q.id === qid)
-        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: (quiz.topic_ids ?? []).filter(x => x !== fkTopicId) })
+        if (quiz) await trainingService.updateLibraryQuiz(qid, { topic_ids: quiz.topic_ids.filter(x => x !== topicId) })
       }
     },
     onSuccess: () => { invalidateAll(); setModalOpen(false); toast({ title: 'Topic updated' }) },
@@ -151,17 +148,15 @@ export default function LibraryTopicsPage() {
 
   const openEdit = (topic: ListItem) => {
     setEditingTopic(topic)
-    const fkId = topic.item_key ? parseInt(topic.item_key) : 0
     setForm({
-      linkedResourceIds: resourcesByTopic.get(fkId)?.map(r => r.id) ?? [],
-      linkedQuizIds:     quizzesByTopic.get(fkId)?.map(q => q.id) ?? [],
+      linkedResourceIds: resourcesByTopic.get(topic.id)?.map(r => r.id) ?? [],
+      linkedQuizIds:     quizzesByTopic.get(topic.id)?.map(q => q.id) ?? [],
     })
     setModalOpen(true)
   }
 
   const handleSave = () => {
-    const fkTopicId = editingTopic.item_key ? parseInt(editingTopic.item_key) : 0
-    saveMut.mutate({ ...form, id: editingTopic.id, fkTopicId })
+    saveMut.mutate({ ...form, id: editingTopic!.id, fkTopicId: editingTopic!.id })
   }
 
   // Group filtered topics by category for card-based rendering
@@ -182,9 +177,8 @@ export default function LibraryTopicsPage() {
 
   const renderTopicRow = (topic: ListItem) => {
     const isOpen = expanded.has(topic.id)
-    const fkId   = topic.item_key ? parseInt(topic.item_key) : 0
-    const topicResources = resourcesByTopic.get(fkId) ?? []
-    const topicQuizzes   = quizzesByTopic.get(fkId) ?? []
+    const topicResources = resourcesByTopic.get(topic.id) ?? []
+    const topicQuizzes   = quizzesByTopic.get(topic.id) ?? []
     return (
       <React.Fragment key={topic.id}>
         <div

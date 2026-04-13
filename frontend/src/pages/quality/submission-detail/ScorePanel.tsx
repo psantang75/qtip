@@ -15,6 +15,7 @@ interface Props {
   answersMap:      Record<number, any>
   roleId:          number
   detail:          SubmissionDetail
+  scoreBreakdown?: any
   onEditAnswer:    (id: number, value: string, type: string) => void
 }
 
@@ -22,7 +23,7 @@ export function ScorePanel({
   score, disputeAdjusted, prevScore, adjScore,
   resolutionMode, liveScore,
   editRenderData, formData, answersMap, roleId, detail,
-  onEditAnswer,
+  scoreBreakdown, onEditAnswer,
 }: Props) {
   return (
     <div className="p-3 space-y-2.5">
@@ -97,6 +98,7 @@ export function ScorePanel({
                 formData={formData}
                 answers={answersMap}
                 backendScore={score}
+                scoreBreakdown={scoreBreakdown}
                 userRole={roleId}
                 showCategoryBreakdown={true}
                 showDetailedScores={true}

@@ -2,7 +2,7 @@
  * Shared helpers for coaching session auto-status transitions.
  *
  * Trigger points:
- *   1. Coach delivers session (IN_PROCESS) → hasCsrRequirements → AWAITING_CSR_ACTION
+ *   1. Coach schedules session (DRAFT → SCHEDULED/AWAITING_CSR_ACTION)
  *   2. CSR submits action plan / acknowledgment → resolveNextStatus
  *   3. CSR passes a quiz attempt → resolveNextStatus
  */
@@ -33,7 +33,7 @@ export async function hasCsrRequirements(sessionId: number): Promise<boolean> {
  * Checks whether ALL CSR-required actions are complete.
  *
  * - Reads the current session state from the DB (after any updates have been committed).
- * - Only advances from IN_PROCESS or AWAITING_CSR_ACTION.
+ * - Only advances from SCHEDULED or AWAITING_CSR_ACTION.
  * - Returns 'FOLLOW_UP_REQUIRED' when done + follow_up_date is set.
  * - Returns 'COMPLETED' when done + no follow_up_date.
  * - Returns null if not yet complete or not in an advanceable state.
@@ -48,7 +48,7 @@ export async function resolveNextStatus(sessionId: number): Promise<string | nul
   if (!rows.length) return null;
   const s = rows[0];
 
-  if (!['IN_PROCESS', 'AWAITING_CSR_ACTION'].includes(s.status)) return null;
+  if (!['SCHEDULED', 'AWAITING_CSR_ACTION'].includes(s.status)) return null;
 
   // Action plan check
   if (Boolean(Number(s.require_action_plan)) && !s.csr_action_plan) return null;
@@ -102,11 +102,11 @@ export async function applyAutoAdvance(sessionId: number, userId: number): Promi
     return nextStatus;
   }
 
-  // Not fully complete — if still IN_PROCESS but requirements exist, escalate to AWAITING_CSR_ACTION
+  // Not fully complete — if still SCHEDULED but requirements exist, escalate to AWAITING_CSR_ACTION
   const rows = await prisma.$queryRaw<{ status: string }[]>(
     Prisma.sql`SELECT status FROM coaching_sessions WHERE id = ${sessionId}`
   );
-  if (rows[0]?.status === 'IN_PROCESS') {
+  if (rows[0]?.status === 'SCHEDULED') {
     const needsCSR = await hasCsrRequirements(sessionId);
     if (needsCSR) {
       await prisma.$executeRaw(

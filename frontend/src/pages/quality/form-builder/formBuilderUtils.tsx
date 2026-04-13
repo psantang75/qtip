@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils'
 import { CheckCircle2 } from 'lucide-react'
-import type { Form, FormMetadataField, FormCategory } from '@/types/form.types'
+import type { Form, FormMetadataField, FormCategory, RadioOption } from '@/types/form.types'
+import { normalizeStandardMetadataOrder } from '@/utils/formMetadataOrder'
 
 export type Step = 'metadata' | 'categories' | 'questions' | 'preview'
 export const STEPS: Step[] = ['metadata', 'categories', 'questions', 'preview']
@@ -15,24 +16,23 @@ export const STEP_LABELS: Record<Step, string> = {
  */
 export function normalizeFormMetadata(form: Form): Form {
   const fields = form.metadata_fields ? [...form.metadata_fields] : []
+  let next = fields
 
-  // Check if Interaction Date already exists in the first 4 required fields
   const hasInteractionDate = fields.slice(0, 4).some(f => f.field_name === 'Interaction Date')
-  if (hasInteractionDate) return form
-
-  // Replace a Spacer in the first 4 slots with Interaction Date
-  const spacerIdx = fields.slice(0, 4).findIndex(f => f.field_type === 'SPACER')
-  if (spacerIdx !== -1) {
-    fields[spacerIdx] = {
-      ...fields[spacerIdx],
-      field_name: 'Interaction Date',
-      field_type: 'DATE',
-      is_required: true,
+  if (!hasInteractionDate) {
+    const spacerIdx = fields.slice(0, 4).findIndex(f => f.field_type === 'SPACER')
+    if (spacerIdx !== -1) {
+      next = [...fields]
+      next[spacerIdx] = {
+        ...next[spacerIdx],
+        field_name: 'Interaction Date',
+        field_type: 'DATE',
+        is_required: true,
+      }
     }
-    return { ...form, metadata_fields: fields }
   }
 
-  return form
+  return { ...form, metadata_fields: normalizeStandardMetadataOrder(next) }
 }
 
 export function freshForm(): Form {
@@ -53,6 +53,86 @@ export function freshForm(): Form {
 
 export function totalCategoryWeight(categories: FormCategory[]): number {
   return categories.reduce((s, c) => s + (c.weight || 0), 0)
+}
+
+/** Next unused string id for a new radio / multi-select option (prefers 1, 2, 3…; skips values already in use). */
+export function nextIncrementalOptionValue(options: RadioOption[]): string {
+  const used = new Set(
+    options.map(o => String(o.option_value ?? '').trim()).filter(v => v.length > 0),
+  )
+  let maxNum = 0
+  for (const o of options) {
+    const n = Number.parseInt(String(o.option_value ?? '').trim(), 10)
+    if (Number.isFinite(n) && n > maxNum) maxNum = n
+  }
+  let candidate = maxNum
+  for (;;) {
+    candidate += 1
+    const s = String(candidate)
+    if (!used.has(s)) return s
+  }
+}
+
+/** Fill blank `option_value` on each option; preserves non-empty values (submissions + conditions). */
+export function ensureRadioOptionValues(options: RadioOption[]): RadioOption[] {
+  const used = new Set(
+    options.map(o => String(o.option_value ?? '').trim()).filter(v => v.length > 0),
+  )
+  let maxNum = 0
+  for (const o of options) {
+    const n = Number.parseInt(String(o.option_value ?? '').trim(), 10)
+    if (Number.isFinite(n) && n > maxNum) maxNum = n
+  }
+  let candidate = maxNum
+  return options.map(o => {
+    const v = String(o.option_value ?? '').trim()
+    if (v) return o
+    for (;;) {
+      candidate += 1
+      const s = String(candidate)
+      if (!used.has(s)) {
+        used.add(s)
+        return { ...o, option_value: s }
+      }
+    }
+  })
+}
+
+export function ensureFormRadioOptionValues(form: Form): Form {
+  return {
+    ...form,
+    categories: form.categories.map(c => ({
+      ...c,
+      questions: (c.questions || []).map(q => {
+        const ro = q.radio_options
+        if (!ro?.length) return q
+        return { ...q, radio_options: ensureRadioOptionValues(ro) }
+      }),
+    })),
+  }
+}
+
+/** Radio / multi-select options no longer support per-option free text in the builder; always persist false. */
+export function stripRadioFreeTextFlags(form: Form): Form {
+  return {
+    ...form,
+    categories: form.categories.map(c => ({
+      ...c,
+      questions: (c.questions || []).map(q => ({
+        ...q,
+        radio_options: (q.radio_options || []).map(o => ({ ...o, has_free_text: false })),
+      })),
+    })),
+  }
+}
+
+/** Final normalization before create/update API (stable option ids + no free-text flags + metadata order). */
+export function normalizeFormBuilderPayload(form: Form): Form {
+  const stripped = stripRadioFreeTextFlags(ensureFormRadioOptionValues(form))
+  return {
+    ...stripped,
+    metadata_fields: normalizeStandardMetadataOrder(stripped.metadata_fields || []),
+  }
 }
 
 export function StepBar({ current }: { current: Step }) {

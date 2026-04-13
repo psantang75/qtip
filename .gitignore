@@ -32,6 +32,11 @@ uploads/
 # ── Imported CSV Data ────────────────────────────────────────────────────────
 QTIP_data/
 
+# ── Playwright E2E ───────────────────────────────────────────────────────────
+e2e/.env
+playwright-report/
+test-results/
+
 # ── OS / Editor ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

@@ -86,7 +86,7 @@ export function PriorDisciplineSection({ form, update }: { form: WriteUpFormStat
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2 justify-end">
-                        <a href={ref.reference_type === 'write_up' ? `/app/writeups/${ref.reference_id}` : `/app/training/coaching/${ref.reference_id}`}
+                        <a href={ref.reference_type === 'write_up' ? `/app/performancewarnings/${ref.reference_id}` : `/app/training/coaching/${ref.reference_id}`}
                           target="_blank" rel="noreferrer" className="text-slate-400 hover:text-primary transition-colors" title="View record">
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>

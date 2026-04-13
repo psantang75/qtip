@@ -157,7 +157,7 @@ export default function QCQualityPage() {
       {isError   && <ErrorCard onRetry={refetch} />}
       {!isLoading && !isError && <div className="space-y-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Quality Deep Dive</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Quality</h1>
           <p className="text-sm text-slate-500 mt-0.5">Detailed quality analytics — scores, disputes, categories, and missed questions.</p>
         </div>
 

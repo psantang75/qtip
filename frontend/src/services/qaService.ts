@@ -130,6 +130,17 @@ export interface SubmissionDetail extends Submission {
   answers: AnswerRow[]
   metadata: Record<string, string> | MetadataEntry[]
   dispute?: DisputeRecord
+  scoreBreakdown?: {
+    total_score: number
+    categoryBreakdown: Record<string, {
+      raw_score: number
+      weighted_score: number
+      weighted_possible: number
+      earned_points: number
+      possible_points: number
+      category_weight: number
+    }>
+  }
 }
 
 export interface FormQuestion {
@@ -189,7 +200,6 @@ export interface DisputeHistoryItem {
 function normalizeSubmission(item: any): any {
   if (!item || typeof item !== 'object') return item
   const rawScore = item.score ?? item.total_score ?? 0
-  // For CSR detail, form data lives inside item.form
   const nestedForm = item.form && typeof item.form === 'object' ? item.form : null
   return {
     ...item,
@@ -197,9 +207,8 @@ function normalizeSubmission(item: any): any {
     form_name:     item.form_name     ?? item.formName ?? nestedForm?.form_name ?? '',
     created_at:    item.created_at    ?? item.submitted_at ?? item.submittedDate ?? '',
     reviewer_name: item.reviewer_name ?? item.auditor_name ?? item.qa_analyst_name ?? undefined,
-    // CSR detail already includes full form structure — expose as formData so the
-    // detail page can use it directly without a separate /forms/:id fetch
     formData:      item.formData ?? (nestedForm?.categories ? nestedForm : undefined),
+    scoreBreakdown: item.scoreBreakdown ?? undefined,
   }
 }
 

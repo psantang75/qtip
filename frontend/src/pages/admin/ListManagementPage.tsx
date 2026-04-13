@@ -45,8 +45,8 @@ const SECTIONS: ListSection[] = [
     ],
   },
   {
-    id: 'writeups',
-    label: 'Write-Ups',
+    id: 'performancewarnings',
+    label: 'Performance Warnings',
     lists: [
       { key: 'writeup_policy',      label: 'Policy Violated',        description: 'Policies selectable when documenting a policy violation in a write-up.',                       tier: 'dynamic', implemented: true, listType: 'writeup_policy'      },
       { key: 'writeup_reference',   label: 'Reference Material',     description: 'Reference materials (e.g. handbook sections) that can be cited in a write-up violation.',      tier: 'dynamic', implemented: true, listType: 'writeup_reference'   },

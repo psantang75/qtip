@@ -80,10 +80,6 @@ export default function CoachingSessionFormPage() {
   const resources = resourcesData?.items ?? []
   const quizzes   = quizLibrary?.items   ?? []
 
-  const topicIdMap = new Map<number, number>(
-    topicItems.filter(t => t.item_key).map(t => [t.id, parseInt(t.item_key!)])
-  )
-
   const csrId = form.csr_ids[0] ?? 0
   const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ['csr-coaching-history', csrId],
@@ -249,7 +245,7 @@ export default function CoachingSessionFormPage() {
   if (isEdit && existingError) {
     return (
       <QualityListPage>
-        <TableErrorState message="Failed to load coaching session." onRetry={existingRefetch} />
+        <TableErrorState message="Failed to load training session." onRetry={existingRefetch} />
       </QualityListPage>
     )
   }
@@ -257,7 +253,7 @@ export default function CoachingSessionFormPage() {
   return (
     <QualityListPage>
       <QualityPageHeader
-        title={isEdit ? 'Edit Coaching Session' : 'New Coaching Session'}
+        title={isEdit ? 'Edit Training Session' : 'New Training Session'}
         actions={<Button variant="outline" onClick={() => navigate(-1)}>Cancel</Button>}
       />
 
@@ -273,7 +269,7 @@ export default function CoachingSessionFormPage() {
           />
           <RequiredActionsSection
             form={form} errors={errors} resources={resources}
-            quizzes={quizzes} topicIdMap={topicIdMap} update={update}
+            quizzes={quizzes} update={update}
           />
           <AccountabilitySection form={form} errors={errors} update={update} />
           {[ROLE_IDS.ADMIN, ROLE_IDS.TRAINER, ROLE_IDS.MANAGER].some(r => r === (user?.role_id ?? 0)) && (

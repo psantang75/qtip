@@ -11,6 +11,7 @@ import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
@@ -40,9 +41,10 @@ import { Section, Sub, InfoRow, SideCard, SideTitle } from './training-detail/la
 
 // ── Section edit bar (detail page specific) ───────────────────────────────────
 
-function SectionEditBar({ onSave, onCancel, saving, showBatch, applyToBatch, onToggleBatch }: {
+function SectionEditBar({ onSave, onCancel, saving, showBatch, applyToBatch, onToggleBatch, onSaveAndClose, showSaveAndClose }: {
   onSave: () => void; onCancel: () => void; saving: boolean
   showBatch?: boolean; applyToBatch?: boolean; onToggleBatch?: () => void
+  onSaveAndClose?: () => void; showSaveAndClose?: boolean
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-3 mt-2">
@@ -58,8 +60,14 @@ function SectionEditBar({ onSave, onCancel, saving, showBatch, applyToBatch, onT
           )}
           <Button size="sm" className="bg-primary hover:bg-primary/90 text-white"
             onClick={onSave} disabled={saving}>
-            {saving ? 'Saving…' : applyToBatch ? 'Save to All' : 'Save Changes'}
+            {saving ? 'Saving…' : applyToBatch ? 'Save to All' : 'Save'}
           </Button>
+          {showSaveAndClose && onSaveAndClose && (
+            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={onSaveAndClose} disabled={saving}>
+              {saving ? 'Saving…' : 'Save & Close'}
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -84,16 +92,16 @@ function NoteBlock({ text, placeholder }: { text?: string | null; placeholder: s
     : <p className="text-[13px] text-slate-400 italic">{placeholder}</p>
 }
 
-function TopicList({ topics }: { topics: string[] }) {
-  if (!topics.length) return <span className="text-[13px] text-slate-400">None</span>
+function TopicList({ topics, columns = 1 }: { topics: string[]; columns?: 1 | 3 }) {
+  if (!topics.length) return <span className="text-sm text-slate-400">None</span>
   return (
-    <ul className="space-y-1">
+    <div className={columns === 3 ? 'grid grid-cols-3 gap-y-1.5 gap-x-4' : 'space-y-1'}>
       {topics.map(t => (
-        <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
+        <div key={t} className="flex items-center gap-2 text-sm text-slate-700">
           <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
-        </li>
+        </div>
       ))}
-    </ul>
+    </div>
   )
 }
 
@@ -192,31 +200,33 @@ export default function CoachingSessionDetailPage() {
 
   const cancelEdit = () => { setEditSection(null); setApplyToBatch(false) }
 
+  const buildFormData = () => {
+    const fd = new FormData()
+    fd.append('csr_id',               String(formDraft.csr_ids[0] || ''))
+    fd.append('coach_id',             String(formDraft.coach_id))
+    fd.append('session_date',         formDraft.session_date)
+    fd.append('coaching_purpose',     formDraft.coaching_purpose)
+    fd.append('coaching_format',      formDraft.coaching_format)
+    fd.append('source_type',          formDraft.source_type)
+    fd.append('notes',                formDraft.notes)
+    fd.append('topic_ids',            formDraft.topic_ids.join(','))
+    fd.append('required_action',      formDraft.required_action)
+    fd.append('resource_ids',         formDraft.kb_resource_ids.join(','))
+    fd.append('quiz_ids',             formDraft.quiz_ids.join(','))
+    fd.append('require_acknowledgment', String(formDraft.require_acknowledgment))
+    fd.append('require_action_plan',  String(formDraft.require_action_plan))
+    fd.append('due_date',             formDraft.due_date || '')
+    fd.append('follow_up_required',   String(formDraft.follow_up_required))
+    fd.append('follow_up_date',       formDraft.follow_up_date || '')
+    fd.append('follow_up_notes',      formDraft.follow_up_notes || '')
+    fd.append('internal_notes',       formDraft.internal_notes || '')
+    fd.append('behavior_flag_ids',     formDraft.behavior_flag_ids.join(','))
+    if (applyToBatch) fd.append('apply_to_batch', 'true')
+    return fd
+  }
+
   const sectionSaveMut = useMutation({
-    mutationFn: () => {
-      const fd = new FormData()
-      fd.append('csr_id',               String(formDraft.csr_ids[0] || ''))
-      fd.append('coach_id',             String(formDraft.coach_id))
-      fd.append('session_date',         formDraft.session_date)
-      fd.append('coaching_purpose',     formDraft.coaching_purpose)
-      fd.append('coaching_format',      formDraft.coaching_format)
-      fd.append('source_type',          formDraft.source_type)
-      fd.append('notes',                formDraft.notes)
-      fd.append('topic_ids',            formDraft.topic_ids.join(','))
-      fd.append('required_action',      formDraft.required_action)
-      fd.append('resource_ids',         formDraft.kb_resource_ids.join(','))
-      fd.append('quiz_ids',             formDraft.quiz_ids.join(','))
-      fd.append('require_acknowledgment', String(formDraft.require_acknowledgment))
-      fd.append('require_action_plan',  String(formDraft.require_action_plan))
-      fd.append('due_date',             formDraft.due_date || '')
-      fd.append('follow_up_required',   String(formDraft.follow_up_required))
-      fd.append('follow_up_date',       formDraft.follow_up_date || '')
-      fd.append('follow_up_notes',      formDraft.follow_up_notes || '')
-      fd.append('internal_notes',       formDraft.internal_notes || '')
-      fd.append('behavior_flag_ids',     formDraft.behavior_flag_ids.join(','))
-      if (applyToBatch) fd.append('apply_to_batch', 'true')
-      return trainingService.updateCoachingSession(Number(id), fd)
-    },
+    mutationFn: () => trainingService.updateCoachingSession(Number(id), buildFormData()),
     onSuccess: () => {
       toast({ title: 'Section saved' })
       setEditSection(null)
@@ -226,6 +236,20 @@ export default function CoachingSessionDetailPage() {
     onError: () => toast({ title: 'Save failed', variant: 'destructive' }),
   })
 
+  const saveAndCloseMut = useMutation({
+    mutationFn: async () => {
+      await trainingService.updateCoachingSession(Number(id), buildFormData())
+      await trainingService.setSessionStatus(Number(id), 'CLOSED')
+    },
+    onSuccess: () => {
+      toast({ title: 'Session saved and closed' })
+      setEditSection(null)
+      invalidate()
+      qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
+    },
+    onError: () => toast({ title: 'Save & close failed', variant: 'destructive' }),
+  })
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['coaching-session', id] })
     qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
@@ -233,11 +257,13 @@ export default function CoachingSessionDetailPage() {
 
   useEffect(() => { if (session) setPendingStatus(session.status) }, [session?.status])
 
-  // Auto-open Required Actions + Accountability as a form when Draft or In Process
+  // Auto-open editable sections based on status
   useEffect(() => {
     if (!session) return
-    if (['SCHEDULED', 'IN_PROCESS'].includes(session.status)) {
+    if (['DRAFT', 'SCHEDULED'].includes(session.status)) {
       startEdit('actions-accountability')
+    } else if (['COMPLETED', 'FOLLOW_UP_REQUIRED'].includes(session.status) && canSeeInternal) {
+      startEdit('internal')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id])
@@ -250,7 +276,7 @@ export default function CoachingSessionDetailPage() {
 
   const deliverMut = useMutation({
     mutationFn: () => trainingService.deliverSession(Number(id)),
-    onSuccess: () => { toast({ title: 'Coaching session scheduled' }); invalidate() },
+    onSuccess: () => { toast({ title: 'Training session scheduled' }); invalidate() },
     onError: () => toast({ title: 'Error', description: 'Could not deliver session.', variant: 'destructive' }),
   })
 
@@ -279,7 +305,7 @@ export default function CoachingSessionDetailPage() {
   return (
     <QualityListPage>
       <QualityPageHeader
-        title={`Coaching Session #${id}`}
+        title={`Training Session #${id}`}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => navigate('/app/training/coaching')}>← Back</Button>
@@ -325,13 +351,13 @@ export default function CoachingSessionDetailPage() {
             {/* Topics */}
             <div className="border-t border-slate-100 pt-4 mt-4">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Topics</p>
-              <TopicList topics={session.topics} />
+              <TopicList topics={session.topics} columns={3} />
             </div>
 
             {/* Notes */}
             <div className="border-t border-slate-100 pt-4 mt-4">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Notes</p>
-              <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">
+              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
                 {session.notes || <span className="text-slate-400">No notes provided</span>}
               </p>
               {session.qa_audit_id && (
@@ -347,7 +373,7 @@ export default function CoachingSessionDetailPage() {
           {editSection === 'actions-accountability' ? (
             <>
               <RequiredActionsSection form={formDraft} errors={{}} resources={resources} quizzes={quizzes} update={updateDraft} />
-              <AccountabilitySection form={formDraft} errors={{}} update={updateDraft} />
+              <AccountabilitySection form={formDraft} errors={{}} update={updateDraft} hideFollowUpNotes />
               <SectionEditBar onSave={() => sectionSaveMut.mutate()} onCancel={cancelEdit} saving={sectionSaveMut.isPending} showBatch={!!session?.batch_id} applyToBatch={applyToBatch} onToggleBatch={() => setApplyToBatch(v => !v)} />
             </>
           ) : null}
@@ -509,21 +535,46 @@ export default function CoachingSessionDetailPage() {
                   )}
                 </div>
               </div>
-              {(session.follow_up_required || !!session.follow_up_date) && (
+              {!!session.follow_up_notes && (
                 <div className="mt-3 border-t border-slate-100 pt-3">
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Follow-Up Notes</p>
-                  <NoteBlock text={session.follow_up_notes} placeholder="No follow-up notes yet" />
+                  <NoteBlock text={session.follow_up_notes} placeholder="" />
                 </div>
               )}
             </Sub>
 
           </Section>}
 
+          {/* ── Follow-Up Notes edit (between Accountability and Internal Notes) ── */}
+          {canSeeInternal && editSection === 'internal' && session.status === 'FOLLOW_UP_REQUIRED' && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
+                <h3 className="text-sm font-semibold text-slate-700">Follow-Up Notes</h3>
+              </div>
+              <div className="p-5">
+                <Textarea rows={4} maxLength={3000} value={formDraft.follow_up_notes}
+                  placeholder="Document notes from the follow-up meeting…"
+                  onChange={e => updateDraft('follow_up_notes', e.target.value)} />
+                <p className="text-[11px] text-slate-400 mt-1 text-right">{formDraft.follow_up_notes.length}/3000</p>
+              </div>
+            </div>
+          )}
+
           {/* ── Section 4: Internal Notes (trainer/manager/admin only) ───── */}
           {canSeeInternal && editSection === 'internal' && (
             <>
               <InternalNotesSection form={formDraft} flagItems={flagItems} update={updateDraft} />
-              <SectionEditBar onSave={() => sectionSaveMut.mutate()} onCancel={cancelEdit} saving={sectionSaveMut.isPending} showBatch={!!session?.batch_id} applyToBatch={applyToBatch} onToggleBatch={() => setApplyToBatch(v => !v)} />
+
+              <SectionEditBar
+                onSave={() => sectionSaveMut.mutate()}
+                onCancel={cancelEdit}
+                saving={sectionSaveMut.isPending || saveAndCloseMut.isPending}
+                showBatch={!!session?.batch_id}
+                applyToBatch={applyToBatch}
+                onToggleBatch={() => setApplyToBatch(v => !v)}
+                showSaveAndClose={['COMPLETED', 'FOLLOW_UP_REQUIRED'].includes(session.status)}
+                onSaveAndClose={() => saveAndCloseMut.mutate()}
+              />
             </>
           )}
           {canSeeInternal && editSection !== 'internal' && (
@@ -616,14 +667,14 @@ export default function CoachingSessionDetailPage() {
                   <p className="text-[13px] font-semibold text-slate-800">{STATUS_LABELS[session.status] ?? session.status}</p>
                 </div>
                 {/* Schedule — only when DRAFT, triggers CSR visibility + auto-status */}
-                {session.status === 'SCHEDULED' && (
+                {session.status === 'DRAFT' && (
                   <div className="border-t border-slate-100 pt-3">
                     <Button
                       className="w-full bg-primary hover:bg-primary/90 text-white h-9 text-[13px] font-semibold"
                       onClick={() => deliverMut.mutate()}
                       disabled={deliverMut.isPending || statusMut.isPending}
                     >
-                      {deliverMut.isPending ? 'Scheduling…' : 'Schedule Coaching Session'}
+                      {deliverMut.isPending ? 'Scheduling…' : 'Schedule Training Session'}
                     </Button>
                   </div>
                 )}
@@ -635,7 +686,7 @@ export default function CoachingSessionDetailPage() {
                     value={pendingStatus}
                     onChange={e => setPendingStatus(e.target.value)}
                   >
-                    {(['SCHEDULED', 'IN_PROCESS', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED'] as const).map(s => (
+                    {(['DRAFT', 'SCHEDULED', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED'] as const).map(s => (
                       <option key={s} value={s}>{STATUS_LABELS[s]}{s === 'CLOSED' ? ' (Final)' : ''}</option>
                     ))}
                   </select>
@@ -656,15 +707,28 @@ export default function CoachingSessionDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* Status History */}
+            <div className="border-t border-slate-100 pt-3 mt-3 space-y-1.5">
+              <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-2">Status History</p>
+              {session.delivered_at && (
+                <ResponseRow label="Scheduled" value={<span className="text-slate-700">{formatQualityDate(session.delivered_at)}</span>} />
+              )}
+              {session.completed_at && (
+                <ResponseRow label="Completed" value={<span className="text-slate-700">{formatQualityDate(session.completed_at)}</span>} />
+              )}
+              {session.closed_at && (
+                <ResponseRow label="Closed" value={<span className="text-slate-700">{formatQualityDate(session.closed_at)}</span>} />
+              )}
+              {!session.delivered_at && !session.completed_at && !session.closed_at && (
+                <p className="text-[12px] text-slate-400 italic">No history yet</p>
+              )}
+            </div>
           </SideCard>
 
           {/* CSR Response summary */}
           <SideCard>
             <SideTitle>CSR Response</SideTitle>
-            <ResponseRow label="Session Scheduled"
-              value={session.delivered_at
-                ? formatQualityDate(session.delivered_at)
-                : <span className="text-slate-400">—</span>} />
             <ResponseRow label="Action Plan"
               muted={!session.require_action_plan}
               value={session.csr_action_plan

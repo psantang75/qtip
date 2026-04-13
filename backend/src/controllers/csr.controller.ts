@@ -525,6 +525,14 @@ export const getAuditDetails = async (req: Request, res: Response) => {
       `
     );
     
+    let scoreBreakdown = null;
+    try {
+      const { getScoreBreakdown } = await import('../utils/scoringUtil');
+      scoreBreakdown = await getScoreBreakdown(null, Number(auditId));
+    } catch (sbErr) {
+      console.error('Error getting score breakdown:', sbErr);
+    }
+
     const auditDetail = {
       ...audit,
       qaAnalystName,
@@ -535,7 +543,8 @@ export const getAuditDetails = async (req: Request, res: Response) => {
       metadata: metadataResults.map(m => ({
         field_name: m.field_name,
         value: m.value
-      }))
+      })),
+      scoreBreakdown,
     };
     
     res.json(auditDetail);
@@ -858,6 +867,13 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
       } catch (formError) {
         console.error('Error fetching form structure:', formError);
       }
+
+      try {
+        const { getScoreBreakdown } = await import('../utils/scoringUtil');
+        response.scoreBreakdown = await getScoreBreakdown(null, submissionId);
+      } catch (sbErr) {
+        console.error('Error getting score breakdown for CSR detail:', sbErr);
+      }
       
       res.status(200).json(response);
     } catch (dbError) {
@@ -1095,6 +1111,7 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
     // CSR sees SCHEDULED sessions as "Upcoming" â€” coach delivers after the meeting
     const conditions: Prisma.Sql[] = [
       Prisma.sql`cs.csr_id = ${userId}`,
+      Prisma.sql`cs.status != 'DRAFT'`,
     ];
 
     if (status && status !== 'all') {
@@ -1526,7 +1543,7 @@ export const submitCSRResponse = async (req: Request, res: Response) => {
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
 
     const session = rows[0];
-    if (!['IN_PROCESS', 'AWAITING_CSR_ACTION'].includes(session.status)) {
+    if (!['SCHEDULED', 'AWAITING_CSR_ACTION'].includes(session.status)) {
       return res.status(400).json({ success: false, message: 'Session is not awaiting a CSR response' });
     }
 

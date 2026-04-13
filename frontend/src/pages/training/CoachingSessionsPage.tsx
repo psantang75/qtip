@@ -49,8 +49,8 @@ const FORMAT_STYLES: Record<CoachingFormat, string> = {
 }
 
 export const STATUS_LABELS: Record<string, string> = {
-  SCHEDULED: 'Draft', IN_PROCESS: 'In Process',
-  AWAITING_CSR_ACTION: 'Awaiting CSR', QUIZ_PENDING: 'Quiz Pending',
+  DRAFT: 'Draft', SCHEDULED: 'Scheduled',
+  AWAITING_CSR_ACTION: 'Awaiting CSR',
   COMPLETED: 'Completed', FOLLOW_UP_REQUIRED: 'Follow-Up', CLOSED: 'Closed',
 }
 const ALL_STATUSES = Object.keys(STATUS_LABELS)
@@ -231,7 +231,7 @@ export default function CoachingSessionsPage() {
   return (
     <QualityListPage>
       <QualityPageHeader
-        title="Coaching Sessions"
+        title="Training Sessions"
         actions={
           <Button
             className="bg-primary hover:bg-primary/90 text-white"
@@ -310,7 +310,7 @@ export default function CoachingSessionsPage() {
         {isLoading ? (
           <TableLoadingSkeleton rows={8} />
         ) : isError ? (
-          <TableErrorState message="Failed to load coaching sessions." onRetry={refetch} />
+          <TableErrorState message="Failed to load training sessions." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>
@@ -332,7 +332,7 @@ export default function CoachingSessionsPage() {
                 <TableEmptyState
                   colSpan={10}
                   icon={MessageSquare}
-                  title="No coaching sessions found"
+                  title="No training sessions found"
                   description="Create a new session to get started"
                   action={{ label: 'New Session', onClick: () => navigate('/app/training/coaching/new') }}
                 />

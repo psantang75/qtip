@@ -212,7 +212,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
                               </div>
                               {policies.length > 0 && <p className="text-[11px] text-slate-500 mt-0.5">{policies.join(', ')}</p>}
                             </div>
-                            <a href={`/app/writeups/${w.id}`} target="_blank" rel="noreferrer"
+                            <a href={`/app/performancewarnings/${w.id}`} target="_blank" rel="noreferrer"
                               className="shrink-0 text-slate-400 hover:text-primary mt-0.5" onClick={e => e.stopPropagation()}>
                               <ExternalLink className="h-3.5 w-3.5" />
                             </a>

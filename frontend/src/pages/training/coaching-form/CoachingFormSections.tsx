@@ -261,7 +261,7 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems = [],
           </Field>
         )}
         <Field label="Session Date" required error={errors.session_date}>
-          <Input type="datetime-local" value={form.session_date}
+          <Input type="date" value={form.session_date?.slice(0, 10)}
             onChange={e => update('session_date', e.target.value)} />
         </Field>
         <Field label="Coaching Purpose" required error={errors.coaching_purpose}>
@@ -410,18 +410,16 @@ interface S3Props {
   update: <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
 }
 
-export function RequiredActionsSection({ form, errors, resources, quizzes, topicIdMap = new Map(), update }: S3Props) {
+export function RequiredActionsSection({ form, errors, resources, quizzes, update }: S3Props) {
   const [kbSearch,   setKbSearch]   = useState('')
   const [quizSearch, setQuizSearch] = useState('')
 
-  const topicFKSet = new Set(
-    form.topic_ids.map(lid => topicIdMap.get(lid)).filter((x): x is number => x !== undefined)
-  )
+  const selectedTopicIds = new Set(form.topic_ids)
   const filteredResources = resources.filter(r =>
-    topicFKSet.size === 0 || r.topic_ids.some(tid => topicFKSet.has(tid))
+    selectedTopicIds.size === 0 || r.topic_ids.some(tid => selectedTopicIds.has(tid))
   )
   const filteredQuizzes = quizzes.filter(q =>
-    topicFKSet.size === 0 || q.topic_ids.some(tid => topicFKSet.has(tid))
+    selectedTopicIds.size === 0 || q.topic_ids.some(tid => selectedTopicIds.has(tid))
   )
 
   const resourceItems = filteredResources.map(r => ({
@@ -438,32 +436,34 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, topic
 
   return (
     <FormSection title="Required Actions">
-      <Field label="Required Action">
-        <Textarea
-          rows={3} maxLength={1000} value={form.required_action}
-          placeholder="Describe what must change or improve…"
-          onChange={e => update('required_action', e.target.value)}
-        />
-        <p className="text-[11px] text-slate-400 mt-1">
-          {form.required_action.length}/1000 · Shown prominently to the CSR as what must change.
-        </p>
-      </Field>
+      <div className="space-y-5">
+        <Field label="Required Action">
+          <Textarea
+            rows={3} maxLength={1000} value={form.required_action}
+            placeholder="Describe what must change or improve…"
+            onChange={e => update('required_action', e.target.value)}
+          />
+          <p className="text-[11px] text-slate-400 mt-1">
+            {form.required_action.length}/1000 · Shown prominently to the CSR as what must change.
+          </p>
+        </Field>
 
-      <SubSection title="Reference Materials">
-        <AssignmentMultiSelect
-          items={resourceItems} selectedIds={form.kb_resource_ids} onToggle={toggleResource}
-          placeholder="Assign Reference Materials…" noTopicsMsg="No resources linked to the selected topics."
-          search={kbSearch} setSearch={setKbSearch}
-        />
-      </SubSection>
+        <Field label="Reference Materials">
+          <AssignmentMultiSelect
+            items={resourceItems} selectedIds={form.kb_resource_ids} onToggle={toggleResource}
+            placeholder="Select Reference Materials…" noTopicsMsg="No resources linked to the selected topics."
+            search={kbSearch} setSearch={setKbSearch}
+          />
+        </Field>
 
-      <SubSection title="Quiz Assignment">
-        <AssignmentMultiSelect
-          items={quizItems} selectedIds={form.quiz_ids} onToggle={toggleQuiz}
-          placeholder="Assign quizzes…" noTopicsMsg="No quizzes linked to the selected topics."
-          search={quizSearch} setSearch={setQuizSearch}
-        />
-      </SubSection>
+        <Field label="Quiz Assignment">
+          <AssignmentMultiSelect
+            items={quizItems} selectedIds={form.quiz_ids} onToggle={toggleQuiz}
+            placeholder="Select Quiz Assignment…" noTopicsMsg="No quizzes linked to the selected topics."
+            search={quizSearch} setSearch={setQuizSearch}
+          />
+        </Field>
+      </div>
     </FormSection>
   )
 }
@@ -474,9 +474,10 @@ interface S4Props {
   form: CoachingFormState
   errors: CoachingFormErrors
   update: <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
+  hideFollowUpNotes?: boolean
 }
 
-export function AccountabilitySection({ form, errors, update }: S4Props) {
+export function AccountabilitySection({ form, errors, update, hideFollowUpNotes }: S4Props) {
   return (
     <FormSection title="CSR Accountability">
       <div className="space-y-4">
@@ -509,7 +510,7 @@ export function AccountabilitySection({ form, errors, update }: S4Props) {
             </Field>
           )}
         </div>
-        {form.follow_up_required && (
+        {!hideFollowUpNotes && form.follow_up_required && (
           <div className="mt-4">
             <Field label="Follow-Up Notes">
               <Textarea

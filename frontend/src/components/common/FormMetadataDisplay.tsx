@@ -1,6 +1,7 @@
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { FormMetadataField } from '@/types/form.types'
+import { isCsrMetadataField } from '@/utils/formMetadataOrder'
 
 interface FormMetadataDisplayProps {
   metadataFields: FormMetadataField[]
@@ -53,9 +54,15 @@ export default function FormMetadataDisplay({
 
             {field.field_type === 'AUTO' && (
               <p className="text-[13px] text-slate-500 h-9 flex items-center">
-                {field.field_name.toLowerCase().includes('agent') || field.field_name.toLowerCase().includes('user')
-                  ? currentUser?.username ?? '—'
-                  : new Date().toLocaleDateString()}
+                {(() => {
+                  const v = val.trim()
+                  if (v) return v
+                  const n = field.field_name.toLowerCase()
+                  if (n.includes('reviewer') || n.includes('auditor') || n.includes('agent') || (n.includes('user') && n.includes('name')))
+                    return currentUser?.username ?? '—'
+                  if (n.includes('date')) return new Date().toISOString().slice(0, 10)
+                  return currentUser?.username ?? '—'
+                })()}
               </p>
             )}
 
@@ -82,10 +89,11 @@ export default function FormMetadataDisplay({
             {field.field_type === 'DROPDOWN' && (
               (() => {
                 const staticOpts = (field.dropdown_source ?? '').split(',').map(o => o.trim()).filter(Boolean)
-                const showUsers  = staticOpts.length === 0 && userOptions.length > 0
+                const csrField = isCsrMetadataField(field)
+                // CSR always uses live user list when options are provided (ignore stale static dropdown_source).
+                const showUsers = userOptions.length > 0 && (csrField || staticOpts.length === 0)
 
                 if (readonly) {
-                  // Resolve display label: for user dropdowns the stored value is the user ID
                   const displayVal = showUsers
                     ? (userOptions.find(u => String(u.id) === val)?.username ?? val)
                     : val
@@ -93,14 +101,13 @@ export default function FormMetadataDisplay({
                 }
 
                 return (
-                  <Select value={val} onValueChange={v => handleChange(field, v)}>
+                  <Select value={val ? val : undefined} onValueChange={v => handleChange(field, v)}>
                     <SelectTrigger className="h-9 text-[13px]">
                       <SelectValue placeholder={`Select ${field.field_name}…`} />
                     </SelectTrigger>
                     <SelectContent>
                       {showUsers
                         ? userOptions.map(u => (
-                            // Store the user ID as the value, display the username
                             <SelectItem key={u.id} value={String(u.id)}>{u.username}</SelectItem>
                           ))
                         : staticOpts.map(opt => (

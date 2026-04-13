@@ -20,6 +20,11 @@ const INSIGHTS_USERS = [
   { name: 'Mitchell Stempowski',  email: 'MStempowski@dm-us.com',    role: 'CSR',     department: 'Sales - Inbound', isAdminUpdate: false },
   { name: 'Jason Spangler',       email: 'JSpangler@dm-us.com',      role: 'CSR',     department: 'Sales - Outbound', isAdminUpdate: false },
   { name: 'Joshua Barber',        email: 'JBarber@dm-us.com',        role: 'CSR',     department: 'Sales - Outbound', isAdminUpdate: false },
+  // Quality E2E: dedicated logins (temp password ChangeMe123! after import)
+  { name: 'E2E Admin',            email: 'e2e-admin@dm-us.com',      role: 'Admin',   department: null,             isAdminUpdate: false },
+  { name: 'Matthew Santangelo',   email: 'msantangelo@dm-us.com',    role: 'CSR',     department: 'Sales - Inbound', isAdminUpdate: false },
+  { name: 'E2E QA Auditor',       email: 'e2e-qa@dm-us.com',         role: 'QA',      department: 'Sales - Inbound', isAdminUpdate: false },
+  { name: 'E2E Manager',          email: 'e2e-manager@dm-us.com',    role: 'Manager', department: null,             isAdminUpdate: false },
 ];
 
 // Temporary password — users should reset on first login

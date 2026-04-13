@@ -81,6 +81,25 @@ const userService = {
     return { items: [], totalItems: 0, totalPages: 0, currentPage: page }
   },
 
+  /**
+   * All active CSR users (role_id 3) for QA form dropdowns.
+   * Paginates: backend rejects a limit above 100 per request.
+   */
+  fetchActiveCsrsForDropdown: async (): Promise<User[]> => {
+    const all: User[] = []
+    let page = 1
+    const limit = 100
+    for (;;) {
+      const res = await userService.getUsers(page, limit, { role_id: 3, is_active: true })
+      const batch = res.items ?? []
+      all.push(...batch)
+      if (batch.length < limit) break
+      page += 1
+      if (page > 100) break
+    }
+    return all
+  },
+
   getUserById: async (userId: number): Promise<User> => {
     const response = await api.get(`/users/${userId}`)
     return response.data

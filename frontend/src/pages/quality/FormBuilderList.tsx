@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { Plus, Pencil, Eye, Copy, ClipboardList } from 'lucide-react'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -21,14 +22,10 @@ import { ListPagination } from '@/components/common/ListPagination'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { formatQualityDate } from '@/utils/dateFormat'
 
-interface FormBuilderListProps {
-  onEdit:      (id: number) => void
-  onCreate:    () => void
-  onPreview:   (id: number) => void
-  onDuplicate: (id: number) => void
-}
+const FORMS_BASE = '/app/quality/forms'
 
-export function FormBuilderList({ onEdit, onCreate, onPreview, onDuplicate }: FormBuilderListProps) {
+export function FormBuilderList() {
+  const navigate = useNavigate()
   const { data: rawForms = [], isLoading, isError, refetch } = useAllForms()
 
   const {
@@ -53,7 +50,7 @@ export function FormBuilderList({ onEdit, onCreate, onPreview, onDuplicate }: Fo
       <QualityPageHeader
         title="Form Builder"
         actions={
-          <Button onClick={onCreate} className="gap-1.5">
+          <Button onClick={() => navigate(`${FORMS_BASE}/new`)} className="gap-1.5">
             <Plus size={15} /> New Form
           </Button>
         }
@@ -129,13 +126,13 @@ export function FormBuilderList({ onEdit, onCreate, onPreview, onDuplicate }: Fo
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => onEdit(f.id)}>
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => navigate(`${FORMS_BASE}/${f.id}/edit`)}>
                         <Pencil size={12} className="mr-1" /> Edit
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => onPreview(f.id)}>
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => navigate(`${FORMS_BASE}/${f.id}/preview`)}>
                         <Eye size={12} className="mr-1" /> Preview
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => onDuplicate(f.id)}>
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => navigate(`${FORMS_BASE}/${f.id}/duplicate`)}>
                         <Copy size={12} className="mr-1" /> Duplicate
                       </Button>
                     </div>

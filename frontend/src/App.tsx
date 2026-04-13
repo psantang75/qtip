@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useRef } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -163,6 +163,14 @@ function RequireRole({
   return <>{children}</>
 }
 
+/** Bookmarks and old links used `/app/writeups`; keep them working. */
+function RedirectWriteupsToPerformanceWarnings() {
+  const { pathname, search } = useLocation()
+  const rest = pathname.replace(/^\/app\/writeups/, '')
+  const to = `/app/performancewarnings${rest === '' ? '' : rest}${search}`
+  return <Navigate to={to} replace />
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -207,6 +215,10 @@ export default function App() {
                   <Route index element={<Navigate to="submissions" replace />} />
                   <Route path="overview"        element={<Navigate to="/app/quality/submissions" replace />} />
                   <Route path="forms"           element={<PageLoader><FormsPage /></PageLoader>} />
+                  <Route path="forms/new"       element={<PageLoader><FormsPage /></PageLoader>} />
+                  <Route path="forms/:id/edit"  element={<PageLoader><FormsPage /></PageLoader>} />
+                  <Route path="forms/:id/preview" element={<PageLoader><FormsPage /></PageLoader>} />
+                  <Route path="forms/:id/duplicate" element={<PageLoader><FormsPage /></PageLoader>} />
                   <Route path="submissions"     element={<PageLoader><SubmissionsPage /></PageLoader>} />
                   <Route path="submissions/:id"   element={<PageLoader><SubmissionDetailPage /></PageLoader>} />
                   <Route path="disputes"          element={<PageLoader><DisputesPage /></PageLoader>} />
@@ -237,13 +249,15 @@ export default function App() {
                   </Route>
                 </Route>
 
-                {/* Write-Ups */}
-                <Route path="/app/writeups">
+                <Route path="/app/writeups/*" element={<RedirectWriteupsToPerformanceWarnings />} />
+
+                {/* Performance Warnings (write-up documents) */}
+                <Route path="/app/performancewarnings">
                   <Route index element={<Navigate to="list" replace />} />
                   <Route
                     path="list"
                     element={
-                      <RequireRole allowed={[ROLE_IDS.ADMIN,ROLE_IDS.QA,ROLE_IDS.MANAGER]} fallback="/app/writeups/my">
+                      <RequireRole allowed={[ROLE_IDS.ADMIN,ROLE_IDS.QA,ROLE_IDS.MANAGER]} fallback="/app/performancewarnings/my">
                         <PageLoader><WriteUpsPage /></PageLoader>
                       </RequireRole>
                     }

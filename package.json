@@ -34,6 +34,9 @@
     "install:backend": "cd backend && npm install",
     "install:frontend": "cd frontend && npm install",
     "test": "npm run test:backend && npm run test:frontend",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test e2e/quality-smoke.spec.ts",
+    "test:e2e:quality": "playwright test e2e/quality-full-ui.spec.ts",
     "test:backend": "cd backend && npm test",
     "test:frontend": "cd frontend && npm test",
     "lint": "npm run lint:backend && npm run lint:frontend",
@@ -44,6 +47,8 @@
     "lint:fix:frontend": "cd frontend && npm run lint:fix"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "dotenv": "^16.4.7",
     "@types/cookie-parser": "^1.4.9",
     "@types/csurf": "^1.11.5",
     "concurrently": "^8.2.2",

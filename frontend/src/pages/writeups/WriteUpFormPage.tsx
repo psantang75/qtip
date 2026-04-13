@@ -168,7 +168,7 @@ export default function WriteUpFormPage() {
       qc.invalidateQueries({ queryKey: ['writeups'] })
       qc.invalidateQueries({ queryKey: ['writeup', String(savedId)] })
       toast({ title: isEdit ? 'Write-up saved' : 'Draft created' })
-      navigate(`/app/writeups/${savedId}`)
+      navigate(`/app/performancewarnings/${savedId}`)
     },
     onError: (err: any) => {
       toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
@@ -203,7 +203,7 @@ export default function WriteUpFormPage() {
       qc.invalidateQueries({ queryKey: ['writeups'] })
       qc.invalidateQueries({ queryKey: ['writeup', String(savedId)] })
       toast({ title: 'Write-up scheduled' })
-      navigate(`/app/writeups/${savedId}`)
+      navigate(`/app/performancewarnings/${savedId}`)
     },
     onError: (err: any) => {
       toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
@@ -237,7 +237,7 @@ export default function WriteUpFormPage() {
           <p className="text-[13px] text-amber-700 mb-4">
             This write-up cannot be edited once it has been sent for signature.
           </p>
-          <Button variant="outline" onClick={() => navigate(`/app/writeups/${id}`)}>
+          <Button variant="outline" onClick={() => navigate(`/app/performancewarnings/${id}`)}>
             View Write-Up
           </Button>
         </div>

@@ -1,14 +1,14 @@
 import React from 'react';
-import { calculateFormScore, getMaxPossibleScore, getQuestionScore } from './scoringAdapter';
 import { processConditionalLogic } from './formConditions';
+import { getMaxPossibleScore, getQuestionScore } from './scoringAdapter';
 
-// Type definitions
 interface QuestionWithScore {
   id: number;
   text: string;
   answer: string;
   pointsEarned: number;
   pointsPossible: number;
+  questionType: string;
 }
 
 interface CategoryScore {
@@ -28,223 +28,142 @@ interface ScoreRendererProps {
   answers: Record<number, any>;
   showCategoryBreakdown?: boolean;
   showDetailedScores?: boolean;
-  userRole?: number; // Add user role prop
-  backendScore?: number; // Add backend score prop
-  scoreBreakdown?: any; // Add score breakdown prop
+  userRole?: number;
+  backendScore?: number;
+  scoreBreakdown?: any;
 }
 
 /**
- * A reusable component for rendering detailed score summaries
- * This can be used in multiple places where score visualization is needed
+ * Renders score summaries using data from the backend scoring engine.
+ * All scores come from the database — no client-side score calculation.
  */
 export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   formData,
   answers,
   showCategoryBreakdown = true,
   showDetailedScores = true,
-  userRole, // Add user role parameter
-  backendScore, // Add backend score parameter
-  scoreBreakdown // Add score breakdown parameter
+  userRole,
+  backendScore,
+  scoreBreakdown,
 }) => {
   if (!formData?.categories) return null;
-  
-  // Always calculate category scores from form data for display
-  const { totalScore: calculatedTotalScore, categoryScores: calculatedCategoryScores } = calculateFormScore(formData, answers);
-  
-  // Use backend score if available, otherwise use calculated score
-  const totalScore = backendScore !== undefined ? backendScore : calculatedTotalScore;
-  
-  // Calculate visibility map to exclude hidden conditional questions
+
   const answerStrings: Record<number, string> = {};
   Object.entries(answers).forEach(([questionId, answer]) => {
     answerStrings[Number(questionId)] = answer.answer || '';
   });
   const visibilityMap = processConditionalLogic(formData, answerStrings);
-  
-  // Filter out categories with zero weight ONLY for CSRs (role_id 3)
-  // All other roles (QA, managers, directors, trainers) should see all categories
+
   const visibleCategories = userRole === 3
     ? formData.categories.filter((category: any) => (category.weight || 0) > 0)
     : formData.categories;
-  
-  // Process each category to get formatted score data
+
   const categoryScores = visibleCategories.map((category: any) => {
-    // Get the calculated score for this category from the scoring adapter result
-    const calculatedScore = calculatedCategoryScores[category.id] || {
-      raw: 0,
-      weighted: 0,
-      earnedPoints: 0,
-      possiblePoints: 0
-    };
-    
-    // Use backend normalized data if available, otherwise use calculated values
-    const backendCategoryData = scoreBreakdown && scoreBreakdown.categoryBreakdown && scoreBreakdown.categoryBreakdown[category.id];
-    
-    // If backend data is available and valid, use it
-    if (backendCategoryData && 
-        typeof backendCategoryData.category_weight === 'number' && 
-        typeof backendCategoryData.weighted_score === 'number' && 
-        typeof backendCategoryData.weighted_possible === 'number') {
-      var normalizedWeight = backendCategoryData.category_weight;
-      var weightedScore = backendCategoryData.weighted_score;
-      var weightedPossible = backendCategoryData.weighted_possible;
-    } else {
-      // Fallback to local calculation
-      normalizedWeight = category.weight || 0;
-      weightedScore = calculatedScore.earnedPoints * (category.weight || 0);
-      weightedPossible = calculatedScore.possiblePoints * (category.weight || 0);
-    }
-    
-    
-    // Group questions by sub-category
-    const subCategories: Record<string, QuestionWithScore[]> = {
-      'default': []
-    };
-    
-    // Process all questions in this category for display
-    category.questions.forEach((question: any) => {
+    const bd = scoreBreakdown?.categoryBreakdown?.[category.id];
+
+    const earnedPoints     = bd?.earned_points    ?? 0;
+    const possiblePoints   = bd?.possible_points  ?? 0;
+    const categoryWeight   = bd?.category_weight  ?? (category.weight || 0);
+    const weightedEarned   = bd?.weighted_score   ?? earnedPoints * categoryWeight;
+    const weightedPossible = bd?.weighted_possible ?? possiblePoints * categoryWeight;
+    const rawScore         = bd?.raw_score ?? (possiblePoints > 0 ? (earnedPoints / possiblePoints) * 100 : 0);
+
+    const subCategories: Record<string, QuestionWithScore[]> = { 'default': [] };
+
+    (category.questions || []).forEach((question: any) => {
       if (!question.id) return;
-      
-      // Skip non-scoring questions
-      if (question.question_type === 'info' || question.question_type === 'info_block') {
-        return;
-      }
-      
-      // Hide text input questions for CSR users (role_id 3) unless visible_to_csr is true
-      if (userRole === 3 && question.question_type === 'TEXT' && question.visible_to_csr !== true) {
-        return;
-      }
-      
-      // If it's a sub-category header, just record it and skip processing
-      const questionType = (question.question_type || '').toLowerCase();
-      if (questionType === 'sub_category') {
+      const qType = (question.question_type || '').toLowerCase();
+
+      if (qType === 'info' || qType === 'info_block') return;
+      if (userRole === 3 && qType === 'text' && question.visible_to_csr !== true) return;
+
+      if (qType === 'sub_category') {
         subCategories[question.question_text] = [];
         return;
       }
-      
-      // Skip ALL questions that are not visible (due to conditional logic)
-      // This matches the form preview logic exactly
-      const isVisible = visibilityMap[question.id] !== false;
-      if (!isVisible) {
-        return;
-      }
-      
-      // Hide questions not visible to CSR (if user is CSR)
-      if (userRole === 3 && question.visible_to_csr === false) {
-        return;
-      }
-      
+
+      if (visibilityMap[question.id] === false) return;
+      if (userRole === 3 && question.visible_to_csr === false) return;
+
       const answer = answers[question.id];
-      
-      // Calculate points for this question using the same logic as the scoring adapter
+      const isNaAnswer = answer && (answer.answer?.toLowerCase() === 'na' || answer.answer?.toLowerCase() === 'n/a');
+
       let pointsEarned = 0;
       let pointsPossible = 0;
-      
-      // Try to get the score from the answer directly
-      if (answer && answer.score !== undefined) {
-        pointsEarned = Number(answer.score);
-      }
-      
-      // Check if this is an NA answer on an NA-allowed question
-      const isNaAnswer = answer && (answer.answer?.toLowerCase() === 'na' || answer.answer?.toLowerCase() === 'n/a');
-      const isNaAllowed = question.is_na_allowed;
-      
-      if (isNaAnswer && isNaAllowed) {
-        // NA questions show 0 points possible and 0 points earned
+
+      if (isNaAnswer && question.is_na_allowed) {
         pointsPossible = 0;
         pointsEarned = 0;
       } else {
-        // Use the getMaxPossibleScore function to get accurate points possible from database
-        // This function uses the same logic as the form preview and scoring calculation
         pointsPossible = getMaxPossibleScore(question);
-        
-        // Get the actual earned points for this question
-        if (answer && answer.score !== undefined) {
-          pointsEarned = Number(answer.score);
-        } else {
-          // Use getQuestionScore to calculate points based on answer
-          pointsEarned = answer ? getQuestionScore(question, answer.answer || '') : 0;
-        }
+        pointsEarned = answer?.score !== undefined
+          ? Number(answer.score)
+          : (answer ? getQuestionScore(question, answer.answer || '') : 0);
       }
-      
-      // Determine which subcategory this question belongs to
+
       let subCategoryKey = 'default';
-      const subCategoryKeys = Object.keys(subCategories);
-      for (let i = subCategoryKeys.length - 1; i >= 0; i--) {
-        if (subCategoryKeys[i] !== 'default') {
-          subCategoryKey = subCategoryKeys[i];
-          break;
-        }
+      const keys = Object.keys(subCategories);
+      for (let i = keys.length - 1; i >= 0; i--) {
+        if (keys[i] !== 'default') { subCategoryKey = keys[i]; break; }
       }
-      
-      // Format answer for display with proper capitalization
+
       let displayAnswer = answer?.answer || 'No answer';
-      if (displayAnswer && displayAnswer !== 'No answer') {
-        // Handle radio questions - show option text instead of value
-        const questionType = (question.question_type || '').toLowerCase();
-        if (questionType === 'radio' && question.radio_options) {
-          const selectedOption = question.radio_options.find(option => option.option_value === displayAnswer);
-          if (selectedOption) {
-            displayAnswer = selectedOption.option_text;
-          }
+      if (displayAnswer !== 'No answer') {
+        if (qType === 'radio' && question.radio_options) {
+          const opt = question.radio_options.find((o: any) => o.option_value === displayAnswer);
+          if (opt) displayAnswer = opt.option_text;
+        } else if (qType === 'multi_select' && question.radio_options) {
+          const selected = displayAnswer.split(',').map((v: string) => v.trim()).filter(Boolean);
+          const labels = selected.map((val: string) => {
+            const opt = question.radio_options.find((o: any) => o.option_value === val || o.option_text === val);
+            return opt ? opt.option_text : val;
+          });
+          displayAnswer = labels.join(', ');
         } else {
-          // Handle other question types with proper capitalization
-          const answerLower = displayAnswer.toLowerCase();
-          if (answerLower === 'yes') {
-            displayAnswer = 'Yes';
-          } else if (answerLower === 'no') {
-            displayAnswer = 'No';
-          } else if (answerLower === 'n/a' || answerLower === 'na') {
-            displayAnswer = 'N/A';
-          }
+          const lower = displayAnswer.toLowerCase();
+          if (lower === 'yes') displayAnswer = 'Yes';
+          else if (lower === 'no') displayAnswer = 'No';
+          else if (lower === 'n/a' || lower === 'na') displayAnswer = 'N/A';
         }
       }
 
-      // Add question to appropriate subcategory
       subCategories[subCategoryKey].push({
         id: question.id,
         text: question.question_text,
         answer: displayAnswer,
-        pointsEarned: pointsEarned,
-        pointsPossible: pointsPossible
+        pointsEarned,
+        pointsPossible,
+        questionType: qType,
       });
     });
-    
+
     return {
       id: category.id,
       name: category.category_name || category.name || `Category ${category.id}`,
-      weight: normalizedWeight,
-      originalWeight: category.weight || 0,
-      pointsEarned: calculatedScore.earnedPoints,
-      pointsPossible: calculatedScore.possiblePoints,
-      weightedPointsEarned: Math.round(weightedScore * 100) / 100,
+      weight: categoryWeight,
+      pointsEarned: earnedPoints,
+      pointsPossible: possiblePoints,
+      weightedPointsEarned: Math.round(weightedEarned * 100) / 100,
       weightedPointsPossible: Math.round(weightedPossible * 100) / 100,
-      score: calculatedScore.raw,
-      subCategories
+      score: rawScore,
+      subCategories,
     };
   }) as CategoryScore[];
-  
-  // Calculate totals for display using normalized weights
+
   let totalWeightedPointsEarned = 0;
   let totalWeightedPointsPossible = 0;
-  
-  // Calculate totals using normalized weights from backend
-  categoryScores.forEach(category => {
-    // Only include categories that have possible points (exclude zero-point categories)
-    if (category.pointsPossible > 0) {
-      totalWeightedPointsEarned += category.weightedPointsEarned;
-      totalWeightedPointsPossible += category.weightedPointsPossible;
+  categoryScores.forEach(cat => {
+    if (cat.pointsPossible > 0) {
+      totalWeightedPointsEarned += cat.weightedPointsEarned;
+      totalWeightedPointsPossible += cat.weightedPointsPossible;
     }
   });
-  
-  // Round totals to avoid floating-point precision issues
   totalWeightedPointsEarned = Math.round(totalWeightedPointsEarned * 100) / 100;
   totalWeightedPointsPossible = Math.round(totalWeightedPointsPossible * 100) / 100;
-  
-  // Calculate score from weighted totals to get exact 82.30%
-  const formScore = totalWeightedPointsPossible > 0 
-    ? (totalWeightedPointsEarned / totalWeightedPointsPossible) * 100 
-    : 0;
+
+  const formScore = backendScore ?? (totalWeightedPointsPossible > 0
+    ? (totalWeightedPointsEarned / totalWeightedPointsPossible) * 100
+    : 0);
   
   
   const scoreClass = (_s: number) => 'text-slate-700';
@@ -348,20 +267,28 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                           </tr>
                         )}
                         {(questions as QuestionWithScore[]).map((q: QuestionWithScore) => {
+                          const isText = q.questionType === 'text';
                           const hasScore = !(q.pointsEarned === 0 && q.pointsPossible === 0);
-                          const answerClass = 'text-slate-600';
                           return (
                             <tr key={q.id} className="hover:bg-slate-50/60 transition-colors">
                               <td className="px-4 py-2.5 text-slate-700 leading-snug">{q.text}</td>
-                              <td className={`px-3 py-2.5 ${answerClass}`}>
-                                {q.answer === 'No answer' ? <span className="text-slate-300">—</span> : q.answer}
-                              </td>
-                              <td className="px-3 py-2.5 text-right text-slate-700 font-medium">
-                                {hasScore ? q.pointsEarned.toFixed(1) : <span className="text-slate-300">—</span>}
-                              </td>
-                              <td className="px-4 py-2.5 text-right text-slate-500">
-                                {hasScore ? q.pointsPossible.toFixed(1) : <span className="text-slate-300">—</span>}
-                              </td>
+                              {isText ? (
+                                <td colSpan={3} className="px-3 py-2.5 text-slate-600">
+                                  {q.answer === 'No answer' ? <span className="text-slate-300">—</span> : q.answer}
+                                </td>
+                              ) : (
+                                <>
+                                  <td className="px-3 py-2.5 text-slate-600">
+                                    {q.answer === 'No answer' ? <span className="text-slate-300">—</span> : q.answer}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right text-slate-700 font-medium">
+                                    {hasScore ? q.pointsEarned.toFixed(1) : <span className="text-slate-300">—</span>}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right text-slate-500">
+                                    {hasScore ? q.pointsPossible.toFixed(1) : <span className="text-slate-300">—</span>}
+                                  </td>
+                                </>
+                              )}
                             </tr>
                           );
                         })}
