@@ -21,7 +21,8 @@ import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
-import { WriteUpTypeBadge, WRITE_UP_STATUS_LABELS } from './WriteUpsPage'
+import { WRITE_UP_STATUS_LABELS } from '@/constants/labels'
+import { WriteUpTypeBadge } from './WriteUpsPage'
 
 const ALL_STATUS_OPTIONS = Object.values(WRITE_UP_STATUS_LABELS)
 

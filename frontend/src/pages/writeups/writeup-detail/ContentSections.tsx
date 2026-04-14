@@ -4,7 +4,7 @@ import type { WriteUpDetail } from '@/services/writeupService'
 import {
   WRITE_UP_TYPE_LABELS as TYPE_LABELS,
   WRITE_UP_STATUS_LABELS as STATUS_LABELS,
-} from '../writeupLabels'
+} from '@/constants/labels'
 import { Section, Sub, InfoRow, NoteBlock } from './layout'
 import { IncidentsSection } from './IncidentsSection'
 import { CorrectiveSection } from './CorrectiveSection'

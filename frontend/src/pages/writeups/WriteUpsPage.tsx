@@ -15,6 +15,7 @@ import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { ListPagination } from '@/components/common/ListPagination'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -25,10 +26,7 @@ import { formatQualityDate } from '@/utils/dateFormat'
 import {
   WRITE_UP_TYPE_LABELS,
   WRITE_UP_STATUS_LABELS,
-} from './writeupLabels'
-
-// Re-export for consumers (e.g. MyWriteUpsPage)
-export { WRITE_UP_TYPE_LABELS, WRITE_UP_STATUS_LABELS }
+} from '@/constants/labels'
 
 const ALL_STATUSES = Object.keys(WRITE_UP_STATUS_LABELS) as WriteUpStatus[]
 const ALL_TYPES    = Object.keys(WRITE_UP_TYPE_LABELS)   as WriteUpType[]
@@ -219,7 +217,7 @@ export default function WriteUpsPage() {
                   <TableCell className="text-[11px] text-slate-400 font-mono">#{w.id}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">{WRITE_UP_TYPE_LABELS[w.document_type] ?? w.document_type}</TableCell>
                   <TableCell className="text-[13px] font-medium text-slate-900">{w.csr_name}</TableCell>
-                  <TableCell className="text-[13px] text-slate-600">{WRITE_UP_STATUS_LABELS[w.status] ?? w.status}</TableCell>
+                  <TableCell><StatusBadge status={w.status} /></TableCell>
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {w.meeting_date ? formatQualityDate(w.meeting_date) : <span className="text-slate-300">—</span>}
                   </TableCell>

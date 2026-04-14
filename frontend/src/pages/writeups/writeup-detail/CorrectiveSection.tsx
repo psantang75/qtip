@@ -1,9 +1,11 @@
 import { ExternalLink } from 'lucide-react'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 import { Section, Sub, InfoRow, NoteBlock, type DetailSectionProps } from './layout'
-import { COACHING_STATUS_LABELS, PURPOSE_LABELS } from '../writeupLabels'
+import { COACHING_STATUS_LABELS, COACHING_PURPOSE_LABELS as PURPOSE_LABELS } from '@/constants/labels'
 
 export function CorrectiveSection({ writeup }: DetailSectionProps) {
   return (
@@ -20,29 +22,29 @@ export function CorrectiveSection({ writeup }: DetailSectionProps) {
       {writeup.linked_coaching_id && (
         <Sub title="Linked Coaching Session">
           <div className="rounded-lg border border-slate-200 overflow-hidden -mx-1">
-            <table className="w-full text-[13px] table-fixed">
+            <Table className="w-full text-[13px] table-fixed">
               <colgroup>
                 <col className="w-[150px]" /><col className="w-[110px]" /><col className="w-[160px]" />
                 <col className="w-[160px]" /><col className="w-[130px]" /><col className="w-[44px]" />
               </colgroup>
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
+              <TableHeader>
+                <StandardTableHeaderRow>
                   {['Purpose / Type','Status','Topic','Notes','Date',''].map(h => (
-                    <th key={h} className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                    <TableHead key={h} className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{h}</TableHead>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </StandardTableHeaderRow>
+              </TableHeader>
+              <TableBody>
                 {(() => {
                   const cs = writeup.linked_coaching_session
                   const topics = cs?.topic_names ?? []
                   const statusLabel  = COACHING_STATUS_LABELS[cs?.status ?? ''] ?? cs?.status
                   const purposeLabel = PURPOSE_LABELS[cs?.coaching_purpose ?? ''] ?? cs?.coaching_purpose
                   return (
-                    <tr className="hover:bg-slate-50/60">
-                      <td className="px-3 py-2.5 text-slate-600 truncate">{purposeLabel ?? <span className="text-slate-300">&mdash;</span>}</td>
-                      <td className="px-3 py-2.5 text-slate-600">{statusLabel ?? <span className="text-slate-300">&mdash;</span>}</td>
-                      <td className="px-3 py-2.5">
+                    <TableRow className="hover:bg-slate-50/60">
+                      <TableCell className="px-3 py-2.5 text-slate-600 truncate">{purposeLabel ?? <span className="text-slate-300">&mdash;</span>}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-slate-600">{statusLabel ?? <span className="text-slate-300">&mdash;</span>}</TableCell>
+                      <TableCell className="px-3 py-2.5">
                         {topics.length > 0 ? (
                           <Tooltip>
                             <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{topics.join(', ')}</span></TooltipTrigger>
@@ -51,26 +53,26 @@ export function CorrectiveSection({ writeup }: DetailSectionProps) {
                             </TooltipContent>
                           </Tooltip>
                         ) : <span className="text-slate-300">&mdash;</span>}
-                      </td>
-                      <td className="px-3 py-2.5">
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5">
                         {cs?.notes ? (
                           <Tooltip>
                             <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{cs.notes}</span></TooltipTrigger>
                             <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><RichTextDisplay html={cs.notes} /></TooltipContent>
                           </Tooltip>
                         ) : <span className="text-slate-300">&mdash;</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{cs?.date ? formatQualityDate(String(cs.date).slice(0, 10)) : <span className="text-slate-300">&mdash;</span>}</td>
-                      <td className="px-3 py-2.5 text-center">
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{cs?.date ? formatQualityDate(String(cs.date).slice(0, 10)) : <span className="text-slate-300">&mdash;</span>}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-center">
                         <a href={`/app/training/coaching/${writeup.linked_coaching_id}`} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-primary transition-colors">
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )
                 })()}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </Sub>
       )}

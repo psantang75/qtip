@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSepa
 import { Input } from '@/components/ui/input'
 import { FormSection, Field } from '@/pages/training/coaching-form/CoachingFormSections'
 import userService from '@/services/userService'
+import { WRITE_UP_TYPE_LABELS } from '@/constants/labels'
 import type { WriteUpFormState } from './types'
 
 type Updater = <K extends keyof WriteUpFormState>(key: K, value: WriteUpFormState[K]) => void
@@ -81,9 +82,9 @@ export function EmployeeSection({ form, update }: { form: WriteUpFormState; upda
               <SelectValue placeholder="Select type…" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="VERBAL_WARNING">Verbal Warning</SelectItem>
-              <SelectItem value="WRITTEN_WARNING">Written Warning</SelectItem>
-              <SelectItem value="FINAL_WARNING">Final Warning</SelectItem>
+              {Object.entries(WRITE_UP_TYPE_LABELS).map(([key, label]) => (
+                <SelectItem key={key} value={key}>{label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>

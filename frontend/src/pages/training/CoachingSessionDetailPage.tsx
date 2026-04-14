@@ -11,12 +11,26 @@ import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
-import { PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './CoachingSessionsPage'
+import {
+  COACHING_PURPOSE_LABELS as PURPOSE_MAP,
+  COACHING_FORMAT_LABELS as FORMAT_MAP,
+  COACHING_STATUS_LABELS as STATUS_LABELS,
+  COACHING_SOURCE_LABELS as SOURCE_LABELS,
+} from '@/constants/labels'
 import {
   SessionSection, RequiredActionsSection, AccountabilitySection, InternalNotesSection,
 } from './coaching-form/CoachingFormSections'
@@ -31,10 +45,6 @@ function resourceHref(r: { id: number; resource_type?: string; url?: string }, f
   return forCSR ? `/api/csr/resources/${r.id}/file` : `/api/trainer/resources/${r.id}/file`
 }
 
-const SOURCE_LABELS: Record<CoachingSourceType, string> = {
-  QA_AUDIT: 'QA Audit', MANAGER_OBSERVATION: 'Manager Observation', TREND: 'Trend',
-  DISPUTE: 'Dispute', SCHEDULED: 'Scheduled', OTHER: 'Other',
-}
 
 import { Section, Sub, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow } from './training-detail/layout'
 
@@ -370,29 +380,29 @@ export default function CoachingSessionDetailPage() {
             {/* Reference Materials */}
             <Sub title="Reference Materials" icon={BookOpen}>
               {(session.kb_resources?.length ?? 0) > 0 ? (
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-slate-400 border-b border-slate-200">
-                      <th className="text-left py-1.5 font-medium pr-4 w-[40%]">Title</th>
-                      <th className="text-left py-1.5 font-medium pr-4">Description</th>
-                      <th className="text-left py-1.5 font-medium pr-2 w-[60px]" />
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table className="text-xs">
+                  <TableHeader>
+                    <StandardTableHeaderRow className="text-slate-400">
+                      <TableHead className="text-left py-1.5 font-medium pr-4 w-[40%]">Title</TableHead>
+                      <TableHead className="text-left py-1.5 font-medium pr-4">Description</TableHead>
+                      <TableHead className="text-left py-1.5 font-medium pr-2 w-[60px]" />
+                    </StandardTableHeaderRow>
+                  </TableHeader>
+                  <TableBody>
                     {session.kb_resources!.map(r => (
-                      <tr key={r.id} className="border-b border-slate-100 last:border-0">
-                        <td className="py-2 pr-4 font-medium text-slate-800">{r.title}</td>
-                        <td className="py-2 pr-4 text-slate-500">{r.description || '—'}</td>
-                        <td className="py-2 pr-2">
+                      <TableRow key={r.id} className="border-b border-slate-100 last:border-0">
+                        <TableCell className="py-2 pr-4 font-medium text-slate-800">{r.title}</TableCell>
+                        <TableCell className="py-2 pr-4 text-slate-500">{r.description || '—'}</TableCell>
+                        <TableCell className="py-2 pr-2">
                           <a href={resourceHref(r)} target="_blank" rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-primary hover:underline">
                             Open <ExternalLink className="h-3 w-3" />
                           </a>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               ) : (
                 <p className="text-[13px] text-slate-400 italic">No resources assigned</p>
               )}
@@ -401,30 +411,30 @@ export default function CoachingSessionDetailPage() {
             {/* Quizzes */}
             <Sub title="Quiz Assignment" icon={HelpCircle}>
               {(session.quizzes?.length ?? 0) > 0 ? (
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-slate-400 border-b border-slate-200">
-                      <th className="text-left py-1.5 font-medium pr-4 w-[40%]">Quiz</th>
-                      <th className="text-left py-1.5 font-medium pr-4">Pass Score</th>
-                      <th className="text-left py-1.5 font-medium pr-4">Attempts</th>
-                      <th className="text-left py-1.5 font-medium pr-4">Best</th>
-                      <th className="text-left py-1.5 font-medium">Result</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table className="text-xs">
+                  <TableHeader>
+                    <StandardTableHeaderRow className="text-slate-400">
+                      <TableHead className="text-left py-1.5 font-medium pr-4 w-[40%]">Quiz</TableHead>
+                      <TableHead className="text-left py-1.5 font-medium pr-4">Pass Score</TableHead>
+                      <TableHead className="text-left py-1.5 font-medium pr-4">Attempts</TableHead>
+                      <TableHead className="text-left py-1.5 font-medium pr-4">Best</TableHead>
+                      <TableHead className="text-left py-1.5 font-medium">Result</TableHead>
+                    </StandardTableHeaderRow>
+                  </TableHeader>
+                  <TableBody>
                     {session.quizzes!.map(quiz => {
                       const attempts = (session.quiz_attempts ?? []).filter(a => a.quiz_id === quiz.id)
                       const passed   = attempts.find(a => a.passed)
                       const best     = attempts.length > 0 ? Math.max(...attempts.map(a => Number(a.score))) : null
                       return (
-                        <tr key={quiz.id} className="border-b border-slate-100 last:border-0">
-                          <td className="py-2 pr-4 font-medium text-slate-800">{quiz.quiz_title}</td>
-                          <td className="py-2 pr-4 text-slate-500">{quiz.pass_score}%</td>
-                          <td className="py-2 pr-4 text-slate-600">{attempts.length}</td>
-                          <td className={`py-2 pr-4 font-semibold ${passed ? 'text-emerald-600' : best != null ? 'text-red-600' : 'text-slate-400'}`}>
+                        <TableRow key={quiz.id} className="border-b border-slate-100 last:border-0">
+                          <TableCell className="py-2 pr-4 font-medium text-slate-800">{quiz.quiz_title}</TableCell>
+                          <TableCell className="py-2 pr-4 text-slate-500">{quiz.pass_score}%</TableCell>
+                          <TableCell className="py-2 pr-4 text-slate-600">{attempts.length}</TableCell>
+                          <TableCell className={`py-2 pr-4 font-semibold ${passed ? 'text-emerald-600' : best != null ? 'text-red-600' : 'text-slate-400'}`}>
                             {best != null ? `${best.toFixed(0)}%` : '—'}
-                          </td>
-                          <td className="py-2">
+                          </TableCell>
+                          <TableCell className="py-2">
                             {passed ? (
                               <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Passed</span>
                             ) : attempts.length > 0 ? (
@@ -432,12 +442,12 @@ export default function CoachingSessionDetailPage() {
                             ) : (
                               <span className="text-[11px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">Not started</span>
                             )}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       )
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               ) : (
                 <p className="text-[13px] text-slate-400 italic">No quizzes assigned</p>
               )}

@@ -8,12 +8,20 @@ import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 import { Dialog } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { FormSection, Field } from '@/pages/training/coaching-form/CoachingFormSections'
 import { formatQualityDate } from '@/utils/dateFormat'
 import trainingService from '@/services/trainingService'
 import listService from '@/services/listService'
+import {
+  COACHING_PURPOSE_LABELS as PURPOSE_LABELS,
+  COACHING_FORMAT_LABELS as FORMAT_LABELS,
+  COACHING_SOURCE_LABELS as SOURCE_LABELS,
+  COACHING_STATUS_LABELS,
+} from '@/constants/labels'
 import type { WriteUpFormState } from './types'
-import { AssignCoachingModal, CreateCoachingModal, PURPOSE_LABELS, FORMAT_LABELS, SOURCE_LABELS } from './AssignCoachingModal'
+import { AssignCoachingModal, CreateCoachingModal } from './AssignCoachingModal'
 
 type Updater = <K extends keyof WriteUpFormState>(key: K, value: WriteUpFormState[K]) => void
 
@@ -89,26 +97,26 @@ export function CorrectiveSection({ form, update }: { form: WriteUpFormState; up
           <p className="text-[13px] font-medium text-slate-700 mb-2">Linked Coaching Session</p>
           {form.linked_coaching_id ? (
             <div className="rounded-lg border border-slate-200 overflow-hidden">
-              <table className="w-full text-[13px] table-fixed">
+              <Table className="w-full text-[13px] table-fixed">
                 <colgroup>
                   <col className="w-[80px]" /><col className="w-[130px]" /><col className="w-[160px]" />
                   <col className="w-[150px]" /><col className="w-[160px]" /><col /><col /><col className="w-[120px]" /><col className="w-[64px]" />
                 </colgroup>
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200">
+                <TableHeader>
+                  <StandardTableHeaderRow>
                     {['#','Status','Purpose','Format','Source','Topics','Notes','Session Date',''].map(h => (
-                      <th key={h} className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                      <TableHead key={h} className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{h}</TableHead>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="hover:bg-slate-50/60">
-                    <td className="px-3 py-2.5 text-[13px] text-slate-500 font-mono whitespace-nowrap">#{form.linked_coaching_id}</td>
-                    <td className="px-3 py-2.5 text-[13px] text-slate-600">{linkedSession ? (linkedSession.status ?? '').replace(/_/g, ' ') : <span className="text-slate-300">&mdash;</span>}</td>
-                    <td className="px-3 py-2.5 text-[13px] text-slate-600 truncate">{linkedSession ? (PURPOSE_LABELS[linkedSession.coaching_purpose] ?? linkedSession.coaching_purpose) : <span className="text-slate-300">&mdash;</span>}</td>
-                    <td className="px-3 py-2.5 text-[13px] text-slate-600 truncate">{linkedSession ? (FORMAT_LABELS[linkedSession.coaching_format] ?? linkedSession.coaching_format?.replace(/_/g, ' ')) : <span className="text-slate-300">&mdash;</span>}</td>
-                    <td className="px-3 py-2.5 text-[13px] text-slate-600 truncate">{linkedSession ? (SOURCE_LABELS[linkedSession.source_type ?? ''] ?? linkedSession.source_type ?? <span className="text-slate-300">&mdash;</span>) : <span className="text-slate-300">&mdash;</span>}</td>
-                    <td className="px-3 py-2.5">
+                  </StandardTableHeaderRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow className="hover:bg-slate-50/60">
+                    <TableCell className="px-3 py-2.5 text-[13px] text-slate-500 font-mono whitespace-nowrap">#{form.linked_coaching_id}</TableCell>
+                    <TableCell className="px-3 py-2.5 text-[13px] text-slate-600">{linkedSession ? (COACHING_STATUS_LABELS[linkedSession.status] ?? linkedSession.status) : <span className="text-slate-300">&mdash;</span>}</TableCell>
+                    <TableCell className="px-3 py-2.5 text-[13px] text-slate-600 truncate">{linkedSession ? (PURPOSE_LABELS[linkedSession.coaching_purpose] ?? linkedSession.coaching_purpose) : <span className="text-slate-300">&mdash;</span>}</TableCell>
+                    <TableCell className="px-3 py-2.5 text-[13px] text-slate-600 truncate">{linkedSession ? (FORMAT_LABELS[linkedSession.coaching_format] ?? linkedSession.coaching_format?.replace(/_/g, ' ')) : <span className="text-slate-300">&mdash;</span>}</TableCell>
+                    <TableCell className="px-3 py-2.5 text-[13px] text-slate-600 truncate">{linkedSession ? (SOURCE_LABELS[linkedSession.source_type ?? ''] ?? linkedSession.source_type ?? <span className="text-slate-300">&mdash;</span>) : <span className="text-slate-300">&mdash;</span>}</TableCell>
+                    <TableCell className="px-3 py-2.5">
                       {linkedSession && (linkedSession.topics ?? []).length > 0 ? (
                         <Tooltip>
                           <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{linkedSession.topics.join(', ')}</span></TooltipTrigger>
@@ -117,17 +125,17 @@ export function CorrectiveSection({ form, update }: { form: WriteUpFormState; up
                           </TooltipContent>
                         </Tooltip>
                       ) : <span className="text-slate-300">&mdash;</span>}
-                    </td>
-                    <td className="px-3 py-2.5">
+                    </TableCell>
+                    <TableCell className="px-3 py-2.5">
                       {linkedSession?.notes ? (
                         <Tooltip>
                           <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{linkedSession.notes}</span></TooltipTrigger>
                           <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><RichTextDisplay html={linkedSession.notes} /></TooltipContent>
                         </Tooltip>
                       ) : <span className="text-slate-300">&mdash;</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-[13px] text-slate-600 whitespace-nowrap">{linkedSession?.session_date ? formatQualityDate(linkedSession.session_date) : <span className="text-slate-300">&mdash;</span>}</td>
-                    <td className="px-3 py-2.5">
+                    </TableCell>
+                    <TableCell className="px-3 py-2.5 text-[13px] text-slate-600 whitespace-nowrap">{linkedSession?.session_date ? formatQualityDate(linkedSession.session_date) : <span className="text-slate-300">&mdash;</span>}</TableCell>
+                    <TableCell className="px-3 py-2.5">
                       <div className="flex items-center gap-1 justify-end">
                         <a href={`/app/training/coaching/${form.linked_coaching_id}`} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-primary" title="Open in Training"><ExternalLink className="h-3.5 w-3.5" /></a>
                         <Button type="button" variant="ghost" size="sm" className="h-auto w-auto p-0 text-slate-400 hover:text-red-500 hover:bg-transparent"
@@ -135,10 +143,10 @@ export function CorrectiveSection({ form, update }: { form: WriteUpFormState; up
                           <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
             </div>
           ) : (
             <div className="flex items-center gap-2 flex-wrap">

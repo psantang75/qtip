@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 import writeupService from '@/services/writeupService'
 import userService from '@/services/userService'
 import type { WriteUpDetail, WriteUpStatus, TransitionExtra } from '@/services/writeupService'
-import { WRITE_UP_STATUS_LABELS as STATUS_LABELS } from '../writeupLabels'
+import { WRITE_UP_STATUS_LABELS as STATUS_LABELS } from '@/constants/labels'
 
 function getTimeline(writeup: WriteUpDetail): string[] {
   const base = ['DRAFT', 'SCHEDULED', 'AWAITING_SIGNATURE', 'SIGNED']

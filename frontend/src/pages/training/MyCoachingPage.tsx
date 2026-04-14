@@ -20,7 +20,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
-import { QuizStatusBadge, PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './CoachingSessionsPage'
+import {
+  COACHING_PURPOSE_LABELS as PURPOSE_MAP,
+  COACHING_FORMAT_LABELS as FORMAT_MAP,
+  COACHING_STATUS_LABELS as STATUS_LABELS,
+} from '@/constants/labels'
+import { QuizStatusBadge } from './CoachingSessionsPage'
 import { StatusBadge } from '@/components/common/StatusBadge'
 
 

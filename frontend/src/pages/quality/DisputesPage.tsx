@@ -22,7 +22,7 @@ import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
 
 // Dispute-level statuses only
-const DISPUTE_STATUSES = ['OPEN', 'UPHELD', 'ADJUSTED']
+import { DISPUTE_STATUSES } from '@/constants/labels'
 
 const DEFAULT_PAGE_SIZE = 20
 

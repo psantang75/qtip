@@ -2,6 +2,7 @@ import { Pencil, FileText, Edit3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { RichTextDisplay } from '@/components/common/RichTextDisplay'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { cn } from '@/lib/utils'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
 import qaService from '@/services/qaService'
@@ -50,10 +51,8 @@ export function DisputePanel({
         <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100">
           <h3 className="text-[15px] font-semibold text-slate-800">Dispute</h3>
           <div className="flex items-center gap-3">
-            <span className="text-[13px] text-slate-600">
-              Status: <span className="font-semibold text-slate-800">
-                {dispute.status.charAt(0) + dispute.status.slice(1).toLowerCase()}
-              </span>
+            <span className="text-[13px] text-slate-600 flex items-center gap-1.5">
+              Status: <StatusBadge status={dispute.status} />
             </span>
             {isCSR && dispute.status === 'OPEN' && !dispute.resolved_by && !editingDispute && (
               <button className="text-[11px] text-slate-400 hover:text-primary flex items-center gap-1"

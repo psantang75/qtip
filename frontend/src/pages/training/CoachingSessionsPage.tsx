@@ -24,44 +24,28 @@ import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Labels (from central file) ────────────────────────────────────────────────
 
-export const PURPOSE_MAP: Record<CoachingPurpose, string> = {
-  WEEKLY:      'Weekly',
-  PERFORMANCE: 'Performance',
-  ONBOARDING:  'Onboarding',
-}
-const PURPOSE_STYLES: Record<CoachingPurpose, string> = {
-  WEEKLY:      'bg-blue-50  text-blue-700',
-  PERFORMANCE: 'bg-amber-50 text-amber-700',
-  ONBOARDING:  'bg-teal-50  text-teal-700',
-}
+import {
+  COACHING_PURPOSE_LABELS,
+  COACHING_PURPOSE_STYLES,
+  COACHING_FORMAT_LABELS,
+  COACHING_FORMAT_STYLES,
+  COACHING_STATUS_LABELS,
+} from '@/constants/labels'
 
-export const FORMAT_MAP: Record<CoachingFormat, string> = {
-  ONE_ON_ONE:   '1-on-1',
-  SIDE_BY_SIDE: 'Side-by-Side',
-  TEAM_SESSION: 'Team',
-}
-const FORMAT_STYLES: Record<CoachingFormat, string> = {
-  ONE_ON_ONE:   'bg-slate-100 text-slate-700',
-  SIDE_BY_SIDE: 'bg-indigo-50 text-indigo-700',
-  TEAM_SESSION: 'bg-purple-50 text-purple-700',
-}
-
-export const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Draft', SCHEDULED: 'Scheduled',
-  AWAITING_CSR_ACTION: 'Awaiting CSR',
-  COMPLETED: 'Completed', FOLLOW_UP_REQUIRED: 'Follow-Up', CLOSED: 'Closed',
-}
-const ALL_STATUSES = Object.keys(STATUS_LABELS)
+export const PURPOSE_MAP = COACHING_PURPOSE_LABELS
+export const FORMAT_MAP  = COACHING_FORMAT_LABELS
+export const STATUS_LABELS = COACHING_STATUS_LABELS
+const ALL_STATUSES = Object.keys(COACHING_STATUS_LABELS)
 
 // ── Exported helper components ────────────────────────────────────────────────
 
 export function CoachingPurposeBadge({ purpose }: { purpose: CoachingPurpose }) {
   return (
     <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
-      PURPOSE_STYLES[purpose] ?? 'bg-slate-100 text-slate-600')}>
-      {PURPOSE_MAP[purpose] ?? purpose}
+      COACHING_PURPOSE_STYLES[purpose] ?? 'bg-slate-100 text-slate-600')}>
+      {COACHING_PURPOSE_LABELS[purpose] ?? purpose}
     </span>
   )
 }
@@ -69,8 +53,8 @@ export function CoachingPurposeBadge({ purpose }: { purpose: CoachingPurpose }) 
 export function CoachingFormatBadge({ format }: { format: CoachingFormat }) {
   return (
     <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
-      FORMAT_STYLES[format] ?? 'bg-slate-100 text-slate-600')}>
-      {FORMAT_MAP[format] ?? format}
+      COACHING_FORMAT_STYLES[format] ?? 'bg-slate-100 text-slate-600')}>
+      {COACHING_FORMAT_LABELS[format] ?? format}
     </span>
   )
 }

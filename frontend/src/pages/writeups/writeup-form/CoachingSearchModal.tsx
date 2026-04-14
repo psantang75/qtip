@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { useToast } from '@/hooks/use-toast'
 import writeupService, { type CoachingSearchResult } from '@/services/writeupService'
+import { COACHING_PURPOSE_LABELS } from '@/constants/labels'
 import type { ExampleInput, PriorDisciplineRef } from './types'
 
 function getPrior90Days() {
@@ -61,11 +62,10 @@ export function CoachingSearchModal({ csrId, onImport, onImportRefs, onClose }: 
 
   const handleImport = () => {
     if (onImportRefs) {
-      const purposeLabel: Record<string, string> = { WEEKLY: 'Weekly', PERFORMANCE: 'Performance', ONBOARDING: 'Onboarding' }
       const refs: PriorDisciplineRef[] = Array.from(selected).map(idx => {
         const r = results[idx]
         const topics: string[] = Array.isArray(r.topic_names) ? r.topic_names.filter(Boolean) : r.topic_names ? [r.topic_names] : []
-        return { reference_type: 'coaching_session' as const, reference_id: r.session_id, label: `Coaching #${r.session_id}`, date: r.session_date?.slice(0, 10), subtype: purposeLabel[r.coaching_purpose ?? ''] ?? (r.coaching_purpose ?? 'Coaching'), detail: topics, notes: r.notes as string | undefined, status: r.status as string | undefined }
+        return { reference_type: 'coaching_session' as const, reference_id: r.session_id, label: `Coaching #${r.session_id}`, date: r.session_date?.slice(0, 10), subtype: COACHING_PURPOSE_LABELS[r.coaching_purpose as keyof typeof COACHING_PURPOSE_LABELS] ?? (r.coaching_purpose ?? 'Coaching'), detail: topics, notes: r.notes as string | undefined, status: r.status as string | undefined }
       })
       onImportRefs(refs)
     } else if (onImport) {

@@ -6,31 +6,33 @@ interface StatusConfig {
 }
 
 const STATUS_MAP: Record<string, StatusConfig> = {
-  // Submission statuses
-  SUBMITTED: { label: 'Submitted',  classes: 'bg-slate-100  text-slate-700'  },
-  FINALIZED: { label: 'Finalized',  classes: 'bg-emerald-100 text-emerald-800' },
-  COMPLETED: { label: 'Completed',  classes: 'bg-emerald-100 text-emerald-800' },
-  DISPUTED:  { label: 'Disputed',   classes: 'bg-amber-100   text-amber-800'   },
-  RESOLVED:  { label: 'Resolved',   classes: 'bg-blue-100    text-blue-800'    },
+  // QA Submission statuses
+  SUBMITTED:           { label: 'Submitted',          classes: 'bg-slate-100   text-slate-700'   },
+  FINALIZED:           { label: 'Finalized',          classes: 'bg-emerald-100 text-emerald-800' },
+  DISPUTED:            { label: 'Disputed',           classes: 'bg-amber-100   text-amber-800'   },
+  RESOLVED:            { label: 'Resolved',           classes: 'bg-blue-100    text-blue-800'    },
   // Dispute statuses
-  OPEN:      { label: 'Open',       classes: 'bg-amber-100   text-amber-800'   },
-  UPHELD:    { label: 'Upheld',     classes: 'bg-emerald-100 text-emerald-800' },
-  REJECTED:  { label: 'Rejected',   classes: 'bg-red-100     text-red-800'     },
-  ADJUSTED:  { label: 'Adjusted',   classes: 'bg-blue-100    text-blue-800'    },
-  // Form statuses
-  ACTIVE:    { label: 'Active',     classes: 'bg-emerald-100 text-emerald-800' },
-  INACTIVE:  { label: 'Inactive',   classes: 'bg-slate-100  text-slate-500'   },
-  DRAFT:     { label: 'Draft',      classes: 'bg-slate-100  text-slate-600'   },
-  // Coaching session statuses
-  DRAFT:               { label: 'Draft',          classes: 'bg-slate-100   text-slate-600'   },
-  SCHEDULED:           { label: 'Scheduled',      classes: 'bg-indigo-100  text-indigo-800'  },
-  AWAITING_CSR_ACTION: { label: 'Awaiting CSR',   classes: 'bg-amber-100   text-amber-800'   },
-  FOLLOW_UP_REQUIRED:  { label: 'Follow-Up',      classes: 'bg-orange-100  text-orange-800'  },
-  CLOSED:              { label: 'Closed',          classes: 'bg-slate-100   text-slate-500'   },
-  // Write-up statuses
+  OPEN:                { label: 'Open',               classes: 'bg-amber-100   text-amber-800'   },
+  UPHELD:              { label: 'Upheld',             classes: 'bg-emerald-100 text-emerald-800' },
+  REJECTED:            { label: 'Rejected',           classes: 'bg-red-100     text-red-800'     },
+  ADJUSTED:            { label: 'Adjusted',           classes: 'bg-blue-100    text-blue-800'    },
+  // Shared statuses (forms, coaching, write-ups)
+  ACTIVE:              { label: 'Active',             classes: 'bg-emerald-100 text-emerald-800' },
+  INACTIVE:            { label: 'Inactive',           classes: 'bg-slate-100   text-slate-500'   },
+  DRAFT:               { label: 'Draft',              classes: 'bg-slate-100   text-slate-600'   },
+  SCHEDULED:           { label: 'Scheduled',          classes: 'bg-indigo-100  text-indigo-800'  },
+  COMPLETED:           { label: 'Completed',          classes: 'bg-emerald-100 text-emerald-800' },
+  CLOSED:              { label: 'Closed',             classes: 'bg-slate-100   text-slate-500'   },
+  // Coaching-specific
+  IN_PROCESS:          { label: 'In Process',         classes: 'bg-blue-100    text-blue-800'    },
+  IN_PROGRESS:         { label: 'In Progress',        classes: 'bg-blue-100    text-blue-800'    },
+  AWAITING_CSR_ACTION: { label: 'Awaiting CSR',       classes: 'bg-amber-100   text-amber-800'   },
+  QUIZ_PENDING:        { label: 'Quiz Pending',       classes: 'bg-indigo-100  text-indigo-800'  },
+  FOLLOW_UP_REQUIRED:  { label: 'Follow-Up',          classes: 'bg-orange-100  text-orange-800'  },
+  // Write-up-specific
   AWAITING_SIGNATURE:  { label: 'Awaiting Signature', classes: 'bg-amber-100   text-amber-800'   },
   SIGNED:              { label: 'Signed',             classes: 'bg-emerald-100 text-emerald-800' },
-  FOLLOW_UP_PENDING:   { label: 'Follow-Up',          classes: 'bg-orange-100  text-orange-800'  },
+  FOLLOW_UP_PENDING:   { label: 'Follow-Up Pending',  classes: 'bg-orange-100  text-orange-800'  },
 }
 
 interface StatusBadgeProps {

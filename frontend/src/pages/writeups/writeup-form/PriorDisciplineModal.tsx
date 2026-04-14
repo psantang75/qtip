@@ -13,7 +13,8 @@ import writeupService from '@/services/writeupService'
 import {
   WRITE_UP_TYPE_LABELS as WRITEUP_TYPE_LABELS,
   WRITE_UP_STATUS_LABELS as WRITEUP_STATUS_LABELS,
-} from '../writeupLabels'
+  COACHING_PURPOSE_LABELS,
+} from '@/constants/labels'
 import listService from '@/services/listService'
 import type { PriorDisciplineRef } from './types'
 
@@ -104,8 +105,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
         const typeLabel = (item.document_type ?? '').replace('_WARNING', '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
         refs.push({ reference_type: refType, reference_id: id, label: `Write-Up #${id}`, date: item.meeting_date?.slice(0, 10) ?? item.created_at?.slice(0, 10), subtype: typeLabel || 'Warning', detail: Array.isArray(item.policies_violated) ? item.policies_violated.filter(Boolean) : [], notes: Array.isArray(item.incident_descriptions) && item.incident_descriptions.length ? item.incident_descriptions.join(' · ') : undefined, status: item.status })
       } else {
-        const purposeLabel: Record<string, string> = { WEEKLY: 'Weekly', PERFORMANCE: 'Performance', ONBOARDING: 'Onboarding' }
-        refs.push({ reference_type: refType, reference_id: id, label: `Coaching #${id}`, date: item.session_date?.slice(0, 10), subtype: purposeLabel[item.coaching_purpose ?? ''] ?? (item.coaching_purpose ?? 'Coaching'), detail: Array.isArray(item.topic_names) ? item.topic_names.filter(Boolean) : [], notes: item.notes ?? undefined, status: item.status })
+        refs.push({ reference_type: refType, reference_id: id, label: `Coaching #${id}`, date: item.session_date?.slice(0, 10), subtype: COACHING_PURPOSE_LABELS[item.coaching_purpose as keyof typeof COACHING_PURPOSE_LABELS] ?? (item.coaching_purpose ?? 'Coaching'), detail: Array.isArray(item.topic_names) ? item.topic_names.filter(Boolean) : [], notes: item.notes ?? undefined, status: item.status })
       }
     })
     onSave(refs)
@@ -169,7 +169,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
                             <Checkbox className="mt-0.5" checked={draft.has(key)} onCheckedChange={() => toggle('coaching_session', c.id)} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[13px] font-medium text-slate-700">{c.coaching_purpose ?? '—'}</span>
+                                <span className="text-[13px] font-medium text-slate-700">{COACHING_PURPOSE_LABELS[c.coaching_purpose as keyof typeof COACHING_PURPOSE_LABELS] ?? c.coaching_purpose ?? '—'}</span>
                                 <span className="text-[11px] text-slate-400">{formatQualityDate(c.session_date)}</span>
                               </div>
                               {topics.length > 0 && <p className="text-[11px] text-primary mt-0.5">{topics.join(', ')}</p>}

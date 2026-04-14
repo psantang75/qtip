@@ -23,7 +23,7 @@ import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
 
 // Submission-level statuses (dispute resolution statuses are separate)
-const SUBMISSION_STATUSES = ['SUBMITTED', 'DISPUTED', 'FINALIZED']
+import { SUBMISSION_STATUSES } from '@/constants/labels'
 
 export default function SubmissionsPage() {
   const navigate = useNavigate()

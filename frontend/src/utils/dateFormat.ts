@@ -1,12 +1,26 @@
 /**
- * Shared date formatting utilities for the Quality section.
- * Single source — one change updates every list/detail view.
+ * Shared date formatting utilities — single source for the entire app.
+ * One change here updates every list, detail, and PDF view.
  */
 
 const DISPLAY_OPTIONS: Intl.DateTimeFormatOptions = {
   month: 'short',
   day: 'numeric',
   year: 'numeric',
+}
+
+const DISPLAY_OPTIONS_LONG: Intl.DateTimeFormatOptions = {
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+}
+
+const DISPLAY_OPTIONS_DATETIME: Intl.DateTimeFormatOptions = {
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
 }
 
 /** Formats an ISO date string (or Date) for display: "Mar 24, 2026" */
@@ -31,6 +45,29 @@ export function formatQualityDate(value: string | Date | null | undefined): stri
   const date = typeof value === 'string' ? new Date(value) : value
   if (isNaN(date.getTime())) return '—'
   return date.toLocaleDateString('en-US', DISPLAY_OPTIONS)
+}
+
+/** Formal long-month format for PDFs / signatures: "April 14, 2026" */
+export function formatQualityDateLong(value: string | Date | null | undefined): string {
+  if (!value) return '—'
+  if (typeof value === 'string') {
+    const datePart = value.slice(0, 10)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+      const [y, m, d] = datePart.split('-')
+      return new Date(Number(y), Number(m) - 1, Number(d)).toLocaleDateString('en-US', DISPLAY_OPTIONS_LONG)
+    }
+  }
+  const date = typeof value === 'string' ? new Date(value) : value
+  if (isNaN(date.getTime())) return '—'
+  return date.toLocaleDateString('en-US', DISPLAY_OPTIONS_LONG)
+}
+
+/** Date + time for signatures / timestamps: "April 14, 2026, 3:45 PM" */
+export function formatQualityDateTime(value: string | Date | null | undefined): string {
+  if (!value) return '—'
+  const date = typeof value === 'string' ? new Date(value) : value
+  if (isNaN(date.getTime())) return '—'
+  return date.toLocaleString('en-US', DISPLAY_OPTIONS_DATETIME)
 }
 
 /**

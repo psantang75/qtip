@@ -16,16 +16,11 @@ import { useToast } from '@/hooks/use-toast'
 import trainingService from '@/services/trainingService'
 import writeupService from '@/services/writeupService'
 
-export const PURPOSE_LABELS: Record<string, string> = {
-  WEEKLY: 'Weekly', PERFORMANCE: 'Performance', ONBOARDING: 'Onboarding',
-}
-export const FORMAT_LABELS: Record<string, string> = {
-  ONE_ON_ONE: 'One-on-One', SIDE_BY_SIDE: 'Side-by-Side', TEAM_SESSION: 'Team Session',
-}
-export const SOURCE_LABELS: Record<string, string> = {
-  QA_AUDIT: 'QA Audit', MANAGER_OBSERVATION: 'Manager Obs.', TREND: 'Trend',
-  DISPUTE: 'Dispute', SCHEDULED: 'Scheduled', OTHER: 'Other',
-}
+import {
+  COACHING_PURPOSE_LABELS as PURPOSE_LABELS,
+  COACHING_FORMAT_LABELS as FORMAT_LABELS,
+  COACHING_SOURCE_LABELS as SOURCE_LABELS,
+} from '@/constants/labels'
 
 const OPEN_STATUSES = ['SCHEDULED', 'IN_PROGRESS', 'IN_PROCESS', 'PENDING_CSR', 'AWAITING_CSR_ACTION', 'FOLLOW_UP_REQUIRED']
 

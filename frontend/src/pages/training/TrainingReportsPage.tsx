@@ -23,10 +23,10 @@ import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
+import { COACHING_PURPOSE_LABELS, COACHING_STATUS_LABELS } from '@/constants/labels'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-// Chart colors mapped to Tailwind palette equivalents
 const TYPE_COLORS: Record<string, string> = {
   WEEKLY:      'var(--color-chart-blue,   #60a5fa)',
   PERFORMANCE: 'var(--color-chart-amber,  #fbbf24)',
@@ -40,7 +40,10 @@ const STATUS_COLORS: Record<string, string> = {
   FOLLOW_UP_REQUIRED:  'var(--color-chart-orange, #f97316)',
   CLOSED:              'var(--color-chart-gray,   #64748b)',
 }
-const typeLabel = (t: string) => t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+const typeLabel = (t: string) =>
+  COACHING_PURPOSE_LABELS[t as keyof typeof COACHING_PURPOSE_LABELS]
+  ?? COACHING_STATUS_LABELS[t]
+  ?? t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
 // ── Stat Card (Tremor-styled) ─────────────────────────────────────────────────
 

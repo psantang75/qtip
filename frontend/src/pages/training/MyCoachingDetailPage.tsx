@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Target, CheckCircle, HelpCircle, Paperclip, Download, BookOpen, ChevronRight, ChevronDown } from 'lucide-react'
 import { QuizPlayer } from '@/components/training/QuizPlayer'
-import trainingService, { type CoachingSourceType } from '@/services/trainingService'
+import trainingService from '@/services/trainingService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
@@ -16,16 +16,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
-import { PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './CoachingSessionsPage'
+import {
+  COACHING_PURPOSE_LABELS as PURPOSE_MAP,
+  COACHING_FORMAT_LABELS as FORMAT_MAP,
+  COACHING_STATUS_LABELS as STATUS_LABELS,
+  COACHING_SOURCE_LABELS as SOURCE_LABELS,
+} from '@/constants/labels'
 
 import { Section, Sub, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow } from './training-detail/layout'
 
 // ── Source labels ─────────────────────────────────────────────────────────────
 
-const SOURCE_LABELS: Record<CoachingSourceType, string> = {
-  QA_AUDIT: 'QA Audit', MANAGER_OBSERVATION: 'Manager Observation', TREND: 'Trend',
-  DISPUTE: 'Dispute', SCHEDULED: 'Scheduled', OTHER: 'Other',
-}
 
 function TopicList({ topics }: { topics: string[] }) {
   if (!topics.length) return <span className="text-[13px] text-slate-400">None</span>

@@ -20,6 +20,11 @@ import type {
 } from '@/services/trainingService'
 import type { ListItem } from '@/services/listService'
 import type { CoachingFormState, CoachingFormErrors } from './types'
+import {
+  COACHING_PURPOSE_LABELS,
+  COACHING_FORMAT_LABELS,
+  COACHING_SOURCE_LABELS,
+} from '@/constants/labels'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -180,24 +185,15 @@ interface S1Props {
   toggleTopic: (id: number) => void
 }
 
-const DEFAULT_PURPOSES = [
-  { item_key: 'WEEKLY', label: 'Weekly' },
-  { item_key: 'PERFORMANCE', label: 'Performance' },
-  { item_key: 'ONBOARDING', label: 'Onboarding' },
-]
-const DEFAULT_FORMATS = [
-  { item_key: 'ONE_ON_ONE',   label: '1-on-1' },
-  { item_key: 'SIDE_BY_SIDE', label: 'Side-by-Side' },
-  { item_key: 'TEAM_SESSION', label: 'Team Session' },
-]
-const DEFAULT_SOURCES = [
-  { item_key: 'SCHEDULED',           label: 'Scheduled' },
-  { item_key: 'QA_AUDIT',            label: 'QA Audit' },
-  { item_key: 'MANAGER_OBSERVATION', label: 'Manager Observation' },
-  { item_key: 'TREND',               label: 'Trend' },
-  { item_key: 'DISPUTE',             label: 'Dispute' },
-  { item_key: 'OTHER',               label: 'Other' },
-]
+const DEFAULT_PURPOSES = Object.entries(COACHING_PURPOSE_LABELS).map(
+  ([item_key, label]) => ({ item_key, label }),
+)
+const DEFAULT_FORMATS = Object.entries(COACHING_FORMAT_LABELS).map(
+  ([item_key, label]) => ({ item_key, label }),
+)
+const DEFAULT_SOURCES = Object.entries(COACHING_SOURCE_LABELS).map(
+  ([item_key, label]) => ({ item_key, label }),
+)
 
 export function SessionSection({ form, errors, csrs, coaches, topicItems = [],
   purposeItems, formatItems, sourceItems,

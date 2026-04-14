@@ -14,6 +14,7 @@ import { CorrectiveSection } from './writeup-form/CorrectiveSection'
 import { AttachmentsSection } from './writeup-form/BasicSections'
 import { IncidentsSection } from './writeup-form/IncidentsSection'
 import { PriorDisciplineSection } from './writeup-form/PriorDisciplineSection'
+import { WRITE_UP_TYPE_LABELS, COACHING_PURPOSE_LABELS } from '@/constants/labels'
 
 export default function WriteUpFormPage() {
   const navigate  = useNavigate()
@@ -75,19 +76,13 @@ export default function WriteUpFormPage() {
       })),
       prior_discipline: (existing.prior_discipline ?? []).map((pd) => {
         const isWriteUp = pd.reference_type === 'write_up'
-        const TYPE_LABELS: Record<string, string> = {
-          VERBAL_WARNING: 'Verbal Warning', WRITTEN_WARNING: 'Written Warning', FINAL_WARNING: 'Final Warning',
-        }
-        const PURPOSE_LABELS: Record<string, string> = {
-          WEEKLY: 'Weekly', PERFORMANCE: 'Performance', ONBOARDING: 'Onboarding',
-        }
         return {
           reference_type: pd.reference_type,
           reference_id:   pd.reference_id,
           label:          `${isWriteUp ? 'Write-Up' : 'Coaching'} #${pd.reference_id}`,
           subtype:        isWriteUp
-            ? (TYPE_LABELS[pd.document_type] ?? pd.document_type)
-            : (PURPOSE_LABELS[pd.coaching_purpose] ?? pd.coaching_purpose),
+            ? (WRITE_UP_TYPE_LABELS[pd.document_type as keyof typeof WRITE_UP_TYPE_LABELS] ?? pd.document_type)
+            : (COACHING_PURPOSE_LABELS[pd.coaching_purpose as keyof typeof COACHING_PURPOSE_LABELS] ?? pd.coaching_purpose),
           status:         isWriteUp ? pd.status : pd.status,
           date:           pd.date
             ? String(pd.date).slice(0, 10)

@@ -11,9 +11,9 @@ import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/hooks/use-toast'
-import { formatQualityDate } from '@/utils/dateFormat'
+import { formatQualityDate, formatQualityDateTime } from '@/utils/dateFormat'
 import { ContentSections } from './writeup-detail/ContentSections'
-import { WRITE_UP_TYPE_LABELS as TYPE_LABELS } from './writeupLabels'
+import { WRITE_UP_TYPE_LABELS as TYPE_LABELS } from '@/constants/labels'
 import { openWriteUpPdf } from './writeup-pdf/openPdf'
 
 const ACK_TEXT = `By signing below, the employee acknowledges receipt of this Corrective Action Form.`
@@ -164,7 +164,7 @@ function SignedSection({ writeup }: { writeup: WriteUpDetail }) {
             </div>
             {writeup.signed_at && (
               <p className="text-[11px] text-slate-400 italic mt-2">
-                Signed: {new Date(writeup.signed_at).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                Signed: {formatQualityDateTime(writeup.signed_at)}
                 {writeup.signed_ip ? ` | IP: ${writeup.signed_ip}` : ''}
               </p>
             )}

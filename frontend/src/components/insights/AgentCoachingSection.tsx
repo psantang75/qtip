@@ -1,5 +1,7 @@
 import { InsightsSection, StatusBadge } from '@/components/insights'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { formatQualityDate } from '@/utils/dateFormat'
+import { COACHING_PURPOSE_LABELS, COACHING_FORMAT_LABELS } from '@/constants/labels'
 import type { AgentProfile } from '@/services/insightsQCService'
 
 interface Props {
@@ -23,9 +25,9 @@ export default function AgentCoachingSection({ coachingSessions, topicCounts }: 
               </tr></thead>
               <tbody>
                 {coachingSessions.map(s => {
-                  const fmtDate = new Date(s.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  const purposeLabel = s.purpose === 'WEEKLY' ? 'Weekly' : s.purpose === 'PERFORMANCE' ? 'Performance' : s.purpose === 'ONBOARDING' ? 'Onboarding' : s.purpose
-                  const formatLabel = s.format === 'ONE_ON_ONE' ? '1-on-1' : s.format === 'SIDE_BY_SIDE' ? 'Side-by-Side' : s.format === 'TEAM_SESSION' ? 'Team' : s.format || '—'
+                  const fmtDate = formatQualityDate(s.date)
+                  const purposeLabel = COACHING_PURPOSE_LABELS[s.purpose as keyof typeof COACHING_PURPOSE_LABELS] ?? s.purpose
+                  const formatLabel = COACHING_FORMAT_LABELS[s.format as keyof typeof COACHING_FORMAT_LABELS] ?? s.format || '—'
                   return (
                     <tr key={s.id} className="border-b border-slate-100 last:border-0">
                       <td className="py-2 pr-4 font-medium text-slate-700">{fmtDate}</td>

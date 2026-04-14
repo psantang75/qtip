@@ -16,6 +16,7 @@ import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
@@ -95,14 +96,14 @@ export function FormBuilderList() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 border-b border-slate-200">
+              <StandardTableHeaderRow>
                 <SortableTableHead field="form_name"        sort={sort} dir={dir} onSort={toggle}>Name</SortableTableHead>
                 <SortableTableHead field="is_active"        sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
                 <SortableTableHead field="interaction_type" sort={sort} dir={dir} onSort={toggle}>Type</SortableTableHead>
                 <SortableTableHead field="version"          sort={sort} dir={dir} onSort={toggle}>Version</SortableTableHead>
                 <SortableTableHead field="created_at"       sort={sort} dir={dir} onSort={toggle}>Created On</SortableTableHead>
                 <TableHead className="py-4 w-[140px]" />
-              </TableRow>
+              </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {displayed.length === 0 ? (

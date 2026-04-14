@@ -1,5 +1,12 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import type { WriteUpDetail, PriorDisciplineRow } from '@/services/writeupService'
+import {
+  WRITE_UP_TYPE_LABELS as TYPE_LABELS,
+  WRITE_UP_STATUS_LABELS as STATUS_LABELS,
+  COACHING_STATUS_LABELS as COACHING_STATUS,
+  COACHING_PURPOSE_LABELS as PURPOSE_LABELS,
+} from '@/constants/labels'
+import { formatQualityDateLong as fmtDate, formatQualityDateTime as fmtDateTime } from '@/utils/dateFormat'
 import { htmlToPdfNodes } from './htmlToPdf'
 
 const BLUE = '#00aeef'
@@ -10,30 +17,6 @@ const GRAY_BG = '#f1f5f9'
 const BORDER = '#e2e8f0'
 const SECTION_BG = '#e2e8f0'
 
-const TYPE_LABELS: Record<string, string> = {
-  VERBAL_WARNING: 'Verbal Warning', WRITTEN_WARNING: 'Written Warning', FINAL_WARNING: 'Final Warning',
-}
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Draft', SCHEDULED: 'Scheduled', AWAITING_SIGNATURE: 'Awaiting Signature',
-  SIGNED: 'Signed', FOLLOW_UP_PENDING: 'Follow-Up Pending', CLOSED: 'Closed',
-}
-const COACHING_STATUS: Record<string, string> = {
-  SCHEDULED: 'Scheduled', IN_PROCESS: 'In Process', IN_PROGRESS: 'In Progress',
-  AWAITING_CSR_ACTION: 'Awaiting CSR', COMPLETED: 'Completed', FOLLOW_UP_REQUIRED: 'Follow-Up', CLOSED: 'Closed',
-}
-const PURPOSE_LABELS: Record<string, string> = { WEEKLY: 'Weekly', PERFORMANCE: 'Performance', ONBOARDING: 'Onboarding' }
-
-function fmtDate(d: string | null | undefined): string {
-  if (!d) return '—'
-  const dt = new Date(String(d).slice(0, 10) + 'T12:00:00')
-  return dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-}
-
-function fmtDateTime(d: string | null | undefined): string {
-  if (!d) return '—'
-  const dt = new Date(d)
-  return dt.toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
-}
 
 function splitSep(val: string | string[] | null | undefined): string[] {
   if (Array.isArray(val)) return val.filter(Boolean)
