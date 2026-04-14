@@ -27,7 +27,7 @@ export default function AgentCoachingSection({ coachingSessions, topicCounts }: 
                 {coachingSessions.map(s => {
                   const fmtDate = formatQualityDate(s.date)
                   const purposeLabel = COACHING_PURPOSE_LABELS[s.purpose as keyof typeof COACHING_PURPOSE_LABELS] ?? s.purpose
-                  const formatLabel = COACHING_FORMAT_LABELS[s.format as keyof typeof COACHING_FORMAT_LABELS] ?? s.format || '—'
+                  const formatLabel = COACHING_FORMAT_LABELS[s.format as keyof typeof COACHING_FORMAT_LABELS] ?? (s.format || '—')
                   return (
                     <tr key={s.id} className="border-b border-slate-100 last:border-0">
                       <td className="py-2 pr-4 font-medium text-slate-700">{fmtDate}</td>
