@@ -62,7 +62,7 @@ function StatCard({ label, value, icon: Icon, valueClass }: {
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <h3 className="text-sm font-semibold text-slate-700 mb-4">{title}</h3>
+      <h3 className="text-[15px] font-semibold text-slate-800 mb-4">{title}</h3>
       {children}
     </div>
   )
@@ -245,7 +245,7 @@ export default function TrainingReportsPage() {
       {/* ── CSR Drill-Down Table ────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-700">CSR Breakdown</p>
+          <p className="text-[15px] font-semibold text-slate-800">CSR Breakdown</p>
           {csrOptions.length > 0 && (
             <div className="flex gap-2 flex-wrap">
               {csrOptions.slice(0, 6).map(name => (

@@ -22,7 +22,6 @@ function fmt(v: number | null | undefined, suffix = ''): string {
 const PIPELINE_STATUSES = [
   { key: 'DRAFT',              label: 'Draft' },
   { key: 'SCHEDULED',          label: 'Scheduled' },
-  { key: 'DELIVERED',          label: 'Delivered' },
   { key: 'AWAITING_SIGNATURE', label: 'Awaiting Signature' },
   { key: 'SIGNED',             label: 'Signed' },
   { key: 'FOLLOW_UP_PENDING',  label: 'Follow-Up Pending' },

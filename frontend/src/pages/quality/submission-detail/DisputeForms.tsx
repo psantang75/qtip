@@ -3,7 +3,7 @@ import { AlertTriangle, X } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import qaService from '@/services/qaService'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { useToast } from '@/hooks/use-toast'
 
 // ── CSR submit new dispute ───────────────────────────────────────────────────
@@ -32,8 +32,8 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
         <h3 className="text-[15px] font-semibold text-slate-800 flex-1">Dispute</h3>
       </div>
       <div className="px-4 py-3 space-y-3">
-        <Textarea value={reason} onChange={e => setReason(e.target.value)}
-          placeholder="Explain why you believe this score is incorrect…" rows={3}
+        <RichTextEditor value={reason} onChange={setReason}
+          placeholder="Explain why you believe this score is incorrect…"
           className="text-[13px]" />
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-slate-400">
@@ -96,9 +96,8 @@ export function EditDisputeForm({
         <button onClick={onCancel} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
       </div>
       <div>
-        <Textarea value={reason} onChange={e => setReason(e.target.value)}
-          rows={4} className="text-[13px] bg-white" maxLength={1000} />
-        <p className="text-[11px] text-slate-400 mt-1 text-right">{reason.length}/1000</p>
+        <RichTextEditor value={reason} onChange={setReason}
+          className="text-[13px] bg-white" />
       </div>
       <div>
         <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide block mb-1">

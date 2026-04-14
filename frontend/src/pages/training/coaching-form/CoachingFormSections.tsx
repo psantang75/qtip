@@ -7,7 +7,7 @@ import { ChevronDown, ChevronRight, Search, Paperclip, X } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '@/components/ui/select'
@@ -26,7 +26,7 @@ import type { CoachingFormState, CoachingFormErrors } from './types'
 export function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">{title}</h3>
+      <h3 className="text-[15px] font-semibold text-slate-800 border-b border-slate-100 pb-3 mb-4">{title}</h3>
       {children}
     </div>
   )
@@ -322,12 +322,10 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems = [],
           />
         </Field>
         <Field label="Notes" required error={errors.notes}>
-          <Textarea
-            rows={5} maxLength={3000} value={form.notes}
+          <RichTextEditor value={form.notes}
             placeholder={form.coaching_purpose ? NOTES_PLACEHOLDER[form.coaching_purpose as CoachingPurpose] : 'Enter session notes…'}
-            onChange={e => update('notes', e.target.value)}
+            onChange={html => update('notes', html)}
           />
-          <p className="text-[11px] text-slate-400 mt-1 text-right">{form.notes.length}/3000</p>
         </Field>
       </div>
     </FormSection>
@@ -438,13 +436,12 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, updat
     <FormSection title="Required Actions">
       <div className="space-y-5">
         <Field label="Required Action">
-          <Textarea
-            rows={3} maxLength={1000} value={form.required_action}
+          <RichTextEditor value={form.required_action}
             placeholder="Describe what must change or improve…"
-            onChange={e => update('required_action', e.target.value)}
+            onChange={html => update('required_action', html)}
           />
           <p className="text-[11px] text-slate-400 mt-1">
-            {form.required_action.length}/1000 · Shown prominently to the CSR as what must change.
+            Shown prominently to the CSR as what must change.
           </p>
         </Field>
 
@@ -513,12 +510,10 @@ export function AccountabilitySection({ form, errors, update, hideFollowUpNotes 
         {!hideFollowUpNotes && form.follow_up_required && (
           <div className="mt-4">
             <Field label="Follow-Up Notes">
-              <Textarea
-                rows={4} maxLength={3000} value={form.follow_up_notes}
+              <RichTextEditor value={form.follow_up_notes}
                 placeholder="Document notes from the follow-up meeting…"
-                onChange={e => update('follow_up_notes', e.target.value)}
+                onChange={html => update('follow_up_notes', html)}
               />
-              <p className="text-[11px] text-slate-400 mt-1 text-right">{form.follow_up_notes.length}/3000</p>
             </Field>
           </div>
         )}
@@ -624,7 +619,7 @@ export function InternalNotesSection({ form, flagItems, update }: S5InternalProp
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
       <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
-        <h3 className="text-sm font-semibold text-slate-700">Internal Notes</h3>
+        <h3 className="text-[15px] font-semibold text-slate-800">Internal Notes</h3>
         <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-full">Private — Not visible to CSR</span>
       </div>
       <div className="p-5 space-y-4">
@@ -632,12 +627,10 @@ export function InternalNotesSection({ form, flagItems, update }: S5InternalProp
           <BehaviorFlagSelect flagItems={flagItems} selectedIds={selectedIds} onToggle={toggleFlag} />
         </Field>
         <Field label="Internal Notes">
-          <Textarea
-            rows={4} maxLength={3000} value={form.internal_notes}
+          <RichTextEditor value={form.internal_notes}
             placeholder="Context, observations, concerns…"
-            onChange={e => update('internal_notes', e.target.value)}
+            onChange={html => update('internal_notes', html)}
           />
-          <p className="text-[11px] text-slate-400 mt-1 text-right">{form.internal_notes.length}/3000</p>
         </Field>
       </div>
     </div>
@@ -664,7 +657,7 @@ export function AttachmentSection({ form, update, existingFilename, onRemoveExis
           : <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
         }
         <Paperclip className="h-4 w-4 text-slate-400 shrink-0" />
-        <span className="text-sm font-semibold text-slate-700">Attachment</span>
+        <span className="text-[15px] font-semibold text-slate-800">Attachment</span>
         <span className="text-[11px] text-slate-400">(optional)</span>
         {(existingFilename || form.attachment_file) && (
           <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-1">1 file</span>

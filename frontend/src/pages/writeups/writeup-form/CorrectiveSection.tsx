@@ -4,7 +4,8 @@ import { ExternalLink, Link2, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
+import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 import { Dialog } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FormSection, Field } from '@/pages/training/coaching-form/CoachingFormSections'
@@ -47,10 +48,10 @@ export function CorrectiveSection({ form, update }: { form: WriteUpFormState; up
     <FormSection title="Corrective Action & Expectations">
       <div className="space-y-4">
         <Field label="Required Corrective Action" required>
-          <Textarea rows={3} className="text-[13px] resize-none"
+          <RichTextEditor className="text-[13px]"
             placeholder="Describe the corrective action required…"
             value={form.corrective_action}
-            onChange={e => update('corrective_action', e.target.value)} />
+            onChange={html => update('corrective_action', html)} />
         </Field>
 
         <div className="grid grid-cols-3 gap-4">
@@ -121,7 +122,7 @@ export function CorrectiveSection({ form, update }: { form: WriteUpFormState; up
                       {linkedSession?.notes ? (
                         <Tooltip>
                           <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{linkedSession.notes}</span></TooltipTrigger>
-                          <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><p className="text-[13px] text-slate-700 whitespace-pre-wrap">{linkedSession.notes}</p></TooltipContent>
+                          <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><RichTextDisplay html={linkedSession.notes} /></TooltipContent>
                         </Tooltip>
                       ) : <span className="text-slate-300">&mdash;</span>}
                     </td>

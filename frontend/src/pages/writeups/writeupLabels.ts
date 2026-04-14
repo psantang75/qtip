@@ -15,7 +15,6 @@ export const WRITE_UP_TYPE_LABELS: Record<WriteUpType, string> = {
 export const WRITE_UP_STATUS_LABELS: Record<WriteUpStatus, string> = {
   DRAFT:              'Draft',
   SCHEDULED:          'Scheduled',
-  DELIVERED:          'Delivered',
   AWAITING_SIGNATURE: 'Awaiting Signature',
   SIGNED:             'Signed',
   FOLLOW_UP_PENDING:  'Follow-Up Pending',

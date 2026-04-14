@@ -287,7 +287,7 @@ export default function CoachingSessionFormPage() {
           <div className="bg-white rounded-xl border border-slate-200 p-4 sticky top-6">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="text-sm font-semibold text-slate-700">Recent Coaching</h3>
+                <h3 className="text-[15px] font-semibold text-slate-800">Recent Coaching</h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">Topics within the last 90 days</p>
               </div>
               {sessions.length > 0 && (

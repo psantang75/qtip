@@ -1,5 +1,5 @@
-import { useNavigate, useLocation } from 'react-router-dom'
-import { ChevronDown, LogOut, User, Settings, ArrowLeft } from 'lucide-react'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { ChevronDown, LogOut, User, Settings, ArrowLeft, Shield, GraduationCap, AlertTriangle, BarChart2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,8 +9,17 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
+import { NAV_CONFIG, getSectionFromPath } from '@/config/navConfig'
 import { ROLE_DISPLAY } from '@/config/navConfig'
 import { ROLE_IDS } from '@/hooks/useQualityRole'
+import { cn } from '@/lib/utils'
+
+const SECTION_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+  quality:              Shield,
+  training:             GraduationCap,
+  performancewarnings:  AlertTriangle,
+  insights:             BarChart2,
+}
 
 function getInitials(username: string): string {
   const parts = username.trim().split(/\s+/)
@@ -47,8 +56,28 @@ export default function TopBar() {
         </span>
       </div>
 
-      {/* ── Center spacer ───────────────────────────────────────────────── */}
-      <div className="flex-1" />
+      {/* ── Section navigation (center) ─────────────────────────────────── */}
+      <nav className="flex-1 flex items-center justify-center gap-1">
+        {NAV_CONFIG.map(section => {
+          const Icon = SECTION_ICONS[section.id]
+          const isActive = getSectionFromPath(location.pathname) === section.id
+          return (
+            <NavLink
+              key={section.id}
+              to={section.defaultPath}
+              className={cn(
+                'flex items-center gap-2 px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                isActive
+                  ? 'bg-white/15 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5',
+              )}
+            >
+              {Icon && <Icon size={15} className="shrink-0" />}
+              {section.label}
+            </NavLink>
+          )
+        })}
+      </nav>
 
       {/* ── Admin shortcut / back-to-app (role_id 1 only) ───────────────── */}
       {user?.role_id === ROLE_IDS.ADMIN && (

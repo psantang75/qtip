@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { emptyForm, type WriteUpFormState } from './writeup-form/types'
 import { EmployeeSection } from './writeup-form/EmployeeSection'
 import { CorrectiveSection } from './writeup-form/CorrectiveSection'
-import { AttachmentsSection, MeetingNotesSection } from './writeup-form/BasicSections'
+import { AttachmentsSection } from './writeup-form/BasicSections'
 import { IncidentsSection } from './writeup-form/IncidentsSection'
 import { PriorDisciplineSection } from './writeup-form/PriorDisciplineSection'
 
@@ -213,7 +213,6 @@ export default function WriteUpFormPage() {
   const isSaving       = saveMut.isPending || scheduleMut.isPending
   const canSchedule    = !!form.meeting_date
   const isScheduled    = isEdit && existing?.status === 'SCHEDULED'
-  const showMeetingNotes = isEdit && existing?.status === 'DELIVERED'
 
   const LOCKED_STATUSES = ['AWAITING_SIGNATURE', 'SIGNED', 'FOLLOW_UP_PENDING', 'CLOSED']
 
@@ -258,7 +257,6 @@ export default function WriteUpFormPage() {
         <CorrectiveSection form={form} update={update} />
         <PriorDisciplineSection form={form} update={update} />
         <AttachmentsSection form={form} update={update} writeUpId={isEdit ? Number(id) : undefined} />
-        {showMeetingNotes && <MeetingNotesSection form={form} update={update} />}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between mt-4">

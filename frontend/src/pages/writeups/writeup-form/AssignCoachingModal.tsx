@@ -3,7 +3,8 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
+import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -109,7 +110,7 @@ export function AssignCoachingModal({ csrId, onSelect, onClose }: {
                             <span className="text-[13px] text-slate-500 truncate block max-w-[200px] cursor-default">{s.notes}</span>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
-                            <p className="text-[13px] text-slate-700 whitespace-pre-wrap">{s.notes}</p>
+                            <RichTextDisplay html={s.notes} />
                           </TooltipContent>
                         </Tooltip>
                       ) : <span className="text-[13px] text-slate-300">&mdash;</span>}
@@ -278,7 +279,7 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
           </Field>
 
           <Field label="Notes">
-            <Textarea rows={2} className="text-[13px] resize-none" placeholder="Optional notes…" value={notes} onChange={e => setNotes(e.target.value)} />
+            <RichTextEditor className="text-[13px]" placeholder="Optional notes…" value={notes} onChange={setNotes} />
           </Field>
 
           <div className="flex justify-end gap-2 pt-1">

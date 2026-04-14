@@ -11,9 +11,8 @@ import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
@@ -37,7 +36,7 @@ const SOURCE_LABELS: Record<CoachingSourceType, string> = {
   DISPUTE: 'Dispute', SCHEDULED: 'Scheduled', OTHER: 'Other',
 }
 
-import { Section, Sub, InfoRow, SideCard, SideTitle } from './training-detail/layout'
+import { Section, Sub, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow } from './training-detail/layout'
 
 // ── Section edit bar (detail page specific) ───────────────────────────────────
 
@@ -75,22 +74,7 @@ function SectionEditBar({ onSave, onCancel, saving, showBatch, applyToBatch, onT
 }
 
 
-function ResponseRow({ label, value, muted }: { label: string; value: React.ReactNode; muted?: boolean }) {
-  return (
-    <div className="flex items-start justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
-      <span className={cn('text-[12px] font-medium', muted ? 'text-slate-400' : 'text-slate-500')}>{label}</span>
-      <span className={cn('text-[12px] text-right shrink-0', muted ? 'text-slate-400' : 'text-slate-700')}>{value}</span>
-    </div>
-  )
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function NoteBlock({ text, placeholder }: { text?: string | null; placeholder: string }) {
-  return text
-    ? <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">{text}</p>
-    : <p className="text-[13px] text-slate-400 italic">{placeholder}</p>
-}
 
 function TopicList({ topics, columns = 1 }: { topics: string[]; columns?: 1 | 3 }) {
   if (!topics.length) return <span className="text-sm text-slate-400">None</span>
@@ -344,7 +328,7 @@ export default function CoachingSessionDetailPage() {
               <InfoRow label="Coaching Source"  value={sourceItems.find(i => i.item_key === session.source_type)?.label ?? SOURCE_LABELS[session.source_type as CoachingSourceType] ?? session.source_type} />
               <InfoRow label="Created"          value={formatQualityDate(session.created_at)} />
               {!!session.is_overdue && (
-                <InfoRow label="Overdue" value={<span className="text-[13px] font-semibold text-red-600">⚠ Overdue</span>} />
+                <InfoRow label="Overdue" value={<span className="text-[14px] font-semibold text-red-600">⚠ Overdue</span>} />
               )}
             </div>
 
@@ -357,9 +341,7 @@ export default function CoachingSessionDetailPage() {
             {/* Notes */}
             <div className="border-t border-slate-100 pt-4 mt-4">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Notes</p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                {session.notes || <span className="text-slate-400">No notes provided</span>}
-              </p>
+              <NoteBlock text={session.notes} placeholder="No notes provided" />
               {session.qa_audit_id && (
                 <a href={`/app/quality/submissions/${session.qa_audit_id}`}
                   className="inline-flex items-center gap-1 text-primary text-[13px] mt-2 hover:underline">
@@ -388,20 +370,29 @@ export default function CoachingSessionDetailPage() {
             {/* Reference Materials */}
             <Sub title="Reference Materials" icon={BookOpen}>
               {(session.kb_resources?.length ?? 0) > 0 ? (
-                <div className="space-y-2">
-                  {session.kb_resources!.map(r => (
-                    <div key={r.id} className="flex items-start justify-between gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-slate-800 truncate">{r.title}</p>
-                        {r.description && <p className="text-[12px] text-slate-500 mt-0.5">{r.description}</p>}
-                      </div>
-                      <a href={resourceHref(r)} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline shrink-0">
-                        Open <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  ))}
-                </div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-200">
+                      <th className="text-left py-1.5 font-medium pr-4 w-[40%]">Title</th>
+                      <th className="text-left py-1.5 font-medium pr-4">Description</th>
+                      <th className="text-left py-1.5 font-medium pr-2 w-[60px]" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {session.kb_resources!.map(r => (
+                      <tr key={r.id} className="border-b border-slate-100 last:border-0">
+                        <td className="py-2 pr-4 font-medium text-slate-800">{r.title}</td>
+                        <td className="py-2 pr-4 text-slate-500">{r.description || '—'}</td>
+                        <td className="py-2 pr-2">
+                          <a href={resourceHref(r)} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline">
+                            Open <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               ) : (
                 <p className="text-[13px] text-slate-400 italic">No resources assigned</p>
               )}
@@ -410,61 +401,43 @@ export default function CoachingSessionDetailPage() {
             {/* Quizzes */}
             <Sub title="Quiz Assignment" icon={HelpCircle}>
               {(session.quizzes?.length ?? 0) > 0 ? (
-                <div className="space-y-4">
-                  {session.quizzes!.map(quiz => {
-                    const attempts = (session.quiz_attempts ?? []).filter(a => a.quiz_id === quiz.id)
-                    const passed   = attempts.find(a => a.passed)
-                    return (
-                      <div key={quiz.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-[13px] font-semibold text-slate-800">{quiz.quiz_title}</p>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] text-slate-400">Pass: {quiz.pass_score}%</span>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-200">
+                      <th className="text-left py-1.5 font-medium pr-4 w-[40%]">Quiz</th>
+                      <th className="text-left py-1.5 font-medium pr-4">Pass Score</th>
+                      <th className="text-left py-1.5 font-medium pr-4">Attempts</th>
+                      <th className="text-left py-1.5 font-medium pr-4">Best</th>
+                      <th className="text-left py-1.5 font-medium">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {session.quizzes!.map(quiz => {
+                      const attempts = (session.quiz_attempts ?? []).filter(a => a.quiz_id === quiz.id)
+                      const passed   = attempts.find(a => a.passed)
+                      const best     = attempts.length > 0 ? Math.max(...attempts.map(a => Number(a.score))) : null
+                      return (
+                        <tr key={quiz.id} className="border-b border-slate-100 last:border-0">
+                          <td className="py-2 pr-4 font-medium text-slate-800">{quiz.quiz_title}</td>
+                          <td className="py-2 pr-4 text-slate-500">{quiz.pass_score}%</td>
+                          <td className="py-2 pr-4 text-slate-600">{attempts.length}</td>
+                          <td className={`py-2 pr-4 font-semibold ${passed ? 'text-emerald-600' : best != null ? 'text-red-600' : 'text-slate-400'}`}>
+                            {best != null ? `${best.toFixed(0)}%` : '—'}
+                          </td>
+                          <td className="py-2">
                             {passed ? (
-                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                Passed {Number(passed.score).toFixed(0)}%
-                              </span>
+                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Passed</span>
                             ) : attempts.length > 0 ? (
-                              <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
-                                Failed
-                              </span>
+                              <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">Failed</span>
                             ) : (
-                              <span className="text-[11px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
-                                Not started
-                              </span>
+                              <span className="text-[11px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">Not started</span>
                             )}
-                          </div>
-                        </div>
-                        {attempts.length > 0 && (
-                          <Table className="mt-2 text-[12px]">
-                            <TableHeader>
-                              <TableRow className="border-slate-200">
-                                <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Attempt</TableHead>
-                                <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Score</TableHead>
-                                <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Result</TableHead>
-                                <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Date</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {attempts.map(a => (
-                                <TableRow key={a.id} className={cn('border-slate-100', a.passed ? 'bg-emerald-50/30' : 'bg-red-50/30')}>
-                                  <TableCell className="py-1.5 text-slate-600">#{a.attempt_number}</TableCell>
-                                  <TableCell className="py-1.5 text-slate-600">{Number(a.score).toFixed(0)}%</TableCell>
-                                  <TableCell className="py-1.5">
-                                    <span className={cn('text-[11px] font-semibold', a.passed ? 'text-emerald-700' : 'text-red-600')}>
-                                      {a.passed ? 'PASS ✓' : 'FAIL ✗'}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="py-1.5 text-slate-400">{formatQualityDate(a.submitted_at)}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               ) : (
                 <p className="text-[13px] text-slate-400 italic">No quizzes assigned</p>
               )}
@@ -481,18 +454,16 @@ export default function CoachingSessionDetailPage() {
             {session.require_action_plan ? (
               <>
                 <NoteBlock text={session.csr_action_plan} placeholder="Pending" />
-                {session.csr_action_plan && (
-                  <div className="mt-3 space-y-1">
-                    {session.csr_root_cause && (
-                      <p className="text-[12px] text-slate-500">
-                        <span className="font-medium text-slate-600">Root cause:</span> {session.csr_root_cause}
-                      </p>
-                    )}
-                    {session.csr_support_needed && (
-                      <p className="text-[12px] text-slate-500">
-                        <span className="font-medium text-slate-600">Support needed:</span> {session.csr_support_needed}
-                      </p>
-                    )}
+                {session.csr_action_plan && (session.csr_root_cause || session.csr_support_needed) && (
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-4 border-t border-slate-100 pt-4 mt-4">
+                    <div>
+                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Root Cause</p>
+                      <NoteBlock text={session.csr_root_cause} placeholder="—" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Support Needed</p>
+                      <NoteBlock text={session.csr_support_needed} placeholder="—" />
+                    </div>
                   </div>
                 )}
               </>
@@ -515,28 +486,18 @@ export default function CoachingSessionDetailPage() {
 
             {/* Timing — due dates govern when CSR must complete their work */}
             <Sub title="Timing">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Due Date</p>
-                  {session.due_date ? (
-                    <p className={cn('text-[13px] font-medium', session.is_overdue ? 'text-red-600' : 'text-slate-800')}>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                <InfoRow label="Due Date" value={session.due_date
+                  ? <span className={session.is_overdue ? 'text-red-600' : undefined}>
                       {formatQualityDate(session.due_date)}{session.is_overdue ? ' ⚠' : ''}
-                    </p>
-                  ) : (
-                    <p className="text-[13px] text-slate-400">Not set</p>
-                  )}
-                </div>
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Follow-Up Date</p>
-                  {session.follow_up_date ? (
-                    <p className="text-[13px] font-medium text-slate-800">{formatQualityDate(session.follow_up_date)}</p>
-                  ) : (
-                    <p className="text-[13px] text-slate-400">Not set</p>
-                  )}
-                </div>
+                    </span>
+                  : null} />
+                <InfoRow label="Follow-Up Date" value={session.follow_up_date
+                  ? formatQualityDate(session.follow_up_date)
+                  : null} />
               </div>
               {!!session.follow_up_notes && (
-                <div className="mt-3 border-t border-slate-100 pt-3">
+                <div className="mt-4 pt-4 border-t border-slate-100">
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Follow-Up Notes</p>
                   <NoteBlock text={session.follow_up_notes} placeholder="" />
                 </div>
@@ -549,13 +510,12 @@ export default function CoachingSessionDetailPage() {
           {canSeeInternal && editSection === 'internal' && session.status === 'FOLLOW_UP_REQUIRED' && (
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
-                <h3 className="text-sm font-semibold text-slate-700">Follow-Up Notes</h3>
+                <h3 className="text-[15px] font-semibold text-slate-800">Follow-Up Notes</h3>
               </div>
               <div className="p-5">
-                <Textarea rows={4} maxLength={3000} value={formDraft.follow_up_notes}
+                <RichTextEditor value={formDraft.follow_up_notes}
                   placeholder="Document notes from the follow-up meeting…"
-                  onChange={e => updateDraft('follow_up_notes', e.target.value)} />
-                <p className="text-[11px] text-slate-400 mt-1 text-right">{formDraft.follow_up_notes.length}/3000</p>
+                  onChange={html => updateDraft('follow_up_notes', html)} />
               </div>
             </div>
           )}
@@ -581,7 +541,7 @@ export default function CoachingSessionDetailPage() {
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="flex items-center justify-between gap-2 px-5 py-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-slate-700">Internal Notes</h3>
+                  <h3 className="text-[15px] font-semibold text-slate-800">Internal Notes</h3>
                   <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-full">Private — Not visible to CSR</span>
                 </div>
                 {canEdit && (
@@ -637,7 +597,7 @@ export default function CoachingSessionDetailPage() {
               <div className="flex items-center justify-between px-5 py-4">
                 <div className="flex items-center gap-2">
                   <Paperclip className="h-4 w-4 text-slate-400" />
-                  <span className="text-sm font-semibold text-slate-700">Attachment</span>
+                  <span className="text-[15px] font-semibold text-slate-800">Attachment</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-[13px] text-slate-600 truncate max-w-[240px]">{session.attachment_filename}</span>
@@ -664,7 +624,7 @@ export default function CoachingSessionDetailPage() {
               <div className="space-y-3">
                 <div>
                   <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Current</p>
-                  <p className="text-[13px] font-semibold text-slate-800">{STATUS_LABELS[session.status] ?? session.status}</p>
+                  <p className="text-[14px] font-semibold text-slate-900">{STATUS_LABELS[session.status] ?? session.status}</p>
                 </div>
                 {/* Schedule — only when DRAFT, triggers CSR visibility + auto-status */}
                 {session.status === 'DRAFT' && (
@@ -712,13 +672,13 @@ export default function CoachingSessionDetailPage() {
             <div className="border-t border-slate-100 pt-3 mt-3 space-y-1.5">
               <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-2">Status History</p>
               {session.delivered_at && (
-                <ResponseRow label="Scheduled" value={<span className="text-slate-700">{formatQualityDate(session.delivered_at)}</span>} />
+                <ProgressRow label="Scheduled" value={<span className="text-slate-700">{formatQualityDate(session.delivered_at)}</span>} />
               )}
               {session.completed_at && (
-                <ResponseRow label="Completed" value={<span className="text-slate-700">{formatQualityDate(session.completed_at)}</span>} />
+                <ProgressRow label="Completed" value={<span className="text-slate-700">{formatQualityDate(session.completed_at)}</span>} />
               )}
               {session.closed_at && (
-                <ResponseRow label="Closed" value={<span className="text-slate-700">{formatQualityDate(session.closed_at)}</span>} />
+                <ProgressRow label="Closed" value={<span className="text-slate-700">{formatQualityDate(session.closed_at)}</span>} />
               )}
               {!session.delivered_at && !session.completed_at && !session.closed_at && (
                 <p className="text-[12px] text-slate-400 italic">No history yet</p>
@@ -729,7 +689,7 @@ export default function CoachingSessionDetailPage() {
           {/* CSR Response summary */}
           <SideCard>
             <SideTitle>CSR Response</SideTitle>
-            <ResponseRow label="Action Plan"
+            <ProgressRow label="Action Plan"
               muted={!session.require_action_plan}
               value={session.csr_action_plan
                 ? <span className="text-slate-700">
@@ -740,21 +700,21 @@ export default function CoachingSessionDetailPage() {
                 : <span className={session.require_action_plan ? 'text-amber-600' : 'text-slate-400'}>
                     {session.require_action_plan ? 'Pending' : 'Not required'}
                   </span>} />
-            <ResponseRow label="Acknowledged"
+            <ProgressRow label="Acknowledged"
               muted={!session.require_acknowledgment}
               value={session.csr_acknowledged_at
                 ? <span className="text-slate-700">{formatQualityDate(session.csr_acknowledged_at)}</span>
                 : <span className={session.require_acknowledgment ? 'text-amber-600' : 'text-slate-400'}>
                     {session.require_acknowledgment ? 'Pending' : 'Not required'}
                   </span>} />
-            <ResponseRow label="Quiz Passed" value={<QuizSummary session={session} />} />
+            <ProgressRow label="Quiz Passed" value={<QuizSummary session={session} />} />
           </SideCard>
 
           {/* Prior Sessions */}
           <SideCard>
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h3 className="text-sm font-semibold text-slate-700">Prior Sessions</h3>
+                <h3 className="text-[15px] font-semibold text-slate-800">Prior Sessions</h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">{session.csr_name}</p>
               </div>
               {recentSessions.length > 0 && (

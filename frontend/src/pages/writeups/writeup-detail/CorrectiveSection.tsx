@@ -1,6 +1,7 @@
 import { ExternalLink } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatQualityDate } from '@/utils/dateFormat'
+import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 import { Section, Sub, InfoRow, NoteBlock, type DetailSectionProps } from './layout'
 import { COACHING_STATUS_LABELS, PURPOSE_LABELS } from '../writeupLabels'
 
@@ -55,7 +56,7 @@ export function CorrectiveSection({ writeup }: DetailSectionProps) {
                         {cs?.notes ? (
                           <Tooltip>
                             <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{cs.notes}</span></TooltipTrigger>
-                            <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><p className="text-[13px] text-slate-700 whitespace-pre-wrap">{cs.notes}</p></TooltipContent>
+                            <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><RichTextDisplay html={cs.notes} /></TooltipContent>
                           </Tooltip>
                         ) : <span className="text-slate-300">&mdash;</span>}
                       </td>

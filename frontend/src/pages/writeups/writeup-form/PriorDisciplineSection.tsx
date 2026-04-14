@@ -3,6 +3,7 @@ import { History, Search, Trash2, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 import { FormSection } from '@/pages/training/coaching-form/CoachingFormSections'
 import { formatQualityDate } from '@/utils/dateFormat'
 import {
@@ -77,7 +78,7 @@ export function PriorDisciplineSection({ form, update }: { form: WriteUpFormStat
                       {ref.notes ? (
                         <Tooltip>
                           <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{ref.notes}</span></TooltipTrigger>
-                          <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><p className="text-[13px] text-slate-700 whitespace-pre-wrap">{ref.notes}</p></TooltipContent>
+                          <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><RichTextDisplay html={ref.notes} /></TooltipContent>
                         </Tooltip>
                       ) : <span className="text-slate-300">&mdash;</span>}
                     </td>

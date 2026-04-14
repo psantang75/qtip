@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Plus, Trash2, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog } from '@/components/ui/dialog'
 import { FormSection, Field } from '@/pages/training/coaching-form/CoachingFormSections'
@@ -16,7 +16,7 @@ import {
 
 type Updater = <K extends keyof WriteUpFormState>(key: K, value: WriteUpFormState[K]) => void
 
-type ModalTarget = { incIdx: number; vIdx: number }
+type ModalTarget = { incIdx: number }
 
 // ── Source badge ──────────────────────────────────────────────────────────────
 
@@ -53,12 +53,11 @@ function ExampleRow({ example, onChange, onRemove }: {
           />
           <SourceBadge source={example.source} />
         </div>
-        <Textarea
-          rows={2}
-          className="text-[12px] resize-none min-h-[56px]"
+        <RichTextEditor
+          className="text-[12px] min-h-[56px]"
           placeholder="Describe the example…"
           value={example.description}
-          onChange={e => onChange({ description: e.target.value })}
+          onChange={html => onChange({ description: html })}
         />
       </div>
       <Button type="button" variant="ghost" size="sm"
@@ -72,11 +71,10 @@ function ExampleRow({ example, onChange, onRemove }: {
 
 // ── Violation block ───────────────────────────────────────────────────────────
 
-function ViolationBlock({ violation, onChange, onRemove, onOpenQa }: {
+function ViolationPolicyFields({ violation, onChange, onRemove }: {
   violation: ViolationInput
   onChange: (partial: Partial<ViolationInput>) => void
   onRemove: () => void
-  onOpenQa: () => void
 }) {
   const { data: policyItems = [] } = useQuery({
     queryKey: ['list-items', 'writeup_policy'],
@@ -92,23 +90,13 @@ function ViolationBlock({ violation, onChange, onRemove, onOpenQa }: {
   const activePolicy    = policyItems.filter(i => i.is_active)
   const activeReference = referenceItems.filter(i => i.is_active)
 
-  // Preserve any existing value that isn't in the list (e.g. legacy free-text)
   const policyNotInList = violation.policy_violated &&
     !activePolicy.some(i => i.label === violation.policy_violated)
   const refNotInList = violation.reference_material &&
     !activeReference.some(i => i.label === violation.reference_material)
 
-  const updateExample = (eIdx: number, partial: Partial<ExampleInput>) =>
-    onChange({ examples: violation.examples.map((e, i) => i === eIdx ? { ...e, ...partial } : e) })
-
-  const removeExample = (eIdx: number) =>
-    onChange({ examples: violation.examples.filter((_, i) => i !== eIdx) })
-
-  const addManual = () =>
-    onChange({ examples: [...violation.examples, newExample('MANUAL', violation.examples.length)] })
-
   return (
-    <div className="border border-slate-200 rounded-lg p-3 space-y-3 bg-slate-50/30">
+    <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/30">
       <div className="grid grid-cols-2 gap-3">
         <Field label="Policy Violated" required>
           <Select
@@ -151,39 +139,9 @@ function ViolationBlock({ violation, onChange, onRemove, onOpenQa }: {
           </Select>
         </Field>
       </div>
-
-      {violation.examples.length > 0 && (
-        <div className="bg-white rounded-lg border border-slate-100 px-3 py-1">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest pt-2 pb-1">
-            Examples
-          </p>
-          {/* Column headers — mirrors ExampleRow layout; mb-1 matches Field label spacing */}
-          <div className="flex gap-2 items-center mb-1">
-            <div className="flex-1 grid grid-cols-[160px_1fr] gap-2">
-              <span className="text-[13px] font-medium text-slate-700">Date</span>
-              <span className="text-[13px] font-medium text-slate-700">Description</span>
-            </div>
-            <div className="w-6 shrink-0" />
-          </div>
-          {violation.examples.map((ex, eIdx) => (
-            <ExampleRow key={eIdx} example={ex}
-              onChange={p => updateExample(eIdx, p)}
-              onRemove={() => removeExample(eIdx)} />
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" className="h-7 text-[12px]"
-          onClick={addManual}>
-          <Plus className="h-3 w-3 mr-1" /> Add Manually
-        </Button>
-        <Button type="button" variant="outline" size="sm" className="h-7 text-[12px]"
-          onClick={onOpenQa}>
-          <Search className="h-3 w-3 mr-1" /> Search QA Records
-        </Button>
+      <div className="flex justify-end mt-2">
         <Button type="button" variant="ghost" size="sm"
-          className="h-7 text-[12px] text-red-400 hover:text-red-600 hover:bg-red-50 ml-auto"
+          className="h-6 text-[12px] text-red-400 hover:text-red-600 hover:bg-red-50"
           onClick={onRemove}>
           <Trash2 className="h-3 w-3 mr-1" /> Remove Violation
         </Button>
@@ -199,7 +157,7 @@ function IncidentBlock({ incident, incIdx, onChange, onRemove, onOpenQa }: {
   incIdx: number
   onChange: (partial: Partial<IncidentInput>) => void
   onRemove: () => void
-  onOpenQa: (vIdx: number) => void
+  onOpenQa: () => void
 }) {
   const updateViolation = (vIdx: number, partial: Partial<ViolationInput>) =>
     onChange({ violations: incident.violations.map((v, i) => i === vIdx ? { ...v, ...partial } : v) })
@@ -209,6 +167,27 @@ function IncidentBlock({ incident, incIdx, onChange, onRemove, onOpenQa }: {
 
   const addViolation = () =>
     onChange({ violations: [...incident.violations, newViolation(incident.violations.length)] })
+
+  // Flatten all examples across violations into a single list with origin tracking
+  const allExamples = incident.violations.flatMap((v, vIdx) =>
+    v.examples.map((ex, eIdx) => ({ ex, vIdx, eIdx }))
+  )
+
+  const updateExample = (vIdx: number, eIdx: number, partial: Partial<ExampleInput>) => {
+    const v = incident.violations[vIdx]
+    updateViolation(vIdx, { examples: v.examples.map((e, i) => i === eIdx ? { ...e, ...partial } : e) })
+  }
+
+  const removeExample = (vIdx: number, eIdx: number) => {
+    const v = incident.violations[vIdx]
+    updateViolation(vIdx, { examples: v.examples.filter((_, i) => i !== eIdx) })
+  }
+
+  const addManual = () => {
+    const v = incident.violations[0]
+    if (!v) return
+    updateViolation(0, { examples: [...v.examples, newExample('MANUAL', v.examples.length)] })
+  }
 
   return (
     <div className="border border-slate-200 rounded-xl p-4 space-y-4 bg-white">
@@ -223,27 +202,59 @@ function IncidentBlock({ incident, incIdx, onChange, onRemove, onOpenQa }: {
         </Button>
       </div>
 
-      <Field label="Description" required>
-        <Textarea rows={2} className="text-[13px] resize-none min-h-[56px]"
-          placeholder="Describe what occurred…"
-          value={incident.description}
-          onChange={e => onChange({ description: e.target.value })} />
-      </Field>
-
+      {/* 1. Policy Violated + Reference Material */}
       <div className="space-y-3">
-        <p className="text-[12px] font-semibold text-slate-500 uppercase tracking-widest">
-          Policy Violations
-        </p>
         {incident.violations.map((v, vIdx) => (
-          <ViolationBlock key={vIdx} violation={v}
+          <ViolationPolicyFields key={vIdx} violation={v}
             onChange={p => updateViolation(vIdx, p)}
-            onRemove={() => removeViolation(vIdx)}
-            onOpenQa={() => onOpenQa(vIdx)} />
+            onRemove={() => removeViolation(vIdx)} />
         ))}
         <Button type="button" variant="outline" size="sm" className="text-[12px] w-full"
           onClick={addViolation}>
           <Plus className="h-3 w-3 mr-1" /> Add Another Policy Violation
         </Button>
+      </div>
+
+      {/* 2. Description */}
+      <Field label="Description" required>
+        <RichTextEditor className="text-[13px] min-h-[56px]"
+          placeholder="Describe what occurred…"
+          value={incident.description}
+          onChange={html => onChange({ description: html })} />
+      </Field>
+
+      {/* 3. Examples (single consolidated section) */}
+      <div className="border border-slate-200 rounded-lg p-3 space-y-3 bg-slate-50/30">
+        {allExamples.length > 0 && (
+          <div className="bg-white rounded-lg border border-slate-100 px-3 py-1">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest pt-2 pb-1">
+              Examples
+            </p>
+            <div className="flex gap-2 items-center mb-1">
+              <div className="flex-1 grid grid-cols-[160px_1fr] gap-2">
+                <span className="text-[13px] font-medium text-slate-700">Date</span>
+                <span className="text-[13px] font-medium text-slate-700">Description</span>
+              </div>
+              <div className="w-6 shrink-0" />
+            </div>
+            {allExamples.map(({ ex, vIdx, eIdx }) => (
+              <ExampleRow key={`${vIdx}-${eIdx}`} example={ex}
+                onChange={p => updateExample(vIdx, eIdx, p)}
+                onRemove={() => removeExample(vIdx, eIdx)} />
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" className="h-7 text-[12px]"
+            onClick={addManual}>
+            <Plus className="h-3 w-3 mr-1" /> Add Manually
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="h-7 text-[12px]"
+            onClick={onOpenQa}>
+            <Search className="h-3 w-3 mr-1" /> Search QA Records
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -263,16 +274,13 @@ export function IncidentsSection({ form, update }: { form: WriteUpFormState; upd
   const addIncident = () =>
     update('incidents', [...form.incidents, newIncident(form.incidents.length)])
 
-  const addExamplesToViolation = ({ incIdx, vIdx }: ModalTarget, examples: ExampleInput[]) => {
+  const addExamplesToIncident = ({ incIdx }: ModalTarget, examples: ExampleInput[]) => {
     const incidents = form.incidents.map((inc, i) => {
       if (i !== incIdx) return inc
-      return {
-        ...inc,
-        violations: inc.violations.map((v, vi) => {
-          if (vi !== vIdx) return v
-          return { ...v, examples: [...v.examples, ...examples] }
-        }),
-      }
+      const violations = [...inc.violations]
+      if (violations.length === 0) return inc
+      violations[0] = { ...violations[0], examples: [...violations[0].examples, ...examples] }
+      return { ...inc, violations }
     })
     update('incidents', incidents)
   }
@@ -292,7 +300,7 @@ export function IncidentsSection({ form, update }: { form: WriteUpFormState; upd
             incIdx={incIdx}
             onChange={p => updateIncident(incIdx, p)}
             onRemove={() => removeIncident(incIdx)}
-            onOpenQa={vIdx => setQaModal({ incIdx, vIdx })}
+            onOpenQa={() => setQaModal({ incIdx })}
           />
         ))}
         <Button type="button" variant="outline" className="w-full text-[13px]" onClick={addIncident}>
@@ -304,7 +312,7 @@ export function IncidentsSection({ form, update }: { form: WriteUpFormState; upd
         {qaModal && (
           <QaSearchModal
             csrId={form.csr_id}
-            onImport={examples => addExamplesToViolation(qaModal, examples)}
+            onImport={examples => addExamplesToIncident(qaModal, examples)}
             onClose={() => setQaModal(null)}
           />
         )}

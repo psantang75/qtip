@@ -24,6 +24,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useListSort } from '@/hooks/useListSort'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { cn } from '@/lib/utils'
 
 // ── Resource type config ──────────────────────────────────────────────────────
@@ -352,9 +353,10 @@ export default function LibraryResourcesPage() {
 
             <div>
               <label className="text-[12px] font-medium text-slate-700 block mb-1">Description (optional)</label>
-              <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                rows={3} placeholder="Brief description..."
-                className="w-full px-3 py-2 border border-slate-200 rounded-md text-[13px] resize-none focus:outline-none focus:ring-1 focus:ring-primary/40" />
+              <RichTextEditor value={form.description}
+                onChange={html => setForm(f => ({ ...f, description: html }))}
+                placeholder="Brief description..."
+                className="text-[13px]" />
             </div>
 
             <div>

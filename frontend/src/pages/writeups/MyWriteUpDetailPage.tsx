@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Printer } from 'lucide-react'
+import { CheckCircle2, FileText, Loader2 } from 'lucide-react'
 import SignatureCanvas from 'react-signature-canvas'
 import writeupService from '@/services/writeupService'
+import type { WriteUpDetail } from '@/services/writeupService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
@@ -13,14 +14,13 @@ import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { ContentSections } from './writeup-detail/ContentSections'
 import { WRITE_UP_TYPE_LABELS as TYPE_LABELS } from './writeupLabels'
+import { openWriteUpPdf } from './writeup-pdf/openPdf'
 
-// ── Acknowledgment text ───────────────────────────────────────────────────────
-
-const ACK_TEXT = `I acknowledge receipt of this document. My signature does not constitute agreement with the contents of this document. I understand that a copy will be placed in my personnel file. This document does not alter the at-will nature of my employment.`
+const ACK_TEXT = `By signing below, the employee acknowledges receipt of this Corrective Action Form.`
 
 // ── Status banner for non-signing statuses ────────────────────────────────────
 
-function StatusBanner({ writeup }: { writeup: Awaited<ReturnType<typeof writeupService.getWriteUpById>> }) {
+function StatusBanner({ writeup }: { writeup: WriteUpDetail }) {
   const { status } = writeup
 
   if (status === 'DRAFT' || status === 'SCHEDULED') {
@@ -31,18 +31,6 @@ function StatusBanner({ writeup }: { writeup: Awaited<ReturnType<typeof writeupS
             {status === 'SCHEDULED' && writeup.meeting_date
               ? `This document has been scheduled for delivery on ${formatQualityDate(writeup.meeting_date)}.`
               : 'This document is in draft and has not yet been scheduled.'}
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  if (status === 'DELIVERED') {
-    return (
-      <div className="mx-auto max-w-3xl px-4 mb-4">
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-          <p className="text-[13px] text-indigo-700">
-            Your manager has delivered this document. It is awaiting finalization before being sent to you for signature.
           </p>
         </div>
       </div>
@@ -152,7 +140,7 @@ function SignatureSection({ id, csrName, onSigned }: { id: number; csrName: stri
 
 // ── Signed section ────────────────────────────────────────────────────────────
 
-function SignedSection({ writeup }: { writeup: Awaited<ReturnType<typeof writeupService.getWriteUpById>> }) {
+function SignedSection({ writeup }: { writeup: WriteUpDetail }) {
   return (
     <div className="mx-auto max-w-3xl px-4">
       <div className="bg-green-50 border border-green-200 rounded-xl p-6 space-y-4">
@@ -174,6 +162,12 @@ function SignedSection({ writeup }: { writeup: Awaited<ReturnType<typeof writeup
             <div className="bg-white rounded-lg border border-green-200 p-3 inline-block">
               <img src={writeup.signature_data} alt="Signature" className="max-h-[100px]" />
             </div>
+            {writeup.signed_at && (
+              <p className="text-[11px] text-slate-400 italic mt-2">
+                Signed: {new Date(writeup.signed_at).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                {writeup.signed_ip ? ` | IP: ${writeup.signed_ip}` : ''}
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -187,6 +181,8 @@ export default function MyWriteUpDetailPage() {
   const { id }    = useParams<{ id: string }>()
   const navigate  = useNavigate()
   const qc        = useQueryClient()
+  const { toast } = useToast()
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   const { data: writeup, isLoading, isError, refetch } = useQuery({
     queryKey: ['writeup', id],
@@ -198,6 +194,14 @@ export default function MyWriteUpDetailPage() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['writeup', id] })
     qc.invalidateQueries({ queryKey: ['my-writeups'] })
+  }
+
+  const handleViewPdf = async () => {
+    if (!writeup) return
+    setPdfLoading(true)
+    try { await openWriteUpPdf(writeup) }
+    catch { toast({ title: 'PDF generation failed', variant: 'destructive' }) }
+    finally { setPdfLoading(false) }
   }
 
   if (isLoading) return <QualityListPage><TableLoadingSkeleton rows={8} /></QualityListPage>
@@ -213,14 +217,11 @@ export default function MyWriteUpDetailPage() {
 
   return (
     <QualityListPage>
-      {/* ── Document card ─────────────────────────────────────────────────── */}
-      <div className="writeup-print-root mx-auto max-w-3xl px-4 print:px-0">
-        <div className="wu-print-doc bg-white rounded-xl border border-slate-200 overflow-hidden">
-
-          {/* ── Screen header ── */}
-          <div className="border-b border-slate-200 px-8 py-6 bg-slate-50 print:hidden">
+      <div className="mx-auto max-w-3xl px-4">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="border-b border-slate-200 px-8 py-6 bg-slate-50">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
-              QTIP — Employee Performance Document
+              QTIP — Employee Corrective Action Form
             </p>
             <h1 className="text-[22px] font-bold text-slate-900 mb-4">
               {TYPE_LABELS[writeup.document_type] ?? writeup.document_type}
@@ -240,70 +241,14 @@ export default function MyWriteUpDetailPage() {
               </div>
             </div>
           </div>
-
-          {/* ── Print-only header ── */}
-          <div className="wu-print-header hidden print:block">
-            <div className="wu-print-header-brand">
-              <div className="wu-print-header-brand-bar" />
-              <div>
-                <p className="wu-print-header-org">QTIP — Employee Performance Document</p>
-                <p className="wu-print-header-title">{TYPE_LABELS[writeup.document_type] ?? writeup.document_type}</p>
-              </div>
-            </div>
-            <div className="wu-print-header-meta">
-              <div>
-                <p className="wu-print-meta-item-label">Employee</p>
-                <p className="wu-print-meta-item-value">{writeup.csr_name}</p>
-              </div>
-              <div>
-                <p className="wu-print-meta-item-label">Issued By</p>
-                <p className="wu-print-meta-item-value">{writeup.created_by_name}</p>
-              </div>
-              <div>
-                <p className="wu-print-meta-item-label">Meeting Date</p>
-                <p className="wu-print-meta-item-value">{meetingDate}</p>
-              </div>
-              <div>
-                <p className="wu-print-meta-item-label">Status</p>
-                <p className="wu-print-meta-item-value">{writeup.status.replace(/_/g, ' ')}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Document body */}
           <div className="px-8 py-6 space-y-6">
             <ContentSections writeup={writeup} />
-          </div>
-
-          {/* ── Print-only acknowledgment + signature block ── */}
-          <div className="hidden print:block px-8 pb-8">
-            <p className="wu-print-ack">{ACK_TEXT}</p>
-            <div className="wu-print-sig">
-              <div>
-                <div className="wu-print-sig-line">
-                  {writeup.signature_data && (
-                    <img src={writeup.signature_data} alt="Signature" className="wu-print-sig-image" />
-                  )}
-                </div>
-                <p className="wu-print-sig-label">Employee Signature — {writeup.csr_name}</p>
-              </div>
-              <div>
-                <div className="wu-print-sig-line" />
-                <p className="wu-print-sig-label">
-                  Date Signed: {writeup.signed_at ? formatQualityDate(writeup.signed_at) : '_______________'}
-                </p>
-              </div>
-            </div>
-            <div className="wu-print-footer">
-              <span>Write-Up #{writeup.id} — Confidential HR Document</span>
-              <span>Generated {formatQualityDate(new Date().toISOString())}</span>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Status banners / signature section (screen only) ──────────────── */}
-      <div className="print:hidden space-y-4 mt-2">
+      {/* ── Status banners / signature section ── */}
+      <div className="space-y-4 mt-2">
         {writeup.status !== 'AWAITING_SIGNATURE' && writeup.status !== 'SIGNED' && (
           <StatusBanner writeup={writeup} />
         )}
@@ -317,14 +262,16 @@ export default function MyWriteUpDetailPage() {
         {writeup.status === 'SIGNED' && <SignedSection writeup={writeup} />}
       </div>
 
-      {/* ── Footer (screen only) ──────────────────────────────────────────── */}
-      <div className="print:hidden mx-auto max-w-3xl px-4">
+      {/* ── Footer ── */}
+      <div className="mx-auto max-w-3xl px-4">
         <div className="flex items-center justify-between pt-2">
           <Button variant="outline" onClick={() => navigate('/app/performancewarnings/my')}>
             ← Back to My Write-Ups
           </Button>
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer className="h-4 w-4 mr-1.5" /> Print / Save PDF
+          <Button variant="outline" disabled={pdfLoading} onClick={handleViewPdf}>
+            {pdfLoading
+              ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Generating…</>
+              : <><FileText className="h-4 w-4 mr-1.5" /> View PDF</>}
           </Button>
         </div>
       </div>

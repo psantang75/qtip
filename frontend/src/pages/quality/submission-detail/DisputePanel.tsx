@@ -1,6 +1,7 @@
 import { Pencil, FileText, Edit3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
+import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 import { cn } from '@/lib/utils'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
 import qaService from '@/services/qaService'
@@ -78,9 +79,9 @@ export function DisputePanel({
             <>
               <div>
                 <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Dispute Reason</p>
-                <p className="text-[12px] text-slate-600 bg-slate-50 rounded-lg p-3 leading-relaxed">
-                  {dispute.reason}
-                </p>
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <RichTextDisplay html={dispute.reason} placeholder="No reason provided" className="text-[12px]" />
+                </div>
               </div>
 
               {dispute.attachment_url && (
@@ -108,9 +109,9 @@ export function DisputePanel({
                 dispute.resolution_notes && (
                   <div className="border-t border-slate-100 pt-3">
                     <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Resolution Notes</p>
-                    <p className="text-[12px] text-slate-600 bg-slate-50 rounded-lg p-3 leading-relaxed">
-                      {dispute.resolution_notes}
-                    </p>
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <RichTextDisplay html={dispute.resolution_notes} placeholder="" className="text-[12px]" />
+                    </div>
                   </div>
                 )
               ) : (
@@ -147,12 +148,11 @@ export function DisputePanel({
                   <label className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
                     Resolution Notes <span className="text-red-400 normal-case font-normal">required</span>
                   </label>
-                  <Textarea
-                    rows={4}
+                  <RichTextEditor
                     value={resolution.notes}
-                    onChange={e => resolution.onChangeNotes(e.target.value)}
+                    onChange={resolution.onChangeNotes}
                     placeholder="Explain your decision…"
-                    className="mt-1.5 text-[13px] resize-none"
+                    className="mt-1.5 text-[13px]"
                   />
                 </div>
                 {resolution.error && (

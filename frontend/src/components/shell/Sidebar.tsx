@@ -45,7 +45,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="fixed left-0 top-[124px] bottom-0 w-[280px] bg-white border-r border-slate-200 flex flex-col z-30 overflow-y-auto">
+    <aside className="fixed left-0 top-[72px] bottom-0 w-[280px] bg-white border-r border-slate-200 flex flex-col z-30 overflow-y-auto">
 
       {/* Section header */}
       <div className="mx-3 mt-4 mb-3 rounded-lg bg-gradient-to-r from-[#00aeef]/15 to-[#00aeef]/5 border border-[#00aeef]/20 px-3 py-2.5 flex items-center gap-2.5">

@@ -12,9 +12,8 @@ const canSeeAll = (role: string) => ['Admin', 'QA', 'Manager'].includes(role)
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   DRAFT:               ['SCHEDULED'],
-  SCHEDULED:           ['DELIVERED'],
-  DELIVERED:           ['AWAITING_SIGNATURE'],
-  AWAITING_SIGNATURE:  ['DELIVERED', 'SIGNED'],
+  SCHEDULED:           ['AWAITING_SIGNATURE'],
+  AWAITING_SIGNATURE:  ['SCHEDULED', 'SIGNED'],
   SIGNED:              ['CLOSED', 'FOLLOW_UP_PENDING'],
   FOLLOW_UP_PENDING:   ['CLOSED'],
 }
@@ -34,6 +33,7 @@ export const getWriteUps = async (req: AuthReq, res: Response) => {
 
     if (!canSeeAll(role)) {
       conditions.push(Prisma.sql`wu.csr_id = ${userId}`)
+      conditions.push(Prisma.sql`wu.status != 'DRAFT'`)
     } else if (csr_id) {
       conditions.push(Prisma.sql`wu.csr_id = ${parseInt(csr_id as string)}`)
     }
@@ -111,6 +111,9 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
 
     const writeUp = rows[0]
     if (role === 'CSR' && writeUp.csr_id !== userId) {
+      return res.status(404).json({ success: false, message: 'Write-up not found' })
+    }
+    if (role === 'CSR' && writeUp.status === 'DRAFT') {
       return res.status(404).json({ success: false, message: 'Write-up not found' })
     }
 
@@ -317,7 +320,7 @@ export const transitionStatus = async (req: AuthReq, res: Response) => {
       return res.status(422).json({ success: false, message: `Cannot transition from ${existing.status} to ${newStatus}` })
     }
 
-    if (existing.status === 'AWAITING_SIGNATURE' && newStatus === 'DELIVERED') {
+    if (existing.status === 'AWAITING_SIGNATURE' && newStatus === 'SCHEDULED') {
       if (role !== 'Manager' && role !== 'Admin') {
         return res.status(403).json({ success: false, message: 'Only managers can recall a document' })
       }
@@ -325,8 +328,8 @@ export const transitionStatus = async (req: AuthReq, res: Response) => {
     if (existing.status === 'DRAFT' && newStatus === 'SCHEDULED' && !meeting_date && !existing.meeting_date) {
       return res.status(400).json({ success: false, message: 'meeting_date is required to schedule a write-up' })
     }
-    if (existing.status === 'SCHEDULED' && newStatus === 'DELIVERED' && !meeting_notes) {
-      return res.status(400).json({ success: false, message: 'meeting_notes are required when delivering a write-up' })
+    if (existing.status === 'SCHEDULED' && newStatus === 'AWAITING_SIGNATURE' && !meeting_notes) {
+      return res.status(400).json({ success: false, message: 'meeting_notes are required when finalizing a write-up' })
     }
     if (existing.status === 'FOLLOW_UP_PENDING' && newStatus === 'CLOSED' && !follow_up_notes && !existing.follow_up_notes) {
       return res.status(400).json({ success: false, message: 'follow_up_notes are required to close a follow-up' })
@@ -367,9 +370,10 @@ export const signWriteUp = async (req: AuthReq, res: Response) => {
     if (!signature_data) return res.status(400).json({ success: false, message: 'signature_data is required' })
 
     const now = new Date()
+    const clientIp = req.ip || req.headers['x-forwarded-for'] || 'unknown'
     await prisma.writeUp.update({
       where: { id: writeUpId },
-      data: { status: 'SIGNED', signature_data, signed_at: now, acknowledged_at: now },
+      data: { status: 'SIGNED', signature_data, signed_at: now, acknowledged_at: now, signed_ip: String(clientIp) },
     })
 
     res.json({ success: true })

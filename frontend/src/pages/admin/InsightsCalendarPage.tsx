@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { useCalendar, useUpdateCalendarDay, useSaveMonthDefaults } from '@/hooks/useInsightsCalendar'
 import type { CalendarDayEntry, BusinessDayType } from '@/services/insightsService'
 import { cn } from '@/lib/utils'
@@ -305,12 +305,11 @@ export default function InsightsCalendarPage() {
               <label className="text-sm font-medium text-slate-700">
                 Note <span className="font-normal text-slate-400">(optional)</span>
               </label>
-              <Textarea
+              <RichTextEditor
                 value={editNote}
-                onChange={e => setEditNote(e.target.value)}
+                onChange={setEditNote}
                 placeholder="e.g. Thanksgiving, Company All-Hands…"
-                rows={2}
-                className="resize-none text-sm"
+                className="text-sm"
               />
             </div>
           </div>

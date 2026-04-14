@@ -55,7 +55,7 @@ function AttachmentsSection({ writeup }: { writeup: WriteUpDetail }) {
 // ── 6. Meeting Notes ──────────────────────────────────────────────────────────
 
 function MeetingNotesSection({ writeup }: { writeup: WriteUpDetail }) {
-  const showStatuses = ['DELIVERED', 'AWAITING_SIGNATURE', 'SIGNED', 'FOLLOW_UP_PENDING', 'CLOSED']
+  const showStatuses = ['AWAITING_SIGNATURE', 'SIGNED', 'FOLLOW_UP_PENDING', 'CLOSED']
   if (!showStatuses.includes(writeup.status)) return null
   return (
     <Section title="Meeting Notes">

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Download, Paperclip, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FormSection, Field } from '@/pages/training/coaching-form/CoachingFormSections'
 import { useToast } from '@/hooks/use-toast'
@@ -138,10 +138,10 @@ export function MeetingNotesSection({ form, update }: { form: WriteUpFormState; 
   return (
     <FormSection title="Meeting Notes">
       <Field label="Post-Meeting Notes">
-        <Textarea rows={4} className="text-[13px] resize-none"
+        <RichTextEditor className="text-[13px]"
           placeholder="Record notes from the meeting…"
           value={form.meeting_notes}
-          onChange={e => update('meeting_notes', e.target.value)} />
+          onChange={html => update('meeting_notes', html)} />
       </Field>
     </FormSection>
   )

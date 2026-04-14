@@ -28,7 +28,6 @@ const STATUS_MAP: Record<string, StatusConfig> = {
   FOLLOW_UP_REQUIRED:  { label: 'Follow-Up',      classes: 'bg-orange-100  text-orange-800'  },
   CLOSED:              { label: 'Closed',          classes: 'bg-slate-100   text-slate-500'   },
   // Write-up statuses
-  DELIVERED:           { label: 'Delivered',         classes: 'bg-indigo-100  text-indigo-800'  },
   AWAITING_SIGNATURE:  { label: 'Awaiting Signature', classes: 'bg-amber-100   text-amber-800'   },
   SIGNED:              { label: 'Signed',             classes: 'bg-emerald-100 text-emerald-800' },
   FOLLOW_UP_PENDING:   { label: 'Follow-Up',          classes: 'bg-orange-100  text-orange-800'  },

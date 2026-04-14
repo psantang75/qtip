@@ -7,7 +7,6 @@ export type WriteUpType   = 'VERBAL_WARNING' | 'WRITTEN_WARNING' | 'FINAL_WARNIN
 export type WriteUpStatus =
   | 'DRAFT'
   | 'SCHEDULED'
-  | 'DELIVERED'
   | 'AWAITING_SIGNATURE'
   | 'SIGNED'
   | 'FOLLOW_UP_PENDING'
@@ -188,6 +187,7 @@ export interface WriteUpDetail extends WriteUp {
   follow_up_checklist?: string | null
   follow_up_notes?: string | null
   signed_at?: string | null
+  signed_ip?: string | null
   acknowledged_at?: string | null
   delivered_at?: string | null
   closed_at?: string | null

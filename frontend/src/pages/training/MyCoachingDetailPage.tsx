@@ -11,27 +11,20 @@ import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 import { PURPOSE_MAP, FORMAT_MAP, STATUS_LABELS } from './CoachingSessionsPage'
 
-import { Section, Sub, InfoRow, SideCard, SideTitle, ProgressRow } from './training-detail/layout'
+import { Section, Sub, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow } from './training-detail/layout'
 
 // ── Source labels ─────────────────────────────────────────────────────────────
 
 const SOURCE_LABELS: Record<CoachingSourceType, string> = {
   QA_AUDIT: 'QA Audit', MANAGER_OBSERVATION: 'Manager Observation', TREND: 'Trend',
   DISPUTE: 'Dispute', SCHEDULED: 'Scheduled', OTHER: 'Other',
-}
-
-
-function NoteBlock({ text, placeholder }: { text?: string | null; placeholder: string }) {
-  return text
-    ? <p className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed">{text}</p>
-    : <p className="text-[13px] text-slate-400 italic">{placeholder}</p>
 }
 
 function TopicList({ topics }: { topics: string[] }) {
@@ -202,7 +195,7 @@ export default function MyCoachingDetailPage() {
                   {session.kb_resources!.map(r => (
                     <div key={r.id} className="flex items-start justify-between gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                       <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-slate-800 truncate">{r.title}</p>
+                        <p className="text-[14px] font-semibold text-slate-900 truncate">{r.title}</p>
                         {r.description && <p className="text-[12px] text-slate-500 mt-0.5">{r.description}</p>}
                       </div>
                       <a
@@ -243,7 +236,7 @@ export default function MyCoachingDetailPage() {
                             ? <ChevronDown  className="h-4 w-4 text-slate-400 shrink-0" />
                             : <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
                           }
-                          <span className="text-[13px] font-semibold text-slate-800 flex-1 truncate">
+                          <span className="text-[14px] font-semibold text-slate-900 flex-1 truncate">
                             {quiz.quiz_title}
                           </span>
                           <div className="flex items-center gap-3 shrink-0">
@@ -394,16 +387,10 @@ export default function MyCoachingDetailPage() {
                   {(session.csr_root_cause || session.csr_support_needed) && (
                     <div className="grid grid-cols-2 gap-x-8 gap-y-3 pt-3 border-t border-slate-100">
                       {session.csr_root_cause && (
-                        <div>
-                          <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Root Cause</p>
-                          <p className="text-[13px] text-slate-800 font-medium">{session.csr_root_cause}</p>
-                        </div>
+                        <InfoRow label="Root Cause" value={session.csr_root_cause} />
                       )}
                       {session.csr_support_needed && (
-                        <div>
-                          <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Support Needed</p>
-                          <p className="text-[13px] text-slate-800 font-medium">{session.csr_support_needed}</p>
-                        </div>
+                        <InfoRow label="Support Needed" value={session.csr_support_needed} />
                       )}
                     </div>
                   )}
@@ -416,11 +403,10 @@ export default function MyCoachingDetailPage() {
                     <p>→ What will you do differently going forward?</p>
                     <p>→ What support do you need, if any?</p>
                   </div>
-                  <Textarea rows={5} maxLength={1000} className="text-[13px] resize-none"
+                  <RichTextEditor className="text-[13px]"
                     placeholder="Write your response here… (50 characters minimum)"
                     value={actionPlan}
-                    onChange={e => setActionPlan(e.target.value)}
-                    disabled={isReadOnly} />
+                    onChange={setActionPlan} />
                   <p className={cn('text-[11px]', actionPlan.length < 50 ? 'text-red-500' : 'text-slate-400')}>
                     {actionPlan.length}/1000{actionPlan.length < 50 && ` (${50 - actionPlan.length} more needed)`}
                   </p>
@@ -478,7 +464,7 @@ export default function MyCoachingDetailPage() {
               <div className="flex items-center justify-between px-5 py-4">
                 <div className="flex items-center gap-2">
                   <Paperclip className="h-4 w-4 text-slate-400" />
-                  <span className="text-sm font-semibold text-slate-700">Attachment</span>
+                  <span className="text-[15px] font-semibold text-slate-800">Attachment</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-[13px] text-slate-600 truncate max-w-[220px]">{session.attachment_filename}</span>
@@ -500,7 +486,7 @@ export default function MyCoachingDetailPage() {
             <SideTitle>Status</SideTitle>
             <div>
               <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Current</p>
-              <p className="text-[13px] font-semibold text-slate-800">{STATUS_LABELS[session.status] ?? session.status}</p>
+              <p className="text-[14px] font-semibold text-slate-900">{STATUS_LABELS[session.status] ?? session.status}</p>
             </div>
           </SideCard>
 

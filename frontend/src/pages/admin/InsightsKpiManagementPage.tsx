@@ -22,6 +22,7 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
 
 const kpiSchema = z.object({
   kpi_code:       z.string().min(1, 'Required'),
@@ -172,7 +173,7 @@ export default function InsightsKpiManagementPage() {
                 )} />
               </div>
               <FormField control={form.control} name="description" render={({ field }) => (
-                <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea rows={2} placeholder="Tooltip/help text" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Description</FormLabel><FormControl><RichTextEditor placeholder="Tooltip/help text" value={field.value ?? ''} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>
               )} />
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="category" render={({ field }) => (

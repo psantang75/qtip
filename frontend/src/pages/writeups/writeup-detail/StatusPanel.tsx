@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/common/RichTextEditor'
+import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
@@ -16,7 +17,7 @@ import type { WriteUpDetail, WriteUpStatus, TransitionExtra } from '@/services/w
 import { WRITE_UP_STATUS_LABELS as STATUS_LABELS } from '../writeupLabels'
 
 function getTimeline(writeup: WriteUpDetail): string[] {
-  const base = ['DRAFT', 'SCHEDULED', 'DELIVERED', 'AWAITING_SIGNATURE', 'SIGNED']
+  const base = ['DRAFT', 'SCHEDULED', 'AWAITING_SIGNATURE', 'SIGNED']
   if (writeup.follow_up_required || writeup.status === 'FOLLOW_UP_PENDING') {
     return [...base, 'FOLLOW_UP_PENDING', 'CLOSED']
   }
@@ -88,7 +89,7 @@ function ConfirmDialog({ open, title, message, onConfirm, onCancel, loading }: {
 
 // ── Action panels per status ──────────────────────────────────────────────────
 
-type ActionState = 'schedule' | 'deliver' | 'finalize_confirm' | 'recall_confirm' | 'follow_up' | 'close_followup' | null
+type ActionState = 'schedule' | 'finalize_confirm' | 'recall_confirm' | 'follow_up' | 'close_followup' | null
 
 function DraftActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
   const navigate = useNavigate()
@@ -128,6 +129,7 @@ function ScheduledActions({ writeup, id, transition, busy }: { writeup: WriteUpD
   const navigate = useNavigate()
   const [show, setShow]   = useState(false)
   const [notes, setNotes] = useState('')
+  const [confirm, setConfirm] = useState(false)
 
   return (
     <div className="space-y-3">
@@ -140,49 +142,31 @@ function ScheduledActions({ writeup, id, transition, busy }: { writeup: WriteUpD
       {show ? (
         <div className="space-y-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
           <p className="text-[12px] font-medium text-slate-600">Meeting Notes</p>
-          <Textarea rows={3} className="text-[13px] resize-none" placeholder="Record what occurred in the meeting…"
-            value={notes} onChange={e => setNotes(e.target.value)} />
+          <RichTextEditor className="text-[13px]" placeholder="Record what occurred in the meeting…"
+            value={notes} onChange={setNotes} />
           <div className="flex gap-2">
             <Button size="sm" variant="outline" className="flex-1" onClick={() => setShow(false)}>Cancel</Button>
             <Button size="sm" className="flex-1 bg-primary hover:bg-primary/90 text-white"
-              disabled={busy || !notes.trim()} onClick={() => transition('DELIVERED', { meeting_notes: notes })}>
-              {busy ? 'Saving…' : 'Mark Delivered'}
+              disabled={busy || !notes.trim()} onClick={() => setConfirm(true)}>
+              Finalize & Send to Agent
             </Button>
           </div>
         </div>
       ) : (
         <Button className="w-full bg-primary hover:bg-primary/90 text-white h-9 text-[13px]"
           onClick={() => setShow(true)}>
-          Mark as Delivered
+          Complete & Send for Signature
         </Button>
       )}
       <Button variant="outline" className="w-full h-9 text-[13px]"
         onClick={() => navigate(`/app/performancewarnings/${id}/edit`)}>
         Edit Write-Up
       </Button>
-    </div>
-  )
-}
-
-function DeliveredActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
-  const navigate = useNavigate()
-  const [confirm, setConfirm] = useState(false)
-
-  return (
-    <div className="space-y-2">
-      <Button className="w-full bg-primary hover:bg-primary/90 text-white h-9 text-[13px]"
-        onClick={() => setConfirm(true)}>
-        Finalize &amp; Send to Agent
-      </Button>
-      <Button variant="outline" className="w-full h-9 text-[13px]"
-        onClick={() => navigate(`/app/performancewarnings/${id}/edit`)}>
-        Edit / Add Notes
-      </Button>
       <ConfirmDialog
         open={confirm} loading={busy}
         title="Finalize Write-Up"
         message={`This will lock the document and send it to ${writeup.csr_name} for signature. Continue?`}
-        onConfirm={() => { setConfirm(false); transition('AWAITING_SIGNATURE') }}
+        onConfirm={() => { setConfirm(false); transition('AWAITING_SIGNATURE', { meeting_notes: notes }) }}
         onCancel={() => setConfirm(false)}
       />
     </div>
@@ -213,8 +197,8 @@ function AwaitingSignatureActions({ writeup, id, transition, busy }: { writeup: 
       <ConfirmDialog
         open={confirm} loading={busy}
         title="Recall Document"
-        message="This will recall the document and return it to Delivered status. The CSR will no longer be able to sign."
-        onConfirm={() => { setConfirm(false); transition('DELIVERED') }}
+        message="This will recall the document and return it to Scheduled status. The CSR will no longer be able to sign."
+        onConfirm={() => { setConfirm(false); transition('SCHEDULED') }}
         onCancel={() => setConfirm(false)}
       />
     </div>
@@ -265,8 +249,8 @@ function SignedActions({ writeup, id, onSetFollowUp, transition, busy }: {
               ))}
             </SelectContent>
           </Select>
-          <Textarea rows={2} className="text-[13px] resize-none" placeholder="Follow-up checklist…"
-            value={fuNotes} onChange={e => setFuNotes(e.target.value)} />
+          <RichTextEditor className="text-[13px]" placeholder="Follow-up checklist…"
+            value={fuNotes} onChange={setFuNotes} />
           <div className="flex gap-2">
             <Button size="sm" variant="outline" className="flex-1" onClick={() => setShowFollowUp(false)}>Cancel</Button>
             <Button size="sm" className="flex-1 bg-primary hover:bg-primary/90 text-white"
@@ -298,14 +282,14 @@ function FollowUpPendingActions({ writeup, transition, busy }: { writeup: WriteU
           </p>
         )}
         {writeup.follow_up_checklist && (
-          <p className="text-[12px] text-amber-700 whitespace-pre-wrap">{writeup.follow_up_checklist}</p>
+          <RichTextDisplay html={writeup.follow_up_checklist} className="text-[12px] text-amber-700" />
         )}
       </div>
       <div className="space-y-1">
         <p className="text-[12px] font-medium text-slate-600">Follow-Up Notes</p>
-        <Textarea rows={3} className="text-[13px] resize-none"
+        <RichTextEditor className="text-[13px]"
           placeholder="What happened at the check-in?"
-          value={notes} onChange={e => setNotes(e.target.value)} />
+          value={notes} onChange={setNotes} />
       </div>
       <Button className="w-full bg-primary hover:bg-primary/90 text-white h-9 text-[13px]"
         onClick={() => transition('CLOSED', { follow_up_notes: notes })}
@@ -324,7 +308,7 @@ function ClosedBanner({ writeup }: { writeup: WriteUpDetail }) {
         <p className="text-[11px] text-slate-400">{formatQualityDate(writeup.closed_at)}</p>
       )}
       {writeup.follow_up_notes && (
-        <p className="text-[12px] text-slate-600 mt-2 whitespace-pre-wrap">{writeup.follow_up_notes}</p>
+        <RichTextDisplay html={writeup.follow_up_notes} className="text-[12px] text-slate-600 mt-2" />
       )}
     </div>
   )
@@ -372,7 +356,7 @@ export function StatusPanel({ writeup, id, onInvalidate }: StatusPanelProps) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4 sticky top-6 space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2.5 mb-3">
+        <h3 className="text-[15px] font-semibold text-slate-800 border-b border-slate-100 pb-2.5 mb-3">
           Status
         </h3>
         <StatusTimeline writeup={writeup} />
@@ -383,7 +367,6 @@ export function StatusPanel({ writeup, id, onInvalidate }: StatusPanelProps) {
 
         {writeup.status === 'DRAFT'               && <DraftActions {...actionProps} />}
         {writeup.status === 'SCHEDULED'           && <ScheduledActions {...actionProps} />}
-        {writeup.status === 'DELIVERED'           && <DeliveredActions {...actionProps} />}
         {writeup.status === 'AWAITING_SIGNATURE'  && <AwaitingSignatureActions {...actionProps} />}
         {writeup.status === 'SIGNED'              && (
           <SignedActions {...actionProps}

@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/hooks/use-toast'
-import { Copy, Pencil } from 'lucide-react'
+import { Copy, Pencil, FileText, Loader2 } from 'lucide-react'
 import { useWriteUpRole } from '@/hooks/useWriteUpRole'
 import writeupService, { type WriteUpPayload } from '@/services/writeupService'
 import { QualityListPage } from '@/components/common/QualityListPage'
@@ -11,6 +12,7 @@ import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { ContentSections } from './writeup-detail/ContentSections'
 import { StatusPanel } from './writeup-detail/StatusPanel'
+import { openWriteUpPdf } from './writeup-pdf/openPdf'
 
 // Document locks at AWAITING_SIGNATURE per backend enforcement
 const LOCKED_STATUSES = ['AWAITING_SIGNATURE', 'SIGNED', 'FOLLOW_UP_PENDING', 'CLOSED'] as const
@@ -23,6 +25,7 @@ export default function WriteUpDetailPage() {
   const qc              = useQueryClient()
   const { toast }       = useToast()
   const { canManage: canEdit } = useWriteUpRole()
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   const { data: writeup, isLoading, isError } = useQuery({
     queryKey:  ['writeup', id],
@@ -82,6 +85,17 @@ export default function WriteUpDetailPage() {
                 <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
               </Button>
             )}
+            <Button variant="outline" size="sm" disabled={pdfLoading}
+              onClick={async () => {
+                setPdfLoading(true)
+                try { await openWriteUpPdf(writeup) }
+                catch { toast({ title: 'PDF generation failed', variant: 'destructive' }) }
+                finally { setPdfLoading(false) }
+              }}>
+              {pdfLoading
+                ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating…</>
+                : <><FileText className="h-3.5 w-3.5 mr-1.5" /> View PDF</>}
+            </Button>
             {canEdit && (
               <Button variant="outline" size="sm"
                 onClick={() => duplicateMut.mutate()} disabled={duplicateMut.isPending}>
