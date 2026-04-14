@@ -14,14 +14,13 @@ import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
-import { WRITE_UP_STATUS_LABELS } from '@/constants/labels'
+import { STATUS_LABELS, WRITE_UP_STATUS_LABELS, CLIENT_FETCH_LIMIT } from '@/constants/labels'
 import { WriteUpTypeBadge } from './WriteUpsPage'
 
 const ALL_STATUS_OPTIONS = Object.values(WRITE_UP_STATUS_LABELS)
@@ -51,7 +50,7 @@ export default function MyWriteUpsPage() {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['my-writeups'],
-    queryFn:  () => writeupService.getWriteUps({ limit: 200 }),
+    queryFn:  () => writeupService.getWriteUps({ limit: 5000 }),
   })
 
   const allItems = data?.items ?? []
@@ -106,6 +105,7 @@ export default function MyWriteUpsPage() {
         hasFilters={hasAnyFilter}
         onReset={reset}
         resultCount={{ filtered: sorted.length, total: allItems.length }}
+        truncated={allItems.length >= CLIENT_FETCH_LIMIT}
       >
         <StagedMultiSelect
           options={ALL_STATUS_OPTIONS}
@@ -158,7 +158,7 @@ export default function MyWriteUpsPage() {
                   onClick={() => navigate(`/app/performancewarnings/my/${w.id}`)}
                 >
                   <TableCell><WriteUpTypeBadge type={w.document_type} /></TableCell>
-                  <TableCell><StatusBadge status={w.status} /></TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[w.status] ?? w.status}</TableCell>
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {w.meeting_date
                       ? formatQualityDate(w.meeting_date)

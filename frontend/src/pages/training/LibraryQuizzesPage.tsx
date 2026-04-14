@@ -19,7 +19,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useListSort } from '@/hooks/useListSort'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
 
 type StatusFilter = 'all' | 'active' | 'inactive'
@@ -38,7 +37,7 @@ export default function LibraryQuizzesPage() {
 
   const { data: quizData, isLoading, isError, refetch } = useQuery({
     queryKey: ['quiz-library-all'],
-    queryFn:  () => trainingService.getQuizLibrary({ limit: 500 }),
+    queryFn:  () => trainingService.getQuizLibrary({ limit: 5000 }),
   })
 
   const allQuizzes = quizData?.items ?? []
@@ -152,7 +151,7 @@ export default function LibraryQuizzesPage() {
                 <TableEmptyState colSpan={7} title="No quizzes found" description="Try adjusting your filters or create a new quiz" />
               ) : quizzes.map((q: LibraryQuiz) => (
                 <TableRow key={q.id} className="hover:bg-slate-50/50">
-                  <TableCell className="text-[13px] font-medium text-slate-900">{q.quiz_title}</TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{q.quiz_title}</TableCell>
 
                   {/* Topics with tooltip — same as resources */}
                   <TableCell className="max-w-[180px]">
@@ -185,7 +184,7 @@ export default function LibraryQuizzesPage() {
                   <TableCell className="text-center text-[13px] text-slate-600">{q.question_count}</TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">{q.pass_score}%</TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">{q.times_used}</TableCell>
-                  <TableCell><StatusBadge status={q.is_active ? 'ACTIVE' : 'INACTIVE'} /></TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{q.is_active ? 'Active' : 'Inactive'}</TableCell>
 
                   <TableCell>
                     <div className="flex items-center gap-1 justify-end">

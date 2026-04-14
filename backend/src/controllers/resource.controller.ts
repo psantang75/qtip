@@ -49,7 +49,7 @@ function parseTopicIds(raw: any): number[] {
 export const getResources = async (req: AuthReq, res: Response) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
+    const limit = Math.min(5000, parseInt(req.query.limit as string) || 20);
     const offset = (page - 1) * limit;
     const { is_active, search } = req.query;
 

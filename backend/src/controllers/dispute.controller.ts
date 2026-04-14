@@ -317,7 +317,7 @@ export const getDisputeHistory = async (req: Request, res: Response): Promise<vo
   try {
     const user_id = req.user?.user_id;
     const page = parseInt(req.query.page as string) || 1;
-    const perPage = parseInt(req.query.perPage as string) || 10;
+    const perPage = Math.min(5000, parseInt(req.query.perPage as string) || parseInt(req.query.limit as string) || 10);
     const offset = (page - 1) * perPage;
 
     const start_date = req.query.start_date as string;

@@ -102,7 +102,7 @@ export default function ReviewFormsPage() {
                 />
               ) : forms.map((f: FormSummary) => (
                 <TableRow key={f.id} className="hover:bg-slate-50/50">
-                  <TableCell className="text-[13px] font-medium text-slate-900">{f.form_name}</TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{f.form_name}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">
                     {f.is_active ? 'Active' : 'Inactive'}
                   </TableCell>

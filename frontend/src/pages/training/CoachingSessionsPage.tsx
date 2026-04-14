@@ -18,46 +18,23 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
-import { cn } from '@/lib/utils'
 
 // ── Labels (from central file) ────────────────────────────────────────────────
 
 import {
   COACHING_PURPOSE_LABELS,
-  COACHING_PURPOSE_STYLES,
   COACHING_FORMAT_LABELS,
-  COACHING_FORMAT_STYLES,
   COACHING_STATUS_LABELS,
+  STATUS_LABELS,
+  CLIENT_FETCH_LIMIT,
 } from '@/constants/labels'
 
-export const PURPOSE_MAP = COACHING_PURPOSE_LABELS
-export const FORMAT_MAP  = COACHING_FORMAT_LABELS
-export const STATUS_LABELS = COACHING_STATUS_LABELS
+const PURPOSE_MAP = COACHING_PURPOSE_LABELS
+const FORMAT_MAP  = COACHING_FORMAT_LABELS
 const ALL_STATUSES = Object.keys(COACHING_STATUS_LABELS)
-
-// ── Exported helper components ────────────────────────────────────────────────
-
-export function CoachingPurposeBadge({ purpose }: { purpose: CoachingPurpose }) {
-  return (
-    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
-      COACHING_PURPOSE_STYLES[purpose] ?? 'bg-slate-100 text-slate-600')}>
-      {COACHING_PURPOSE_LABELS[purpose] ?? purpose}
-    </span>
-  )
-}
-
-export function CoachingFormatBadge({ format }: { format: CoachingFormat }) {
-  return (
-    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
-      COACHING_FORMAT_STYLES[format] ?? 'bg-slate-100 text-slate-600')}>
-      {COACHING_FORMAT_LABELS[format] ?? format}
-    </span>
-  )
-}
 
 
 export { TopicChips } from '@/components/training/TopicChips'
@@ -141,11 +118,12 @@ export default function CoachingSessionsPage() {
   const selectedFormats  = useMemo(() => formatsParam  ? formatsParam.split(',').filter(Boolean)   : [], [formatsParam])
   const selectedTopics   = useMemo(() => topicsParam   ? topicsParam.split(',').filter(Boolean)    : [], [topicsParam])
 
+  // Fetch ALL sessions for the date range in one call
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['coaching-sessions', page, pageSize, dateFrom, dateTo, overdue, dueToday],
+    queryKey: ['coaching-sessions', dateFrom, dateTo, overdue, dueToday],
     queryFn: () => trainingService.getCoachingSessions({
-      page,
-      limit: pageSize,
+      page: 1,
+      limit: 5000,
       date_from:    dateFrom || undefined,
       date_to:      dateTo   || undefined,
       overdue_only: overdue   === 'true' ? true : undefined,
@@ -154,38 +132,36 @@ export default function CoachingSessionsPage() {
     placeholderData: (prev) => prev,
   })
 
-  // Derive filter options from current result set
+  const allItems = data?.items ?? []
+
+  // Dropdown options from the FULL result set
   const csrOptions = useMemo(() => {
-    const names = new Set((data?.items ?? []).map(s => s.csr_name).filter(Boolean))
-    return Array.from(names).sort()
-  }, [data?.items])
+    return Array.from(new Set(allItems.map(s => s.csr_name).filter(Boolean))).sort()
+  }, [allItems])
 
   const topicOptions = useMemo(() => {
-    const all = (data?.items ?? []).flatMap(s => s.topics)
-    return Array.from(new Set(all)).sort()
-  }, [data?.items])
+    return Array.from(new Set(allItems.flatMap(s => s.topics))).sort()
+  }, [allItems])
 
   const statusOptions = ALL_STATUSES.map(s => STATUS_LABELS[s])
-
-  // Default: all visible statuses except Closed. When user explicitly selects, use that instead.
   const allExceptClosed = useMemo(() => statusOptions.filter(s => s !== 'Closed'), [statusOptions])
   const effectiveSelectedStatuses = useMemo(
     () => selectedStatuses.length === 0 ? allExceptClosed : selectedStatuses,
     [selectedStatuses, allExceptClosed],
   )
-
   const formatOptions = Object.values(FORMAT_MAP)
 
-  const clientFiltered = useMemo(() => {
-    let items = data?.items ?? []
+  // Client-side filtering on the full result set
+  const filtered = useMemo(() => {
+    let items = allItems
     if (selectedCsrs.length)             items = items.filter(s => selectedCsrs.includes(s.csr_name))
     if (effectiveSelectedStatuses.length) items = items.filter(s => effectiveSelectedStatuses.includes(STATUS_LABELS[s.status] ?? s.status))
     if (selectedFormats.length)          items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
     if (selectedTopics.length)           items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
     return items
-  }, [data?.items, selectedCsrs, effectiveSelectedStatuses, selectedFormats, selectedTopics])
+  }, [allItems, selectedCsrs, effectiveSelectedStatuses, selectedFormats, selectedTopics])
 
-  const { sort, dir, toggle, sorted: sortedItems } = useListSort(clientFiltered)
+  const { sort, dir, toggle, sorted: sortedItems } = useListSort(filtered)
 
   // Group sessions by batch_id — batched sessions collapse into one summary row
   const { rows: listRows, batchMap } = useMemo(() => {
@@ -209,8 +185,9 @@ export default function CoachingSessionsPage() {
     return { rows, batchMap }
   }, [sortedItems])
 
-  const hasClientFilter = selectedCsrs.length > 0 || selectedStatuses.length > 0 || selectedFormats.length > 0 || selectedTopics.length > 0
-  const displayTotal = hasClientFilter ? clientFiltered.length : (data?.total ?? 0)
+  // Client-side pagination on grouped rows
+  const paginatedRows = listRows.slice((page - 1) * pageSize, page * pageSize)
+  const displayTotal = filtered.length
 
   return (
     <QualityListPage>
@@ -227,9 +204,10 @@ export default function CoachingSessionsPage() {
       />
 
       <QualityFilterBar
-        hasFilters={hasAnyFilter || hasClientFilter}
+        hasFilters={hasAnyFilter}
         onReset={reset}
         resultCount={{ total: displayTotal }}
+        truncated={allItems.length >= CLIENT_FETCH_LIMIT}
       >
         {/* ── Row 1: CSR · Topics · Format · Status ── */}
         <StagedMultiSelect
@@ -312,7 +290,7 @@ export default function CoachingSessionsPage() {
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
-              {listRows.length === 0 ? (
+              {paginatedRows.length === 0 ? (
                 <TableEmptyState
                   colSpan={10}
                   icon={MessageSquare}
@@ -320,7 +298,7 @@ export default function CoachingSessionsPage() {
                   description="Create a new session to get started"
                   action={{ label: 'New Session', onClick: () => navigate('/app/training/coaching/new') }}
                 />
-              ) : listRows.map(({ key, batchId, session: s }) => {
+              ) : paginatedRows.map(({ key, batchId, session: s }) => {
                 const batchSessions = batchId ? (batchMap.get(batchId) ?? [s]) : null
                 const isExpanded = batchId ? expandedBatches.has(batchId) : false
                 const isBatch = !!batchId && (batchSessions?.length ?? 0) > 1
@@ -332,7 +310,7 @@ export default function CoachingSessionsPage() {
                 {isBatch ? (
                   <TableRow className="bg-slate-50 border-l-4 border-l-primary hover:bg-slate-100/60">
                     <TableCell className="text-[11px] text-slate-300 font-mono">&mdash;</TableCell>
-                    <TableCell className="text-[13px] text-slate-600 whitespace-nowrap font-medium">
+                    <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                       {formatQualityDate(s.session_date)}
                     </TableCell>
                     <TableCell><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
@@ -389,10 +367,10 @@ export default function CoachingSessionsPage() {
                     <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                       {formatQualityDate(s.session_date)}
                     </TableCell>
-                    <TableCell><StatusBadge status={s.status} /></TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[s.status] ?? s.status}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-medium text-slate-900">{s.csr_name}</span>
+                        <span className="text-[13px] text-slate-600">{s.csr_name}</span>
                         {(s.repeat_topics?.length ?? 0) > 0 && (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -478,7 +456,7 @@ export default function CoachingSessionsPage() {
                     </TableCell>
                     <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[bs.status] ?? bs.status}</TableCell>
                     <TableCell>
-                      <span className="text-[13px] font-medium text-slate-800">{bs.csr_name}</span>
+                      <span className="text-[13px] text-slate-600">{bs.csr_name}</span>
                     </TableCell>
                     <TableCell className="text-[13px] text-slate-500">{PURPOSE_MAP[bs.coaching_purpose] ?? bs.coaching_purpose}</TableCell>
                     <TableCell className="text-[13px] text-slate-500">{FORMAT_MAP[bs.coaching_format] ?? bs.coaching_format}</TableCell>
@@ -514,8 +492,8 @@ export default function CoachingSessionsPage() {
 
       <ListPagination
         page={page}
-        totalPages={hasClientFilter ? Math.max(1, Math.ceil(clientFiltered.length / pageSize)) : (data?.totalPages ?? 1)}
-        totalItems={hasClientFilter ? clientFiltered.length : (data?.total ?? 0)}
+        totalPages={Math.max(1, Math.ceil(listRows.length / pageSize))}
+        totalItems={listRows.length}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}

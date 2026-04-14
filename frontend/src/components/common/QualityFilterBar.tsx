@@ -1,4 +1,4 @@
-import { Search } from 'lucide-react'
+import { Search, AlertTriangle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,6 +27,8 @@ interface QualityFilterBarProps {
    * or just { total } for server-side pages ("48 results").
    */
   resultCount?: { filtered?: number; total: number }
+  /** When true, shows a warning that results may be incomplete */
+  truncated?: boolean
   /** Slot for extra controls (date pickers, etc.) inserted after the selects */
   children?: React.ReactNode
 }
@@ -39,6 +41,7 @@ export function QualityFilterBar({
   hasFilters,
   onReset,
   resultCount,
+  truncated,
   children,
 }: QualityFilterBarProps) {
   const showCount = resultCount != null
@@ -49,7 +52,14 @@ export function QualityFilterBar({
     : null
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
+    <div className="space-y-0">
+    {truncated && (
+      <div className="flex items-center gap-2 rounded-t-xl border border-b-0 border-amber-200 bg-amber-50 px-4 py-2 text-[13px] text-amber-800">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+        Results may be incomplete. Narrow your date range to ensure all records are shown.
+      </div>
+    )}
+    <div className={`bg-white ${truncated ? 'rounded-b-xl border-t-0' : 'rounded-xl'} border border-slate-200 p-4 flex flex-wrap items-center gap-3`}>
       {onSearchChange && (
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search
@@ -97,6 +107,7 @@ export function QualityFilterBar({
           Reset Filters
         </Button>
       </div>
+    </div>
     </div>
   )
 }

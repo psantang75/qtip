@@ -304,7 +304,7 @@ export default function CoachingSessionDetailPage() {
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => navigate('/app/training/coaching')}>← Back</Button>
             {canEdit && (
-              <Button variant="outline" size="sm" className="text-[12px]"
+              <Button variant="outline" className="border-primary text-primary hover:bg-primary/5"
                 onClick={() => navigate(`/app/training/coaching/${id}/edit`)}>
                 Edit Full Session
               </Button>
@@ -391,7 +391,7 @@ export default function CoachingSessionDetailPage() {
                   <TableBody>
                     {session.kb_resources!.map(r => (
                       <TableRow key={r.id} className="border-b border-slate-100 last:border-0">
-                        <TableCell className="py-2 pr-4 font-medium text-slate-800">{r.title}</TableCell>
+                        <TableCell className="py-2 pr-4 text-slate-600">{r.title}</TableCell>
                         <TableCell className="py-2 pr-4 text-slate-500">{r.description || '—'}</TableCell>
                         <TableCell className="py-2 pr-2">
                           <a href={resourceHref(r)} target="_blank" rel="noopener noreferrer"
@@ -428,20 +428,14 @@ export default function CoachingSessionDetailPage() {
                       const best     = attempts.length > 0 ? Math.max(...attempts.map(a => Number(a.score))) : null
                       return (
                         <TableRow key={quiz.id} className="border-b border-slate-100 last:border-0">
-                          <TableCell className="py-2 pr-4 font-medium text-slate-800">{quiz.quiz_title}</TableCell>
+                          <TableCell className="py-2 pr-4 text-slate-600">{quiz.quiz_title}</TableCell>
                           <TableCell className="py-2 pr-4 text-slate-500">{quiz.pass_score}%</TableCell>
                           <TableCell className="py-2 pr-4 text-slate-600">{attempts.length}</TableCell>
-                          <TableCell className={`py-2 pr-4 font-semibold ${passed ? 'text-emerald-600' : best != null ? 'text-red-600' : 'text-slate-400'}`}>
+                          <TableCell className="py-2 pr-4 text-slate-600">
                             {best != null ? `${best.toFixed(0)}%` : '—'}
                           </TableCell>
-                          <TableCell className="py-2">
-                            {passed ? (
-                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Passed</span>
-                            ) : attempts.length > 0 ? (
-                              <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">Failed</span>
-                            ) : (
-                              <span className="text-[11px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">Not started</span>
-                            )}
+                          <TableCell className="py-2 text-[13px] text-slate-600">
+                            {passed ? 'Passed' : attempts.length > 0 ? 'Failed' : 'Not started'}
                           </TableCell>
                         </TableRow>
                       )

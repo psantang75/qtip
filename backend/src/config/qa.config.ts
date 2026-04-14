@@ -47,7 +47,7 @@ interface QAConfig {
 const developmentConfig: QAConfig = {
   pagination: {
     defaultLimit: 20,
-    maxLimit: 100
+    maxLimit: 5000
   },
   cache: {
     enabled: false, // Disable caching in development for real-time data
@@ -87,7 +87,7 @@ const developmentConfig: QAConfig = {
 const productionConfig: QAConfig = {
   pagination: {
     defaultLimit: 20,
-    maxLimit: 100
+    maxLimit: 5000
   },
   cache: {
     enabled: true,

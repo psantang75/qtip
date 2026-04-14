@@ -23,7 +23,7 @@ import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
-import { COACHING_PURPOSE_LABELS, COACHING_STATUS_LABELS } from '@/constants/labels'
+import { COACHING_PURPOSE_LABELS, COACHING_STATUS_LABELS, CLIENT_FETCH_LIMIT } from '@/constants/labels'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -98,20 +98,24 @@ export default function TrainingReportsPage() {
   })
 
   const { data: csrListPage, isLoading: csrLoading, isError: csrError, refetch: csrRefetch } = useQuery({
-    queryKey: ['coaching-csr-list', page, pageSize, dateFrom, dateTo],
-    queryFn:  () => trainingService.getCSRCoachingList({ page, limit: pageSize, ...summaryParams }),
+    queryKey: ['coaching-csr-list', dateFrom, dateTo],
+    queryFn:  () => trainingService.getCSRCoachingList({ page: 1, limit: 5000, ...summaryParams }),
     placeholderData: (p: unknown) => p as typeof csrListPage,
   })
 
-  const csrRows = useMemo(() => {
-    const items = csrListPage?.items ?? []
-    return selectedCsrs.length ? items.filter(r => selectedCsrs.includes(r.csr_name)) : items
-  }, [csrListPage?.items, selectedCsrs])
+  const allCsrItems = csrListPage?.items ?? []
 
   const csrOptions = useMemo(() => {
-    const names = new Set((csrListPage?.items ?? []).map(r => r.csr_name).filter(Boolean))
+    const names = new Set(allCsrItems.map(r => r.csr_name).filter(Boolean))
     return Array.from(names).sort() as string[]
-  }, [csrListPage?.items])
+  }, [allCsrItems])
+
+  const csrRows = useMemo(() => {
+    return selectedCsrs.length ? allCsrItems.filter(r => selectedCsrs.includes(r.csr_name)) : allCsrItems
+  }, [allCsrItems, selectedCsrs])
+
+  const csrTotalPages  = Math.max(1, Math.ceil(csrRows.length / pageSize))
+  const paginatedCsrRows = csrRows.slice((page - 1) * pageSize, page * pageSize)
 
   const s = summary ?? {}
   const compRate = Number(s.completion_rate ?? 0)
@@ -154,7 +158,8 @@ export default function TrainingReportsPage() {
       <QualityPageHeader title="Training Reports" />
 
       <QualityFilterBar hasFilters={hasAnyFilter} onReset={reset}
-        resultCount={{ total: csrListPage?.total ?? 0 }}>
+        resultCount={{ filtered: csrRows.length, total: allCsrItems.length }}
+        truncated={allCsrItems.length >= CLIENT_FETCH_LIMIT}>
         <DateRangeFilter
           value={{ start: dateFrom, end: dateTo }}
           onChange={v => setMany({ from: v.start, to: v.end, page: '1' })}
@@ -283,12 +288,12 @@ export default function TrainingReportsPage() {
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
-              {csrRows.length === 0 ? (
+              {paginatedCsrRows.length === 0 ? (
                 <TableEmptyState colSpan={9} icon={MessageSquare} title="No coaching data in this range" />
-              ) : csrRows.map(csr => (
+              ) : paginatedCsrRows.map(csr => (
                 <TableRow key={csr.user_id} className="cursor-pointer hover:bg-slate-50/50"
                   onClick={() => navigate(`/app/training/coaching?csrs=${csr.user_id}`)}>
-                  <TableCell className="text-[13px] font-medium text-slate-900">{csr.csr_name}</TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{csr.csr_name}</TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">{csr.total_sessions}</TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">{csr.completed_sessions}</TableCell>
                   <TableCell>
@@ -317,8 +322,8 @@ export default function TrainingReportsPage() {
 
       <ListPagination
         page={page}
-        totalPages={csrListPage?.totalPages ?? 1}
-        totalItems={csrListPage?.total ?? 0}
+        totalPages={csrTotalPages}
+        totalItems={csrRows.length}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={s => setMany({ size: String(s), page: '1' })}

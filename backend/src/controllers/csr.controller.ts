@@ -1043,10 +1043,10 @@ export const finalizeSubmission = async (req: Request, res: Response): Promise<v
 export const getCSRCoachingSessions = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.user_id;
-    const { page = 1, pageSize = 10, status, coaching_purpose, coaching_format, startDate, endDate, search } = req.query;
+    const { page = 1, pageSize, limit: limitParam, status, coaching_purpose, coaching_format, startDate, endDate, search } = req.query;
     
     const pageNum = Number(page);
-    const pageSizeNum = Number(pageSize);
+    const pageSizeNum = Number(pageSize || limitParam || 10);
     
     if (isNaN(pageNum) || pageNum < 1 || pageNum > 10000) {
       return res.status(400).json({ 
@@ -1055,10 +1055,10 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
       });
     }
     
-    if (isNaN(pageSizeNum) || pageSizeNum < 1 || pageSizeNum > 100) {
+    if (isNaN(pageSizeNum) || pageSizeNum < 1 || pageSizeNum > 5000) {
       return res.status(400).json({ 
         error: 'INVALID_PAGE_SIZE',
-        message: 'Page size must be a number between 1 and 100' 
+        message: 'Page size must be a number between 1 and 5000' 
       });
     }
     

@@ -546,7 +546,7 @@ const getTrainerCoachingSessions = async (req: AuthenticatedRequest, res: Respon
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    if (isNaN(limit) || isNaN(offset) || limit < 1 || limit > 100 || offset < 0) {
+    if (isNaN(limit) || isNaN(offset) || limit < 1 || limit > 5000 || offset < 0) {
       return res.status(400).json({ success: false, message: 'Invalid pagination parameters' });
     }
 

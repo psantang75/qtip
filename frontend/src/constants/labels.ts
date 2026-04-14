@@ -5,8 +5,37 @@
  * Organized by domain: Quality, Coaching, Write-ups.
  */
 
+export const CLIENT_FETCH_LIMIT = 5000
+
 import type { WriteUpType, WriteUpStatus } from '@/services/writeupService'
 import type { CoachingPurpose, CoachingFormat, CoachingSourceType } from '@/services/trainingService'
+
+// ── Universal status → display-text lookup (all domains) ─────────────────────
+
+export const STATUS_LABELS: Record<string, string> = {
+  SUBMITTED:           'Submitted',
+  FINALIZED:           'Finalized',
+  DISPUTED:            'Disputed',
+  RESOLVED:            'Resolved',
+  OPEN:                'Open',
+  UPHELD:              'Upheld',
+  REJECTED:            'Rejected',
+  ADJUSTED:            'Adjusted',
+  ACTIVE:              'Active',
+  INACTIVE:            'Inactive',
+  DRAFT:               'Draft',
+  SCHEDULED:           'Scheduled',
+  COMPLETED:           'Completed',
+  CLOSED:              'Closed',
+  IN_PROCESS:          'In Process',
+  IN_PROGRESS:         'In Progress',
+  AWAITING_CSR_ACTION: 'Awaiting CSR',
+  QUIZ_PENDING:        'Quiz Pending',
+  FOLLOW_UP_REQUIRED:  'Follow-Up',
+  AWAITING_SIGNATURE:  'Awaiting Signature',
+  SIGNED:              'Signed',
+  FOLLOW_UP_PENDING:   'Follow-Up Pending',
+}
 
 // ── Quality ──────────────────────────────────────────────────────────────────
 
@@ -52,10 +81,7 @@ export const COACHING_SOURCE_LABELS: Record<CoachingSourceType, string> = {
 export const COACHING_STATUS_LABELS: Record<string, string> = {
   DRAFT:               'Draft',
   SCHEDULED:           'Scheduled',
-  IN_PROCESS:          'In Process',
-  IN_PROGRESS:         'In Progress',
   AWAITING_CSR_ACTION: 'Awaiting CSR',
-  QUIZ_PENDING:        'Quiz Pending',
   COMPLETED:           'Completed',
   FOLLOW_UP_REQUIRED:  'Follow-Up',
   CLOSED:              'Closed',

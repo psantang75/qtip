@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, FileWarning, Eye } from 'lucide-react'
 import writeupService, { type WriteUp, type WriteUpType, type WriteUpStatus } from '@/services/writeupService'
-import userService from '@/services/userService'
+
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { QualityFilterBar } from '@/components/common/QualityFilterBar'
@@ -15,7 +15,6 @@ import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { ListPagination } from '@/components/common/ListPagination'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -26,6 +25,8 @@ import { formatQualityDate } from '@/utils/dateFormat'
 import {
   WRITE_UP_TYPE_LABELS,
   WRITE_UP_STATUS_LABELS,
+  STATUS_LABELS,
+  CLIENT_FETCH_LIMIT,
 } from '@/constants/labels'
 
 const ALL_STATUSES = Object.keys(WRITE_UP_STATUS_LABELS) as WriteUpStatus[]
@@ -63,12 +64,12 @@ export default function WriteUpsPage() {
   const selectedStatuses = useMemo(() => statusParam ? statusParam.split(',').filter(Boolean) : [], [statusParam])
   const selectedTypes    = useMemo(() => typeParam   ? typeParam.split(',').filter(Boolean)   : [], [typeParam])
 
-  // Fetch write-ups with server-side date + name search filtering
+  // Fetch ALL write-ups for the date range in one call
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['writeups', page, pageSize, dateFrom, dateTo, searchParam],
+    queryKey: ['writeups', dateFrom, dateTo, searchParam],
     queryFn: () => writeupService.getWriteUps({
-      page,
-      limit:     pageSize,
+      page:      1,
+      limit:     5000,
       date_from: dateFrom    || undefined,
       date_to:   dateTo      || undefined,
       search:    searchParam || undefined,
@@ -76,43 +77,37 @@ export default function WriteUpsPage() {
     placeholderData: (prev) => prev,
   })
 
-  // Fetch all CSRs for the filter dropdown
-  const { data: csrData } = useQuery({
-    queryKey: ['users', 'csrs'],
-    queryFn:  () => userService.getUsers(1, 100, { role_id: 3, is_active: true }),
-    staleTime: Infinity,
-  })
-  // Build grouped employee options: department (alpha) → employees (alpha)
-  const csrOptions = useMemo<GroupedOption[]>(
-    () => (csrData?.items ?? []).map(u => ({
-      group: u.department_name ?? '',
-      value: u.username,
-    })),
-    [csrData?.items],
-  )
+  const allItems = data?.items ?? []
+
+  // Dropdown options from the FULL result set
+  const csrOptions = useMemo<GroupedOption[]>(() => {
+    const names = Array.from(new Set(allItems.map(w => w.csr_name).filter(Boolean))).sort()
+    return names.map(name => ({ group: '', value: name }))
+  }, [allItems])
+
   const statusOptions = useMemo(() => ALL_STATUSES.map(s => WRITE_UP_STATUS_LABELS[s]), [])
   const typeOptions   = useMemo(() => ALL_TYPES.map(t => WRITE_UP_TYPE_LABELS[t]), [])
 
-  // Default: all except Closed — same pattern as coaching sessions
   const allExceptClosed = useMemo(() => statusOptions.filter(s => s !== CLOSED_LABEL), [statusOptions])
   const effectiveSelectedStatuses = useMemo(
     () => selectedStatuses.length === 0 ? allExceptClosed : selectedStatuses,
     [selectedStatuses, allExceptClosed],
   )
 
-  // Client-side filtering for CSR, status, type
-  const clientFiltered = useMemo(() => {
-    let items = data?.items ?? []
+  // Client-side filtering on the full result set
+  const filtered = useMemo(() => {
+    let items = allItems
     if (selectedCsrs.length)               items = items.filter(w => selectedCsrs.includes(w.csr_name))
     if (effectiveSelectedStatuses.length)  items = items.filter(w => effectiveSelectedStatuses.includes(WRITE_UP_STATUS_LABELS[w.status]))
     if (selectedTypes.length)              items = items.filter(w => selectedTypes.includes(WRITE_UP_TYPE_LABELS[w.document_type]))
     return items
-  }, [data?.items, selectedCsrs, effectiveSelectedStatuses, selectedTypes])
+  }, [allItems, selectedCsrs, effectiveSelectedStatuses, selectedTypes])
 
-  const { sort, dir, toggle, sorted } = useListSort(clientFiltered)
+  const { sort, dir, toggle, sorted } = useListSort(filtered)
 
-  const hasClientFilter = selectedCsrs.length > 0 || selectedStatuses.length > 0 || selectedTypes.length > 0
-  const displayTotal    = hasClientFilter ? clientFiltered.length : (data?.total ?? 0)
+  // Client-side pagination
+  const paginatedItems = sorted.slice((page - 1) * pageSize, page * pageSize)
+  const displayTotal   = filtered.length
 
   return (
     <QualityListPage>
@@ -134,9 +129,10 @@ export default function WriteUpsPage() {
         search={searchParam}
         onSearchChange={v => setMany({ search: v, page: '1' })}
         searchPlaceholder="Search by employee or creator…"
-        hasFilters={hasAnyFilter || hasClientFilter}
+        hasFilters={hasAnyFilter}
         onReset={reset}
         resultCount={{ total: displayTotal }}
+        truncated={allItems.length >= CLIENT_FETCH_LIMIT}
       >
         {/* ── Row 1: Employee · Type · Status ── */}
         <GroupedStagedMultiSelect
@@ -200,7 +196,7 @@ export default function WriteUpsPage() {
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
-              {sorted.length === 0 ? (
+              {paginatedItems.length === 0 ? (
                 <TableEmptyState
                   colSpan={8}
                   icon={FileWarning}
@@ -208,7 +204,7 @@ export default function WriteUpsPage() {
                   description={canCreate ? 'Create a new write-up to get started' : 'No write-ups have been issued yet'}
                   action={canCreate ? { label: 'New Write-Up', onClick: () => navigate('/app/performancewarnings/new') } : undefined}
                 />
-              ) : sorted.map((w: WriteUp) => (
+              ) : paginatedItems.map((w: WriteUp) => (
                 <TableRow
                   key={w.id}
                   className="cursor-pointer hover:bg-slate-50/50"
@@ -216,8 +212,8 @@ export default function WriteUpsPage() {
                 >
                   <TableCell className="text-[11px] text-slate-400 font-mono">#{w.id}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">{WRITE_UP_TYPE_LABELS[w.document_type] ?? w.document_type}</TableCell>
-                  <TableCell className="text-[13px] font-medium text-slate-900">{w.csr_name}</TableCell>
-                  <TableCell><StatusBadge status={w.status} /></TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{w.csr_name}</TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[w.status] ?? w.status}</TableCell>
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {w.meeting_date ? formatQualityDate(w.meeting_date) : <span className="text-slate-300">—</span>}
                   </TableCell>
@@ -244,7 +240,7 @@ export default function WriteUpsPage() {
 
       <ListPagination
         page={page}
-        totalPages={hasClientFilter ? Math.max(1, Math.ceil(clientFiltered.length / pageSize)) : (data?.totalPages ?? 1)}
+        totalPages={Math.max(1, Math.ceil(filtered.length / pageSize))}
         totalItems={displayTotal}
         pageSize={pageSize}
         onPageChange={setPage}

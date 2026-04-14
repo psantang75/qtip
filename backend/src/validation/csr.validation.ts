@@ -6,7 +6,7 @@
 
 export const CSRAuditFiltersSchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(5000).optional(),
   form_name: z.preprocess(val => val === '' ? undefined : val, z.string().optional()),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format. Expected YYYY-MM-DD').optional(),
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format. Expected YYYY-MM-DD').optional(),
@@ -62,7 +62,7 @@ export const PositionUpdateSchema = z.object({
 
 export const CoachingSessionFiltersSchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(5000).optional(),
   status: z.preprocess(val => val === '' ? undefined : val, z.enum(['SCHEDULED', 'COMPLETED', 'CANCELLED']).optional()),
   coaching_type: z.preprocess(val => val === '' ? undefined : val, z.enum(['IMPROVEMENT', 'DEVELOPMENT', 'PERFORMANCE']).optional()),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format. Expected YYYY-MM-DD').optional(),

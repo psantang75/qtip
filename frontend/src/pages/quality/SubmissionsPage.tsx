@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { FileText, Eye } from 'lucide-react'
+import { FileText, Eye, Search } from 'lucide-react'
 import qaService, { type Submission } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
@@ -15,15 +16,12 @@ import { ListPagination } from '@/components/common/ListPagination'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { DateRangeFilter } from '@/components/common/DateRangeFilter'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
-
-// Submission-level statuses (dispute resolution statuses are separate)
-import { SUBMISSION_STATUSES } from '@/constants/labels'
+import { SUBMISSION_STATUSES, STATUS_LABELS, CLIENT_FETCH_LIMIT } from '@/constants/labels'
 
 export default function SubmissionsPage() {
   const navigate = useNavigate()
@@ -34,7 +32,7 @@ export default function SubmissionsPage() {
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    forms: '', csrs: '', statuses: '', from: defaultFrom, to: defaultTo, page: '1', size: '20',
+    forms: '', csrs: '', statuses: '', from: defaultFrom, to: defaultTo, reviewId: '', page: '1', size: '20',
   })
 
   const formsParam    = get('forms')
@@ -42,78 +40,63 @@ export default function SubmissionsPage() {
   const statusesParam = get('statuses')
   const dateFrom      = get('from')
   const dateTo        = get('to')
+  const reviewId      = get('reviewId')
   const page          = parseInt(get('page')) || 1
   const pageSize      = parseInt(get('size')) || 20
 
-  // Parsed multi-select values
-  const selectedFormNames = useMemo(
-    () => formsParam ? formsParam.split(',').filter(Boolean) : [],
-    [formsParam],
-  )
-  const selectedCsrNames = useMemo(
-    () => csrsParam ? csrsParam.split(',').filter(Boolean) : [],
-    [csrsParam],
-  )
-  const selectedStatuses = useMemo(
-    () => statusesParam ? statusesParam.split(',').filter(Boolean) : [],
-    [statusesParam],
-  )
+  const selectedFormNames = useMemo(() => formsParam ? formsParam.split(',').filter(Boolean) : [], [formsParam])
+  const selectedCsrNames  = useMemo(() => csrsParam  ? csrsParam.split(',').filter(Boolean)  : [], [csrsParam])
+  const selectedStatuses  = useMemo(() => statusesParam ? statusesParam.split(',').filter(Boolean) : [], [statusesParam])
 
   const setPage     = (p: number) => set('page', String(p))
   const setPageSize = (s: number) => setMany({ size: String(s), page: '1' })
 
-  // For single selections, pass value to API; multiple = client-side filtered
-  const apiStatus = selectedStatuses.length === 1 ? selectedStatuses[0] : undefined
-
+  // Fetch ALL rows for the date range in one call — filtering + pagination is client-side
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['submissions', roleId, page, pageSize, statusesParam, formsParam, csrsParam, dateFrom, dateTo],
+    queryKey: ['submissions', roleId, dateFrom, dateTo],
     queryFn: () => {
       const ds = dateFrom || undefined
       const de = dateTo   || undefined
-
-      if (isCSR)     return qaService.getCSRAudits({ page, limit: pageSize, status: apiStatus, start_date: ds, end_date: de })
-      if (isManager) return qaService.getTeamAudits({ page, limit: pageSize, status: apiStatus, start_date: ds, end_date: de })
-      return qaService.getSubmissions({ page, limit: pageSize, status: apiStatus, date_start: ds, date_end: de })
+      if (isCSR)     return qaService.getCSRAudits({ page: 1, limit: 5000, start_date: ds, end_date: de })
+      if (isManager) return qaService.getTeamAudits({ page: 1, limit: 5000, start_date: ds, end_date: de })
+      return qaService.getSubmissions({ page: 1, limit: 5000, date_start: ds, date_end: de })
     },
     enabled: roleId > 0,
     placeholderData: (prev) => prev,
   })
 
-  // Derive filter options from the fetched items — only show what's in the current result
+  const allItems = data?.items ?? []
+
+  // Dropdown options from the FULL result set (all items in date range)
   const formNameOptions = useMemo(() => {
-    const names = new Set((data?.items ?? []).map((r: Submission) => r.form_name).filter(Boolean))
-    return Array.from(names).sort() as string[]
-  }, [data?.items])
+    return Array.from(new Set(allItems.map((r: Submission) => r.form_name).filter(Boolean))).sort() as string[]
+  }, [allItems])
 
   const csrNameOptions = useMemo(() => {
-    const names = new Set((data?.items ?? []).map((r: Submission) => r.csr_name).filter(Boolean))
-    return Array.from(names).sort() as string[]
-  }, [data?.items])
+    return Array.from(new Set(allItems.map((r: Submission) => r.csr_name).filter(Boolean))).sort() as string[]
+  }, [allItems])
 
   const statusOptions = useMemo(() => {
-    const present = new Set((data?.items ?? []).map((r: Submission) => r.status).filter(Boolean))
+    const present = new Set(allItems.map((r: Submission) => r.status).filter(Boolean))
     return SUBMISSION_STATUSES.filter(s => present.has(s))
-  }, [data?.items])
+  }, [allItems])
 
-  // Client-side filtering for multi-selection (single selections handled by API)
-  const clientFiltered = useMemo(() => {
-    let items: Submission[] = data?.items ?? []
-    if (selectedFormNames.length > 0) {
-      items = items.filter(r => selectedFormNames.includes(r.form_name ?? ''))
-    }
-    if (selectedCsrNames.length > 0) {
-      items = items.filter(r => selectedCsrNames.includes(r.csr_name ?? ''))
-    }
-    if (selectedStatuses.length > 1) {
-      items = items.filter(r => selectedStatuses.includes(r.status))
-    }
+  // Client-side filtering on the full result set
+  const filtered = useMemo(() => {
+    let items = allItems
+    if (reviewId) items = items.filter(r => String(r.id).includes(reviewId))
+    if (selectedFormNames.length) items = items.filter(r => selectedFormNames.includes(r.form_name ?? ''))
+    if (selectedCsrNames.length)  items = items.filter(r => selectedCsrNames.includes(r.csr_name ?? ''))
+    if (selectedStatuses.length)  items = items.filter(r => selectedStatuses.includes(r.status))
     return items
-  }, [data?.items, selectedFormNames, selectedCsrNames, selectedStatuses])
+  }, [allItems, reviewId, selectedFormNames, selectedCsrNames, selectedStatuses])
 
-  const totalPages = data?.total != null ? Math.ceil(data.total / pageSize) : 1
-  const hasFilters = hasAnyFilter
+  const { sort, dir, toggle, sorted } = useListSort(filtered)
 
-  const { sort, dir, toggle, sorted: sortedItems } = useListSort(clientFiltered)
+  // Client-side pagination on filtered + sorted results
+  const totalPages  = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const sortedItems = sorted.slice((page - 1) * pageSize, page * pageSize)
+  const hasFilters  = hasAnyFilter
 
   const colSpan = isAdminOrQA ? 8 : isManager ? 7 : 6
 
@@ -124,7 +107,8 @@ export default function SubmissionsPage() {
       <QualityFilterBar
         hasFilters={hasFilters}
         onReset={reset}
-        resultCount={{ total: data?.total ?? 0 }}
+        resultCount={{ total: filtered.length }}
+        truncated={allItems.length >= CLIENT_FETCH_LIMIT}
       >
         {/* 1. Forms */}
         <StagedMultiSelect
@@ -158,11 +142,31 @@ export default function SubmissionsPage() {
           width="w-[160px]"
         />
 
+        {/* Line break — date + search on second row */}
+        <div className="basis-full" />
+
         {/* 4. Date range */}
         <DateRangeFilter
           value={{ start: dateFrom, end: dateTo }}
           onChange={v => setMany({ from: v.start, to: v.end, page: '1' })}
         />
+
+        {/* 5. Review # search */}
+        <div className="relative w-[150px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+          <Input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="Review #"
+            value={reviewId}
+            onChange={e => {
+              const v = e.target.value.replace(/\D/g, '')
+              setMany({ reviewId: v, page: '1' })
+            }}
+            className="pl-8 h-9 text-[13px]"
+          />
+        </div>
       </QualityFilterBar>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -174,13 +178,13 @@ export default function SubmissionsPage() {
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
-                <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
-                <SortableTableHead field="form_name"     sort={sort} dir={dir} onSort={toggle}>Form Name</SortableTableHead>
+                <SortableTableHead field="id"              sort={sort} dir={dir} onSort={toggle} className="w-[100px]">Review #</SortableTableHead>
+                <SortableTableHead field="status"          sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
+                <SortableTableHead field="form_name"       sort={sort} dir={dir} onSort={toggle}>Form Name</SortableTableHead>
                 {!isCSR      && <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>}
-                <SortableTableHead field="id"           sort={sort} dir={dir} onSort={toggle}>Review #</SortableTableHead>
-                <SortableTableHead field="created_at"   sort={sort} dir={dir} onSort={toggle}>Review Date</SortableTableHead>
-                <SortableTableHead field="interaction_date" sort={sort} dir={dir} onSort={toggle}>Interaction Date</SortableTableHead>
-                <SortableTableHead field="score"        sort={sort} dir={dir} onSort={toggle}>Score</SortableTableHead>
+                <SortableTableHead field="created_at"      sort={sort} dir={dir} onSort={toggle} className="pl-6">Review Date</SortableTableHead>
+                <SortableTableHead field="interaction_date" sort={sort} dir={dir} onSort={toggle} className="pl-6">Interaction Date</SortableTableHead>
+                <SortableTableHead field="score"           sort={sort} dir={dir} onSort={toggle}>Score</SortableTableHead>
                 <TableHead className="w-20" />
               </StandardTableHeaderRow>
             </TableHeader>
@@ -191,13 +195,13 @@ export default function SubmissionsPage() {
                     onClick={() => navigate(`/app/quality/submissions/${row.id}`, {
                       state: { from: pageTitle, fromPath: '/app/quality/submissions' },
                     })}>
-                    <TableCell><StatusBadge status={row.status} /></TableCell>
-                    <TableCell className="text-[13px] font-medium text-slate-900">{row.form_name}</TableCell>
-                    {!isCSR      && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-500">{row.id}</TableCell>
-                    <TableCell className="text-[13px] text-slate-600">{fmtDate(row.created_at)}</TableCell>
-                    <TableCell className="text-[13px] text-slate-600">{row.interaction_date ? fmtDate(row.interaction_date) : <span className="text-slate-400">—</span>}</TableCell>
-                    <TableCell className="text-[13px] font-medium text-slate-700">
+                    <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[row.status] ?? row.status}</TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{row.form_name}</TableCell>
+                    {!isCSR      && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}
+                    <TableCell className="text-[13px] text-slate-600 pl-6">{fmtDate(row.created_at)}</TableCell>
+                    <TableCell className="text-[13px] text-slate-600 pl-6">{row.interaction_date ? fmtDate(row.interaction_date) : <span className="text-slate-400">—</span>}</TableCell>
+                    <TableCell className="text-[13px] text-slate-600">
                       {row.score != null && row.score > 0
                         ? `${row.score.toFixed(1)}%`
                         : <span className="text-slate-400">—</span>
@@ -232,7 +236,7 @@ export default function SubmissionsPage() {
       <ListPagination
         page={page}
         totalPages={totalPages}
-        totalItems={data?.total ?? 0}
+        totalItems={filtered.length}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}

@@ -60,7 +60,7 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const role = req.user!.role;
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
+    const limit = Math.min(5000, parseInt(req.query.limit as string) || 20);
     const offset = (page - 1) * limit;
     const { csr_id, status, coaching_purpose, coaching_format, topic_ids, date_from, date_to, overdue_only, due_today } = req.query;
 

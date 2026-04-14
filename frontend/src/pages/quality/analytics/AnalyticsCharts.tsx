@@ -63,7 +63,7 @@ export function RawScoresTable({ data }: { data: ChartData }) {
           <TableBody>
             {data.labels.map((l, i) => (
               <TableRow key={l} className="hover:bg-slate-50/50">
-                <TableCell className="text-[13px] font-medium text-slate-900">{l}</TableCell>
+                <TableCell className="text-[13px] text-slate-600">{l}</TableCell>
                 {data.datasets?.map(ds => (
                   <TableCell key={ds.name} className="text-right text-[13px] text-slate-600">
                     {typeof ds.data[i] === 'number' ? `${(ds.data[i] as number).toFixed(1)}%` : ds.data[i] ?? '—'}

@@ -50,7 +50,7 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
 
   return (
     <div className={cn(
-      'rounded-md border border-input bg-background ring-offset-background',
+      'relative rounded-md border border-input bg-background ring-offset-background',
       'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
       className,
     )}>

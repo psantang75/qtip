@@ -57,7 +57,7 @@ export function IncidentsSection({ writeup }: DetailSectionProps) {
                     <TableBody>
                       {allExamples.map((ex, ei) => (
                         <TableRow key={ex.id ?? ei} className="border-b border-slate-100 last:border-0">
-                          <TableCell className="py-2 pr-4 font-medium text-slate-800 whitespace-nowrap">
+                          <TableCell className="py-2 pr-4 text-slate-600 whitespace-nowrap">
                             {ex.source === 'QA_IMPORT' ? 'QA' : ex.source === 'COACHING_IMPORT' ? 'Coaching' : 'Manual'}
                           </TableCell>
                           <TableCell className="py-2 pr-4 text-slate-500 whitespace-nowrap">

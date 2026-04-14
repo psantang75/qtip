@@ -23,10 +23,10 @@ import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 import {
   COACHING_PURPOSE_LABELS as PURPOSE_MAP,
   COACHING_FORMAT_LABELS as FORMAT_MAP,
-  COACHING_STATUS_LABELS as STATUS_LABELS,
+  STATUS_LABELS,
+  CLIENT_FETCH_LIMIT,
 } from '@/constants/labels'
 import { QuizStatusBadge } from './CoachingSessionsPage'
-import { StatusBadge } from '@/components/common/StatusBadge'
 
 
 const SORT_PRIORITY: Record<string, number> = { SCHEDULED: 0, AWAITING_CSR_ACTION: 0 }
@@ -50,7 +50,7 @@ export default function MyCoachingPage() {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['my-coaching'],
-    queryFn:  () => trainingService.getMyCoachingSessions({ limit: 100 }),
+    queryFn:  () => trainingService.getMyCoachingSessions({ limit: 5000 }),
   })
 
   const allSessions = data?.items ?? []
@@ -121,6 +121,7 @@ export default function MyCoachingPage() {
         hasFilters={hasFilters}
         onReset={() => { setStatusFilter([]); setTopicFilter([]); setDateFrom(defaultFrom); setDateTo(defaultTo); setOverdueOnly(false); setDueTodayOnly(false); setPage(1) }}
         resultCount={{ filtered: sorted.length, total: allSessions.length }}
+        truncated={allSessions.length >= CLIENT_FETCH_LIMIT}
       >
         {/* ── Row 1: Status · Topics ── */}
         <StagedMultiSelect
@@ -194,7 +195,7 @@ export default function MyCoachingPage() {
                     {formatQualityDate(s.session_date)}
                   </TableCell>
 
-                  <TableCell><StatusBadge status={s.status} /></TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[s.status] ?? s.status}</TableCell>
 
                   <TableCell className="text-[13px] text-slate-600">
                     {PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}

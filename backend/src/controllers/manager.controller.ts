@@ -617,7 +617,7 @@ export const getManagerTeamDisputes = async (req: AuthenticatedRequest, res: Res
     }
 
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = Math.min(5000, parseInt(req.query.limit as string) || 10);
     const offset = (page - 1) * limit;
     
     const csrFilter = req.query.csr_id as string;

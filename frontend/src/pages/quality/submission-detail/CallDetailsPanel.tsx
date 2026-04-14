@@ -3,6 +3,7 @@ import { Phone, MicOff, FileDown, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatTranscriptText } from '@/utils/transcriptUtils'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
+import { InfoRow } from '@/components/common/DetailLayout'
 
 interface SubmissionCall {
   call_id?: string
@@ -57,24 +58,14 @@ export function CallDetailsPanel({ calls }: Props) {
       {/* Active call content */}
       {call && (
         <div className="px-4 py-3 space-y-3">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-            {call.call_id && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Conversation ID</p>
-                <p className="text-[12px] font-medium text-slate-700 mt-0.5 truncate">{call.call_id}</p>
-              </div>
-            )}
-            {call.call_date && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Call Date</p>
-                <p className="text-[12px] font-medium text-slate-700 mt-0.5">{fmtDate(call.call_date)}</p>
-              </div>
-            )}
+          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+            {call.call_id && <InfoRow label="Conversation ID" value={call.call_id} />}
+            {call.call_date && <InfoRow label="Call Date" value={fmtDate(call.call_date)} />}
           </div>
 
           {call.recording_url ? (
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Audio Recording</p>
+              <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1.5">Audio Recording</p>
               <audio controls className="w-full h-9 rounded-lg">
                 <source src={call.recording_url} type="audio/mpeg" />
               </audio>

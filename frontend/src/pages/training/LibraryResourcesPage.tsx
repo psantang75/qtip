@@ -13,7 +13,6 @@ import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { ListPagination } from '@/components/common/ListPagination'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
 import { Button } from '@/components/ui/button'
@@ -92,7 +91,7 @@ export default function LibraryResourcesPage() {
   const [page,          setPage]          = useState(1)
   const [pageSize,     setPageSize]     = useState(20)
 
-  const { data: resData,   isLoading, isError, refetch } = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 200 }) })
+  const { data: resData,   isLoading, isError, refetch } = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 5000 }) })
   const { data: topicsData }           = useQuery({ queryKey: ['list-items', 'training_topic'], queryFn: () => listService.getItems('training_topic') })
 
   const allResources = resData?.items ?? []
@@ -279,7 +278,7 @@ export default function LibraryResourcesPage() {
                       <span className="text-[13px] text-slate-300">&mdash;</span>
                     )}
                   </TableCell>
-                  <TableCell><StatusBadge status={r.is_active ? 'ACTIVE' : 'INACTIVE'} /></TableCell>
+                  <TableCell className="text-[13px] text-slate-600">{r.is_active ? 'Active' : 'Inactive'}</TableCell>
                   <TableCell>
                     <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => openEdit(r)}>
                       <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
