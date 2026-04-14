@@ -1,7 +1,7 @@
 import { Pencil, FileText, Edit3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
-import { RichTextDisplay } from '@/components/common/RichTextDisplay'
+import { Section, SectionLabel, NoteBlock } from '@/components/common/DetailLayout'
 import { STATUS_LABELS } from '@/constants/labels'
 import { cn } from '@/lib/utils'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
@@ -44,26 +44,25 @@ export function DisputePanel({
   dispute, isCSR, editingDispute, onEditDispute,
   canResolveDispute, resolution, formData,
 }: Props) {
+  const headerRight = (
+    <div className="flex items-center gap-3">
+      <span className="text-[13px] text-slate-500 flex items-center gap-1.5">
+        Status: <span className="text-[15px] font-semibold text-primary">{STATUS_LABELS[dispute.status] ?? dispute.status}</span>
+      </span>
+      {isCSR && dispute.status === 'OPEN' && !dispute.resolved_by && !editingDispute && (
+        <button className="text-[12px] text-primary hover:text-primary/80 transition-colors font-medium flex items-center gap-1"
+          onClick={() => onEditDispute(true)}>
+          <Pencil className="h-3 w-3" /> Edit
+        </button>
+      )}
+    </div>
+  )
+
   return (
     <>
-      {/* ── Dispute information ─────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100">
-          <h3 className="text-[15px] font-semibold text-slate-800">Dispute</h3>
-          <div className="flex items-center gap-3">
-            <span className="text-[13px] text-slate-600 flex items-center gap-1.5">
-              Status: <span className="text-[13px] text-slate-600">{STATUS_LABELS[dispute.status] ?? dispute.status}</span>
-            </span>
-            {isCSR && dispute.status === 'OPEN' && !dispute.resolved_by && !editingDispute && (
-              <button className="text-[11px] text-slate-400 hover:text-primary flex items-center gap-1"
-                onClick={() => onEditDispute(true)}>
-                <Pencil className="h-3 w-3" /> Edit
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="px-4 py-3 space-y-3">
-          <div className="flex gap-4 text-[11px] text-slate-500">
+      <Section title="Dispute" headerRight={headerRight}>
+        <div className="space-y-3">
+          <div className="flex gap-4 text-[11px] text-slate-400">
             {dispute.created_at  && <span>Filed {fmtDate(dispute.created_at)}</span>}
             {dispute.resolved_at && <span>· Resolved {fmtDate(dispute.resolved_at)}</span>}
           </div>
@@ -77,15 +76,15 @@ export function DisputePanel({
           ) : (
             <>
               <div>
-                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Dispute Reason</p>
+                <SectionLabel>Dispute Reason</SectionLabel>
                 <div className="bg-slate-50 rounded-lg p-3">
-                  <RichTextDisplay html={dispute.reason} placeholder="No reason provided" className="text-[12px]" />
+                  <NoteBlock text={dispute.reason} placeholder="No reason provided" />
                 </div>
               </div>
 
               {dispute.attachment_url && (
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Supporting Evidence</p>
+                  <SectionLabel>Supporting Evidence</SectionLabel>
                   <button
                     onClick={() => qaService.downloadDisputeAttachment(
                       dispute.id,
@@ -107,32 +106,32 @@ export function DisputePanel({
               {dispute.status !== 'OPEN' ? (
                 dispute.resolution_notes && (
                   <div className="border-t border-slate-100 pt-3">
-                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Resolution Notes</p>
+                    <SectionLabel>Resolution Notes</SectionLabel>
                     <div className="bg-slate-50 rounded-lg p-3">
-                      <RichTextDisplay html={dispute.resolution_notes} placeholder="" className="text-[12px]" />
+                      <NoteBlock text={dispute.resolution_notes} placeholder="" />
                     </div>
                   </div>
                 )
               ) : (
-                <p className="text-[12px] text-slate-400 italic">Awaiting manager review.</p>
+                <p className="text-[13px] text-slate-400 italic">Awaiting manager review.</p>
               )}
             </>
           )}
         </div>
-      </div>
+      </Section>
 
       {/* ── Resolve dispute (manager / admin) ───────────────────────────── */}
       {canResolveDispute && dispute.status === 'OPEN' && (
         <div className={cn('rounded-xl border overflow-hidden',
           resolution.isActive ? 'border-amber-300' : 'border-slate-200 bg-white')}>
-          <div className={cn('px-4 py-3 border-b',
+          <div className={cn('px-5 py-3 border-b',
             resolution.isActive ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100')}>
             <h3 className="text-[15px] font-semibold text-slate-800">Resolve Dispute</h3>
           </div>
-          <div className={cn('px-4 py-3 space-y-3', resolution.isActive ? 'bg-amber-50/50' : 'bg-white')}>
+          <div className={cn('px-5 py-4 space-y-3', resolution.isActive ? 'bg-amber-50/50' : 'bg-white')}>
             {!resolution.isActive ? (
               <>
-                <p className="text-[12px] text-slate-500">
+                <p className="text-[13px] text-slate-500">
                   Review the dispute reason and score breakdown, then choose how to resolve.
                 </p>
                 <Button size="sm" className="w-full bg-primary hover:bg-primary/90 text-white"
@@ -144,14 +143,14 @@ export function DisputePanel({
             ) : (
               <>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                  <SectionLabel>
                     Resolution Notes <span className="text-red-400 normal-case font-normal">required</span>
-                  </label>
+                  </SectionLabel>
                   <RichTextEditor
                     value={resolution.notes}
                     onChange={resolution.onChangeNotes}
                     placeholder="Explain your decision…"
-                    className="mt-1.5 text-[13px]"
+                    className="mt-1 text-[13px]"
                   />
                 </div>
                 {resolution.error && (

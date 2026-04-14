@@ -10,12 +10,13 @@ import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 // ── Section card ─────────────────────────────────────────────────────────────
 
 export function Section({
-  title, children, onEdit, badge,
+  title, children, onEdit, badge, headerRight,
 }: {
   title: string
   children: React.ReactNode
   onEdit?: () => void
   badge?: React.ReactNode
+  headerRight?: React.ReactNode
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -24,12 +25,12 @@ export function Section({
           <h3 className="text-[15px] font-semibold text-slate-800">{title}</h3>
           {badge}
         </div>
-        {onEdit && (
+        {headerRight ?? (onEdit && (
           <button type="button" onClick={onEdit}
             className="text-[12px] text-primary hover:text-primary/80 transition-colors font-medium">
             Edit
           </button>
-        )}
+        ))}
       </div>
       {children}
     </div>
@@ -52,6 +53,14 @@ export function Sub({
       </p>
       {children}
     </div>
+  )
+}
+
+// ── Standalone sub-label (no divider, unlike Sub) ────────────────────────────
+
+export function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1.5">{children}</p>
   )
 }
 

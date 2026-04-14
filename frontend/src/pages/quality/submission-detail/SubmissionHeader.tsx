@@ -67,7 +67,7 @@ export function SubmissionHeader({
         <span className="text-[15px] font-semibold text-slate-900 truncate">
           Review #: {detail.id} — {detail.form_name}
         </span>
-        <span className="text-[13px] text-slate-600">{STATUS_LABELS[detail.status] ?? detail.status}</span>
+        <span className="text-[15px] font-semibold text-primary">{STATUS_LABELS[detail.status] ?? detail.status}</span>
       </div>
     </div>
   )

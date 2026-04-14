@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import qaService from '@/services/qaService'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
+import { Section, SectionLabel } from '@/components/common/DetailLayout'
 import { useToast } from '@/hooks/use-toast'
 
 // ── CSR submit new dispute ───────────────────────────────────────────────────
@@ -26,12 +27,8 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
 
   const minLen = 10
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 bg-white border-b border-slate-100">
-        <AlertTriangle className="h-4 w-4 text-slate-500 shrink-0" />
-        <h3 className="text-[15px] font-semibold text-slate-800 flex-1">Dispute</h3>
-      </div>
-      <div className="px-4 py-3 space-y-3">
+    <Section title="Dispute" badge={<AlertTriangle className="h-4 w-4 text-slate-500 shrink-0" />}>
+      <div className="space-y-3">
         <RichTextEditor value={reason} onChange={setReason}
           placeholder="Explain why you believe this score is incorrect…"
           className="text-[13px]" />
@@ -45,7 +42,7 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
           </Button>
         </div>
       </div>
-    </div>
+    </Section>
   )
 }
 
@@ -100,14 +97,12 @@ export function EditDisputeForm({
           className="text-[13px] bg-white" />
       </div>
       <div>
-        <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide block mb-1">
-          Supporting Evidence (optional)
-        </label>
+        <SectionLabel>Supporting Evidence (optional)</SectionLabel>
         <input type="file" onChange={handleFileChange}
           accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
           className="text-[12px] w-full text-slate-600 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-[12px] file:font-medium file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200" />
         {dispute.attachment_url && !file && (
-          <p className="text-[11px] text-slate-500 mt-1">Current: {dispute.attachment_url.split('/').pop()}</p>
+          <p className="text-[11px] text-slate-400 mt-1">Current: {dispute.attachment_url.split('/').pop()}</p>
         )}
         {file && <p className="text-[11px] text-primary mt-1">New file: {file.name}</p>}
         {fileError && <p className="text-[11px] text-red-600 mt-1">{fileError}</p>}
