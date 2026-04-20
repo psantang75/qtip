@@ -2,17 +2,14 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Target, CheckCircle, HelpCircle, Paperclip, Download, BookOpen, ChevronRight, ChevronDown } from 'lucide-react'
-import { QuizPlayer } from '@/components/training/QuizPlayer'
+import { CheckCircle } from 'lucide-react'
+import { QuizPlayer, QuizReview } from '@/components/training/QuizPlayer'
 import trainingService from '@/services/trainingService'
-import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
@@ -23,23 +20,10 @@ import {
   COACHING_SOURCE_LABELS as SOURCE_LABELS,
 } from '@/constants/labels'
 
-import { Section, Sub, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow } from './training-detail/layout'
-
-// ── Source labels ─────────────────────────────────────────────────────────────
-
-
-function TopicList({ topics }: { topics: string[] }) {
-  if (!topics.length) return <span className="text-[13px] text-slate-400">None</span>
-  return (
-    <ul className="space-y-1">
-      {topics.map(t => (
-        <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
-        </li>
-      ))}
-    </ul>
-  )
-}
+import { Section, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow, TopicList } from './training-detail/layout'
+import { AttachmentCard } from '@/components/training/AttachmentCard'
+import { ResourcesTable, QuizSummaryTable } from '@/components/training/ReadOnlySections'
+import { downloadSessionAttachment } from '@/utils/trainingHelpers'
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -51,18 +35,8 @@ export default function MyCoachingDetailPage() {
   const { user }  = useAuth()
 
   const [actionPlan,    setActionPlan]    = useState('')
-  const [rootCause,     setRootCause]     = useState('')
-  const [supportNeeded, setSupportNeeded] = useState('')
   const [acknowledged,  setAcknowledged]  = useState(false)
   const [passedQuizIds,   setPassedQuizIds]   = useState<Set<number>>(new Set())
-  const [expandedQuizIds, setExpandedQuizIds] = useState<Set<number>>(new Set())
-
-  const toggleQuizExpand = (quizId: number) =>
-    setExpandedQuizIds(prev => {
-      const next = new Set(prev)
-      next.has(quizId) ? next.delete(quizId) : next.add(quizId)
-      return next
-    })
 
   const { data: session, isLoading, isError, refetch } = useQuery({
     queryKey: ['my-coaching-detail', id],
@@ -73,8 +47,6 @@ export default function MyCoachingDetailPage() {
   useEffect(() => {
     if (!session) return
     setActionPlan(session.csr_action_plan ?? '')
-    setRootCause(session.csr_root_cause ?? '')
-    setSupportNeeded(session.csr_support_needed ?? '')
     setAcknowledged(!!session.csr_acknowledged_at)
     const passed = new Set<number>(
       (session.quiz_attempts ?? [])
@@ -88,8 +60,6 @@ export default function MyCoachingDetailPage() {
   const submitMut = useMutation({
     mutationFn: () => trainingService.submitCSRResponse(Number(id), {
       action_plan:    actionPlan,
-      root_cause:     rootCause     || undefined,
-      support_needed: supportNeeded || undefined,
       acknowledged,
     }),
     onSuccess: () => {
@@ -104,26 +74,25 @@ export default function MyCoachingDetailPage() {
 
   const handleDownload = async () => {
     if (!session?.attachment_filename) return
-    try {
-      const blob = URL.createObjectURL(await trainingService.downloadAttachment(Number(id)))
-      const a = Object.assign(document.createElement('a'), { href: blob, download: session.attachment_filename })
-      a.click(); URL.revokeObjectURL(blob)
-    } catch { toast({ title: 'Download failed', variant: 'destructive' }) }
+    try { await downloadSessionAttachment(Number(id), session.attachment_filename) }
+    catch { toast({ title: 'Download failed', variant: 'destructive' }) }
   }
 
-  if (isLoading) return <QualityListPage><TableLoadingSkeleton rows={8} /></QualityListPage>
-  if (isError || !session) return <QualityListPage><TableErrorState message="Failed to load training session." onRetry={refetch} /></QualityListPage>
+  if (isLoading) return <div className="p-6"><TableLoadingSkeleton rows={8} /></div>
+  if (isError || !session) return <div className="p-6"><TableErrorState message="Failed to load training session." onRetry={refetch} /></div>
 
-  const { status, require_action_plan, require_acknowledgment } = session
+  const { status } = session
+  const require_action_plan    = !!session.require_action_plan
+  const require_acknowledgment = !!session.require_acknowledgment
   const quizzes          = session.quizzes ?? []
-  const isReadOnly       = ['COMPLETED', 'CLOSED'].includes(status)
+  const isReadOnly       = ['COMPLETED', 'CLOSED', 'CANCELED'].includes(status)
   const isScheduled      = status === 'SCHEDULED'
   const alreadySubmitted = !!session.csr_action_plan
 
   const planOk         = !require_action_plan || (actionPlan.length >= 50) || alreadySubmitted
   const ackOk          = !require_acknowledgment || acknowledged || !!session.csr_acknowledged_at
   const needsPlanOrAck = require_action_plan || require_acknowledgment
-  // Quizzes are independent — CSR submits plan/ack separately; quiz pass triggers auto-advance on its own
+  // Quizzes are independent — Agent submits plan/ack separately; quiz pass triggers auto-advance on its own
   const isFormComplete  = planOk && ackOk
 
   const progressItems: { label: string }[] = [
@@ -135,33 +104,36 @@ export default function MyCoachingDetailPage() {
 
 
   return (
-    <QualityListPage>
-      <QualityPageHeader
-        title="Training Session"
-        actions={
-          <Button variant="outline" onClick={() => navigate('/app/training/my-coaching')}>← Back</Button>
-        }
-      />
+    <div className="flex flex-col" style={{ height: 'calc(100% + 24px)', marginBottom: '-24px' }}>
 
-      {/* Banners */}
-      {isScheduled && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-          <p className="text-[13px] font-medium text-slate-700">
-            Your training session is scheduled. Notes and any required actions will be shared after your meeting.
-          </p>
-          {progressItems.length > 0 && (
-            <div className="text-[12px] text-slate-500 space-y-1 pt-2 mt-2 border-t border-slate-200">
-              <p className="font-medium text-slate-600">After the meeting, you may need to:</p>
-              {progressItems.map(i => <p key={i.label}>→ {i.label}</p>)}
-            </div>
-          )}
-        </div>
-      )}
+      <div className="shrink-0 px-6 pt-6 space-y-5">
+        <QualityPageHeader
+          title="Training Session"
+          actions={
+            <Button variant="outline" onClick={() => navigate('/app/training/my-coaching')}>← Back</Button>
+          }
+        />
 
-      <div className="grid grid-cols-3 gap-6">
+        {isScheduled && (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <p className="text-[13px] font-medium text-slate-700">
+              Your training session is scheduled. Notes and any required actions will be shared after your meeting.
+            </p>
+            {progressItems.length > 0 && (
+              <div className="text-[12px] text-slate-500 space-y-1 pt-2 mt-2 border-t border-slate-200">
+                <p className="font-medium text-slate-600">After the meeting, you may need to:</p>
+                {progressItems.map(i => <p key={i.label}>→ {i.label}</p>)}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
-        {/* ── Left column ─────────────────────────────────────────────────── */}
-        <div className="col-span-2 space-y-4">
+      <div className="flex-1 min-h-0 px-6 pb-6 pt-5">
+        <div className="grid grid-cols-3 gap-6 h-full">
+
+          {/* ── Left column ─────────────────────────────────────────────────── */}
+          <div className="col-span-2 overflow-y-auto space-y-4 pr-2">
 
           {/* Section 1 — Session (same layout as trainer) */}
           <Section title="Session">
@@ -174,11 +146,11 @@ export default function MyCoachingDetailPage() {
             </div>
             <div className="border-t border-slate-100 pt-4 mt-4">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Topics</p>
-              <TopicList topics={session.topics} />
+              <TopicList topics={session.topics} columns={3} bold />
             </div>
             <div className="border-t border-slate-100 pt-4 mt-4">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Notes</p>
-              <NoteBlock text={session.notes} placeholder="No notes provided" />
+              <NoteBlock text={session.notes} placeholder="No notes provided" bold />
             </div>
           </Section>
 
@@ -187,215 +159,47 @@ export default function MyCoachingDetailPage() {
 
             {/* Required action */}
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Required Action Notes</p>
-            <NoteBlock text={session.required_action} placeholder="No required action specified" />
+            <NoteBlock text={session.required_action} placeholder="No required action specified" bold />
 
-            {/* Reference Materials */}
-            <Sub title="Reference Materials" icon={BookOpen}>
-              {(session.kb_resources?.length ?? 0) > 0 ? (
-                <div className="space-y-2">
-                  {session.kb_resources!.map(r => (
-                    <div key={r.id} className="flex items-start justify-between gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="min-w-0">
-                        <p className="text-[14px] font-semibold text-slate-900 truncate">{r.title}</p>
-                        {r.description && <p className="text-[12px] text-slate-500 mt-0.5">{r.description}</p>}
-                      </div>
-                      <a
-                        href={r.resource_type === 'URL' && r.url ? r.url : r.url ? r.url : `/api/csr/resources/${r.id}/file`}
-                        target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline shrink-0">
-                        Open <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[13px] text-slate-400 italic">No resources assigned</p>
-              )}
-            </Sub>
+            <ResourcesTable resources={session.kb_resources ?? []} forAgent />
 
-            {/* Quizzes */}
-            <Sub title="Quizzes" icon={HelpCircle}>
-              {quizzes.length > 0 ? (
-                <div className="space-y-3">
-                  {quizzes.map(quiz => {
-                    const attempts    = (session.quiz_attempts ?? []).filter(a => a.quiz_id === quiz.id)
-                    const quizPassed  = passedQuizIds.has(quiz.id) || attempts.some(a => a.passed)
-                    const bestScore   = attempts.length > 0 ? Math.max(...attempts.map(a => Number(a.score))) : null
-                    const isExpanded  = expandedQuizIds.has(quiz.id)
-                    const hasAttempts = attempts.length > 0
+            <QuizSummaryTable
+              quizzes={quizzes}
+              attempts={session.quiz_attempts ?? []}
+              renderAction={(quizId) => {
+                const quiz = quizzes.find(q => q.id === quizId)
+                if (!quiz) return null
+                const qa = (session.quiz_attempts ?? []).filter(a => a.quiz_id === quizId)
+                const alreadyPassed = passedQuizIds.has(quizId) || qa.some(a => a.passed)
 
-                    return (
-                      <div key={quiz.id} className="rounded-lg border border-slate-200 overflow-hidden">
+                if (alreadyPassed) return <QuizReview quiz={quiz} defaultOpen />
 
-                        {/* Accordion header */}
-                        <button
-                          type="button"
-                          onClick={() => toggleQuizExpand(quiz.id)}
-                          className="w-full flex items-center gap-3 px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
-                        >
-                          {isExpanded
-                            ? <ChevronDown  className="h-4 w-4 text-slate-400 shrink-0" />
-                            : <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
-                          }
-                          <span className="text-[14px] font-semibold text-slate-900 flex-1 truncate">
-                            {quiz.quiz_title}
-                          </span>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-[12px] text-slate-500">
-                              {attempts.length} attempt{attempts.length !== 1 ? 's' : ''}
-                            </span>
-                            {quizPassed
-                              ? <span className="text-[13px] text-slate-500">Passed</span>
-                              : <span className="text-[11px] text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-full">Pass: {quiz.pass_score}%</span>
-                            }
-                          </div>
-                        </button>
+                if (isReadOnly) return null
 
-                        {/* Accordion body */}
-                        {isExpanded && (
-                          <div className="px-4 pb-4 pt-3 space-y-4 bg-white">
-
-                            {/* Attempt history */}
-                            {hasAttempts && (
-                              <div>
-                                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Attempt History</p>
-                                <Table className="text-[12px]">
-                                  <TableHeader>
-                                    <TableRow className="border-slate-100">
-                                      <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Attempt</TableHead>
-                                      <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Score</TableHead>
-                                      <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Result</TableHead>
-                                      <TableHead className="h-7 py-0 text-[11px] text-slate-400 font-medium">Date</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {attempts.map(a => (
-                                      <TableRow key={a.id} className="border-slate-50">
-                                        <TableCell className="py-1.5 text-slate-600">#{a.attempt_number}</TableCell>
-                                        <TableCell className="py-1.5 text-slate-600">{Number(a.score).toFixed(0)}%</TableCell>
-                                        <TableCell className="py-1.5 text-slate-600">
-                                          {a.passed ? 'Passed' : 'Not passed'}
-                                        </TableCell>
-                                        <TableCell className="py-1.5 text-slate-400">{formatQualityDate(a.submitted_at)}</TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </div>
-                            )}
-
-                            {/* Review — only shown after at least one attempt */}
-                            {hasAttempts && quiz.questions?.length > 0 && (() => {
-                              // Use the most recent attempt's answers
-                              const lastAttempt = attempts[attempts.length - 1]
-                              const answerMap = new Map<number, number>()
-                              try {
-                                const parsed = JSON.parse(lastAttempt?.answers_json ?? '[]')
-                                parsed.forEach((a: { question_id: number; selected_option: number }) =>
-                                  answerMap.set(a.question_id, a.selected_option)
-                                )
-                              } catch { /* ignore parse errors */ }
-                              return (
-                                <div>
-                                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">
-                                    Your Answers — Attempt #{lastAttempt.attempt_number}
-                                  </p>
-                                  <div className="space-y-4">
-                                    {quiz.questions.map((q: any, qi: number) => {
-                                      const userAnswer = answerMap.get(q.id)
-                                      const answeredCorrectly = userAnswer === q.correct_option
-                                      return (
-                                        <div key={q.id}>
-                                          <p className="text-[13px] font-medium text-slate-700 mb-2">
-                                            {qi + 1}. {q.question_text}
-                                          </p>
-                                          <div className="space-y-1 pl-3">
-                                            {q.options.map((opt: string, oi: number) => {
-                                              const isUserAnswer  = oi === userAnswer
-                                              const isCorrect     = oi === q.correct_option
-                                              // Show: user's answer (right or wrong) + correct answer if user was wrong
-                                              const show = isUserAnswer || (!answeredCorrectly && isCorrect)
-                                              if (!show && userAnswer !== undefined) return null
-                                              return (
-                                                <div key={oi} className={cn(
-                                                  'flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px]',
-                                                  isUserAnswer && answeredCorrectly ? 'bg-emerald-50 text-emerald-800 font-medium' :
-                                                  isUserAnswer && !answeredCorrectly ? 'bg-red-50 text-red-800 font-medium' :
-                                                  isCorrect ? 'bg-slate-50 text-slate-600 font-medium' : 'text-slate-500'
-                                                )}>
-                                                  <span className="text-[11px] shrink-0 w-4">
-                                                    {isUserAnswer && answeredCorrectly ? '✓' :
-                                                     isUserAnswer && !answeredCorrectly ? '✗' :
-                                                     isCorrect ? '→' : ''}
-                                                  </span>
-                                                  <span>{String.fromCharCode(65 + oi)}. {opt}</span>
-                                                  {isCorrect && !answeredCorrectly && (
-                                                    <span className="text-[11px] text-slate-400 ml-1">(correct)</span>
-                                                  )}
-                                                </div>
-                                              )
-                                            })}
-                                          </div>
-                                        </div>
-                                      )
-                                    })}
-                                  </div>
-                                </div>
-                              )
-                            })()}
-
-                            {/* Take Quiz / Retake if score < 100% */}
-                            {!isReadOnly && (bestScore === null || bestScore < 100) && (
-                              <div className="border-t border-slate-100 pt-4">
-                                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">
-                                  {attempts.length === 0 ? 'Take Quiz' : 'Retake Quiz'}
-                                </p>
-                                <QuizPlayer
-                                  quiz={quiz}
-                                  coachingSessionId={session.id}
-                                  onPassed={() => {
-                                    setPassedQuizIds(prev => new Set([...prev, quiz.id]))
-                                    qc.invalidateQueries({ queryKey: ['my-coaching-detail', id] })
-                                    qc.invalidateQueries({ queryKey: ['my-coaching'] })
-                                  }}
-                                />
-                              </div>
-                            )}
-
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p className="text-[13px] text-slate-400 italic">No quizzes assigned</p>
-              )}
-            </Sub>
+                return (
+                  <QuizPlayer
+                    quiz={quiz}
+                    coachingSessionId={session.id}
+                    onPassed={() => {
+                      setPassedQuizIds(prev => new Set([...prev, quizId]))
+                      qc.invalidateQueries({ queryKey: ['my-coaching-detail', id] })
+                      qc.invalidateQueries({ queryKey: ['my-coaching'] })
+                    }}
+                  />
+                )
+              }}
+            />
 
           </Section>
 
-          {/* Section 3 — CSR Accountability */}
-          <Section title="CSR Accountability">
+          {/* Section 3 — Agent Accountability */}
+          <Section title="Agent Accountability">
 
             {/* Action Plan */}
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Action Plan</p>
             {require_action_plan ? (
               alreadySubmitted ? (
-                /* Submitted — same NoteBlock style as Notes and Required Action Notes */
-                <div className="space-y-4">
-                  <NoteBlock text={session.csr_action_plan} placeholder="" />
-                  {(session.csr_root_cause || session.csr_support_needed) && (
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 pt-3 border-t border-slate-100">
-                      {session.csr_root_cause && (
-                        <InfoRow label="Root Cause" value={session.csr_root_cause} />
-                      )}
-                      {session.csr_support_needed && (
-                        <InfoRow label="Support Needed" value={session.csr_support_needed} />
-                      )}
-                    </div>
-                  )}
-                </div>
+                <NoteBlock text={session.csr_action_plan} placeholder="" bold />
               ) : (
                 /* Not yet submitted — form inputs */
                 <div className="space-y-3">
@@ -411,18 +215,6 @@ export default function MyCoachingDetailPage() {
                   <p className={cn('text-[11px]', actionPlan.length < 50 ? 'text-red-500' : 'text-slate-400')}>
                     {actionPlan.length}/1000{actionPlan.length < 50 && ` (${50 - actionPlan.length} more needed)`}
                   </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Root Cause (optional)</label>
-                      <Input className="h-9 text-[13px]" placeholder="e.g. Misunderstood policy"
-                        value={rootCause} onChange={e => setRootCause(e.target.value)} disabled={isReadOnly} />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide block mb-1">Support Needed (optional)</label>
-                      <Input className="h-9 text-[13px]" placeholder="e.g. Additional training"
-                        value={supportNeeded} onChange={e => setSupportNeeded(e.target.value)} disabled={isReadOnly} />
-                    </div>
-                  </div>
                 </div>
               )
             ) : (
@@ -459,28 +251,37 @@ export default function MyCoachingDetailPage() {
 
           </Section>
 
-          {/* Section 4 — Attachment */}
-          {session.attachment_filename && (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4">
-                <div className="flex items-center gap-2">
-                  <Paperclip className="h-4 w-4 text-slate-400" />
-                  <span className="text-[15px] font-semibold text-slate-800">Attachment</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-[13px] text-slate-600 truncate max-w-[220px]">{session.attachment_filename}</span>
-                  <Button variant="outline" size="sm" onClick={handleDownload}>
-                    <Download className="h-3.5 w-3.5 mr-1.5" /> Download
-                  </Button>
-                </div>
-              </div>
+          {/* Attachment (always visible) */}
+          <AttachmentCard
+            filename={session.attachment_filename}
+            onDownload={session.attachment_filename ? handleDownload : undefined}
+          />
+
+          {/* ── Bottom action bar ── */}
+          {!isReadOnly && !isScheduled && needsPlanOrAck && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
+              <Button variant="outline" onClick={() => navigate('/app/training/my-coaching')}>
+                Cancel
+              </Button>
+              <Button
+                className={cn(
+                  'text-[13px] font-semibold',
+                  isFormComplete
+                    ? 'bg-primary hover:bg-primary/90 text-white'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                )}
+                disabled={!isFormComplete || submitMut.isPending}
+                onClick={() => submitMut.mutate()}
+              >
+                {submitMut.isPending ? 'Submitting…' : 'Submit Response'}
+              </Button>
             </div>
           )}
 
-        </div>
+          </div>
 
-        {/* ── Right column ────────────────────────────────────────────────── */}
-        <div className="col-span-1 space-y-4">
+          {/* ── Right column ────────────────────────────────────────────────── */}
+          <div className="col-span-1 overflow-y-auto space-y-4 pl-2">
 
           {/* Current Status */}
           <SideCard>
@@ -491,7 +292,7 @@ export default function MyCoachingDetailPage() {
             </div>
           </SideCard>
 
-          {/* Your Progress — same format as trainer's CSR Response panel */}
+          {/* Your Progress — same format as trainer's Agent Response panel */}
           <SideCard>
             <SideTitle>Your Progress</SideTitle>
 
@@ -576,35 +377,10 @@ export default function MyCoachingDetailPage() {
             </div>
           </SideCard>
 
+          </div>
         </div>
       </div>
 
-      {/* ── Bottom action bar — aligned with left column only ────────────── */}
-      {!isReadOnly && !isScheduled && needsPlanOrAck && (
-        <div className="grid grid-cols-3 gap-6 mt-2">
-        <div className="col-span-2">
-        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
-          <Button variant="outline" onClick={() => navigate('/app/training/my-coaching')}>
-            Cancel
-          </Button>
-          <div className="flex items-center gap-3">
-            <Button
-              className={cn(
-                'text-[13px] font-semibold',
-                isFormComplete
-                  ? 'bg-primary hover:bg-primary/90 text-white'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              )}
-              disabled={!isFormComplete || submitMut.isPending}
-              onClick={() => submitMut.mutate()}
-            >
-              {submitMut.isPending ? 'Submitting…' : 'Submit Response'}
-            </Button>
-          </div>
-        </div>
-        </div>
-        </div>
-      )}
-    </QualityListPage>
+    </div>
   )
 }

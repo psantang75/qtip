@@ -11,6 +11,7 @@ import { useQCFilters } from '@/hooks/useQCFilters'
 import { getKpiDef } from '@/constants/kpiDefs'
 import { getQCAgents, getFilterOptions } from '@/services/insightsQCService'
 import type { AgentSummary } from '@/services/insightsQCService'
+import { useToast } from '@/hooks/use-toast'
 import QCAgentProfile from './QCAgentProfile'
 
 const col = createColumnHelper<AgentSummary>()
@@ -84,6 +85,7 @@ const COLUMNS = [
 export default function QCAgentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const agentId = searchParams.get('agent') ? parseInt(searchParams.get('agent')!, 10) : null
+  const { toast } = useToast()
 
   const { departments, setDepartments, period, setPeriod,
           customStart, setCustomStart, customEnd, setCustomEnd,
@@ -101,6 +103,21 @@ export default function QCAgentsPage() {
     if (!agentId) return null
     return agents.find(a => a.userId === agentId) ?? null
   }, [agentId, agents])
+
+  // Guard against URL tampering: if the user requests an agent they cannot
+  // see (e.g. a SELF-scoped agent rewriting ?agent=17), strip the param and
+  // surface an access-denied toast instead of silently swapping data.
+  useEffect(() => {
+    if (!agentId) return
+    if (isLoading || isError) return
+    if (selectedAgent) return
+    toast({
+      title: 'Access denied',
+      description: "You don't have access to that agent's profile.",
+      variant: 'destructive',
+    })
+    setSearchParams({}, { replace: true })
+  }, [agentId, isLoading, isError, selectedAgent, toast, setSearchParams])
 
   useEffect(() => {
     if (agentId) {
@@ -141,6 +158,12 @@ export default function QCAgentsPage() {
         customEnd={customEnd} setCustomEnd={setCustomEnd}
       />
     )
+  }
+
+  // An agent was requested via URL but the agents list is still loading —
+  // show a skeleton so we don't flash the table before the access guard runs.
+  if (agentId && isLoading) {
+    return <SkeletonTable rows={6} />
   }
 
   return (

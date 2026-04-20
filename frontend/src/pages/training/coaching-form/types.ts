@@ -1,7 +1,7 @@
 import type { CoachingPurpose, CoachingFormat, CoachingSourceType } from '@/services/trainingService'
 
 export interface CoachingFormState {
-  csr_ids: number[]   // multi-select for create; [csr_id] for edit
+  csr_ids: number[]   // multi-select for create; [csr_id] for edit (API field name)
   coach_id: number
   session_date: string
   coaching_purpose: CoachingPurpose | ''
@@ -20,6 +20,8 @@ export interface CoachingFormState {
   follow_up_notes: string
   internal_notes: string
   behavior_flag_ids: number[]
+  root_cause_ids: number[]
+  support_needed_ids: number[]
   attachment_file: File | null
 }
 
@@ -46,6 +48,8 @@ export function emptyForm(): CoachingFormState {
     follow_up_notes: '',
     internal_notes: '',
     behavior_flag_ids: [],
+    root_cause_ids: [],
+    support_needed_ids: [],
     attachment_file: null,
   }
 }

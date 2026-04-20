@@ -7,7 +7,7 @@ import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { Section, SectionLabel } from '@/components/common/DetailLayout'
 import { useToast } from '@/hooks/use-toast'
 
-// ── CSR submit new dispute ───────────────────────────────────────────────────
+// ── Agent submit new dispute ─────────────────────────────────────────────────
 export function DisputeForm({ submissionId, onSuccess }: { submissionId: number; onSuccess: () => void }) {
   const [reason, setReason] = useState('')
   const { toast } = useToast()
@@ -19,7 +19,7 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
       toast({ title: 'Dispute submitted', description: 'Sent to your manager for review.' })
       qc.invalidateQueries({ queryKey: ['submission-detail'] })
       qc.invalidateQueries({ queryKey: ['submissions'] })
-      qc.invalidateQueries({ queryKey: ['csr-dispute-history'] })
+      qc.invalidateQueries({ queryKey: ['agent-dispute-history'] })
       onSuccess()
     },
     onError: () => toast({ title: 'Error', description: 'Failed to submit dispute.', variant: 'destructive' }),
@@ -46,7 +46,7 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
   )
 }
 
-// ── CSR edit open dispute ────────────────────────────────────────────────────
+// ── Agent edit open dispute ──────────────────────────────────────────────────
 export function EditDisputeForm({
   dispute,
   onSuccess,
@@ -67,7 +67,7 @@ export function EditDisputeForm({
     onSuccess: () => {
       toast({ title: 'Dispute updated' })
       qc.invalidateQueries({ queryKey: ['submission-detail'] })
-      qc.invalidateQueries({ queryKey: ['csr-dispute-history'] })
+      qc.invalidateQueries({ queryKey: ['agent-dispute-history'] })
       onSuccess()
     },
     onError: (err: any) =>

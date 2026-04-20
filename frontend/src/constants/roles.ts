@@ -5,7 +5,7 @@
 export const USER_ROLES = {
   ADMIN: 1,
   MANAGER: 2,
-  CSR: 3,
+  AGENT: 3,
   QA_ANALYST: 4
 } as const;
 
@@ -17,7 +17,7 @@ export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES];
 export const ROLE_NAMES = {
   [USER_ROLES.ADMIN]: 'Admin',
   [USER_ROLES.MANAGER]: 'Manager', 
-  [USER_ROLES.CSR]: 'CSR',
+  [USER_ROLES.AGENT]: 'Agent',
   [USER_ROLES.QA_ANALYST]: 'QA Analyst'
 } as const;
 
@@ -29,10 +29,10 @@ export const hasRole = (userRoleId: number, requiredRole: UserRole): boolean => 
 };
 
 /**
- * Check if user is CSR
+ * Check if user is Agent
  */
-export const isCSR = (userRoleId: number): boolean => {
-  return hasRole(userRoleId, USER_ROLES.CSR);
+export const isAgent = (userRoleId: number): boolean => {
+  return hasRole(userRoleId, USER_ROLES.AGENT);
 };
 
 /**
@@ -69,7 +69,7 @@ export const ROLE_PERMISSIONS = {
     canManageTraining: false,
     canSetGoals: false,
   },
-  [USER_ROLES.CSR]: {
+  [USER_ROLES.AGENT]: {
     canManageUsers: false,
     canManageForms: false,
     canViewAllAudits: false,

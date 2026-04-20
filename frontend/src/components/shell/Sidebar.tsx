@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import * as LucideIcons from 'lucide-react'
 import type { LucideProps } from 'lucide-react'
 import { ChevronDown } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   getNavItemsForRole,
   getSectionFromPath,
   getSectionConfig,
 } from '@/config/navConfig'
+import { getInsightsNavigation } from '@/services/insightsService'
 import { cn } from '@/lib/utils'
 
 function DynamicIcon({ name, size = 16, className }: { name: string; size?: number; className?: string }) {
@@ -26,7 +28,33 @@ export default function Sidebar() {
 
   const currentSection = getSectionFromPath(location.pathname) ?? 'quality'
   const sectionConfig  = getSectionConfig(currentSection)
-  const navItems       = user ? getNavItemsForRole(currentSection, user.role_id) : []
+  const rawNavItems    = user ? getNavItemsForRole(currentSection, user.role_id) : []
+
+  // Pull the user's accessible Insights pages from the backend so items
+  // tagged with `pageKey` are gated by ie_page_role_access. Only fetch when
+  // we're actually in the Insights section to avoid unnecessary requests.
+  const { data: insightsNav } = useQuery({
+    queryKey: ['insights-navigation'],
+    queryFn: getInsightsNavigation,
+    enabled: !!user && currentSection === 'insights',
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const accessiblePageKeys = useMemo(() => {
+    const set = new Set<string>()
+    for (const cat of insightsNav ?? []) {
+      for (const p of cat.pages) set.add(p.page_key)
+    }
+    return set
+  }, [insightsNav])
+
+  const navItems = useMemo(() => {
+    if (currentSection !== 'insights') return rawNavItems
+    return rawNavItems.filter(item => {
+      if (!item.pageKey) return true
+      return accessiblePageKeys.has(item.pageKey)
+    })
+  }, [rawNavItems, currentSection, accessiblePageKeys])
 
   const originPath = (location.state as { fromPath?: string } | null)?.fromPath
 

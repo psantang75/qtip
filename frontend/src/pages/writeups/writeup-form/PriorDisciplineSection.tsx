@@ -1,43 +1,33 @@
 import { useState } from 'react'
-import { History, Search, Trash2, ExternalLink } from 'lucide-react'
+import { History, Trash2, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { Dialog } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { RichTextDisplay } from '@/components/common/RichTextDisplay'
+import { RichTextDisplay, stripHtml } from '@/components/common/RichTextDisplay'
 import { FormSection } from '@/pages/training/coaching-form/CoachingFormSections'
 import { formatQualityDate } from '@/utils/dateFormat'
 import {
   WRITE_UP_STATUS_LABELS as WRITEUP_STATUS_LABELS,
   COACHING_STATUS_LABELS,
 } from '@/constants/labels'
-import { CoachingSearchModal } from './CoachingSearchModal'
 import { PriorDisciplineModal } from './PriorDisciplineModal'
-import type { WriteUpFormState, PriorDisciplineRef } from './types'
+import type { WriteUpFormState } from './types'
 
 type Updater = <K extends keyof WriteUpFormState>(key: K, value: WriteUpFormState[K]) => void
 
 export function PriorDisciplineSection({ form, update }: { form: WriteUpFormState; update: Updater }) {
-  const [showModal, setShowModal]                 = useState(false)
-  const [showCoachingSearch, setShowCoachingSearch] = useState(false)
+  const [showModal, setShowModal] = useState(false)
 
   const remove = (idx: number) =>
     update('prior_discipline', form.prior_discipline.filter((_, i) => i !== idx))
-
-  const addRefs = (newRefs: PriorDisciplineRef[]) => {
-    const existing = new Set(form.prior_discipline.map(r => `${r.reference_type}:${r.reference_id}`))
-    update('prior_discipline', [...form.prior_discipline, ...newRefs.filter(r => !existing.has(`${r.reference_type}:${r.reference_id}`))])
-  }
 
   return (
     <FormSection title="Prior Discipline & Coaching History">
       <div className="flex items-center gap-2 flex-wrap">
         <Button type="button" variant="outline" size="sm" className="text-[13px]" onClick={() => setShowModal(true)}>
           <History className="h-4 w-4 mr-1.5" /> Browse History
-        </Button>
-        <Button type="button" variant="outline" size="sm" className="text-[13px]" onClick={() => setShowCoachingSearch(true)}>
-          <Search className="h-4 w-4 mr-1.5" /> Search Coaching Sessions
         </Button>
       </div>
 
@@ -79,7 +69,7 @@ export function PriorDisciplineSection({ form, update }: { form: WriteUpFormStat
                     <TableCell className="px-3 py-2.5">
                       {ref.notes ? (
                         <Tooltip>
-                          <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{ref.notes}</span></TooltipTrigger>
+                          <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{stripHtml(ref.notes)}</span></TooltipTrigger>
                           <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><RichTextDisplay html={ref.notes} /></TooltipContent>
                         </Tooltip>
                       ) : <span className="text-slate-300">&mdash;</span>}
@@ -110,12 +100,6 @@ export function PriorDisciplineSection({ form, update }: { form: WriteUpFormStat
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <PriorDisciplineModal csrId={form.csr_id} selected={form.prior_discipline}
           onSave={refs => update('prior_discipline', refs)} onClose={() => setShowModal(false)} />
-      </Dialog>
-
-      <Dialog open={showCoachingSearch} onOpenChange={setShowCoachingSearch}>
-        <CoachingSearchModal csrId={form.csr_id}
-          onImportRefs={refs => { addRefs(refs); setShowCoachingSearch(false) }}
-          onClose={() => setShowCoachingSearch(false)} />
       </Dialog>
     </FormSection>
   )

@@ -32,7 +32,7 @@ export interface ResolutionState {
 
 interface Props {
   dispute:          Dispute
-  isCSR:            boolean
+  isAgent:          boolean
   editingDispute:   boolean
   onEditDispute:    (v: boolean) => void
   canResolveDispute: boolean
@@ -41,7 +41,7 @@ interface Props {
 }
 
 export function DisputePanel({
-  dispute, isCSR, editingDispute, onEditDispute,
+  dispute, isAgent, editingDispute, onEditDispute,
   canResolveDispute, resolution, formData,
 }: Props) {
   const headerRight = (
@@ -49,7 +49,7 @@ export function DisputePanel({
       <span className="text-[13px] text-slate-500 flex items-center gap-1.5">
         Status: <span className="text-[15px] font-semibold text-primary">{STATUS_LABELS[dispute.status] ?? dispute.status}</span>
       </span>
-      {isCSR && dispute.status === 'OPEN' && !dispute.resolved_by && !editingDispute && (
+      {isAgent && dispute.status === 'OPEN' && !dispute.resolved_by && !editingDispute && (
         <button className="text-[12px] text-primary hover:text-primary/80 transition-colors font-medium flex items-center gap-1"
           onClick={() => onEditDispute(true)}>
           <Pencil className="h-3 w-3" /> Edit

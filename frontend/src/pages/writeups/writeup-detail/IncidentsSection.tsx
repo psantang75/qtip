@@ -1,5 +1,6 @@
 import { ExternalLink } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 import { Section, InfoRow, type DetailSectionProps } from './layout'
@@ -45,26 +46,26 @@ export function IncidentsSection({ writeup }: DetailSectionProps) {
               return (
                 <div className="px-4 py-3">
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Examples</p>
-                  <Table className="w-full text-xs">
+                  <Table className="w-full text-[13px]">
                     <TableHeader>
-                      <TableRow className="text-slate-400 border-b border-slate-200">
-                        <TableHead className="text-left py-1.5 font-medium pr-4 w-[90px]">Type</TableHead>
-                        <TableHead className="text-left py-1.5 font-medium pr-4 w-[100px]">Date</TableHead>
-                        <TableHead className="text-left py-1.5 font-medium pr-4">Notes</TableHead>
-                        <TableHead className="py-1.5 w-[36px]" />
-                      </TableRow>
+                      <StandardTableHeaderRow>
+                        <TableHead className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-[90px]">Type</TableHead>
+                        <TableHead className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide w-[110px]">Date</TableHead>
+                        <TableHead className="text-left px-3 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Notes</TableHead>
+                        <TableHead className="px-3 py-2 w-[44px]" />
+                      </StandardTableHeaderRow>
                     </TableHeader>
                     <TableBody>
                       {allExamples.map((ex, ei) => (
-                        <TableRow key={ex.id ?? ei} className="border-b border-slate-100 last:border-0">
-                          <TableCell className="py-2 pr-4 text-slate-600 whitespace-nowrap">
+                        <TableRow key={ex.id ?? ei} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
+                          <TableCell className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
                             {ex.source === 'QA_IMPORT' ? 'QA' : ex.source === 'COACHING_IMPORT' ? 'Coaching' : 'Manual'}
                           </TableCell>
-                          <TableCell className="py-2 pr-4 text-slate-500 whitespace-nowrap">
+                          <TableCell className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
                             {ex.example_date ? formatQualityDate(ex.example_date) : <span className="text-slate-300">&mdash;</span>}
                           </TableCell>
-                          <TableCell className="py-2 pr-4 text-slate-600 leading-relaxed"><RichTextDisplay html={ex.description} placeholder="—" /></TableCell>
-                          <TableCell className="py-2 pr-2 text-center">
+                          <TableCell className="px-3 py-2.5 text-slate-600 leading-relaxed"><RichTextDisplay html={ex.description} placeholder="—" /></TableCell>
+                          <TableCell className="px-3 py-2.5 text-center">
                             {ex.source === 'QA_IMPORT' && ex.qa_submission_id && (
                               <a href={`/app/quality/submissions/${ex.qa_submission_id}`} target="_blank" rel="noopener noreferrer"
                                 className="text-slate-400 hover:text-primary transition-colors" title="View completed QA form">

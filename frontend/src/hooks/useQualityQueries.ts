@@ -32,17 +32,17 @@ export function useFormsForFilter() {
   })
 }
 
-/** Manager's team CSRs */
-export function useTeamCsrs(enabled = true) {
+/** Manager's team agents */
+export function useTeamAgents(enabled = true) {
   return useQuery({
-    queryKey: ['team-csrs'],
+    queryKey: ['team-agents'],
     queryFn: () => qaService.getTeamCSRs(),
     staleTime: 5 * 60 * 1000,
     enabled,
   })
 }
 
-/** Analytics filter options (org-wide CSRs, forms, departments) */
+/** Analytics filter options (org-wide agents, forms, departments) */
 export function useAnalyticsFilters(enabled = true) {
   return useQuery({
     queryKey: ['analytics-filters'],

@@ -1,11 +1,12 @@
 import React, { Suspense, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ROLE_IDS } from './hooks/useQualityRole'
 import { Toaster } from './components/ui/toaster'
 import { TooltipProvider } from './components/ui/tooltip'
+import { getInsightsAccess, getInsightsNavigation } from './services/insightsService'
 
 // Shell components — NOT lazy (load immediately)
 import AppShell from './components/shell/AppShell'
@@ -88,12 +89,12 @@ function RoleRedirect() {
   React.useEffect(() => {
     if (!user) return
     const destinations: Record<number, string> = {
-      [ROLE_IDS.ADMIN]:    '/app/insights/qc-overview',
+      [ROLE_IDS.ADMIN]:    '/app/insights',
       [ROLE_IDS.QA]:       '/app/quality/submissions',
-      [ROLE_IDS.CSR]:      '/app/quality/submissions',
+      [ROLE_IDS.AGENT]:    '/app/quality/submissions',
       [ROLE_IDS.TRAINER]:  '/app/training/coaching',
       [ROLE_IDS.MANAGER]:  '/app/quality/submissions',
-      [ROLE_IDS.DIRECTOR]: '/app/insights/qc-overview',
+      [ROLE_IDS.DIRECTOR]: '/app/insights',
     }
     const dest = destinations[user.role_id] ?? '/app/quality/submissions'
     navigate(dest, { replace: true })
@@ -143,7 +144,7 @@ function CacheResetGuard() {
 
 function TrainingIndexRedirect() {
   const { user } = useAuth()
-  return <Navigate to={user?.role_id === ROLE_IDS.CSR ? 'my-coaching' : 'coaching'} replace />
+  return <Navigate to={user?.role_id === ROLE_IDS.AGENT ? 'my-coaching' : 'coaching'} replace />
 }
 
 // ── Role guard — redirects to a fallback if the user's role isn't allowed ─────
@@ -161,6 +162,64 @@ function RequireRole({
   if (!user) return null
   if (!allowed.includes(user.role_id)) return <Navigate to={fallback} replace />
   return <>{children}</>
+}
+
+// ── Insights page-access guard ────────────────────────────────────────────────
+// Drives access from the same `ie_page_role_access` / `ie_page_user_override`
+// tables the backend enforces. Eliminates the "land on the page → trigger
+// 403s" UX by checking access *before* the page mounts.
+
+function RequireInsightsAccess({
+  pageKey,
+  fallback = '/app',
+  children,
+}: {
+  pageKey: string
+  fallback?: string
+  children: React.ReactNode
+}) {
+  const { user } = useAuth()
+  const { data, isLoading } = useQuery({
+    queryKey: ['insights-access', pageKey, user?.id],
+    queryFn: () => getInsightsAccess(pageKey),
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  if (!user) return null
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    )
+  }
+  if (!data?.canAccess) return <Navigate to={fallback} replace />
+  return <>{children}</>
+}
+
+// Sends the user to the first Insights page they actually have access to,
+// instead of always defaulting to qc-overview (which most non-admins can't see).
+function InsightsIndexRedirect() {
+  const { user } = useAuth()
+  const { data, isLoading } = useQuery({
+    queryKey: ['insights-navigation', user?.id],
+    queryFn: getInsightsNavigation,
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  if (!user || isLoading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    )
+  }
+
+  const firstPage = data?.flatMap(c => c.pages)[0]
+  if (!firstPage) return <Navigate to="/app" replace />
+  return <Navigate to={firstPage.route_path} replace />
 }
 
 /** Bookmarks and old links used `/app/writeups`; keep them working. */
@@ -298,12 +357,12 @@ export default function App() {
 
                 {/* Insights */}
                 <Route path="/app/insights">
-                  <Route index element={<Navigate to="qc-overview" replace />} />
-                  <Route path="qc-overview" element={<PageLoader><QCOverviewPage /></PageLoader>} />
-                  <Route path="qc-quality"  element={<PageLoader><QCQualityPage /></PageLoader>} />
-                  <Route path="qc-coaching" element={<PageLoader><QCCoachingPage /></PageLoader>} />
-                  <Route path="qc-warnings" element={<PageLoader><QCWarningsPage /></PageLoader>} />
-                  <Route path="qc-agents"   element={<PageLoader><QCAgentsPage /></PageLoader>} />
+                  <Route index element={<InsightsIndexRedirect />} />
+                  <Route path="qc-overview" element={<RequireInsightsAccess pageKey="qc_overview"><PageLoader><QCOverviewPage /></PageLoader></RequireInsightsAccess>} />
+                  <Route path="qc-quality"  element={<RequireInsightsAccess pageKey="qc_quality"><PageLoader><QCQualityPage /></PageLoader></RequireInsightsAccess>} />
+                  <Route path="qc-coaching" element={<RequireInsightsAccess pageKey="qc_coaching"><PageLoader><QCCoachingPage /></PageLoader></RequireInsightsAccess>} />
+                  <Route path="qc-warnings" element={<RequireInsightsAccess pageKey="qc_warnings"><PageLoader><QCWarningsPage /></PageLoader></RequireInsightsAccess>} />
+                  <Route path="qc-agents"   element={<RequireInsightsAccess pageKey="qc_agents"><PageLoader><QCAgentsPage /></PageLoader></RequireInsightsAccess>} />
                   <Route path="dashboard" element={<PageLoader><DashboardPage /></PageLoader>} />
                   <Route path="team"      element={<PageLoader><TeamDashboardPage /></PageLoader>} />
                   <Route path="builder"   element={<PageLoader><ReportBuilderPage /></PageLoader>} />

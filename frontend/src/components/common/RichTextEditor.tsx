@@ -1,7 +1,8 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
-import { useEffect } from 'react'
+import Placeholder from '@tiptap/extension-placeholder'
+import { useEffect, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { Bold, Italic, Underline as UnderlineIcon, List, ListOrdered } from 'lucide-react'
 
@@ -12,18 +13,19 @@ interface RichTextEditorProps {
   className?: string
 }
 
-const extensions = [
-  StarterKit.configure({
-    heading: false,
-    codeBlock: false,
-    blockquote: false,
-    horizontalRule: false,
-    code: false,
-  }),
-  Underline,
-]
-
 export function RichTextEditor({ value, onChange, placeholder, className }: RichTextEditorProps) {
+  const extensions = useMemo(() => [
+    StarterKit.configure({
+      heading: false,
+      codeBlock: false,
+      blockquote: false,
+      horizontalRule: false,
+      code: false,
+    }),
+    Underline,
+    Placeholder.configure({ placeholder: placeholder ?? '' }),
+  ], [placeholder])
+
   const editor = useEditor({
     extensions,
     content: value || '',
@@ -50,16 +52,11 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
 
   return (
     <div className={cn(
-      'relative rounded-md border border-input bg-background ring-offset-background',
-      'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
+      'relative rounded-md border border-input bg-background',
+      'focus-within:border-slate-400',
       className,
     )}>
       <Toolbar editor={editor} />
-      {placeholder && editor.isEmpty && (
-        <div className="pointer-events-none absolute px-3 py-2 text-sm text-muted-foreground">
-          {placeholder}
-        </div>
-      )}
       <EditorContent editor={editor} />
     </div>
   )

@@ -8,6 +8,7 @@ import {
 } from '@/constants/labels'
 import { formatQualityDateLong as fmtDate, formatQualityDateTime as fmtDateTime } from '@/utils/dateFormat'
 import { htmlToPdfNodes } from './htmlToPdf'
+import { stripHtml } from '@/components/common/RichTextDisplay'
 
 const BLUE = '#00aeef'
 const DARK = '#1e293b'
@@ -71,6 +72,8 @@ const s = StyleSheet.create({
   sigStamp: { fontSize: 6.5, color: MID, marginTop: 3, fontStyle: 'italic' },
   sigImg: { width: 120, height: 28 },
   sigText: { fontSize: 12, fontFamily: 'Helvetica-Oblique', color: '#1e293b' },
+  refusedStamp: { fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#b91c1c', letterSpacing: 0.8, marginBottom: 2 },
+  refusedReason: { fontSize: 7.5, color: MID, fontStyle: 'italic', marginTop: 6, lineHeight: 1.4 },
   // Page footer (fixed)
   pageFooter: { position: 'absolute', bottom: 20, left: 44, right: 44, flexDirection: 'row', justifyContent: 'space-between', fontSize: 6.5, color: LIGHT, borderTopWidth: 0.5, borderTopColor: BORDER, paddingTop: 4 },
 })
@@ -197,9 +200,8 @@ export function WriteUpPdfDocument({ writeup }: { writeup: WriteUpDetail }) {
           <SectionBar num={nextSection()} title="CORRECTIVE ACTION & EXPECTATIONS" />
           {htmlToPdfNodes(writeup.corrective_action) ?? <Text style={s.empty}>Not specified.</Text>}
           <View style={s.fieldRow}>
-            <Field label="Timeline for Correction" value={writeup.correction_timeline ?? '—'} width="33.33%" />
-            <Field label="Consequence if Not Met" value={writeup.consequence ?? '—'} width="33.33%" />
-            <Field label="Follow-Up Date" value={fmtDate(writeup.checkin_date)} width="33.33%" />
+            <Field label="Timeline for Correction" value={writeup.correction_timeline ?? '—'} width="50%" />
+            <Field label="Consequence if Not Met" value={writeup.consequence ?? '—'} width="50%" />
           </View>
           {writeup.linked_coaching_session && (
             <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 0.5, borderTopColor: BORDER }}>
@@ -223,7 +225,7 @@ export function WriteUpPdfDocument({ writeup }: { writeup: WriteUpDetail }) {
               const label = isWU ? (TYPE_LABELS[pd.document_type] ?? pd.document_type) : (PURPOSE_LABELS[pd.coaching_purpose ?? ''] ?? pd.coaching_purpose)
               const statusLabel = isWU ? (STATUS_LABELS[pd.status] ?? pd.status) : (COACHING_STATUS[pd.status ?? ''] ?? pd.status)
               const detail = isWU ? splitSep(pd.policies_violated) : splitSep(pd.topic_names)
-              const desc = isWU ? splitSep(pd.incident_descriptions).join(' | ') : pd.notes
+              const desc = isWU ? splitSep(pd.incident_descriptions).join(' | ') : stripHtml(pd.notes)
               return (
                 <View key={i} style={s.priorRow}>
                   <View style={s.fieldRow}>
@@ -258,15 +260,32 @@ export function WriteUpPdfDocument({ writeup }: { writeup: WriteUpDetail }) {
             <View style={s.sigCol}>
               <Text style={s.sigHeading}>EMPLOYEE SIGNATURE</Text>
               <View style={s.sigBox}>
-                {writeup.signature_data && (
+                {writeup.refused_at ? (
+                  <Text style={s.refusedStamp}>REFUSED TO SIGN</Text>
+                ) : writeup.signature_data ? (
                   <Image src={writeup.signature_data} style={s.sigImg} />
-                )}
+                ) : null}
               </View>
               <View style={s.sigMeta}>
                 <Text>Print Name: {writeup.csr_name}</Text>
-                <Text>Date: {writeup.signed_at ? fmtDate(writeup.signed_at) : '___________'}</Text>
+                <Text>Date: {
+                  writeup.refused_at ? fmtDate(writeup.refused_at)
+                    : writeup.signed_at ? fmtDate(writeup.signed_at)
+                    : '___________'
+                }</Text>
               </View>
-              {writeup.signed_at && (
+              {writeup.refused_at ? (
+                <>
+                  <Text style={s.sigStamp}>
+                    Employee declined to sign or approve this performance warning on {fmtDateTime(writeup.refused_at)}.
+                  </Text>
+                  {writeup.refusal_reason && (
+                    <Text style={s.refusedReason}>
+                      Reason: {writeup.refusal_reason}
+                    </Text>
+                  )}
+                </>
+              ) : writeup.signed_at && (
                 <Text style={s.sigStamp}>
                   Signed: {fmtDateTime(writeup.signed_at)}{writeup.signed_ip ? ` | IP: ${writeup.signed_ip}` : ''}
                 </Text>

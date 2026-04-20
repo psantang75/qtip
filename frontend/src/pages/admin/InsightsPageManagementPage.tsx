@@ -15,13 +15,15 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 
+// Mirrors the rows in the `roles` table. Keep this list in sync with the DB
+// — adding an id here that doesn't exist in `roles` will fail the FK on
+// `ie_page_role_access.role_id` when saving.
 const ROLES = [
   { id: 1, name: 'Admin' },
   { id: 2, name: 'QA' },
   { id: 3, name: 'CSR' },
   { id: 4, name: 'Trainer' },
   { id: 5, name: 'Manager' },
-  { id: 6, name: 'Director' },
 ]
 
 const SCOPES = ['ALL', 'DIVISION', 'DEPARTMENT', 'SELF'] as const
@@ -91,17 +93,27 @@ function PageDetailSection({ page }: { page: IePage }) {
     const map: Record<number, { can_access: boolean; data_scope: string }> = {}
     for (const r of ROLES) {
       const existing = existingAccess.find((a: IePageRoleAccess) => a.role_id === r.id)
-      map[r.id] = { can_access: existing?.can_access ?? false, data_scope: existing?.data_scope ?? 'SELF' }
+      // MySQL returns TINYINT(1) as a number (0/1); coerce to boolean so the
+      // backend Zod schema (z.boolean()) doesn't reject the payload.
+      map[r.id] = {
+        can_access: Boolean(existing?.can_access),
+        data_scope: existing?.data_scope ?? 'SELF',
+      }
     }
     return map
   })
 
   const accessMut = useMutation({
     mutationFn: () => {
-      const roles = ROLES.map(r => ({ role_id: r.id, can_access: roleEdits[r.id].can_access, data_scope: roleEdits[r.id].data_scope }))
+      const roles = ROLES.map(r => ({
+        role_id: r.id,
+        can_access: Boolean(roleEdits[r.id].can_access),
+        data_scope: roleEdits[r.id].data_scope as 'ALL' | 'DIVISION' | 'DEPARTMENT' | 'SELF',
+      }))
       return updatePageAccess(page.id, roles)
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['ie-pages'] }); toast({ title: 'Access updated' }) },
+    onError: (e: Error) => toast({ title: 'Failed to save access', description: e.message, variant: 'destructive' }),
   })
 
   return (

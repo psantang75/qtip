@@ -500,6 +500,7 @@ model WriteUp {
   correction_timeline    String?        @db.VarChar(255)
   checkin_date           DateTime?      @db.Date
   consequence            String?        @db.Text
+  internal_notes         String?        @db.Text
   linked_coaching_id     Int?
   manager_id             Int?
   hr_witness_id          Int?
@@ -513,6 +514,8 @@ model WriteUp {
   signature_data         String?        @db.Text
   signed_ip              String?        @db.VarChar(45)
   acknowledged_at        DateTime?      @db.DateTime(0)
+  refusal_reason         String?        @db.Text
+  refused_at             DateTime?      @db.DateTime(0)
   created_by             Int
   created_at             DateTime       @default(now()) @db.DateTime(0)
   updated_at             DateTime       @updatedAt @db.DateTime(0)
@@ -1400,6 +1403,7 @@ enum CoachingFormat {
 }
 
 enum CoachingSessionStatus {
+  DRAFT
   SCHEDULED
   IN_PROCESS
   AWAITING_CSR_ACTION
@@ -1407,6 +1411,7 @@ enum CoachingSessionStatus {
   COMPLETED
   FOLLOW_UP_REQUIRED
   CLOSED
+  CANCELED
 }
 
 enum CoachingSourceType {
@@ -1490,7 +1495,9 @@ enum WriteUpStatus {
   DELIVERED
   AWAITING_SIGNATURE
   SIGNED
+  SIGNATURE_REFUSED
   FOLLOW_UP_PENDING
+  FOLLOW_UP_COMPLETED
   CLOSED
 }
 

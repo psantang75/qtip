@@ -39,6 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
   COMPLETED:           'var(--color-chart-green,  #10b981)',
   FOLLOW_UP_REQUIRED:  'var(--color-chart-orange, #f97316)',
   CLOSED:              'var(--color-chart-gray,   #64748b)',
+  CANCELED:            'var(--color-chart-red,    #ef4444)',
 }
 const typeLabel = (t: string) =>
   COACHING_PURPOSE_LABELS[t as keyof typeof COACHING_PURPOSE_LABELS]
@@ -79,16 +80,16 @@ export default function TrainingReportsPage() {
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    from: defaultFrom, to: defaultTo, csrs: '', types: '', topics: '', page: '1', size: '20',
+    from: defaultFrom, to: defaultTo, agents: '', types: '', topics: '', page: '1', size: '20',
   })
 
   const dateFrom  = get('from')
   const dateTo    = get('to')
-  const csrsParam = get('csrs')
+  const agentsParam = get('agents')
   const page      = parseInt(get('page')) || 1
   const pageSize  = parseInt(get('size')) || 20
   const setPage   = (p: number) => set('page', String(p))
-  const selectedCsrs = useMemo(() => csrsParam ? csrsParam.split(',').filter(Boolean) : [], [csrsParam])
+  const selectedAgents = useMemo(() => agentsParam ? agentsParam.split(',').filter(Boolean) : [], [agentsParam])
 
   const summaryParams = { date_from: dateFrom || undefined, date_to: dateTo || undefined }
 
@@ -97,25 +98,25 @@ export default function TrainingReportsPage() {
     queryFn:  () => trainingService.getReportsSummary(summaryParams),
   })
 
-  const { data: csrListPage, isLoading: csrLoading, isError: csrError, refetch: csrRefetch } = useQuery({
-    queryKey: ['coaching-csr-list', dateFrom, dateTo],
+  const { data: agentListPage, isLoading: agentLoading, isError: agentError, refetch: agentRefetch } = useQuery({
+    queryKey: ['coaching-agent-list', dateFrom, dateTo],
     queryFn:  () => trainingService.getCSRCoachingList({ page: 1, limit: 5000, ...summaryParams }),
-    placeholderData: (p: unknown) => p as typeof csrListPage,
+    placeholderData: (p: unknown) => p as typeof agentListPage,
   })
 
-  const allCsrItems = csrListPage?.items ?? []
+  const allAgentItems = agentListPage?.items ?? []
 
-  const csrOptions = useMemo(() => {
-    const names = new Set(allCsrItems.map(r => r.csr_name).filter(Boolean))
+  const agentOptions = useMemo(() => {
+    const names = new Set(allAgentItems.map(r => r.csr_name).filter(Boolean))
     return Array.from(names).sort() as string[]
-  }, [allCsrItems])
+  }, [allAgentItems])
 
-  const csrRows = useMemo(() => {
-    return selectedCsrs.length ? allCsrItems.filter(r => selectedCsrs.includes(r.csr_name)) : allCsrItems
-  }, [allCsrItems, selectedCsrs])
+  const agentRows = useMemo(() => {
+    return selectedAgents.length ? allAgentItems.filter(r => selectedAgents.includes(r.csr_name)) : allAgentItems
+  }, [allAgentItems, selectedAgents])
 
-  const csrTotalPages  = Math.max(1, Math.ceil(csrRows.length / pageSize))
-  const paginatedCsrRows = csrRows.slice((page - 1) * pageSize, page * pageSize)
+  const agentTotalPages  = Math.max(1, Math.ceil(agentRows.length / pageSize))
+  const paginatedAgentRows = agentRows.slice((page - 1) * pageSize, page * pageSize)
 
   const s = summary ?? {}
   const compRate = Number(s.completion_rate ?? 0)
@@ -148,7 +149,8 @@ export default function TrainingReportsPage() {
   // Tremor DonutChart needs colors as Tremor color names; map status to closest Tremor color
   const donutColors: string[] = statusData.map((d: { name: string }) =>
     ({ DRAFT: 'slate', SCHEDULED: 'indigo', AWAITING_CSR_ACTION: 'amber',
-       COMPLETED: 'emerald', FOLLOW_UP_REQUIRED: 'orange', CLOSED: 'gray' } as Record<string, string>
+       COMPLETED: 'emerald', FOLLOW_UP_REQUIRED: 'orange', CLOSED: 'gray',
+       CANCELED: 'red' } as Record<string, string>
     )[d.name] ?? 'slate'
   )
 
@@ -158,8 +160,8 @@ export default function TrainingReportsPage() {
       <QualityPageHeader title="Training Reports" />
 
       <QualityFilterBar hasFilters={hasAnyFilter} onReset={reset}
-        resultCount={{ filtered: csrRows.length, total: allCsrItems.length }}
-        truncated={allCsrItems.length >= CLIENT_FETCH_LIMIT}>
+        resultCount={{ filtered: agentRows.length, total: allAgentItems.length }}
+        truncated={allAgentItems.length >= CLIENT_FETCH_LIMIT}>
         <DateRangeFilter
           value={{ start: dateFrom, end: dateTo }}
           onChange={v => setMany({ from: v.start, to: v.end, page: '1' })}
@@ -250,17 +252,17 @@ export default function TrainingReportsPage() {
 
       </div>
 
-      {/* ── CSR Drill-Down Table ────────────────────────────────────────────── */}
+      {/* ── Agent Drill-Down Table ──────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <p className="text-[15px] font-semibold text-slate-800">CSR Breakdown</p>
-          {csrOptions.length > 0 && (
+          <p className="text-[15px] font-semibold text-slate-800">Agent Breakdown</p>
+          {agentOptions.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              {csrOptions.slice(0, 6).map(name => (
+              {agentOptions.slice(0, 6).map(name => (
                 <Button key={name} variant="ghost" size="sm"
-                  onClick={() => setMany({ csrs: selectedCsrs.includes(name) ? selectedCsrs.filter(c => c !== name).join(',') : [...selectedCsrs, name].join(','), page: '1' })}
+                  onClick={() => setMany({ agents: selectedAgents.includes(name) ? selectedAgents.filter(c => c !== name).join(',') : [...selectedAgents, name].join(','), page: '1' })}
                   className={cn('px-2.5 py-0.5 h-auto rounded-full text-[11px] font-medium',
-                    selectedCsrs.includes(name) ? 'bg-primary/10 text-primary hover:bg-primary/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}>
+                    selectedAgents.includes(name) ? 'bg-primary/10 text-primary hover:bg-primary/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}>
                   {name}
                 </Button>
               ))}
@@ -268,15 +270,15 @@ export default function TrainingReportsPage() {
           )}
         </div>
 
-        {csrLoading ? (
+        {agentLoading ? (
           <TableLoadingSkeleton rows={8} />
-        ) : csrError ? (
-          <TableErrorState message="Failed to load coaching data." onRetry={csrRefetch} />
+        ) : agentError ? (
+          <TableErrorState message="Failed to load coaching data." onRetry={agentRefetch} />
         ) : (
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
-                <TableHead>CSR</TableHead>
+                <TableHead>Agent</TableHead>
                 <TableHead className="text-center">Sessions</TableHead>
                 <TableHead className="text-center">Completed</TableHead>
                 <TableHead>Completion Rate</TableHead>
@@ -288,29 +290,29 @@ export default function TrainingReportsPage() {
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
-              {paginatedCsrRows.length === 0 ? (
+              {paginatedAgentRows.length === 0 ? (
                 <TableEmptyState colSpan={9} icon={MessageSquare} title="No coaching data in this range" />
-              ) : paginatedCsrRows.map(csr => (
-                <TableRow key={csr.user_id} className="cursor-pointer hover:bg-slate-50/50"
-                  onClick={() => navigate(`/app/training/coaching?csrs=${csr.user_id}`)}>
-                  <TableCell className="text-[13px] text-slate-600">{csr.csr_name}</TableCell>
-                  <TableCell className="text-center text-[13px] text-slate-600">{csr.total_sessions}</TableCell>
-                  <TableCell className="text-center text-[13px] text-slate-600">{csr.completed_sessions}</TableCell>
+              ) : paginatedAgentRows.map(row => (
+                <TableRow key={row.user_id} className="cursor-pointer hover:bg-slate-50/50"
+                  onClick={() => navigate(`/app/training/coaching?agents=${row.user_id}`)}>
+                  <TableCell className="text-[13px] text-slate-600">{row.csr_name}</TableCell>
+                  <TableCell className="text-center text-[13px] text-slate-600">{row.total_sessions}</TableCell>
+                  <TableCell className="text-center text-[13px] text-slate-600">{row.completed_sessions}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-1.5 bg-slate-100 rounded-full max-w-[60px]">
-                        <div className="h-full bg-primary rounded-full" style={{ width: `${csr.completion_rate ?? 0}%` }} />
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${row.completion_rate ?? 0}%` }} />
                       </div>
-                      <span className="text-[13px] text-slate-600">{csr.completion_rate ?? 0}%</span>
+                      <span className="text-[13px] text-slate-600">{row.completion_rate ?? 0}%</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-center text-[13px] text-slate-600">
-                    {csr.avg_days_to_completion != null ? `${csr.avg_days_to_completion}d` : '—'}
+                    {row.avg_days_to_completion != null ? `${row.avg_days_to_completion}d` : '—'}
                   </TableCell>
-                  <TableCell className="text-center text-[13px] text-slate-600">{csr.quizzes_passed ?? 0}</TableCell>
-                  <TableCell className="text-[13px] text-slate-500 max-w-[120px] truncate">{csr.most_common_topic ?? '—'}</TableCell>
+                  <TableCell className="text-center text-[13px] text-slate-600">{row.quizzes_passed ?? 0}</TableCell>
+                  <TableCell className="text-[13px] text-slate-500 max-w-[120px] truncate">{row.most_common_topic ?? '—'}</TableCell>
                   <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">
-                    {csr.last_session_date ? formatQualityDate(csr.last_session_date) : '—'}
+                    {row.last_session_date ? formatQualityDate(row.last_session_date) : '—'}
                   </TableCell>
                   <TableCell className="text-slate-400 text-[13px]">→</TableCell>
                 </TableRow>
@@ -322,8 +324,8 @@ export default function TrainingReportsPage() {
 
       <ListPagination
         page={page}
-        totalPages={csrTotalPages}
-        totalItems={csrRows.length}
+        totalPages={agentTotalPages}
+        totalItems={agentRows.length}
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={s => setMany({ size: String(s), page: '1' })}

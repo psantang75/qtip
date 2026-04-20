@@ -32,6 +32,7 @@ const STATUS_MAP: Record<string, StatusConfig> = {
   // Write-up-specific
   AWAITING_SIGNATURE:  { label: 'Awaiting Signature', classes: 'bg-amber-100   text-amber-800'   },
   SIGNED:              { label: 'Signed',             classes: 'bg-emerald-100 text-emerald-800' },
+  SIGNATURE_REFUSED:   { label: 'Signature Refused',  classes: 'bg-rose-100    text-rose-800'    },
   FOLLOW_UP_PENDING:   { label: 'Follow-Up Pending',  classes: 'bg-orange-100  text-orange-800'  },
 }
 

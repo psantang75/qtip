@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
-import { RichTextDisplay } from '@/components/common/RichTextDisplay'
+import { RichTextDisplay, stripHtml } from '@/components/common/RichTextDisplay'
 import { Dialog } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -62,7 +62,7 @@ export function CorrectiveSection({ form, update }: { form: WriteUpFormState; up
             onChange={html => update('corrective_action', html)} />
         </Field>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <Field label="Timeline for Correction">
             <Select value={form.correction_timeline || ''}
               onValueChange={v => update('correction_timeline', v === '__clear__' ? '' : v)}>
@@ -85,11 +85,6 @@ export function CorrectiveSection({ form, update }: { form: WriteUpFormState; up
                 {activeConsequences.map(i => <SelectItem key={i.id} value={i.label}>{i.label}</SelectItem>)}
               </SelectContent>
             </Select>
-          </Field>
-
-          <Field label="Follow-Up Meeting Date">
-            <Input type="date" className="h-9 text-[13px]" value={form.checkin_date}
-              onChange={e => update('checkin_date', e.target.value)} />
           </Field>
         </div>
 
@@ -129,7 +124,7 @@ export function CorrectiveSection({ form, update }: { form: WriteUpFormState; up
                     <TableCell className="px-3 py-2.5">
                       {linkedSession?.notes ? (
                         <Tooltip>
-                          <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{linkedSession.notes}</span></TooltipTrigger>
+                          <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{stripHtml(linkedSession.notes)}</span></TooltipTrigger>
                           <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><RichTextDisplay html={linkedSession.notes} /></TooltipContent>
                         </Tooltip>
                       ) : <span className="text-slate-300">&mdash;</span>}

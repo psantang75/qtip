@@ -3,25 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { ROLE_IDS } from '@/hooks/useQualityRole'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Download, Paperclip, BookOpen, HelpCircle, Pencil } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import trainingService, { type CoachingSession, type CoachingSourceType, type CoachingFormat, type CoachingPurpose } from '@/services/trainingService'
 import listService from '@/services/listService'
-import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
@@ -34,19 +24,14 @@ import {
 import {
   SessionSection, RequiredActionsSection, AccountabilitySection, InternalNotesSection,
 } from './coaching-form/CoachingFormSections'
+import { AgentHistoryPanel } from './coaching-form/AgentHistoryPanel'
+import { AttachmentCard } from '@/components/training/AttachmentCard'
+import { ResourcesTable, QuizSummaryTable } from '@/components/training/ReadOnlySections'
 import { emptyForm, type CoachingFormState } from './coaching-form/types'
 
-// ── Source labels ─────────────────────────────────────────────────────────────
-
-/** Returns the correct href for a resource — URL type uses the url field; uploaded files use the API. */
-function resourceHref(r: { id: number; resource_type?: string; url?: string }, forCSR = false): string {
-  if (r.resource_type === 'URL' && r.url) return r.url
-  if (r.url) return r.url
-  return forCSR ? `/api/csr/resources/${r.id}/file` : `/api/trainer/resources/${r.id}/file`
-}
-
-
-import { Section, Sub, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow } from './training-detail/layout'
+import { Section, Sub, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow, TopicList, ListItemReadOnly } from './training-detail/layout'
+import { InternalNotesPanel } from '@/components/common/InternalNotesPanel'
+import { downloadSessionAttachment } from '@/utils/trainingHelpers'
 
 // ── Section edit bar (detail page specific) ───────────────────────────────────
 
@@ -86,19 +71,6 @@ function SectionEditBar({ onSave, onCancel, saving, showBatch, applyToBatch, onT
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function TopicList({ topics, columns = 1 }: { topics: string[]; columns?: 1 | 3 }) {
-  if (!topics.length) return <span className="text-sm text-slate-400">None</span>
-  return (
-    <div className={columns === 3 ? 'grid grid-cols-3 gap-y-1.5 gap-x-4' : 'space-y-1'}>
-      {topics.map(t => (
-        <div key={t} className="flex items-center gap-2 text-sm text-slate-700">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function QuizSummary({ session }: { session: CoachingSession }) {
   const hasQuizzes = (session.quizzes?.length ?? 0) > 0
   if (!hasQuizzes) return <span className="text-[12px] text-slate-400">Not assigned</span>
@@ -121,7 +93,6 @@ export default function CoachingSessionDetailPage() {
   const { toast } = useToast()
   const { user }  = useAuth()
   const canSeeInternal = [ROLE_IDS.ADMIN, ROLE_IDS.TRAINER, ROLE_IDS.MANAGER].some(r => r === (user?.role_id ?? 0))
-  const [showHistory,    setShowHistory]    = useState(false)
   const [pendingStatus,  setPendingStatus]  = useState('')
 
   const { data: session, isLoading, isError } = useQuery({
@@ -132,11 +103,13 @@ export default function CoachingSessionDetailPage() {
   })
 
   // ── Reference data (cached — needed for inline editing) ───────────────────
-  const { data: flagItems = [] }    = useQuery({ queryKey: ['list-items', 'behavior_flag'],    queryFn: () => listService.getItems('behavior_flag') })
-  const { data: purposeItems = [] } = useQuery({ queryKey: ['list-items', 'coaching_purpose'], queryFn: () => listService.getItems('coaching_purpose') })
-  const { data: formatItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_format'],  queryFn: () => listService.getItems('coaching_format') })
-  const { data: sourceItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_source'],  queryFn: () => listService.getItems('coaching_source') })
-  const { data: csrs = [] }    = useQuery({ queryKey: ['team-csrs'],    queryFn: () => trainingService.getTeamCSRs() })
+  const { data: flagItems = [] }           = useQuery({ queryKey: ['list-items', 'behavior_flag'],    queryFn: () => listService.getItems('behavior_flag') })
+  const { data: rootCauseItems = [] }     = useQuery({ queryKey: ['list-items', 'root_cause'],       queryFn: () => listService.getItems('root_cause') })
+  const { data: supportNeededItems = [] } = useQuery({ queryKey: ['list-items', 'support_needed'],    queryFn: () => listService.getItems('support_needed') })
+  const { data: purposeItems = [] }       = useQuery({ queryKey: ['list-items', 'coaching_purpose'], queryFn: () => listService.getItems('coaching_purpose') })
+  const { data: formatItems = [] }        = useQuery({ queryKey: ['list-items', 'coaching_format'],  queryFn: () => listService.getItems('coaching_format') })
+  const { data: sourceItems = [] }        = useQuery({ queryKey: ['list-items', 'coaching_source'],  queryFn: () => listService.getItems('coaching_source') })
+  const { data: agents = [] }  = useQuery({ queryKey: ['team-agents'],  queryFn: () => trainingService.getTeamCSRs() })
   const { data: coaches = [] } = useQuery({ queryKey: ['eligible-coaches'], queryFn: () => trainingService.getCoaches() })
   const { data: topicsData }   = useQuery({ queryKey: ['list-items', 'training_topic'], queryFn: () => listService.getItems('training_topic') })
   const { data: resourcesData }= useQuery({ queryKey: ['resources'],     queryFn: () => trainingService.getResources({ is_active: true, limit: 200 }) })
@@ -146,11 +119,25 @@ export default function CoachingSessionDetailPage() {
   const quizzes   = quizLibrary?.items   ?? []
 
   // ── Section inline editing ────────────────────────────────────────────────
-  // Required Actions + CSR Accountability always edit together ('actions-accountability')
-  type EditSection = 'session' | 'actions-accountability' | 'internal' | null
+  // Required Actions + Agent Accountability always edit together ('actions-accountability')
+  type EditSection = 'session' | 'actions-accountability' | null
   const [editSection, setEditSection]   = useState<EditSection>(null)
   const [formDraft, setFormDraft]       = useState<CoachingFormState>(emptyForm)
   const [applyToBatch, setApplyToBatch] = useState(false)
+  const [removeAttachment, setRemoveAttachment] = useState(false)
+  const [attachmentFilename, setAttachmentFilename] = useState<string | undefined>()
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
+  const [editingAttachment, setEditingAttachment] = useState(false)
+
+  // Internal notes independent edit state
+  const [editingInternal, setEditingInternal] = useState(false)
+  const [internalDraft, setInternalDraft] = useState({
+    follow_up_notes: '', internal_notes: '',
+    behavior_flag_ids: [] as number[], root_cause_ids: [] as number[], support_needed_ids: [] as number[],
+  })
+  const [internalApplyBatch, setInternalApplyBatch] = useState(false)
+  const updateInternalDraft = <K extends keyof typeof internalDraft>(k: K, v: (typeof internalDraft)[K]) =>
+    setInternalDraft(d => ({ ...d, [k]: v }))
 
   const updateDraft = useCallback(<K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => {
     setFormDraft(f => ({ ...f, [k]: v }))
@@ -187,6 +174,8 @@ export default function CoachingSessionDetailPage() {
       follow_up_notes:        session.follow_up_notes ?? '',
       internal_notes:         session.internal_notes ?? '',
       behavior_flag_ids:      session.behavior_flag_ids ?? [],
+      root_cause_ids:         session.root_cause_ids ?? [],
+      support_needed_ids:     session.support_needed_ids ?? [],
       attachment_file:        null,
     })
     setEditSection(section)
@@ -214,7 +203,9 @@ export default function CoachingSessionDetailPage() {
     fd.append('follow_up_date',       formDraft.follow_up_date || '')
     fd.append('follow_up_notes',      formDraft.follow_up_notes || '')
     fd.append('internal_notes',       formDraft.internal_notes || '')
-    fd.append('behavior_flag_ids',     formDraft.behavior_flag_ids.join(','))
+    fd.append('behavior_flag_ids',    formDraft.behavior_flag_ids.join(','))
+    fd.append('root_cause_ids',       formDraft.root_cause_ids.join(','))
+    fd.append('support_needed_ids',   formDraft.support_needed_ids.join(','))
     if (applyToBatch) fd.append('apply_to_batch', 'true')
     return fd
   }
@@ -230,41 +221,110 @@ export default function CoachingSessionDetailPage() {
     onError: () => toast({ title: 'Save failed', variant: 'destructive' }),
   })
 
-  const saveAndCloseMut = useMutation({
-    mutationFn: async () => {
-      await trainingService.updateCoachingSession(Number(id), buildFormData())
-      await trainingService.setSessionStatus(Number(id), 'CLOSED')
-    },
-    onSuccess: () => {
-      toast({ title: 'Session saved and closed' })
-      setEditSection(null)
-      invalidate()
-      qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
-    },
-    onError: () => toast({ title: 'Save & close failed', variant: 'destructive' }),
-  })
-
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['coaching-session', id] })
     qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
   }
 
+  const attachmentSaveMut = useMutation({
+    mutationFn: () => {
+      const fd = new FormData()
+      if (attachmentFile) fd.append('attachment', attachmentFile)
+      else if (removeAttachment) fd.append('remove_attachment', 'true')
+      return trainingService.updateCoachingSession(Number(id), fd)
+    },
+    onSuccess: () => {
+      toast({ title: 'Attachment saved' })
+      setEditingAttachment(false)
+      setRemoveAttachment(false)
+      setAttachmentFilename(undefined)
+      setAttachmentFile(null)
+      invalidate()
+    },
+    onError: () => toast({ title: 'Save failed', variant: 'destructive' }),
+  })
+
+  const startEditInternal = () => {
+    if (!session) return
+    setInternalDraft({
+      follow_up_notes:    session.follow_up_notes ?? '',
+      internal_notes:     session.internal_notes ?? '',
+      behavior_flag_ids:  session.behavior_flag_ids ?? [],
+      root_cause_ids:     session.root_cause_ids ?? [],
+      support_needed_ids: session.support_needed_ids ?? [],
+    })
+    setEditingInternal(true)
+  }
+
+  const cancelEditInternal = () => { setEditingInternal(false); setInternalApplyBatch(false) }
+
+  const internalSaveMut = useMutation({
+    mutationFn: () => {
+      const fd = new FormData()
+      fd.append('follow_up_notes',   internalDraft.follow_up_notes || '')
+      fd.append('internal_notes',    internalDraft.internal_notes || '')
+      fd.append('behavior_flag_ids', internalDraft.behavior_flag_ids.join(','))
+      fd.append('root_cause_ids',    internalDraft.root_cause_ids.join(','))
+      fd.append('support_needed_ids', internalDraft.support_needed_ids.join(','))
+      if (internalApplyBatch) fd.append('apply_to_batch', 'true')
+      return trainingService.updateCoachingSession(Number(id), fd)
+    },
+    onSuccess: () => {
+      toast({ title: 'Section saved' })
+      setEditingInternal(false)
+      setInternalApplyBatch(false)
+      invalidate()
+    },
+    onError: () => toast({ title: 'Save failed', variant: 'destructive' }),
+  })
+
+  const internalSaveAndCloseMut = useMutation({
+    mutationFn: async () => {
+      const fd = new FormData()
+      fd.append('follow_up_notes',   internalDraft.follow_up_notes || '')
+      fd.append('internal_notes',    internalDraft.internal_notes || '')
+      fd.append('behavior_flag_ids', internalDraft.behavior_flag_ids.join(','))
+      fd.append('root_cause_ids',    internalDraft.root_cause_ids.join(','))
+      fd.append('support_needed_ids', internalDraft.support_needed_ids.join(','))
+      if (internalApplyBatch) fd.append('apply_to_batch', 'true')
+      await trainingService.updateCoachingSession(Number(id), fd)
+      await trainingService.setSessionStatus(Number(id), 'CLOSED')
+    },
+    onSuccess: () => {
+      toast({ title: 'Session saved and closed' })
+      setEditingInternal(false)
+      setInternalApplyBatch(false)
+      invalidate()
+    },
+    onError: () => toast({ title: 'Save & close failed', variant: 'destructive' }),
+  })
+
   useEffect(() => { if (session) setPendingStatus(session.status) }, [session?.status])
 
-  // Auto-open editable sections based on status
+  // Auto-open editable sections based on status (re-runs on manual status changes)
   useEffect(() => {
     if (!session) return
+    setEditSection(null)
+    setEditingAttachment(false)
+    setEditingInternal(false)
+
     if (['DRAFT', 'SCHEDULED'].includes(session.status)) {
       startEdit('actions-accountability')
     } else if (['COMPLETED', 'FOLLOW_UP_REQUIRED'].includes(session.status) && canSeeInternal) {
-      startEdit('internal')
+      startEditInternal()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.id])
+  }, [session?.id, session?.status])
 
   const statusMut = useMutation({
     mutationFn: (status: string) => trainingService.setSessionStatus(Number(id), status),
-    onSuccess: (_d, status) => { toast({ title: `Status updated to ${STATUS_LABELS[status] ?? status}` }); invalidate() },
+    onSuccess: (_d, status) => {
+      setEditSection(null)
+      setEditingAttachment(false)
+      setEditingInternal(false)
+      toast({ title: `Status updated to ${STATUS_LABELS[status] ?? status}` })
+      invalidate()
+    },
     onError: () => toast({ title: 'Error', description: 'Could not update status.', variant: 'destructive' }),
   })
 
@@ -277,60 +337,66 @@ export default function CoachingSessionDetailPage() {
 
   const handleDownload = async () => {
     if (!session?.attachment_filename) return
-    try {
-      const blob = URL.createObjectURL(await trainingService.downloadAttachment(Number(id)))
-      const a = Object.assign(document.createElement('a'), { href: blob, download: session.attachment_filename })
-      a.click(); URL.revokeObjectURL(blob)
-    } catch { toast({ title: 'Download failed', variant: 'destructive' }) }
+    try { await downloadSessionAttachment(Number(id), session.attachment_filename) }
+    catch { toast({ title: 'Download failed', variant: 'destructive' }) }
   }
 
-  if (isLoading) return <QualityListPage><TableLoadingSkeleton rows={10} /></QualityListPage>
+  if (isLoading) return <div className="p-6"><TableLoadingSkeleton rows={10} /></div>
   if (isError || !session) return (
-    <QualityListPage>
+    <div className="p-6">
       <TableErrorState message="Failed to load session."
         onRetry={() => qc.invalidateQueries({ queryKey: ['coaching-session', id] })} />
-    </QualityListPage>
+    </div>
   )
 
-  const canEdit        = session.status !== 'CLOSED'
-  const recentSessions = session.recent_sessions ?? []
+  const canEditSession     = session.status === 'DRAFT'
+  const canEditActions     = ['DRAFT', 'SCHEDULED'].includes(session.status)
+  const canEditAttachment  = session.status === 'DRAFT'
+  const canEditInternal    = canSeeInternal && !['CLOSED', 'CANCELED'].includes(session.status)
+  const recentSessions     = session.recent_sessions ?? []
+  const priorYearSessions  = session.prior_year_sessions ?? []
+  const repeatTopics       = session.repeat_topics ?? []
 
 
   return (
-    <QualityListPage>
-      <QualityPageHeader
-        title={`Training Session #${id}`}
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate('/app/training/coaching')}>← Back</Button>
-            {canEdit && (
-              <Button variant="outline" className="border-primary text-primary hover:bg-primary/5"
-                onClick={() => navigate(`/app/training/coaching/${id}/edit`)}>
-                Edit Full Session
-              </Button>
-            )}
-          </div>
-        }
-      />
+    <div className="flex flex-col" style={{ height: 'calc(100% + 24px)', marginBottom: '-24px' }}>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="shrink-0 px-6 pt-6 pb-5">
+        <QualityPageHeader
+          title={`Training Session #${id}`}
+          actions={
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => navigate('/app/training/coaching')}>← Back</Button>
+              {canEditSession && (
+                <Button variant="outline" className="border-primary text-primary hover:bg-primary/5"
+                  onClick={() => navigate(`/app/training/coaching/${id}/edit`)}>
+                  Edit Full Session
+                </Button>
+              )}
+            </div>
+          }
+        />
+      </div>
 
-        {/* ── Left column ─────────────────────────────────────────────────── */}
-        <div className="col-span-2 space-y-4">
+      <div className="flex-1 min-h-0 px-6 pb-6">
+        <div className="grid grid-cols-3 gap-6 h-full">
+
+          {/* ── Left column ─────────────────────────────────────────────────── */}
+          <div className="col-span-2 overflow-y-auto space-y-4 pr-2">
 
           {/* ── Section 1: Session ──────────────────────────────────────── */}
           {editSection === 'session' ? (
             <>
-              <SessionSection form={formDraft} errors={{}} csrs={csrs} coaches={coaches}
+              <SessionSection form={formDraft} errors={{}} csrs={agents} coaches={coaches}
                 topicItems={topics} isEdit
                 purposeItems={purposeItems} formatItems={formatItems} sourceItems={sourceItems}
                 update={updateDraft} toggleTopic={toggleDraftTopic} />
               <SectionEditBar onSave={() => sectionSaveMut.mutate()} onCancel={cancelEdit} saving={sectionSaveMut.isPending} showBatch={!!session?.batch_id} applyToBatch={applyToBatch} onToggleBatch={() => setApplyToBatch(v => !v)} />
             </>
           ) : null}
-          {editSection !== 'session' && <Section title="Session" onEdit={canEdit ? () => startEdit('session') : undefined}>
+          {editSection !== 'session' && <Section title="Session" onEdit={canEditSession ? () => startEdit('session') : undefined}>
             <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-              <InfoRow label="CSR"              value={session.csr_name} />
+              <InfoRow label="Agent"            value={session.csr_name} />
               <InfoRow label="Coach"            value={session.created_by_name} />
               <InfoRow label="Session Date"     value={formatQualityDate(session.session_date)} />
               <InfoRow label="Coaching Format"  value={formatItems.find(i => i.item_key === session.coaching_format)?.label ?? FORMAT_MAP[session.coaching_format as CoachingFormat] ?? session.coaching_format} />
@@ -345,13 +411,13 @@ export default function CoachingSessionDetailPage() {
             {/* Topics */}
             <div className="border-t border-slate-100 pt-4 mt-4">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Topics</p>
-              <TopicList topics={session.topics} columns={3} />
+              <TopicList topics={session.topics} columns={3} bold />
             </div>
 
             {/* Notes */}
             <div className="border-t border-slate-100 pt-4 mt-4">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Notes</p>
-              <NoteBlock text={session.notes} placeholder="No notes provided" />
+              <NoteBlock text={session.notes} placeholder="No notes provided" bold />
               {session.qa_audit_id && (
                 <a href={`/app/quality/submissions/${session.qa_audit_id}`}
                   className="inline-flex items-center gap-1 text-primary text-[13px] mt-2 hover:underline">
@@ -361,7 +427,7 @@ export default function CoachingSessionDetailPage() {
             </div>
           </Section>}
 
-          {/* ── Sections 2 + 3: Required Actions + CSR Accountability (edit together) ── */}
+          {/* ── Sections 2 + 3: Required Actions + Agent Accountability (edit together) ── */}
           {editSection === 'actions-accountability' ? (
             <>
               <RequiredActionsSection form={formDraft} errors={{}} resources={resources} quizzes={quizzes} update={updateDraft} />
@@ -371,106 +437,25 @@ export default function CoachingSessionDetailPage() {
           ) : null}
 
           {/* ── Section 2: Required Actions (read-only) ─────────────────────── */}
-          {editSection !== 'actions-accountability' && <Section title="Required Actions" onEdit={canEdit ? () => startEdit('actions-accountability') : undefined}>
+          {editSection !== 'actions-accountability' && <Section title="Required Actions" onEdit={canEditActions ? () => startEdit('actions-accountability') : undefined}>
 
             {/* Required Action Notes */}
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Required Action Notes</p>
-            <NoteBlock text={session.required_action} placeholder="No required action specified" />
+            <NoteBlock text={session.required_action} placeholder="No required action specified" bold />
 
-            {/* Reference Materials */}
-            <Sub title="Reference Materials" icon={BookOpen}>
-              {(session.kb_resources?.length ?? 0) > 0 ? (
-                <Table className="text-xs">
-                  <TableHeader>
-                    <StandardTableHeaderRow className="text-slate-400">
-                      <TableHead className="text-left py-1.5 font-medium pr-4 w-[40%]">Title</TableHead>
-                      <TableHead className="text-left py-1.5 font-medium pr-4">Description</TableHead>
-                      <TableHead className="text-left py-1.5 font-medium pr-2 w-[60px]" />
-                    </StandardTableHeaderRow>
-                  </TableHeader>
-                  <TableBody>
-                    {session.kb_resources!.map(r => (
-                      <TableRow key={r.id} className="border-b border-slate-100 last:border-0">
-                        <TableCell className="py-2 pr-4 text-slate-600">{r.title}</TableCell>
-                        <TableCell className="py-2 pr-4 text-slate-500">{r.description || '—'}</TableCell>
-                        <TableCell className="py-2 pr-2">
-                          <a href={resourceHref(r)} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-primary hover:underline">
-                            Open <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="text-[13px] text-slate-400 italic">No resources assigned</p>
-              )}
-            </Sub>
-
-            {/* Quizzes */}
-            <Sub title="Quiz Assignment" icon={HelpCircle}>
-              {(session.quizzes?.length ?? 0) > 0 ? (
-                <Table className="text-xs">
-                  <TableHeader>
-                    <StandardTableHeaderRow className="text-slate-400">
-                      <TableHead className="text-left py-1.5 font-medium pr-4 w-[40%]">Quiz</TableHead>
-                      <TableHead className="text-left py-1.5 font-medium pr-4">Pass Score</TableHead>
-                      <TableHead className="text-left py-1.5 font-medium pr-4">Attempts</TableHead>
-                      <TableHead className="text-left py-1.5 font-medium pr-4">Best</TableHead>
-                      <TableHead className="text-left py-1.5 font-medium">Result</TableHead>
-                    </StandardTableHeaderRow>
-                  </TableHeader>
-                  <TableBody>
-                    {session.quizzes!.map(quiz => {
-                      const attempts = (session.quiz_attempts ?? []).filter(a => a.quiz_id === quiz.id)
-                      const passed   = attempts.find(a => a.passed)
-                      const best     = attempts.length > 0 ? Math.max(...attempts.map(a => Number(a.score))) : null
-                      return (
-                        <TableRow key={quiz.id} className="border-b border-slate-100 last:border-0">
-                          <TableCell className="py-2 pr-4 text-slate-600">{quiz.quiz_title}</TableCell>
-                          <TableCell className="py-2 pr-4 text-slate-500">{quiz.pass_score}%</TableCell>
-                          <TableCell className="py-2 pr-4 text-slate-600">{attempts.length}</TableCell>
-                          <TableCell className="py-2 pr-4 text-slate-600">
-                            {best != null ? `${best.toFixed(0)}%` : '—'}
-                          </TableCell>
-                          <TableCell className="py-2 text-[13px] text-slate-600">
-                            {passed ? 'Passed' : attempts.length > 0 ? 'Failed' : 'Not started'}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="text-[13px] text-slate-400 italic">No quizzes assigned</p>
-              )}
-            </Sub>
+            <ResourcesTable resources={session.kb_resources ?? []} />
+            <QuizSummaryTable quizzes={session.quizzes ?? []} attempts={session.quiz_attempts ?? []} />
 
 
           </Section>}
 
-          {/* ── Section 3: CSR Accountability (read-only) ───────────────────── */}
-          {editSection !== 'actions-accountability' && <Section title="CSR Accountability" onEdit={canEdit ? () => startEdit('actions-accountability') : undefined}>
+          {/* ── Section 3: Agent Accountability (read-only) ─────────────────── */}
+          {editSection !== 'actions-accountability' && <Section title="Agent Accountability" onEdit={canEditActions ? () => startEdit('actions-accountability') : undefined}>
 
             {/* Action Plan */}
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Action Plan</p>
             {session.require_action_plan ? (
-              <>
-                <NoteBlock text={session.csr_action_plan} placeholder="Pending" />
-                {session.csr_action_plan && (session.csr_root_cause || session.csr_support_needed) && (
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-4 border-t border-slate-100 pt-4 mt-4">
-                    <div>
-                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Root Cause</p>
-                      <NoteBlock text={session.csr_root_cause} placeholder="—" />
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Support Needed</p>
-                      <NoteBlock text={session.csr_support_needed} placeholder="—" />
-                    </div>
-                  </div>
-                )}
-              </>
+              <NoteBlock text={session.csr_action_plan} placeholder="Pending" bold />
             ) : (
               <p className="text-[13px] text-slate-400">Not required</p>
             )}
@@ -481,14 +466,14 @@ export default function CoachingSessionDetailPage() {
               {session.require_acknowledgment ? (
                 <NoteBlock
                   text={session.csr_acknowledged_at ? formatQualityDate(session.csr_acknowledged_at) : null}
-                  placeholder="Pending"
+                  placeholder="Pending" bold
                 />
               ) : (
                 <p className="text-[13px] text-slate-400">Not required</p>
               )}
             </div>
 
-            {/* Timing — due dates govern when CSR must complete their work */}
+            {/* Timing — due dates govern when Agent must complete their work */}
             <Sub title="Timing">
               <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                 <InfoRow label="Due Date" value={session.due_date
@@ -503,134 +488,100 @@ export default function CoachingSessionDetailPage() {
               {!!session.follow_up_notes && (
                 <div className="mt-4 pt-4 border-t border-slate-100">
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Follow-Up Notes</p>
-                  <NoteBlock text={session.follow_up_notes} placeholder="" />
+                  <NoteBlock text={session.follow_up_notes} placeholder="" bold />
                 </div>
               )}
             </Sub>
 
           </Section>}
 
-          {/* ── Follow-Up Notes edit (between Accountability and Internal Notes) ── */}
-          {canSeeInternal && editSection === 'internal' && session.status === 'FOLLOW_UP_REQUIRED' && (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
-                <h3 className="text-[15px] font-semibold text-slate-800">Follow-Up Notes</h3>
-              </div>
-              <div className="p-5">
-                <RichTextEditor value={formDraft.follow_up_notes}
-                  placeholder="Document notes from the follow-up meeting…"
-                  onChange={html => updateDraft('follow_up_notes', html)} />
-              </div>
-            </div>
-          )}
-
-          {/* ── Section 4: Internal Notes (trainer/manager/admin only) ───── */}
-          {canSeeInternal && editSection === 'internal' && (
+          {/* ── Attachment (always visible) ────────────────────────────────── */}
+          {editingAttachment ? (
             <>
-              <InternalNotesSection form={formDraft} flagItems={flagItems} update={updateDraft} />
-
+              <AttachmentCard
+                filename={attachmentFilename || (attachmentFile ? attachmentFile.name : undefined)}
+                onDownload={attachmentFilename ? handleDownload : undefined}
+                editable
+                onFileSelect={f => { setAttachmentFile(f); setRemoveAttachment(false) }}
+                onRemove={() => { setAttachmentFile(null); setAttachmentFilename(undefined); setRemoveAttachment(true) }}
+              />
               <SectionEditBar
-                onSave={() => sectionSaveMut.mutate()}
-                onCancel={cancelEdit}
-                saving={sectionSaveMut.isPending || saveAndCloseMut.isPending}
-                showBatch={!!session?.batch_id}
-                applyToBatch={applyToBatch}
-                onToggleBatch={() => setApplyToBatch(v => !v)}
-                showSaveAndClose={['COMPLETED', 'FOLLOW_UP_REQUIRED'].includes(session.status)}
-                onSaveAndClose={() => saveAndCloseMut.mutate()}
+                onSave={() => attachmentSaveMut.mutate()}
+                onCancel={() => { setEditingAttachment(false); setRemoveAttachment(false); setAttachmentFilename(undefined); setAttachmentFile(null) }}
+                saving={attachmentSaveMut.isPending}
               />
             </>
-          )}
-          {canSeeInternal && editSection !== 'internal' && (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center justify-between gap-2 px-5 py-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-[15px] font-semibold text-slate-800">Internal Notes</h3>
-                  <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-full">Private — Not visible to CSR</span>
-                </div>
-                {canEdit && (
-                  <button type="button" onClick={() => startEdit('internal')}
-                    className="flex items-center gap-1 text-slate-400 hover:text-primary transition-colors text-[12px]">
-                    <Pencil className="h-3 w-3" /> Edit
-                  </button>
-                )}
-              </div>
-              <div className="p-5 space-y-5">
-                {/* Behavior flags — uses junction table data */}
-                {(() => {
-                  const items = session.behavior_flag_items ?? []
-                  const categories = [...new Set(items.map(f => f.category ?? 'Other'))]
-                  return (
-                    <div>
-                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Behavior Flags</p>
-                      {items.length === 0 ? (
-                        <p className="text-[13px] text-slate-400 italic">No flags recorded</p>
-                      ) : (
-                        <div className="space-y-3">
-                          {categories.map(cat => (
-                            <div key={cat}>
-                              <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1.5">{cat}</p>
-                              <ul className="space-y-1">
-                                {items.filter(f => (f.category ?? 'Other') === cat).map(f => (
-                                  <li key={f.id} className="flex items-center gap-2 text-[13px] text-slate-700">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-                                    {f.label}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })()}
-
-                {/* Internal notes text — second */}
-                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Internal Notes</p>
-                  <NoteBlock text={session.internal_notes} placeholder="No internal notes recorded" />
-                </div>
-              </div>
-            </div>
+          ) : (
+            <AttachmentCard
+              filename={session.attachment_filename}
+              onDownload={session.attachment_filename ? handleDownload : undefined}
+              onEdit={canEditAttachment ? () => { setAttachmentFilename(session.attachment_filename ?? undefined); setEditingAttachment(true) } : undefined}
+            />
           )}
 
-          {/* ── Section 4: Attachment ────────────────────────────────────── */}
-          {session.attachment_filename && (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4">
-                <div className="flex items-center gap-2">
-                  <Paperclip className="h-4 w-4 text-slate-400" />
-                  <span className="text-[15px] font-semibold text-slate-800">Attachment</span>
+          {/* ── Internal Notes (trainer/manager/admin only) ─────────────── */}
+          {canSeeInternal && editingInternal ? (
+            <>
+              {session.status === 'FOLLOW_UP_REQUIRED' && (
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
+                    <h3 className="text-[15px] font-semibold text-slate-800">Follow-Up Notes</h3>
+                  </div>
+                  <div className="p-5">
+                    <RichTextEditor value={internalDraft.follow_up_notes}
+                      placeholder="Document notes from the follow-up meeting…"
+                      onChange={html => updateInternalDraft('follow_up_notes', html)} />
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-[13px] text-slate-600 truncate max-w-[240px]">{session.attachment_filename}</span>
-                  <Button variant="outline" size="sm" onClick={handleDownload}>
-                    <Download className="h-3.5 w-3.5 mr-1.5" /> Download
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
+              )}
+              <InternalNotesSection form={internalDraft as any} flagItems={flagItems}
+                rootCauseItems={rootCauseItems} supportNeededItems={supportNeededItems}
+                update={(k: any, v: any) => updateInternalDraft(k, v)} />
+              <SectionEditBar
+                onSave={() => internalSaveMut.mutate()}
+                onCancel={cancelEditInternal}
+                saving={internalSaveMut.isPending || internalSaveAndCloseMut.isPending}
+                showBatch={!!session?.batch_id}
+                applyToBatch={internalApplyBatch}
+                onToggleBatch={() => setInternalApplyBatch(v => !v)}
+                showSaveAndClose={['COMPLETED', 'FOLLOW_UP_REQUIRED'].includes(session.status)}
+                onSaveAndClose={() => internalSaveAndCloseMut.mutate()}
+              />
+            </>
+          ) : canSeeInternal ? (
+            <InternalNotesPanel
+              internalNotes={session.internal_notes}
+              behaviorFlagItems={session.behavior_flag_items}
+              rootCauseItems={session.root_cause_items}
+              supportNeededItems={session.support_needed_items}
+              legacyRootCauseText={session.csr_root_cause}
+              legacySupportNeededText={session.csr_support_needed}
+              canEdit={canEditInternal}
+              onEdit={startEditInternal}
+            />
+          ) : null}
+
 
 
         </div>
 
-        {/* ── Right column ────────────────────────────────────────────────── */}
-        <div className="col-span-1 space-y-4">
+          {/* ── Right column ────────────────────────────────────────────────── */}
+          <div className="col-span-1 overflow-y-auto space-y-4 pl-2">
 
           {/* Status panel */}
           <SideCard>
             <SideTitle>Status</SideTitle>
             {session.status === 'CLOSED' ? (
               <p className="text-[12px] text-slate-400 italic">This session is closed and archived.</p>
+            ) : session.status === 'CANCELED' ? (
+              <p className="text-[12px] text-slate-400 italic">This session was canceled.</p>
             ) : (
               <div className="space-y-3">
                 <div>
                   <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Current</p>
                   <p className="text-[14px] font-semibold text-slate-900">{STATUS_LABELS[session.status] ?? session.status}</p>
                 </div>
-                {/* Schedule — only when DRAFT, triggers CSR visibility + auto-status */}
+                {/* Schedule — only when DRAFT, triggers Agent visibility + auto-status */}
                 {session.status === 'DRAFT' && (
                   <div className="border-t border-slate-100 pt-3">
                     <Button
@@ -650,14 +601,14 @@ export default function CoachingSessionDetailPage() {
                     value={pendingStatus}
                     onChange={e => setPendingStatus(e.target.value)}
                   >
-                    {(['DRAFT', 'SCHEDULED', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED'] as const).map(s => (
-                      <option key={s} value={s}>{STATUS_LABELS[s]}{s === 'CLOSED' ? ' (Final)' : ''}</option>
+                    {(['DRAFT', 'SCHEDULED', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED', 'CANCELED'] as const).map(s => (
+                      <option key={s} value={s}>{STATUS_LABELS[s]}{s === 'CLOSED' || s === 'CANCELED' ? ' (Final)' : ''}</option>
                     ))}
                   </select>
                   <Button
                     className={cn(
                       'w-full h-8 text-[12px]',
-                      pendingStatus === 'CLOSED'
+                      pendingStatus === 'CLOSED' || pendingStatus === 'CANCELED'
                         ? 'bg-red-600 hover:bg-red-700 text-white'
                         : 'bg-primary hover:bg-primary/90 text-white'
                     )}
@@ -666,6 +617,7 @@ export default function CoachingSessionDetailPage() {
                   >
                     {statusMut.isPending ? 'Updating…'
                       : pendingStatus === 'CLOSED' ? 'Close Session'
+                      : pendingStatus === 'CANCELED' ? 'Cancel Session'
                       : 'Update Status'}
                   </Button>
                 </div>
@@ -690,9 +642,9 @@ export default function CoachingSessionDetailPage() {
             </div>
           </SideCard>
 
-          {/* CSR Response summary */}
+          {/* Agent Response summary */}
           <SideCard>
-            <SideTitle>CSR Response</SideTitle>
+            <SideTitle>Agent Response</SideTitle>
             <ProgressRow label="Action Plan"
               muted={!session.require_action_plan}
               value={session.csr_action_plan
@@ -714,99 +666,18 @@ export default function CoachingSessionDetailPage() {
             <ProgressRow label="Quiz Passed" value={<QuizSummary session={session} />} />
           </SideCard>
 
-          {/* Prior Sessions */}
-          <SideCard>
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="text-[15px] font-semibold text-slate-800">Prior Sessions</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">{session.csr_name}</p>
-              </div>
-              {recentSessions.length > 0 && (
-                <button type="button" onClick={() => setShowHistory(true)}
-                  className="text-[12px] text-primary hover:underline shrink-0">
-                  View all →
-                </button>
-              )}
-            </div>
+          {/* Prior Sessions (shared component) */}
+          <AgentHistoryPanel
+            agentName={session.csr_name}
+            recentSessions={recentSessions}
+            priorYearSessions={priorYearSessions}
+            repeatTopics={repeatTopics}
+          />
 
-            {recentSessions.length === 0 ? (
-              <p className="text-[13px] text-slate-400">First session with this CSR</p>
-            ) : (
-              <div className="space-y-0">
-                {recentSessions.map(s => (
-                  <div key={s.id} className="grid grid-cols-[80px_1fr] gap-4 py-3 border-b border-slate-100 last:border-0 items-start">
-                    <span className="text-[11px] text-slate-400 pt-0.5 whitespace-nowrap">
-                      {formatQualityDate(s.session_date)}
-                    </span>
-                    <TopicList topics={s.topics} />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {(session.repeat_topics?.length ?? 0) > 0 && (
-              <div className="mt-3 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                  Coached 2+ times in 90 days
-                </p>
-                <ul className="space-y-1 pl-3">
-                  {session.repeat_topics!.map(t => (
-                    <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </SideCard>
-
+          </div>
         </div>
       </div>
 
-      {/* ── Prior Sessions Modal ───────────────────────────────────────────── */}
-      <Dialog open={showHistory} onOpenChange={setShowHistory}>
-        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>All Sessions — {session.csr_name}</DialogTitle>
-          </DialogHeader>
-          <div className="overflow-y-auto flex-1 pr-1">
-            {recentSessions.length === 0 ? (
-              <p className="text-[13px] text-slate-400 py-4 text-center">No prior sessions</p>
-            ) : (
-              <div className="space-y-0">
-                {recentSessions.map(s => (
-                  <div key={s.id} className="grid grid-cols-[90px_1fr] gap-6 py-3 border-b border-slate-100 last:border-0 items-start">
-                    <span className="text-[11px] text-slate-400 pt-0.5 whitespace-nowrap">
-                      {formatQualityDate(s.session_date)}
-                    </span>
-                    <TopicList topics={s.topics} />
-                  </div>
-                ))}
-              </div>
-            )}
-            {(session.repeat_topics?.length ?? 0) > 0 && (
-              <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                  Coached 2+ times in 90 days
-                </p>
-                <ul className="space-y-1 pl-3">
-                  {session.repeat_topics!.map(t => (
-                    <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-          <div className="pt-3 border-t border-slate-100">
-            <Button variant="outline" size="sm" className="w-full text-[13px]"
-              onClick={() => { setShowHistory(false); navigate(`/app/training/coaching?csrs=${encodeURIComponent(session.csr_name)}`) }}>
-              Open Full Coaching List for {session.csr_name} →
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </QualityListPage>
+    </div>
   )
 }

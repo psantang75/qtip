@@ -40,6 +40,9 @@ async function resolveDeptFilter(
     }
     return []
   }
+  // SELF scope is filtered by user_id at the handler level — leave the
+  // dept filter empty so deptClause() produces no SQL.
+  if (access.dataScope === 'SELF') return []
   const [rows] = await pool.execute<RowDataPacket[]>(
     'SELECT department_id FROM users WHERE id = ?',
     [userId],
@@ -56,11 +59,22 @@ function periodRanges(req: Request): PeriodRanges {
   )
 }
 
-// Generic wrapper — resolves access, dept filter, and period for any QC handler
+// Generic wrapper — resolves access, dept filter, and period for any QC handler.
+// `access` is forwarded so handlers can react to scope (e.g. SELF agents only
+// see their own row).
+//
+// Pass an array of page keys when an endpoint legitimately serves multiple
+// pages (e.g. trend / form-score / category-score data is needed both by the
+// QC Quality dashboard AND by the Agent Profile drill-down). The user is
+// granted access if ANY of the keys resolve to canAccess; the resolved access
+// is the first one that grants — preferring narrower scopes is the caller's
+// responsibility.
 function qcHandler(
-  pageKey: string,
-  fn: (deptFilter: number[], ranges: PeriodRanges, req: Request) => Promise<unknown>,
+  pageKey: string | string[],
+  fn: (deptFilter: number[], ranges: PeriodRanges, req: Request, access: InsightsAccessResult) => Promise<unknown>,
 ) {
+  const keys = Array.isArray(pageKey) ? pageKey : [pageKey]
+  const label = keys.join('|')
   return async (req: Request, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -72,10 +86,12 @@ function qcHandler(
         res.status(403).json({ error: 'Unknown role' })
         return
       }
-      const access = await permissionService.resolveAccess(
-        req.user.user_id, roleId, pageKey,
-      )
-      if (!access.canAccess) {
+      let access: InsightsAccessResult | null = null
+      for (const key of keys) {
+        const a = await permissionService.resolveAccess(req.user.user_id, roleId, key)
+        if (a.canAccess) { access = a; break }
+      }
+      if (!access) {
         res.status(403).json({ error: 'Access denied' })
         return
       }
@@ -83,14 +99,14 @@ function qcHandler(
         req.user.user_id, access, req.query.departments as string | undefined,
       )
       const ranges = periodRanges(req)
-      const data   = await fn(deptFilter, ranges, req)
+      const data   = await fn(deptFilter, ranges, req, access)
       res.json(data)
     } catch (err) {
       if (err instanceof BadRequestError) {
         res.status(400).json({ error: err.message })
         return
       }
-      console.error(`insightsQC [${pageKey}] error:`, err)
+      console.error(`insightsQC [${label}] error:`, err)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -102,34 +118,70 @@ export const getQCKpis = qcHandler('qc_overview', (deptFilter, ranges) =>
   qcKpiService.getKpiValues(deptFilter, ranges),
 )
 
-export const getQCTrends = qcHandler('qc_overview', (deptFilter, ranges, req) => {
+// Trends are also used by the Agent Profile drill-down (with ?userId=X), so
+// users with qc_agents access can request them too. SELF scope is forced to
+// the requesting user's own id.
+export const getQCTrends = qcHandler(['qc_overview', 'qc_agents'], (deptFilter, ranges, req, access) => {
   const codes = req.query.kpis
     ? (req.query.kpis as string).split(',')
     : ['avg_qa_score', 'coaching_completion_rate', 'quiz_pass_rate']
-  const userId = req.query.userId ? parseInt(req.query.userId as string, 10) : undefined
+  const requestedUserId = req.query.userId ? parseInt(req.query.userId as string, 10) : undefined
+  const userId = access.dataScope === 'SELF' ? req.user?.user_id : requestedUserId
   return qcKpiService.getTrends(deptFilter, codes, ranges.current.end, userId)
 })
 
 // ── Agents ────────────────────────────────────────────────────────────────────
 
-export const getQCAgents = qcHandler('qc_agents', (deptFilter, ranges) =>
-  qcAnalyticsService.getAgents(deptFilter, ranges),
-)
+export const getQCAgents = qcHandler('qc_agents', (deptFilter, ranges, req, access) => {
+  // SELF scope (e.g. an agent granted qc_agents access) sees only their own row.
+  const forUserId = access.dataScope === 'SELF' ? req.user?.user_id ?? null : null
+  return qcAnalyticsService.getAgents(deptFilter, ranges, forUserId)
+})
 
-export const getQCAgentProfile = qcHandler('qc_agents', (deptFilter, ranges, req) => {
+export const getQCAgentProfile = qcHandler('qc_agents', (_deptFilter, ranges, req, access) => {
   const userId = parseInt(req.params.userId, 10)
   if (isNaN(userId)) throw new BadRequestError('Invalid userId')
+  // SELF scope can only view their own profile.
+  if (access.dataScope === 'SELF' && userId !== req.user?.user_id) {
+    throw new BadRequestError('You can only view your own profile')
+  }
   return qcAnalyticsService.getAgentProfile(userId, ranges)
 })
 
 // ── Filter options ────────────────────────────────────────────────────────────
 
-export const getFilterOptions = qcHandler('qc_quality', (deptFilter, ranges, req) => {
-  const formNames = req.query.forms
-    ? (req.query.forms as string).split(',').map(s => s.trim()).filter(Boolean)
-    : []
-  return qcData.getFilterOptions(deptFilter, formNames, ranges)
-})
+// Filter options (dept list + form list) are shared infrastructure used by
+// every QC page. Allow access if the user has access to ANY QC page so the
+// filter bar still works for users with narrow grants (e.g. SELF on qc_agents).
+const QC_PAGE_KEYS = ['qc_overview', 'qc_quality', 'qc_coaching', 'qc_warnings', 'qc_agents']
+
+export const getFilterOptions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return }
+    const roleId = getInsightsRoleId(req.user.role)
+    if (roleId === null) { res.status(403).json({ error: 'Unknown role' }); return }
+
+    let access: InsightsAccessResult | null = null
+    for (const key of QC_PAGE_KEYS) {
+      const a = await permissionService.resolveAccess(req.user.user_id, roleId, key)
+      if (a.canAccess) { access = a; break }
+    }
+    if (!access) { res.status(403).json({ error: 'Access denied' }); return }
+
+    const deptFilter = await resolveDeptFilter(
+      req.user.user_id, access, req.query.departments as string | undefined,
+    )
+    const ranges = periodRanges(req)
+    const formNames = req.query.forms
+      ? (req.query.forms as string).split(',').map(s => s.trim()).filter(Boolean)
+      : []
+    const data = await qcData.getFilterOptions(deptFilter, formNames, ranges)
+    res.json(data)
+  } catch (err) {
+    console.error('insightsQC [filter-options] error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
 
 // ── Quality deep-dive ─────────────────────────────────────────────────────────
 
@@ -142,11 +194,20 @@ export const getScoreDistribution = qcHandler('qc_quality', (deptFilter, ranges,
   qcData.getScoreDistribution(deptFilter, parseFormNames(req), ranges),
 )
 
-export const getCategoryScores = qcHandler('qc_quality', (deptFilter, ranges, req) =>
-  qcData.getCategoryScores(deptFilter, parseFormNames(req), ranges),
-)
+// Category & form scores and missed questions are also surfaced inside the
+// Agent Profile drill-down on the qc_agents page, so qc_agents access also
+// grants them. When a userId filter is requested (Agent Profile drill-down)
+// the data is scoped to that user's audits; SELF scope forces the userId to
+// the requesting user so a SELF user can't peek at someone else's data.
+export const getCategoryScores = qcHandler(['qc_quality', 'qc_agents'], (deptFilter, ranges, req, access) => {
+  const requestedUserId = req.query.userId ? parseInt(req.query.userId as string, 10) : null
+  const userId = access.dataScope === 'SELF'
+    ? req.user?.user_id ?? null
+    : (Number.isFinite(requestedUserId) ? requestedUserId : null)
+  return qcData.getCategoryScores(deptFilter, parseFormNames(req), ranges, userId)
+})
 
-export const getMissedQuestions = qcHandler('qc_quality', (deptFilter, ranges, req) =>
+export const getMissedQuestions = qcHandler(['qc_quality', 'qc_agents'], (deptFilter, ranges, req) =>
   qcData.getMissedQuestions(deptFilter, parseFormNames(req), ranges),
 )
 
@@ -154,7 +215,7 @@ export const getQualityDeptComparison = qcHandler('qc_quality', (deptFilter, ran
   qcData.getQualityDeptComparison(deptFilter, ranges),
 )
 
-export const getFormScores = qcHandler('qc_quality', (deptFilter, ranges) =>
+export const getFormScores = qcHandler(['qc_quality', 'qc_agents'], (deptFilter, ranges) =>
   qcData.getFormScores(deptFilter, ranges),
 )
 

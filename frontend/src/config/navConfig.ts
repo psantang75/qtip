@@ -10,6 +10,14 @@ export interface NavItem {
   roles: number[]
   badge?: string
   group?: string
+  /**
+   * If set, this item is gated by the Insights page-access table
+   * (`ie_page_role_access` / `ie_page_user_override`). The static `roles`
+   * array is ignored for these items — visibility is driven entirely by
+   * `/api/insights/navigation` so admin grants in the Pages screen are
+   * reflected immediately.
+   */
+  pageKey?: string
 }
 
 export interface SectionConfig {
@@ -69,14 +77,19 @@ export const NAV_CONFIG: SectionConfig[] = [
     label: 'Insights',
     icon: 'BarChart2',
     color: '#00aeef',
-    defaultPath: '/app/insights/qc-overview',
+    // Route through the bare /app/insights so InsightsIndexRedirect picks
+    // the first page the user actually has access to (per ie_page_role_access),
+    // instead of hard-landing everyone on qc-overview.
+    defaultPath: '/app/insights',
     items: [
       // ── Quality, Coaching & Performance Warnings ──
-      { label: 'Overview',             path: '/app/insights/qc-overview', icon: 'LayoutDashboard', roles: [1,2,4,5], group: 'Quality, Coaching & Performance Warnings' },
-      { label: 'Quality',    path: '/app/insights/qc-quality',  icon: 'Target',          roles: [1,2,5],   group: 'Quality, Coaching & Performance Warnings' },
-      { label: 'Coaching',             path: '/app/insights/qc-coaching', icon: 'BookOpen',        roles: [1,2,4,5], group: 'Quality, Coaching & Performance Warnings' },
-      { label: 'Performance Warnings', path: '/app/insights/qc-warnings', icon: 'AlertTriangle',   roles: [1,2,5],   group: 'Quality, Coaching & Performance Warnings' },
-      { label: 'Agent Performance',    path: '/app/insights/qc-agents',   icon: 'Users',           roles: [1,2,4,5], group: 'Quality, Coaching & Performance Warnings' },
+      // `roles` is ignored when `pageKey` is set — visibility comes from
+      // /api/insights/navigation (i.e. ie_page_role_access).
+      { label: 'Overview',             path: '/app/insights/qc-overview', icon: 'LayoutDashboard', roles: [], pageKey: 'qc_overview', group: 'Quality, Coaching & Performance Warnings' },
+      { label: 'Quality',              path: '/app/insights/qc-quality',  icon: 'Target',          roles: [], pageKey: 'qc_quality',  group: 'Quality, Coaching & Performance Warnings' },
+      { label: 'Coaching',             path: '/app/insights/qc-coaching', icon: 'BookOpen',        roles: [], pageKey: 'qc_coaching', group: 'Quality, Coaching & Performance Warnings' },
+      { label: 'Performance Warnings', path: '/app/insights/qc-warnings', icon: 'AlertTriangle',   roles: [], pageKey: 'qc_warnings', group: 'Quality, Coaching & Performance Warnings' },
+      { label: 'Agent Performance',    path: '/app/insights/qc-agents',   icon: 'Users',           roles: [], pageKey: 'qc_agents',   group: 'Quality, Coaching & Performance Warnings' },
       // ── Data Management ──
       { label: 'Report Builder', path: '/app/insights/builder',  icon: 'PenSquare',    roles: [1],     group: 'Data Management' },
       { label: 'Saved Reports',  path: '/app/insights/reports',  icon: 'FileBarChart', roles: [1,5],   group: 'Data Management' },
@@ -94,7 +107,10 @@ export function getSectionConfig(id: NavSection): SectionConfig {
 
 export function getNavItemsForRole(section: NavSection, roleId: number): NavItem[] {
   const config = getSectionConfig(section)
-  return config.items.filter(item => item.roles.includes(roleId))
+  // Items with a `pageKey` are gated by the backend Insights access table
+  // and are filtered separately by the Sidebar via /api/insights/navigation.
+  // Always include them here so the Sidebar can apply that filter.
+  return config.items.filter(item => item.pageKey != null || item.roles.includes(roleId))
 }
 
 export function getSectionFromPath(pathname: string): NavSection | null {

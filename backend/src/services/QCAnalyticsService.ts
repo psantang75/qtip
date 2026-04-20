@@ -25,13 +25,20 @@ export interface AgentProfile {
 }
 
 export class QCAnalyticsService {
-  async getAgents(deptFilter: number[], ranges: PeriodRanges): Promise<AgentSummary[]> {
+  async getAgents(
+    deptFilter: number[],
+    ranges: PeriodRanges,
+    forUserId: number | null = null,
+  ): Promise<AgentSummary[]> {
     const s  = fmt(ranges.current.start)
     const e  = fmt(ranges.current.end)
     const ps = fmt(ranges.prior.start)
     const pe = fmt(ranges.prior.end)
-    const dc = deptClause(deptFilter)
-    const dp = dc.params
+    // The users table is aliased `u` here — the default `csr` alias would
+    // produce "Unknown column 'csr.department_id'".
+    const dc = deptClause(deptFilter, 'u')
+    const userClause = forUserId !== null ? 'AND u.id = ?' : ''
+    const userParams = forUserId !== null ? [forUserId] : []
 
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT u.id AS userId, u.username AS name,
@@ -53,9 +60,9 @@ export class QCAnalyticsService {
        LEFT JOIN quiz_attempts qa ON qa.user_id = u.id AND qa.submitted_at BETWEEN ? AND ?
        LEFT JOIN disputes disp ON disp.submission_id = sub.id
        LEFT JOIN write_ups wu ON wu.csr_id = u.id AND wu.created_at BETWEEN ? AND ?
-       WHERE u.role_id = 3 AND u.is_active = 1 ${dc.sql}
+       WHERE u.role_id = 3 AND u.is_active = 1 ${dc.sql} ${userClause}
        GROUP BY u.id, u.username, d.department_name`,
-      [s, e, s, e, s, e, s, e, ...dp],
+      [s, e, s, e, s, e, s, e, ...dc.params, ...userParams],
     )
 
     // Prior-period QA for trend

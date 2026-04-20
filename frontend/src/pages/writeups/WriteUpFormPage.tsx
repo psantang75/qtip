@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/hooks/use-toast'
 import writeupService, { type WriteUpPayload } from '@/services/writeupService'
+import listService from '@/services/listService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
@@ -14,6 +15,7 @@ import { CorrectiveSection } from './writeup-form/CorrectiveSection'
 import { AttachmentsSection } from './writeup-form/BasicSections'
 import { IncidentsSection } from './writeup-form/IncidentsSection'
 import { PriorDisciplineSection } from './writeup-form/PriorDisciplineSection'
+import { InternalNotesSection } from './writeup-form/InternalNotesSection'
 import { WRITE_UP_TYPE_LABELS, COACHING_PURPOSE_LABELS } from '@/constants/labels'
 
 export default function WriteUpFormPage() {
@@ -38,6 +40,10 @@ export default function WriteUpFormPage() {
     refetchOnWindowFocus: false,
   })
 
+  const { data: flagItems = [] }          = useQuery({ queryKey: ['list-items', 'behavior_flag'],  queryFn: () => listService.getItems('behavior_flag') })
+  const { data: rootCauseItems = [] }     = useQuery({ queryKey: ['list-items', 'root_cause'],     queryFn: () => listService.getItems('root_cause') })
+  const { data: supportNeededItems = [] } = useQuery({ queryKey: ['list-items', 'support_needed'], queryFn: () => listService.getItems('support_needed') })
+
   useEffect(() => {
     if (!existing) return
     setForm({
@@ -48,7 +54,6 @@ export default function WriteUpFormPage() {
       meeting_date:        existing.meeting_date?.slice(0, 10) ?? '',
       corrective_action:   existing.corrective_action ?? '',
       correction_timeline: existing.correction_timeline ?? '',
-      checkin_date:        existing.checkin_date?.slice(0, 10) ?? '',
       consequence:         existing.consequence ?? '',
       linked_coaching_id:  existing.linked_coaching_id ?? null,
       linked_coaching_label: existing.linked_coaching_id
@@ -79,7 +84,7 @@ export default function WriteUpFormPage() {
         return {
           reference_type: pd.reference_type,
           reference_id:   pd.reference_id,
-          label:          `${isWriteUp ? 'Write-Up' : 'Coaching'} #${pd.reference_id}`,
+          label:          `${isWriteUp ? 'Performance Warning' : 'Coaching'} #${pd.reference_id}`,
           subtype:        isWriteUp
             ? (WRITE_UP_TYPE_LABELS[pd.document_type as keyof typeof WRITE_UP_TYPE_LABELS] ?? pd.document_type)
             : (COACHING_PURPOSE_LABELS[pd.coaching_purpose as keyof typeof COACHING_PURPOSE_LABELS] ?? pd.coaching_purpose),
@@ -104,6 +109,10 @@ export default function WriteUpFormPage() {
         mime_type:       a.mime_type ?? null,
         attachment_type: a.attachment_type,
       })),
+      internal_notes:     existing.internal_notes ?? '',
+      behavior_flag_ids:  existing.behavior_flag_ids ?? [],
+      root_cause_ids:     existing.root_cause_ids ?? [],
+      support_needed_ids: existing.support_needed_ids ?? [],
     })
   }, [existing])
 
@@ -126,12 +135,15 @@ export default function WriteUpFormPage() {
     meeting_date:        form.meeting_date || null,
     corrective_action:   form.corrective_action || null,
     correction_timeline: form.correction_timeline || null,
-    checkin_date:        form.checkin_date || null,
     consequence:         form.consequence || null,
     linked_coaching_id:  form.linked_coaching_id,
     manager_id:          form.manager_id   || null,
     hr_witness_id:       form.hr_witness_id || null,
     meeting_notes:       form.meeting_notes || null,
+    internal_notes:      form.internal_notes || null,
+    behavior_flag_ids:   form.behavior_flag_ids,
+    root_cause_ids:      form.root_cause_ids,
+    support_needed_ids:  form.support_needed_ids,
     incidents:           form.incidents,
     prior_discipline:    form.prior_discipline.map(pd => ({
       reference_type: pd.reference_type,
@@ -162,7 +174,7 @@ export default function WriteUpFormPage() {
     onSuccess: ({ id: savedId }) => {
       qc.invalidateQueries({ queryKey: ['writeups'] })
       qc.invalidateQueries({ queryKey: ['writeup', String(savedId)] })
-      toast({ title: isEdit ? 'Write-up saved' : 'Draft created' })
+      toast({ title: isEdit ? 'Performance Warning saved' : 'Draft created' })
       navigate(`/app/performancewarnings/${savedId}`)
     },
     onError: (err: any) => {
@@ -197,7 +209,7 @@ export default function WriteUpFormPage() {
     onSuccess: ({ id: savedId }) => {
       qc.invalidateQueries({ queryKey: ['writeups'] })
       qc.invalidateQueries({ queryKey: ['writeup', String(savedId)] })
-      toast({ title: 'Write-up scheduled' })
+      toast({ title: 'Performance Warning scheduled' })
       navigate(`/app/performancewarnings/${savedId}`)
     },
     onError: (err: any) => {
@@ -218,7 +230,7 @@ export default function WriteUpFormPage() {
   if (isEdit && loadError) {
     return (
       <QualityListPage>
-        <TableErrorState message="Failed to load write-up." onRetry={loadRefetch} />
+        <TableErrorState message="Failed to load performance warning." onRetry={loadRefetch} />
       </QualityListPage>
     )
   }
@@ -229,10 +241,10 @@ export default function WriteUpFormPage() {
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 max-w-lg mt-4">
           <p className="text-[14px] font-semibold text-amber-900 mb-1">Document locked for editing</p>
           <p className="text-[13px] text-amber-700 mb-4">
-            This write-up cannot be edited once it has been sent for signature.
+            This performance warning cannot be edited once it has been sent for signature.
           </p>
           <Button variant="outline" onClick={() => navigate(`/app/performancewarnings/${id}`)}>
-            View Write-Up
+            View Performance Warning
           </Button>
         </div>
       </QualityListPage>
@@ -242,7 +254,7 @@ export default function WriteUpFormPage() {
   return (
     <QualityListPage>
       <QualityPageHeader
-        title={isEdit ? 'Edit Write-Up' : 'New Write-Up'}
+        title={isEdit ? 'Edit Performance Warning' : 'New Performance Warning'}
         actions={<Button variant="outline" onClick={() => navigate(-1)}>Cancel</Button>}
       />
 
@@ -252,6 +264,13 @@ export default function WriteUpFormPage() {
         <CorrectiveSection form={form} update={update} />
         <PriorDisciplineSection form={form} update={update} />
         <AttachmentsSection form={form} update={update} writeUpId={isEdit ? Number(id) : undefined} />
+        <InternalNotesSection
+          form={form}
+          flagItems={flagItems}
+          rootCauseItems={rootCauseItems}
+          supportNeededItems={supportNeededItems}
+          update={update}
+        />
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between mt-4">

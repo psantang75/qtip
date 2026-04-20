@@ -162,7 +162,10 @@ export function QaSearchModal({ csrId, onImport, onClose }: QaSearchModalProps) 
   const handleImport = () => {
     const examples: ExampleInput[] = Array.from(selected).map((submissionId, idx) => {
       const r = grouped.find(g => g.submission_id === submissionId)!
-      const matchDesc = r.matches.map(m => [`Form: ${r.form_name}`, m.category_name ? `Category: ${m.category_name}` : null, `Question: ${m.question_text}`, `Answer: ${formatAnswer(m.answer)}`].filter(Boolean).join('  |  ')).join('\n')
+      const matchDesc = r.matches.map(m => {
+        const parts = [`Form: ${r.form_name}`, m.category_name ? `Category: ${m.category_name}` : null, `Question: ${m.question_text}`, `Answer: ${formatAnswer(m.answer)}`].filter(Boolean).join('  |  ')
+        return `<p>${parts}</p>`
+      }).join('')
       return { example_date: r.interaction_date?.slice(0, 10) ?? r.submission_date?.slice(0, 10) ?? '', description: matchDesc, source: 'QA_IMPORT' as const, qa_submission_id: submissionId, qa_question_id: null, sort_order: idx }
     })
     onImport(examples)

@@ -25,8 +25,8 @@ import { DISPUTE_STATUSES, STATUS_LABELS, CLIENT_FETCH_LIMIT } from '@/constants
 const DEFAULT_PAGE_SIZE = 20
 
 
-/** Normalize CSR dispute history items to the shared DisputeRecord shape */
-function normalizeCsrItem(d: DisputeHistoryItem): DisputeRecord {
+/** Normalize agent dispute history items to the shared DisputeRecord shape */
+function normalizeAgentItem(d: DisputeHistoryItem): DisputeRecord {
   return {
     id:             d.dispute_id,
     submission_id:  d.audit_id,
@@ -43,7 +43,7 @@ function normalizeCsrItem(d: DisputeHistoryItem): DisputeRecord {
 
 function DisputeListView() {
   const navigate = useNavigate()
-  const { isCSR } = useQualityRole()
+  const { isAgent } = useQualityRole()
 
   const [page, setPage]         = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
@@ -51,17 +51,17 @@ function DisputeListView() {
 
   // Multi-select filter state — staged via StagedMultiSelect, applied on click
   const [selectedFormNames,     setSelectedFormNames]     = useState<string[]>([])
-  const [selectedCsrNames,      setSelectedCsrNames]      = useState<string[]>([])
+  const [selectedAgentNames,    setSelectedAgentNames]    = useState<string[]>([])
   const [selectedReviewerNames, setSelectedReviewerNames] = useState<string[]>([])
   const [selectedStatuses,      setSelectedStatuses]      = useState<string[]>([])
   const [disputeId,             setDisputeId]             = useState('')
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['disputes', isCSR, dateRange.start, dateRange.end],
+    queryKey: ['disputes', isAgent, dateRange.start, dateRange.end],
     queryFn: async () => {
-      if (isCSR) {
+      if (isAgent) {
         const res = await qaService.getCSRDisputeHistory({ page: 1, limit: 5000 })
-        return { ...res, items: res.items.map(normalizeCsrItem) }
+        return { ...res, items: res.items.map(normalizeAgentItem) }
       }
       return qaService.getManagerDisputes({
         page: 1, limit: 5000,
@@ -74,12 +74,12 @@ function DisputeListView() {
 
   const allItems = useMemo(() => {
     let items: DisputeRecord[] = data?.items ?? []
-    if (isCSR) {
+    if (isAgent) {
       if (dateRange.start) items = items.filter(d => (d.created_at ?? '').split('T')[0] >= dateRange.start)
       if (dateRange.end)   items = items.filter(d => (d.created_at ?? '').split('T')[0] <= dateRange.end)
     }
     return items
-  }, [data?.items, isCSR, dateRange])
+  }, [data?.items, isAgent, dateRange])
 
   const clientFiltered = useMemo(() => {
     let items = allItems
@@ -87,21 +87,21 @@ function DisputeListView() {
       items = items.filter(d => String(d.id).includes(disputeId))
     if (selectedFormNames.length > 0)
       items = items.filter(d => selectedFormNames.includes(d.form_name ?? ''))
-    if (selectedCsrNames.length > 0)
-      items = items.filter(d => selectedCsrNames.includes(d.csr_name ?? ''))
+    if (selectedAgentNames.length > 0)
+      items = items.filter(d => selectedAgentNames.includes(d.csr_name ?? ''))
     if (selectedReviewerNames.length > 0)
       items = items.filter(d => selectedReviewerNames.includes(d.qa_analyst_name ?? ''))
     if (selectedStatuses.length > 0)
       items = items.filter(d => selectedStatuses.includes(d.status))
     return items
-  }, [allItems, disputeId, selectedFormNames, selectedCsrNames, selectedReviewerNames, selectedStatuses])
+  }, [allItems, disputeId, selectedFormNames, selectedAgentNames, selectedReviewerNames, selectedStatuses])
 
   const formNameOptions = useMemo(() => {
     const s = new Set(allItems.map((d: DisputeRecord) => d.form_name).filter(Boolean))
     return Array.from(s).sort() as string[]
   }, [allItems])
 
-  const csrNameOptions = useMemo(() => {
+  const agentNameOptions = useMemo(() => {
     const s = new Set(allItems.map((d: DisputeRecord) => d.csr_name).filter(Boolean))
     return Array.from(s).sort() as string[]
   }, [allItems])
@@ -125,7 +125,7 @@ function DisputeListView() {
   const hasFilters =
     disputeId.length > 0 ||
     selectedFormNames.length > 0 ||
-    selectedCsrNames.length > 0 ||
+    selectedAgentNames.length > 0 ||
     selectedReviewerNames.length > 0 ||
     selectedStatuses.length > 0 ||
     dateRange.start !== defaultDateRange90().start ||
@@ -134,7 +134,7 @@ function DisputeListView() {
   const resetFilters = () => {
     setDisputeId('')
     setSelectedFormNames([])
-    setSelectedCsrNames([])
+    setSelectedAgentNames([])
     setSelectedReviewerNames([])
     setSelectedStatuses([])
     setDateRange(defaultDateRange90())
@@ -142,9 +142,9 @@ function DisputeListView() {
     setPageSize(DEFAULT_PAGE_SIZE)
   }
 
-  const fromLabel = isCSR ? 'Dispute History' : 'Disputes'
+  const fromLabel = isAgent ? 'Dispute History' : 'Disputes'
   const fromPath  = '/app/quality/disputes'
-  const colSpan   = isCSR ? 8 : 10
+  const colSpan   = isAgent ? 8 : 10
 
   return (
     <QualityListPage>
@@ -165,19 +165,19 @@ function DisputeListView() {
           width="w-[340px]"
         />
 
-        {/* 2. CSR — hidden for CSR role (they only see their own) */}
-        {!isCSR && csrNameOptions.length > 0 && (
+        {/* 2. Agent — hidden for Agent role (they only see their own) */}
+        {!isAgent && agentNameOptions.length > 0 && (
           <StagedMultiSelect
-            options={csrNameOptions}
-            selected={selectedCsrNames}
-            onApply={v => { setSelectedCsrNames(v); setPage(1) }}
-            placeholder="All CSRs"
+            options={agentNameOptions}
+            selected={selectedAgentNames}
+            onApply={v => { setSelectedAgentNames(v); setPage(1) }}
+            placeholder="All Agents"
             width="w-[200px]"
           />
         )}
 
         {/* 3. Reviewer */}
-        {!isCSR && reviewerNameOptions.length > 0 && (
+        {!isAgent && reviewerNameOptions.length > 0 && (
           <StagedMultiSelect
             options={reviewerNameOptions}
             selected={selectedReviewerNames}
@@ -237,7 +237,7 @@ function DisputeListView() {
                 <SortableTableHead field="submission_id"    sort={sort} dir={dir} onSort={toggle} className="w-[75px]">Review #</SortableTableHead>
                 <SortableTableHead field="status"           sort={sort} dir={dir} onSort={toggle} className="w-[70px]">Status</SortableTableHead>
                 <SortableTableHead field="form_name"        sort={sort} dir={dir} onSort={toggle} className="w-[230px]">Form Name</SortableTableHead>
-                {!isCSR && <SortableTableHead field="csr_name" sort={sort} dir={dir} onSort={toggle} className="w-[170px]">CSR</SortableTableHead>}
+                {!isAgent && <SortableTableHead field="csr_name" sort={sort} dir={dir} onSort={toggle} className="w-[170px]">Agent</SortableTableHead>}
                 <SortableTableHead field="created_at"       sort={sort} dir={dir} onSort={toggle} className="w-[95px]">Review Date</SortableTableHead>
                 <SortableTableHead field="interaction_date" sort={sort} dir={dir} onSort={toggle} className="w-[95px]">Int. Date</SortableTableHead>
                 <SortableTableHead field="original_score"   sort={sort} dir={dir} onSort={toggle} className="w-[65px]" right>Score</SortableTableHead>
@@ -256,7 +256,7 @@ function DisputeListView() {
                     <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">#{d.submission_id ?? '—'}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[d.status] ?? d.status}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">{d.form_name ?? '—'}</TableCell>
-                    {!isCSR && <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{d.csr_name ?? '—'}</TableCell>}
+                    {!isAgent && <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{d.csr_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{fmtDate(d.created_at)}</TableCell>
                     <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{d.interaction_date ? fmtDate(d.interaction_date) : <span className="text-slate-400">—</span>}</TableCell>
                     <TableCell className="text-right text-[13px] text-slate-600 whitespace-nowrap">
@@ -280,7 +280,7 @@ function DisputeListView() {
                           })
                         }}>
                         <Eye size={12} className="mr-1" />
-                        {!isCSR && d.status === 'OPEN' ? 'Resolve' : 'View'}
+                        {!isAgent && d.status === 'OPEN' ? 'Resolve' : 'View'}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -289,7 +289,7 @@ function DisputeListView() {
                 <TableEmptyState
                   colSpan={colSpan}
                   icon={AlertTriangle}
-                  title={hasFilters ? 'No disputes match your filters.' : isCSR ? 'You have no dispute history yet.' : 'No disputes found.'}
+                  title={hasFilters ? 'No disputes match your filters.' : isAgent ? 'You have no dispute history yet.' : 'No disputes found.'}
                   action={hasFilters ? { label: 'Clear filters', onClick: resetFilters } : undefined}
                 />
               )}

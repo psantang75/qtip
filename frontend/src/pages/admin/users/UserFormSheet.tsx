@@ -55,7 +55,7 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
   const schema = makeSchema(isCreate)
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { username: '', email: '', password: '', title: '', role_id: ROLE_IDS.CSR, department_id: null, is_active: true },
+    defaultValues: { username: '', email: '', password: '', title: '', role_id: ROLE_IDS.AGENT, department_id: null, is_active: true },
   })
 
   // Reset form whenever the target user changes
@@ -71,7 +71,7 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
         is_active: editUser.is_active,
       })
     } else {
-      form.reset({ username: '', email: '', password: '', title: '', role_id: ROLE_IDS.CSR, department_id: null, is_active: true })
+      form.reset({ username: '', email: '', password: '', title: '', role_id: ROLE_IDS.AGENT, department_id: null, is_active: true })
     }
   }, [open, editUser, form])
 

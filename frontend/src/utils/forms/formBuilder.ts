@@ -39,7 +39,7 @@ export const getDefaultMetadataFields = (interactionType: string): FormMetadataF
       sort_order: 2
     },
     {
-      field_name: 'CSR',
+      field_name: 'Agent',
       field_type: 'DROPDOWN',
       is_required: true,
       sort_order: 3

@@ -183,7 +183,7 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
                 <div><span className="text-slate-400 block">Type</span><span className="text-slate-700 font-medium">{TYPE_LABELS[q.question_type] ?? q.question_type}</span></div>
                 <div><span className="text-slate-400 block">Scoring</span><span className="text-slate-600">{scoringText(q)}</span></div>
                 <div><span className="text-slate-400 block">Required</span><span className={cn('font-medium', q.is_required !== false ? 'text-slate-700' : 'text-slate-400')}>{q.is_required !== false ? 'Yes' : 'No'}</span></div>
-                <div><span className="text-slate-400 block">CSR Visible</span><button onClick={quickToggleVisible} title="Click to toggle" className={cn('font-medium', isVisible ? 'text-emerald-600' : 'text-slate-400')}>{isVisible ? 'Yes' : 'No'}</button></div>
+                <div><span className="text-slate-400 block">Agent Visible</span><button onClick={quickToggleVisible} title="Click to toggle" className={cn('font-medium', isVisible ? 'text-emerald-600' : 'text-slate-400')}>{isVisible ? 'Yes' : 'No'}</button></div>
                 {dependentCount > 0 && <div><span className="text-slate-400 block">Dependents</span><span className="text-amber-700 font-medium">{dependentCount}</span></div>}
               </div>
             )}

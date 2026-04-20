@@ -7,7 +7,7 @@ import type { FormMetadataField } from '@/types/form.types'
 const SLOT_MATCHERS: ((name: string) => boolean)[] = [
   n => n === 'reviewer name' || n === 'auditor name',
   n => n === 'review date' || n === 'audit date',
-  n => n === 'csr',
+  n => n === 'agent' || n === 'csr',
   n => n === 'interaction date',
 ]
 
@@ -30,6 +30,12 @@ export function normalizeStandardMetadataOrder(fields: FormMetadataField[]): For
   return ordered.map((f, i) => ({ ...f, sort_order: i }))
 }
 
-export function isCsrMetadataField(field: FormMetadataField): boolean {
-  return field.field_name.trim().toLowerCase() === 'csr'
+export function isAgentMetadataField(field: FormMetadataField): boolean {
+  const name = field.field_name.trim().toLowerCase()
+  return name === 'agent' || name === 'csr'
+}
+
+/** Map legacy "CSR" field labels to "Agent" for display. All other names pass through unchanged. */
+export function displayFieldName(fieldName: string): string {
+  return fieldName.trim().toLowerCase() === 'csr' ? 'Agent' : fieldName
 }

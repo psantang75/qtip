@@ -55,7 +55,6 @@ export interface WriteUpFormState {
   meeting_date: string
   corrective_action: string
   correction_timeline: string
-  checkin_date: string
   consequence: string
   linked_coaching_id: number | null
   linked_coaching_label: string
@@ -64,6 +63,10 @@ export interface WriteUpFormState {
   meeting_notes: string
   attachment_files: File[]
   existing_attachments: SavedAttachment[]
+  internal_notes: string
+  behavior_flag_ids: number[]
+  root_cause_ids: number[]
+  support_needed_ids: number[]
 }
 
 export function emptyForm(): WriteUpFormState {
@@ -75,7 +78,6 @@ export function emptyForm(): WriteUpFormState {
     meeting_date: '',
     corrective_action: '',
     correction_timeline: '',
-    checkin_date: '',
     consequence: '',
     linked_coaching_id: null,
     linked_coaching_label: '',
@@ -84,6 +86,10 @@ export function emptyForm(): WriteUpFormState {
     meeting_notes: '',
     attachment_files: [],
     existing_attachments: [],
+    internal_notes: '',
+    behavior_flag_ids: [],
+    root_cause_ids: [],
+    support_needed_ids: [],
   }
 }
 

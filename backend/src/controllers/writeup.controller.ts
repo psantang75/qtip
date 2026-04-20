@@ -11,11 +11,13 @@ interface AuthReq extends Request {
 const canSeeAll = (role: string) => ['Admin', 'QA', 'Manager'].includes(role)
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  DRAFT:               ['SCHEDULED'],
-  SCHEDULED:           ['AWAITING_SIGNATURE'],
-  AWAITING_SIGNATURE:  ['SCHEDULED', 'SIGNED'],
-  SIGNED:              ['CLOSED', 'FOLLOW_UP_PENDING'],
-  FOLLOW_UP_PENDING:   ['CLOSED'],
+  DRAFT:                ['SCHEDULED'],
+  SCHEDULED:            ['AWAITING_SIGNATURE'],
+  AWAITING_SIGNATURE:   ['SCHEDULED', 'SIGNED', 'SIGNATURE_REFUSED'],
+  SIGNED:               ['CLOSED', 'FOLLOW_UP_PENDING'],
+  SIGNATURE_REFUSED:    ['CLOSED', 'FOLLOW_UP_PENDING'],
+  FOLLOW_UP_PENDING:    ['FOLLOW_UP_COMPLETED'],
+  FOLLOW_UP_COMPLETED:  ['CLOSED'],
 }
 
 // ── 1. getWriteUps ────────────────────────────────────────────────────────────
@@ -61,6 +63,7 @@ export const getWriteUps = async (req: AuthReq, res: Response) => {
       prisma.$queryRaw<any[]>(
         Prisma.sql`
           SELECT wu.id, wu.document_type, wu.status, wu.meeting_date, wu.created_at,
+            wu.follow_up_required, wu.follow_up_date, wu.follow_up_completed_at,
             wu.csr_id, csr.username as csr_name,
             wu.created_by, creator.username as created_by_name,
             (SELECT COUNT(*) FROM write_up_incidents WHERE write_up_id = wu.id) as incident_count
@@ -156,7 +159,7 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
         : [],
     } : null
 
-    const [priorDisciplineRaw, attachments] = await Promise.all([
+    const [priorDisciplineRaw, attachments, behaviorFlagItems, rootCauseItems, supportNeededItems] = await Promise.all([
       prisma.$queryRaw<any[]>(Prisma.sql`
         SELECT pd.reference_type, pd.reference_id,
           wu.document_type, wu.status as wu_status, wu.meeting_date,
@@ -177,14 +180,43 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
         ORDER BY MIN(pd.id) ASC
       `),
       prisma.$queryRaw<any[]>(Prisma.sql`SELECT * FROM write_up_attachments WHERE write_up_id = ${writeUpId} ORDER BY created_at ASC`),
+      prisma.$queryRaw<any[]>(Prisma.sql`
+        SELECT li.id, li.category, li.label, li.sort_order
+        FROM write_up_list_items wuli
+        JOIN list_items li ON wuli.list_item_id = li.id
+        WHERE wuli.write_up_id = ${writeUpId} AND li.list_type = 'behavior_flag'
+        ORDER BY li.sort_order ASC
+      `),
+      prisma.$queryRaw<any[]>(Prisma.sql`
+        SELECT li.id, li.category, li.label, li.sort_order
+        FROM write_up_list_items wuli
+        JOIN list_items li ON wuli.list_item_id = li.id
+        WHERE wuli.write_up_id = ${writeUpId} AND li.list_type = 'root_cause'
+        ORDER BY li.sort_order ASC
+      `),
+      prisma.$queryRaw<any[]>(Prisma.sql`
+        SELECT li.id, li.category, li.label, li.sort_order
+        FROM write_up_list_items wuli
+        JOIN list_items li ON wuli.list_item_id = li.id
+        WHERE wuli.write_up_id = ${writeUpId} AND li.list_type = 'support_needed'
+        ORDER BY li.sort_order ASC
+      `),
     ])
 
     const priorDiscipline = shapePriorDiscipline(priorDisciplineRaw)
+    const isAgent = role === 'CSR'
 
     res.json({
       success: true,
       data: {
         ...writeUp,
+        internal_notes:          isAgent ? null : (writeUp.internal_notes ?? null),
+        behavior_flag_items:     isAgent ? []   : behaviorFlagItems.map(r => ({ ...r, id: Number(r.id) })),
+        root_cause_items:        isAgent ? []   : rootCauseItems.map(r => ({ ...r, id: Number(r.id) })),
+        support_needed_items:    isAgent ? []   : supportNeededItems.map(r => ({ ...r, id: Number(r.id) })),
+        behavior_flag_ids:       isAgent ? []   : behaviorFlagItems.map(r => Number(r.id)),
+        root_cause_ids:          isAgent ? []   : rootCauseItems.map(r => Number(r.id)),
+        support_needed_ids:      isAgent ? []   : supportNeededItems.map(r => Number(r.id)),
         follow_up_required: Boolean(Number(writeUp.follow_up_required)),
         incidents,
         prior_discipline: priorDiscipline,
@@ -200,16 +232,35 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
 
 // ── 3. createWriteUp ──────────────────────────────────────────────────────────
 
+const toIntArray = (v: unknown): number[] => {
+  if (Array.isArray(v)) return v.map(Number).filter(n => Number.isFinite(n) && n > 0)
+  if (typeof v === 'string') return v.split(',').map(Number).filter(n => Number.isFinite(n) && n > 0)
+  return []
+}
+
+async function replaceWriteUpListItems(tx: Prisma.TransactionClient, writeUpId: number, listItemIds: number[]) {
+  await tx.$executeRaw(Prisma.sql`DELETE FROM write_up_list_items WHERE write_up_id = ${writeUpId}`)
+  if (!listItemIds.length) return
+  const values = Prisma.join(listItemIds.map(id => Prisma.sql`(${writeUpId}, ${id})`))
+  await tx.$executeRaw(Prisma.sql`INSERT INTO write_up_list_items (write_up_id, list_item_id) VALUES ${values}`)
+}
+
 export const createWriteUp = async (req: AuthReq, res: Response) => {
   try {
     const userId = req.user!.user_id
     const { csr_id, document_type, meeting_date, corrective_action, correction_timeline,
-            checkin_date, consequence, linked_coaching_id, manager_id, hr_witness_id,
+            checkin_date, consequence, internal_notes, linked_coaching_id, manager_id, hr_witness_id,
             incidents = [], prior_discipline = [] } = req.body
 
     if (!csr_id || !document_type) {
       return res.status(400).json({ success: false, message: 'csr_id and document_type are required' })
     }
+
+    const listItemIds = [
+      ...toIntArray(req.body.behavior_flag_ids),
+      ...toIntArray(req.body.root_cause_ids),
+      ...toIntArray(req.body.support_needed_ids),
+    ]
 
     const result = await prisma.$transaction(async (tx) => {
       const writeUp = await tx.writeUp.create({
@@ -222,6 +273,7 @@ export const createWriteUp = async (req: AuthReq, res: Response) => {
           correction_timeline: correction_timeline ?? null,
           checkin_date:       checkin_date       ? new Date(checkin_date)       : null,
           consequence:        consequence        ?? null,
+          internal_notes:     internal_notes     ?? null,
           linked_coaching_id: linked_coaching_id ? parseInt(linked_coaching_id) : null,
           manager_id:         manager_id         ? parseInt(manager_id)         : null,
           hr_witness_id:      hr_witness_id      ? parseInt(hr_witness_id)      : null,
@@ -234,6 +286,7 @@ export const createWriteUp = async (req: AuthReq, res: Response) => {
           data: { write_up_id: writeUp.id, reference_type: pd.reference_type, reference_id: parseInt(pd.reference_id) },
         })
       }
+      await replaceWriteUpListItems(tx, writeUp.id, listItemIds)
       return writeUp
     })
 
@@ -264,8 +317,21 @@ export const updateWriteUp = async (req: AuthReq, res: Response) => {
     }
 
     const { meeting_date, corrective_action, correction_timeline, checkin_date,
-            consequence, linked_coaching_id, manager_id, hr_witness_id,
+            consequence, internal_notes, linked_coaching_id, manager_id, hr_witness_id,
             incidents = [], prior_discipline = [] } = req.body
+
+    const hasInternalListItems =
+      req.body.behavior_flag_ids !== undefined ||
+      req.body.root_cause_ids !== undefined ||
+      req.body.support_needed_ids !== undefined
+
+    const listItemIds = hasInternalListItems
+      ? [
+          ...toIntArray(req.body.behavior_flag_ids),
+          ...toIntArray(req.body.root_cause_ids),
+          ...toIntArray(req.body.support_needed_ids),
+        ]
+      : []
 
     await prisma.$transaction(async (tx) => {
       await tx.writeUp.update({
@@ -276,6 +342,7 @@ export const updateWriteUp = async (req: AuthReq, res: Response) => {
           correction_timeline: correction_timeline ?? null,
           checkin_date:        checkin_date       ? new Date(checkin_date)       : null,
           consequence:         consequence        ?? null,
+          internal_notes:      internal_notes !== undefined ? (internal_notes ?? null) : undefined,
           linked_coaching_id:  linked_coaching_id ? parseInt(linked_coaching_id) : null,
           manager_id:          manager_id         ? parseInt(manager_id)         : null,
           hr_witness_id:       hr_witness_id      ? parseInt(hr_witness_id)      : null,
@@ -291,11 +358,82 @@ export const updateWriteUp = async (req: AuthReq, res: Response) => {
           data: { write_up_id: writeUpId, reference_type: pd.reference_type, reference_id: parseInt(pd.reference_id) },
         })
       }
+
+      if (hasInternalListItems) {
+        await replaceWriteUpListItems(tx, writeUpId, listItemIds)
+      }
     })
 
     res.json({ success: true })
   } catch (error) {
     console.error('[WRITEUP] updateWriteUp error:', error)
+    res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+}
+
+// ── 4a. updateInternalNotes ──────────────────────────────────────────────────
+// Management-only endpoint for editing internal notes + list-item categories on
+// the detail page at any status except CLOSED. Keeps the regular updateWriteUp
+// endpoint locked to DRAFT/SCHEDULED for incident edits.
+
+export const updateInternalNotes = async (req: AuthReq, res: Response) => {
+  try {
+    const writeUpId = parseInt(req.params.id)
+    if (isNaN(writeUpId)) return res.status(400).json({ success: false, message: 'Invalid write-up ID' })
+
+    const existing = await prisma.writeUp.findUnique({ where: { id: writeUpId } })
+    if (!existing) return res.status(404).json({ success: false, message: 'Write-up not found' })
+    if (existing.status === 'CLOSED') {
+      return res.status(403).json({ success: false, message: 'Internal notes cannot be edited after the warning is closed' })
+    }
+
+    const { internal_notes } = req.body
+    const listItemIds = [
+      ...toIntArray(req.body.behavior_flag_ids),
+      ...toIntArray(req.body.root_cause_ids),
+      ...toIntArray(req.body.support_needed_ids),
+    ]
+
+    await prisma.$transaction(async (tx) => {
+      await tx.writeUp.update({
+        where: { id: writeUpId },
+        data: { internal_notes: internal_notes !== undefined ? (internal_notes ?? null) : undefined },
+      })
+      await replaceWriteUpListItems(tx, writeUpId, listItemIds)
+    })
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('[WRITEUP] updateInternalNotes error:', error)
+    res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+}
+
+// ── 4b. updateFollowUpNotes ──────────────────────────────────────────────────
+// Management-only endpoint for saving follow-up notes while a write-up is in
+// FOLLOW_UP_PENDING, without transitioning the status. Closing the write-up
+// is a separate action through transitionStatus.
+
+export const updateFollowUpNotes = async (req: AuthReq, res: Response) => {
+  try {
+    const writeUpId = parseInt(req.params.id)
+    if (isNaN(writeUpId)) return res.status(400).json({ success: false, message: 'Invalid write-up ID' })
+
+    const existing = await prisma.writeUp.findUnique({ where: { id: writeUpId } })
+    if (!existing) return res.status(404).json({ success: false, message: 'Write-up not found' })
+    if (existing.status !== 'FOLLOW_UP_PENDING') {
+      return res.status(422).json({ success: false, message: 'Follow-up notes can only be saved while a write-up is in follow-up' })
+    }
+
+    const { follow_up_notes } = req.body
+    await prisma.writeUp.update({
+      where: { id: writeUpId },
+      data: { follow_up_notes: follow_up_notes ?? null },
+    })
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('[WRITEUP] updateFollowUpNotes error:', error)
     res.status(500).json({ success: false, message: 'Internal server error' })
   }
 }
@@ -309,7 +447,11 @@ export const transitionStatus = async (req: AuthReq, res: Response) => {
     const writeUpId = parseInt(req.params.id)
     if (isNaN(writeUpId)) return res.status(400).json({ success: false, message: 'Invalid write-up ID' })
 
-    const { status: newStatus, meeting_notes, meeting_date, follow_up_notes } = req.body
+    const {
+      status: newStatus, meeting_notes, meeting_date, follow_up_notes,
+      follow_up_required, follow_up_date, follow_up_assigned_to, follow_up_checklist,
+      refusal_reason,
+    } = req.body
     if (!newStatus) return res.status(400).json({ success: false, message: 'status is required' })
 
     const existing = await prisma.writeUp.findUnique({ where: { id: writeUpId } })
@@ -325,25 +467,65 @@ export const transitionStatus = async (req: AuthReq, res: Response) => {
         return res.status(403).json({ success: false, message: 'Only managers can recall a document' })
       }
     }
+    if (existing.status === 'AWAITING_SIGNATURE' && newStatus === 'SIGNATURE_REFUSED') {
+      if (role !== 'Manager' && role !== 'Admin') {
+        return res.status(403).json({ success: false, message: 'Only managers can record a signature refusal' })
+      }
+      if (!refusal_reason || !String(refusal_reason).trim()) {
+        return res.status(400).json({ success: false, message: 'refusal_reason is required when recording a signature refusal' })
+      }
+    }
     if (existing.status === 'DRAFT' && newStatus === 'SCHEDULED' && !meeting_date && !existing.meeting_date) {
       return res.status(400).json({ success: false, message: 'meeting_date is required to schedule a write-up' })
     }
     if (existing.status === 'SCHEDULED' && newStatus === 'AWAITING_SIGNATURE' && !meeting_notes) {
       return res.status(400).json({ success: false, message: 'meeting_notes are required when finalizing a write-up' })
     }
-    if (existing.status === 'FOLLOW_UP_PENDING' && newStatus === 'CLOSED' && !follow_up_notes && !existing.follow_up_notes) {
-      return res.status(400).json({ success: false, message: 'follow_up_notes are required to close a follow-up' })
+    if (existing.status === 'SCHEDULED' && newStatus === 'AWAITING_SIGNATURE' && follow_up_required === true) {
+      if (!follow_up_date) return res.status(400).json({ success: false, message: 'follow_up_date is required when follow-up is required' })
+      if (!follow_up_assigned_to) return res.status(400).json({ success: false, message: 'follow_up_assigned_to is required when follow-up is required' })
+    }
+    if (existing.status === 'FOLLOW_UP_PENDING' && newStatus === 'FOLLOW_UP_COMPLETED' && !follow_up_notes && !existing.follow_up_notes) {
+      return res.status(400).json({ success: false, message: 'follow_up_notes are required to complete a follow-up' })
     }
 
-    const updateData: Record<string, unknown> = { status: newStatus }
+    // Mirrors signWriteUp's auto-route: when the manager records a refusal at
+    // AWAITING_SIGNATURE and a follow-up is already scheduled, jump straight to
+    // FOLLOW_UP_PENDING while still capturing refusal_reason / refused_at.
+    let resolvedStatus = newStatus
+    if (existing.status === 'AWAITING_SIGNATURE' && newStatus === 'SIGNATURE_REFUSED' && existing.follow_up_required) {
+      resolvedStatus = 'FOLLOW_UP_PENDING'
+    }
+
+    const updateData: Record<string, unknown> = { status: resolvedStatus }
     if (meeting_notes)                                          updateData.meeting_notes = meeting_notes
     if (meeting_date)                                           updateData.meeting_date  = new Date(meeting_date)
     if (follow_up_notes)                                        updateData.follow_up_notes = follow_up_notes
     if (newStatus === 'AWAITING_SIGNATURE')                     updateData.delivered_at  = new Date()
-    if (newStatus === 'CLOSED')                                 updateData.closed_at     = new Date()
+    if (newStatus === 'SIGNATURE_REFUSED') {
+      updateData.refused_at     = new Date()
+      updateData.refusal_reason = String(refusal_reason).trim()
+    }
+    if (resolvedStatus === 'FOLLOW_UP_COMPLETED')               updateData.follow_up_completed_at = new Date()
+    if (resolvedStatus === 'CLOSED')                            updateData.closed_at     = new Date()
+
+    // Capture follow-up decision at finalize-meeting time (SCHEDULED -> AWAITING_SIGNATURE).
+    if (existing.status === 'SCHEDULED' && newStatus === 'AWAITING_SIGNATURE' && follow_up_required !== undefined) {
+      if (follow_up_required === true) {
+        updateData.follow_up_required     = true
+        updateData.follow_up_date         = follow_up_date ? new Date(follow_up_date) : null
+        updateData.follow_up_assigned_to  = follow_up_assigned_to ? parseInt(follow_up_assigned_to) : null
+        updateData.follow_up_checklist    = follow_up_checklist ?? null
+      } else {
+        updateData.follow_up_required     = false
+        updateData.follow_up_date         = null
+        updateData.follow_up_assigned_to  = null
+        updateData.follow_up_checklist    = null
+      }
+    }
 
     await prisma.writeUp.update({ where: { id: writeUpId }, data: updateData as any })
-    res.json({ success: true, data: { status: newStatus } })
+    res.json({ success: true, data: { status: resolvedStatus } })
   } catch (error) {
     console.error('[WRITEUP] transitionStatus error:', error)
     res.status(500).json({ success: false, message: 'Internal server error' })
@@ -371,12 +553,15 @@ export const signWriteUp = async (req: AuthReq, res: Response) => {
 
     const now = new Date()
     const clientIp = req.ip || req.headers['x-forwarded-for'] || 'unknown'
+    // If follow-up was captured at finalize-meeting time, move directly to FOLLOW_UP_PENDING
+    // so the manager does not need to make a second decision after the agent signs.
+    const nextStatus = existing.follow_up_required ? 'FOLLOW_UP_PENDING' : 'SIGNED'
     await prisma.writeUp.update({
       where: { id: writeUpId },
-      data: { status: 'SIGNED', signature_data, signed_at: now, acknowledged_at: now, signed_ip: String(clientIp) },
+      data: { status: nextStatus, signature_data, signed_at: now, acknowledged_at: now, signed_ip: String(clientIp) },
     })
 
-    res.json({ success: true })
+    res.json({ success: true, data: { status: nextStatus } })
   } catch (error) {
     console.error('[WRITEUP] signWriteUp error:', error)
     res.status(500).json({ success: false, message: 'Internal server error' })

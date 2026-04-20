@@ -38,7 +38,7 @@ export default function AuditFormPage() {
 
   const formId = searchParams.get('formId')
   const callId = searchParams.get('callId')
-  const csrId  = searchParams.get('csrId')
+  const agentId = searchParams.get('csrId')
 
   const qc = useQueryClient()
 
@@ -54,17 +54,17 @@ export default function AuditFormPage() {
     [formRaw],
   )
 
-  const { data: csrUsers = [] } = useQuery({
-    queryKey: ['csr-dropdown-users'],
+  const { data: agentUsers = [] } = useQuery({
+    queryKey: ['agent-dropdown-users'],
     queryFn:  () => userService.fetchActiveCsrsForDropdown(),
     staleTime: 5 * 60 * 1000,
     retry: 1,
   })
-  const csrUserOptions = useMemo(
-    () => csrUsers
+  const agentUserOptions = useMemo(
+    () => agentUsers
       .map(u => ({ id: u.id, username: u.username }))
       .sort((a, b) => a.username.localeCompare(b.username)),
-    [csrUsers],
+    [agentUsers],
   )
 
   const [score, setScore] = useState(0)
@@ -192,17 +192,16 @@ export default function AuditFormPage() {
     }
 
     let customerId: string | null = null
-    let csrUserId: number | null = null
+    let agentUserId: number | null = null
     if (form.metadata_fields && metadataValues) {
       for (const f of form.metadata_fields as any[]) {
         const key = (f.id && f.id !== 0) ? f.id.toString() : f.field_name
         const val = metadataValues[key]
         if (!val) continue
         if (f.field_name?.toLowerCase().includes('customer')) customerId = val
-        // CSR field: DROPDOWN with no static source — value is the stored user ID
         if (f.field_type === 'DROPDOWN' && !f.dropdown_source) {
           const parsed = parseInt(val, 10)
-          if (!isNaN(parsed) && parsed > 0) csrUserId = parsed
+          if (!isNaN(parsed) && parsed > 0) agentUserId = parsed
         }
       }
     }
@@ -215,7 +214,7 @@ export default function AuditFormPage() {
         call_id: c.call_id, customer_id: customerId || c.customer_id,
         call_date: c.call_date, duration: c.duration, recording_url: c.recording_url, transcript: c.transcript,
       })),
-      csr_id: csrUserId,
+      csr_id: agentUserId,
       submitted_by: user.id,
       answers: Object.entries(answers).map(([qId, a]) => ({ question_id: Number(qId), answer: a.answer, notes: a.notes || '' })),
       metadata: Object.entries(metadataValues).map(([fieldId, value]) => ({ field_id: fieldId, value })),
@@ -342,7 +341,7 @@ export default function AuditFormPage() {
                     }}
                     readonly={false}
                     currentUser={user ? { id: user.id, username: user.username } : undefined}
-                    userOptions={csrUserOptions}
+                    userOptions={agentUserOptions}
                   />
                 </div>
               </div>

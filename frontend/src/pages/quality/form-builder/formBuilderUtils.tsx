@@ -39,7 +39,7 @@ export function freshForm(): Form {
   const defaultMetadata: FormMetadataField[] = [
     { field_name: 'Reviewer Name', field_type: 'AUTO',     is_required: true,  interaction_type: 'CALL', sort_order: 0 },
     { field_name: 'Review Date',   field_type: 'AUTO',     is_required: true,  interaction_type: 'CALL', sort_order: 1 },
-    { field_name: 'CSR',           field_type: 'DROPDOWN', is_required: true,  interaction_type: 'CALL', sort_order: 2 },
+    { field_name: 'Agent',         field_type: 'DROPDOWN', is_required: true,  interaction_type: 'CALL', sort_order: 2 },
     { field_name: 'Interaction Date', field_type: 'DATE',   is_required: true,  interaction_type: 'CALL', sort_order: 3 },
     { field_name: 'Customer ID',   field_type: 'TEXT',     is_required: true,  interaction_type: 'CALL', sort_order: 4 },
     { field_name: 'Customer Name', field_type: 'TEXT',     is_required: true,  interaction_type: 'CALL', sort_order: 5 },

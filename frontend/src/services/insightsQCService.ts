@@ -94,7 +94,7 @@ export const getQCAgentProfile = async (userId: number, p: QCParams): Promise<Ag
 export const getScoreDistribution = async (p: QCParams): Promise<ScoreBucket[]> =>
   (await api.get('/insights/qc/quality/score-distribution', { params: p })).data
 
-export const getCategoryScores = async (p: QCParams & { form?: number }): Promise<CategoryScore[]> =>
+export const getCategoryScores = async (p: QCParams & { form?: number; userId?: string }): Promise<CategoryScore[]> =>
   (await api.get('/insights/qc/quality/categories', { params: p })).data
 
 export const getMissedQuestions = async (p: QCParams): Promise<MissedQuestion[]> =>

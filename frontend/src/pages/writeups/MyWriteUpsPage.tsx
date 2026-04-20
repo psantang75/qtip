@@ -21,19 +21,18 @@ import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 import { STATUS_LABELS, WRITE_UP_STATUS_LABELS, CLIENT_FETCH_LIMIT } from '@/constants/labels'
-import { WriteUpTypeBadge } from './WriteUpsPage'
-
-const ALL_STATUS_OPTIONS = Object.values(WRITE_UP_STATUS_LABELS)
+import { ALL_STATUS_LABELS, WriteUpTypeBadge, WarningIdSearch } from './warningListHelpers'
 
 export default function MyWriteUpsPage() {
   const navigate = useNavigate()
 
   const { get, setMany, reset, hasAnyFilter } = useUrlFilters({
-    statuses: '', types: '', from: '', to: '', page: '1', size: '20',
+    statuses: '', types: '', warningId: '', from: '', to: '', page: '1', size: '20',
   })
 
   const statusParam = get('statuses')
   const typeParam   = get('types')
+  const warningId   = get('warningId')
   const dateFrom    = get('from')
   const dateTo      = get('to')
   const page        = parseInt(get('page')) || 1
@@ -53,7 +52,10 @@ export default function MyWriteUpsPage() {
     queryFn:  () => writeupService.getWriteUps({ limit: 5000 }),
   })
 
-  const allItems = data?.items ?? []
+  const allItems = useMemo(
+    () => (data?.items ?? []).filter(w => w.status !== 'DRAFT'),
+    [data],
+  )
 
   const pendingSignature = useMemo(
     () => allItems.filter(w => w.status === 'AWAITING_SIGNATURE').length,
@@ -62,6 +64,8 @@ export default function MyWriteUpsPage() {
 
   const filtered = useMemo(() => {
     let items = allItems
+    if (warningId)
+      items = items.filter(w => String(w.id).includes(warningId))
     if (selectedStatuses.length)
       items = items.filter(w => selectedStatuses.includes(WRITE_UP_STATUS_LABELS[w.status]))
     if (selectedTypes.length)
@@ -75,7 +79,7 @@ export default function MyWriteUpsPage() {
       })
     }
     return items
-  }, [allItems, selectedStatuses, selectedTypes, dateFrom, dateTo])
+  }, [allItems, warningId, selectedStatuses, selectedTypes, dateFrom, dateTo])
 
   const { sort, dir, toggle, sorted } = useListSort(filtered)
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
@@ -91,7 +95,7 @@ export default function MyWriteUpsPage() {
       <QualityPageHeader
         title={
           <span className="flex items-center gap-3">
-            My Write-Ups
+            My Performance Warnings
             {pendingSignature > 0 && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">
                 {pendingSignature} awaiting signature
@@ -108,7 +112,7 @@ export default function MyWriteUpsPage() {
         truncated={allItems.length >= CLIENT_FETCH_LIMIT}
       >
         <StagedMultiSelect
-          options={ALL_STATUS_OPTIONS}
+          options={ALL_STATUS_LABELS}
           selected={selectedStatuses}
           onApply={v => setMany({ statuses: v.join(','), page: '1' })}
           placeholder="All Statuses"
@@ -121,6 +125,7 @@ export default function MyWriteUpsPage() {
           placeholder="All Types"
           width="w-[200px]"
         />
+        <WarningIdSearch value={warningId} onChange={v => setMany({ warningId: v, page: '1' })} />
         <DateRangeFilter
           value={{ start: dateFrom, end: dateTo }}
           onChange={r => setMany({ from: r.start, to: r.end, page: '1' })}
@@ -131,23 +136,23 @@ export default function MyWriteUpsPage() {
         {isLoading ? (
           <TableLoadingSkeleton rows={5} />
         ) : isError ? (
-          <TableErrorState message="Failed to load write-ups." onRetry={refetch} />
+          <TableErrorState message="Failed to load performance warnings." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
+                <SortableTableHead field="id" sort={sort} dir={dir} onSort={toggle} className="w-[100px]">Warning #</SortableTableHead>
                 <TableHead className="min-w-[160px]">Document Type</TableHead>
                 <SortableTableHead field="status"       sort={sort} dir={dir} onSort={toggle} className="min-w-[160px]">Status</SortableTableHead>
                 <SortableTableHead field="meeting_date" sort={sort} dir={dir} onSort={toggle} className="min-w-[130px]">Meeting Date</SortableTableHead>
-                <TableHead className="min-w-[140px]">Issued By</TableHead>
                 <TableHead className="w-20" />
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
               {items.length === 0 ? (
                 <TableEmptyState colSpan={5} icon={FileWarning}
-                  title="No write-ups found"
-                  description={hasAnyFilter ? 'Try adjusting your filters' : 'Your write-ups will appear here'} />
+                  title="No performance warnings found"
+                  description={hasAnyFilter ? 'Try adjusting your filters' : 'Your performance warnings will appear here'} />
               ) : items.map(w => (
                 <TableRow
                   key={w.id}
@@ -157,14 +162,18 @@ export default function MyWriteUpsPage() {
                   )}
                   onClick={() => navigate(`/app/performancewarnings/my/${w.id}`)}
                 >
-                  <TableCell><WriteUpTypeBadge type={w.document_type} /></TableCell>
+                  <TableCell className="text-[13px] text-slate-500">{w.id}</TableCell>
+                  <TableCell>
+                    {w.status === 'SCHEDULED'
+                      ? <span className="text-[13px] text-slate-400 italic">Pending</span>
+                      : <WriteUpTypeBadge type={w.document_type} />}
+                  </TableCell>
                   <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[w.status] ?? w.status}</TableCell>
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {w.meeting_date
                       ? formatQualityDate(w.meeting_date)
                       : <span className="text-slate-300">—</span>}
                   </TableCell>
-                  <TableCell className="text-[13px] text-slate-600">{w.created_by_name}</TableCell>
                   <TableCell onClick={e => e.stopPropagation()}>
                     <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
                       onClick={() => navigate(`/app/performancewarnings/my/${w.id}`)}>

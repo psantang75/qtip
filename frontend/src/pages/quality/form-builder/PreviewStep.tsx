@@ -44,17 +44,17 @@ export function PreviewStep({ form, onBack, onSave, saving }: PreviewStepProps) 
     return n
   }, [form])
 
-  const { data: csrUsers = [] } = useQuery({
-    queryKey: ['csr-dropdown-users-preview'],
+  const { data: agentUsers = [] } = useQuery({
+    queryKey: ['agent-dropdown-users-preview'],
     queryFn:  () => userService.fetchActiveCsrsForDropdown(),
     staleTime: 5 * 60 * 1000,
     retry: 1,
   })
-  const csrUserOptions = useMemo(
-    () => csrUsers
+  const agentUserOptions = useMemo(
+    () => agentUsers
       .map(u => ({ id: u.id, username: u.username }))
       .sort((a, b) => a.username.localeCompare(b.username)),
-    [csrUsers],
+    [agentUsers],
   )
 
   const [answers, setAnswers]               = useState<Record<number, PreviewAnswer>>({})
@@ -144,7 +144,7 @@ export function PreviewStep({ form, onBack, onSave, saving }: PreviewStepProps) 
                     onChange={(fieldId, value) => setMetadataValues(prev => ({ ...prev, [fieldId]: value }))}
                     readonly={false}
                     currentUser={{ id: 1, username: 'Preview User' }}
-                    userOptions={csrUserOptions}
+                    userOptions={agentUserOptions}
                   />
                 </div>
               </div>

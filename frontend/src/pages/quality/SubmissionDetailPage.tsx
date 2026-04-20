@@ -43,7 +43,7 @@ export default function SubmissionDetailPage() {
   const { toast } = useToast()
 
   const backLabel = (location.state as { from?: string } | null)?.from ?? 'Submissions'
-  const { roleId, isCSR, isManager, canResolveDispute } = useQualityRole()
+  const { roleId, isAgent, isManager, canResolveDispute } = useQualityRole()
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [showDisputeForm, setShowDisputeForm] = useState(false)
@@ -64,7 +64,7 @@ export default function SubmissionDetailPage() {
     queryKey: ['submission-detail', id, roleId],
     queryFn: async () => {
       if (!id) return null
-      const submission = isCSR
+      const submission = isAgent
         ? await qaService.getCSRAuditDetail(Number(id))
         : isManager
         ? await qaService.getTeamAuditDetail(Number(id))
@@ -80,7 +80,7 @@ export default function SubmissionDetailPage() {
     enabled: !!id && !!user,
   })
 
-  // ── CSR finalize ─────────────────────────────────────────────────────────
+  // ── Agent finalize ───────────────────────────────────────────────────────
   const { mutate: finalize, isPending: finalizing } = useMutation({
     mutationFn: () => qaService.finalizeCSRReview(Number(id)),
     onSuccess: () => {
@@ -112,8 +112,8 @@ export default function SubmissionDetailPage() {
   const calls    = detail.calls
   const score    = typeof detail.score === 'string' ? parseFloat(detail.score) || 0 : Number(detail.score) || 0
 
-  const canDispute      = isCSR && detail.status === 'SUBMITTED' && !detail.dispute
-  const canAcceptReview = isCSR && detail.status !== 'FINALIZED' && detail.status !== 'DISPUTED' && detail.status !== 'RESOLVED'
+  const canDispute      = isAgent && detail.status === 'SUBMITTED' && !detail.dispute
+  const canAcceptReview = isAgent && detail.status !== 'FINALIZED' && detail.status !== 'DISPUTED' && detail.status !== 'RESOLVED'
 
   // Build read-only answers map for ScoreRenderer
   const answersMap: Record<number, any> = {}
@@ -215,7 +215,7 @@ export default function SubmissionDetailPage() {
       qc.invalidateQueries({ queryKey: ['submissions'] })
       qc.invalidateQueries({ queryKey: ['disputes'] })
       qc.invalidateQueries({ queryKey: ['manager-disputes'] })
-      qc.invalidateQueries({ queryKey: ['csr-dispute-history'] })
+      qc.invalidateQueries({ queryKey: ['agent-dispute-history'] })
       setResolutionMode(false)
       setResNotes('')
     } catch (err: any) {
@@ -281,14 +281,14 @@ export default function SubmissionDetailPage() {
               topFields={topReviewFields}
               bottomFields={bottomReviewFields}
               hasBottomFields={hasBottomReviewFields}
-              csrName={detail.csr_name}
-              isCSR={isCSR}
+              agentName={detail.csr_name}
+              isAgent={isAgent}
               username={user?.username}
             />
             {detail.dispute && (
               <DisputePanel
                 dispute={detail.dispute}
-                isCSR={isCSR}
+                isAgent={isAgent}
                 editingDispute={editingDispute}
                 onEditDispute={setEditingDispute}
                 canResolveDispute={canResolveDispute}

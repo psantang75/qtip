@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
-import { RichTextDisplay } from '@/components/common/RichTextDisplay'
+import { RichTextDisplay, stripHtml } from '@/components/common/RichTextDisplay'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -102,7 +102,7 @@ export function AssignCoachingModal({ csrId, onSelect, onClose }: {
                       {s.notes ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="text-[13px] text-slate-500 truncate block max-w-[200px] cursor-default">{s.notes}</span>
+                            <span className="text-[13px] text-slate-500 truncate block max-w-[200px] cursor-default">{stripHtml(s.notes)}</span>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
                             <RichTextDisplay html={s.notes} />

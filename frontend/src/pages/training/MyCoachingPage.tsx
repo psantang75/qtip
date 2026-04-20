@@ -1,80 +1,93 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { BookOpen, Eye } from 'lucide-react'
 import trainingService from '@/services/trainingService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
-import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
-import { DateFieldRangeFilter, type DateField } from '@/components/common/DateFieldRangeFilter'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
+import { CoachingFilterBar, ALL_STATUSES } from '@/components/training/CoachingFilterBar'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 import {
   COACHING_PURPOSE_LABELS as PURPOSE_MAP,
   COACHING_FORMAT_LABELS as FORMAT_MAP,
   STATUS_LABELS,
-  CLIENT_FETCH_LIMIT,
 } from '@/constants/labels'
 import { QuizStatusBadge } from './CoachingSessionsPage'
-
 
 const SORT_PRIORITY: Record<string, number> = { SCHEDULED: 0, AWAITING_CSR_ACTION: 0 }
 
 export default function MyCoachingPage() {
   const navigate = useNavigate()
-
-  const [statusFilter, setStatusFilter] = useState<string[]>([])
-  const [topicFilter,  setTopicFilter]  = useState<string[]>([])
-  const [dateField,    setDateField]    = useState<DateField>('session_date')
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
-  const [dateFrom,     setDateFrom]     = useState(defaultFrom)
-  const [dateTo,       setDateTo]       = useState(defaultTo)
-  const [overdueOnly,  setOverdueOnly]  = useState(false)
-  const [dueTodayOnly, setDueTodayOnly] = useState(false)
-  const [page,         setPage]         = useState(1)
-  const [pageSize,     setPageSize]     = useState(20)
 
-  const handleRangeChange = useCallback((s: string, e: string) => { setDateFrom(s); setDateTo(e); setPage(1) }, [])
-  const handleFieldChange = useCallback((f: DateField) => { setDateField(f); setDateFrom(''); setDateTo(''); setPage(1) }, [])
+  const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
+    statuses: '', formats: '', topics: '',
+    from: defaultFrom, to: defaultTo, overdue: '', dueToday: '', sessionId: '',
+    page: '1', size: '20',
+  })
+
+  const statusesParam = get('statuses')
+  const formatsParam  = get('formats')
+  const topicsParam   = get('topics')
+  const dateFrom      = get('from')
+  const dateTo        = get('to')
+  const overdue       = get('overdue')
+  const dueToday      = get('dueToday')
+  const sessionId     = get('sessionId')
+  const page          = parseInt(get('page')) || 1
+  const pageSize      = parseInt(get('size')) || 20
+
+  const setPage     = (p: number) => set('page', String(p))
+  const setPageSize = (s: number) => setMany({ size: String(s), page: '1' })
+
+  const selectedStatuses = useMemo(() => statusesParam ? statusesParam.split(',').filter(Boolean) : [], [statusesParam])
+  const selectedFormats  = useMemo(() => formatsParam  ? formatsParam.split(',').filter(Boolean)  : [], [formatsParam])
+  const selectedTopics   = useMemo(() => topicsParam   ? topicsParam.split(',').filter(Boolean)   : [], [topicsParam])
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['my-coaching'],
+    queryKey: ['my-coaching', dateFrom, dateTo, overdue, dueToday],
     queryFn:  () => trainingService.getMyCoachingSessions({ limit: 5000 }),
   })
 
   const allSessions = data?.items ?? []
 
-  // Base filter (search only) — used to derive available filter options
-  const baseFiltered = useMemo(() => allSessions, [allSessions])
+  const topicOptions  = useMemo(() => [...new Set(allSessions.flatMap(s => s.topics))].sort(), [allSessions])
+
+  const allExceptClosed = useMemo(
+    () => ALL_STATUSES.map(s => STATUS_LABELS[s]).filter(s => s !== 'Closed' && s !== 'Canceled'), [],
+  )
+  const effectiveSelectedStatuses = useMemo(
+    () => selectedStatuses.length === 0 ? allExceptClosed : selectedStatuses,
+    [selectedStatuses, allExceptClosed],
+  )
 
   const filtered = useMemo(() => {
-    let items = baseFiltered
-    if (statusFilter.length) items = items.filter(s => statusFilter.includes(STATUS_LABELS[s.status] ?? s.status))
-    if (topicFilter.length)  items = items.filter(s => topicFilter.some(t => s.topics.includes(t)))
+    let items = allSessions
+    if (sessionId)                        items = items.filter(s => String(s.id).includes(sessionId))
+    if (effectiveSelectedStatuses.length) items = items.filter(s => effectiveSelectedStatuses.includes(STATUS_LABELS[s.status] ?? s.status))
+    if (selectedFormats.length)           items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
+    if (selectedTopics.length)            items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
     if (dateFrom || dateTo) {
       items = items.filter(s => {
-        const raw = dateField === 'session_date' ? s.session_date
-                  : dateField === 'due_date'     ? s.due_date
-                  : s.follow_up_date
-        if (!raw) return false
-        const d = raw.slice(0, 10)
+        const d = s.session_date?.slice(0, 10)
+        if (!d) return false
         if (dateFrom && d < dateFrom) return false
         if (dateTo   && d > dateTo)   return false
         return true
       })
     }
-    if (dueTodayOnly) {
+    if (dueToday === 'true') {
       const today = new Date().toISOString().slice(0, 10)
       items = items.filter(s =>
         s.session_date?.slice(0, 10) === today ||
@@ -82,14 +95,13 @@ export default function MyCoachingPage() {
         s.follow_up_date?.slice(0, 10) === today
       )
     }
-    if (overdueOnly) {
+    if (overdue === 'true') {
       const today = new Date().toISOString().slice(0, 10)
       items = items.filter(s =>
-        (s.due_date       && s.due_date.slice(0, 10)       < today && !['COMPLETED','CLOSED'].includes(s.status)) ||
+        (s.due_date       && s.due_date.slice(0, 10)       < today && !['COMPLETED','CLOSED','CANCELED'].includes(s.status)) ||
         (s.follow_up_date && s.follow_up_date.slice(0, 10) < today && s.status === 'FOLLOW_UP_REQUIRED')
       )
     }
-    // Default sort: needs-response first, then by due date
     return [...items].sort((a, b) => {
       const diff = (SORT_PRIORITY[a.status] ?? 2) - (SORT_PRIORITY[b.status] ?? 2)
       if (diff !== 0) return diff
@@ -97,70 +109,26 @@ export default function MyCoachingPage() {
       const bd = b.due_date ? new Date(b.due_date).getTime() : Infinity
       return ad - bd
     })
-  }, [baseFiltered, statusFilter, topicFilter, dateField, dateFrom, dateTo, overdueOnly, dueTodayOnly])
+  }, [allSessions, sessionId, effectiveSelectedStatuses, selectedFormats, selectedTopics, dateFrom, dateTo, dueToday, overdue])
 
   const { sort, dir, toggle, sorted } = useListSort(filtered)
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
   const sessions   = sorted.slice((page - 1) * pageSize, page * pageSize)
-
-  // Filter option lists derived from base-filtered results
-  const statusOptions = useMemo(() => [...new Set(baseFiltered.map(s => STATUS_LABELS[s.status] ?? s.status))].sort(), [baseFiltered])
-  const topicOptions  = useMemo(() => {
-    const all = baseFiltered.flatMap(s => s.topics)
-    return [...new Set(all)].sort()
-  }, [baseFiltered])
-
-  const hasFilters = statusFilter.length > 0 || topicFilter.length > 0 || !!dateFrom || !!dateTo || overdueOnly || dueTodayOnly
 
   return (
     <QualityListPage>
       <QualityPageHeader title="My Training" />
 
 
-      <QualityFilterBar
-        hasFilters={hasFilters}
-        onReset={() => { setStatusFilter([]); setTopicFilter([]); setDateFrom(defaultFrom); setDateTo(defaultTo); setOverdueOnly(false); setDueTodayOnly(false); setPage(1) }}
-        resultCount={{ filtered: sorted.length, total: allSessions.length }}
-        truncated={allSessions.length >= CLIENT_FETCH_LIMIT}
-      >
-        {/* ── Row 1: Status · Topics ── */}
-        <StagedMultiSelect
-          options={statusOptions}
-          selected={statusFilter}
-          onApply={v => { setStatusFilter(v); setPage(1) }}
-          placeholder="All Statuses"
-          width="w-[200px]"
-        />
-        <StagedMultiSelect
-          options={topicOptions}
-          selected={topicFilter}
-          onApply={v => { setTopicFilter(v); setPage(1) }}
-          placeholder="All Topics"
-          width="w-[280px]"
-        />
-
-        {/* ── Row break ── */}
-        <div className="w-full" />
-
-        {/* ── Row 2: Date field range · Overdue ── */}
-        <DateFieldRangeFilter
-          field={dateField}
-          start={dateFrom}
-          end={dateTo}
-          onFieldChange={handleFieldChange}
-          onRangeChange={handleRangeChange}
-        />
-        <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
-          <Checkbox checked={dueTodayOnly}
-            onCheckedChange={v => { setDueTodayOnly(!!v); if (v) setOverdueOnly(false); setPage(1) }} />
-          Due Today
-        </label>
-        <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
-          <Checkbox checked={overdueOnly}
-            onCheckedChange={v => { setOverdueOnly(!!v); if (v) setDueTodayOnly(false); setPage(1) }} />
-          Overdue
-        </label>
-      </QualityFilterBar>
+      <CoachingFilterBar
+        values={{ statuses: selectedStatuses, formats: selectedFormats, topics: selectedTopics, sessionId, dateFrom, dateTo, dueToday, overdue }}
+        setMany={setMany}
+        hasAnyFilter={hasAnyFilter}
+        onReset={reset}
+        resultTotal={filtered.length}
+        itemCount={allSessions.length}
+        topicOptions={topicOptions}
+      />
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? (
@@ -186,7 +154,7 @@ export default function MyCoachingPage() {
               {sessions.length === 0 ? (
                 <TableEmptyState colSpan={9} icon={BookOpen}
                   title="No training sessions found"
-                  description={hasFilters ? 'Try adjusting your filters' : 'Your sessions will appear here'} />
+                  description={hasAnyFilter ? 'Try adjusting your filters' : 'Your sessions will appear here'} />
               ) : sessions.map(s => (
                 <TableRow key={s.id} className="cursor-pointer hover:bg-slate-50/50"
                   onClick={() => navigate(`/app/training/my-coaching/${s.id}`)}>
@@ -258,7 +226,7 @@ export default function MyCoachingPage() {
         totalItems={sorted.length}
         pageSize={pageSize}
         onPageChange={setPage}
-        onPageSizeChange={s => { setPageSize(s); setPage(1) }}
+        onPageSizeChange={setPageSize}
       />
     </QualityListPage>
   )

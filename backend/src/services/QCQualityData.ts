@@ -73,9 +73,12 @@ export async function getScoreDistribution(
 
 async function queryCategoryScores(
   deptFilter: number[], formNames: string[], start: string, end: string,
+  userId: number | null = null,
 ) {
   const dc = deptClause(deptFilter)
   const fc = formClause(formNames)
+  const userClause  = userId !== null ? 'AND csr.id = ?' : ''
+  const userParams  = userId !== null ? [userId] : []
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT
        fc.category_name                AS category_name,
@@ -119,10 +122,10 @@ async function queryCategoryScores(
      WHERE s.status = 'FINALIZED'
        AND s.submitted_at BETWEEN ? AND ?
        AND fq.question_type IN ('YES_NO','SCALE','RADIO')
-       ${dc.sql} ${fc.sql}
+       ${dc.sql} ${fc.sql} ${userClause}
      GROUP BY fc.id, fc.category_name, f.id, f.form_name
      ORDER BY f.form_name, fc.sort_order`,
-    [start, end, ...dc.params, ...fc.params],
+    [start, end, ...dc.params, ...fc.params, ...userParams],
   )
   const result = new Map<string, number | null>()
   const list = rows.map(r => {
@@ -143,10 +146,11 @@ async function queryCategoryScores(
 
 export async function getCategoryScores(
   deptFilter: number[], formNames: string[], ranges: PeriodRanges,
+  userId: number | null = null,
 ) {
   const [current, prior] = await Promise.all([
-    queryCategoryScores(deptFilter, formNames, fmt(ranges.current.start), fmt(ranges.current.end)),
-    queryCategoryScores(deptFilter, formNames, fmt(ranges.prior.start), fmt(ranges.prior.end)),
+    queryCategoryScores(deptFilter, formNames, fmt(ranges.current.start), fmt(ranges.current.end), userId),
+    queryCategoryScores(deptFilter, formNames, fmt(ranges.prior.start), fmt(ranges.prior.end), userId),
   ])
   return current.list.map(row => {
     const key = `${row.form}::${row.category}`

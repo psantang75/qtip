@@ -25,18 +25,18 @@ import { SUBMISSION_STATUSES, STATUS_LABELS, CLIENT_FETCH_LIMIT } from '@/consta
 
 export default function SubmissionsPage() {
   const navigate = useNavigate()
-  const { roleId, isAdminOrQA, isManager, isCSR } = useQualityRole()
+  const { roleId, isAdminOrQA, isManager, isAgent } = useQualityRole()
 
-  const pageTitle = isCSR ? 'My Reviews' : isManager ? 'Completed Reviews' : 'Completed Forms'
+  const pageTitle = isAgent ? 'My Reviews' : isManager ? 'Completed Reviews' : 'Completed Forms'
 
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    forms: '', csrs: '', statuses: '', from: defaultFrom, to: defaultTo, reviewId: '', page: '1', size: '20',
+    forms: '', agents: '', statuses: '', from: defaultFrom, to: defaultTo, reviewId: '', page: '1', size: '20',
   })
 
   const formsParam    = get('forms')
-  const csrsParam     = get('csrs')
+  const agentsParam   = get('agents')
   const statusesParam = get('statuses')
   const dateFrom      = get('from')
   const dateTo        = get('to')
@@ -44,9 +44,9 @@ export default function SubmissionsPage() {
   const page          = parseInt(get('page')) || 1
   const pageSize      = parseInt(get('size')) || 20
 
-  const selectedFormNames = useMemo(() => formsParam ? formsParam.split(',').filter(Boolean) : [], [formsParam])
-  const selectedCsrNames  = useMemo(() => csrsParam  ? csrsParam.split(',').filter(Boolean)  : [], [csrsParam])
-  const selectedStatuses  = useMemo(() => statusesParam ? statusesParam.split(',').filter(Boolean) : [], [statusesParam])
+  const selectedFormNames  = useMemo(() => formsParam  ? formsParam.split(',').filter(Boolean)  : [], [formsParam])
+  const selectedAgentNames = useMemo(() => agentsParam ? agentsParam.split(',').filter(Boolean) : [], [agentsParam])
+  const selectedStatuses   = useMemo(() => statusesParam ? statusesParam.split(',').filter(Boolean) : [], [statusesParam])
 
   const setPage     = (p: number) => set('page', String(p))
   const setPageSize = (s: number) => setMany({ size: String(s), page: '1' })
@@ -57,7 +57,7 @@ export default function SubmissionsPage() {
     queryFn: () => {
       const ds = dateFrom || undefined
       const de = dateTo   || undefined
-      if (isCSR)     return qaService.getCSRAudits({ page: 1, limit: 5000, start_date: ds, end_date: de })
+      if (isAgent)   return qaService.getCSRAudits({ page: 1, limit: 5000, start_date: ds, end_date: de })
       if (isManager) return qaService.getTeamAudits({ page: 1, limit: 5000, start_date: ds, end_date: de })
       return qaService.getSubmissions({ page: 1, limit: 5000, date_start: ds, date_end: de })
     },
@@ -72,7 +72,7 @@ export default function SubmissionsPage() {
     return Array.from(new Set(allItems.map((r: Submission) => r.form_name).filter(Boolean))).sort() as string[]
   }, [allItems])
 
-  const csrNameOptions = useMemo(() => {
+  const agentNameOptions = useMemo(() => {
     return Array.from(new Set(allItems.map((r: Submission) => r.csr_name).filter(Boolean))).sort() as string[]
   }, [allItems])
 
@@ -86,10 +86,10 @@ export default function SubmissionsPage() {
     let items = allItems
     if (reviewId) items = items.filter(r => String(r.id).includes(reviewId))
     if (selectedFormNames.length) items = items.filter(r => selectedFormNames.includes(r.form_name ?? ''))
-    if (selectedCsrNames.length)  items = items.filter(r => selectedCsrNames.includes(r.csr_name ?? ''))
+    if (selectedAgentNames.length) items = items.filter(r => selectedAgentNames.includes(r.csr_name ?? ''))
     if (selectedStatuses.length)  items = items.filter(r => selectedStatuses.includes(r.status))
     return items
-  }, [allItems, reviewId, selectedFormNames, selectedCsrNames, selectedStatuses])
+  }, [allItems, reviewId, selectedFormNames, selectedAgentNames, selectedStatuses])
 
   const { sort, dir, toggle, sorted } = useListSort(filtered)
 
@@ -119,13 +119,13 @@ export default function SubmissionsPage() {
           width="w-[340px]"
         />
 
-        {/* 2. CSR Name */}
-        {!isCSR && csrNameOptions.length > 0 && (
+        {/* 2. Agent Name */}
+        {!isAgent && agentNameOptions.length > 0 && (
           <StagedMultiSelect
-            options={csrNameOptions}
-            selected={selectedCsrNames}
-            onApply={names => setMany({ csrs: names.join(','), page: '1' })}
-            placeholder="All CSRs"
+            options={agentNameOptions}
+            selected={selectedAgentNames}
+            onApply={names => setMany({ agents: names.join(','), page: '1' })}
+            placeholder="All Agents"
             width="w-[200px]"
           />
         )}
@@ -181,7 +181,7 @@ export default function SubmissionsPage() {
                 <SortableTableHead field="id"              sort={sort} dir={dir} onSort={toggle} className="w-[100px]">Review #</SortableTableHead>
                 <SortableTableHead field="status"          sort={sort} dir={dir} onSort={toggle}>Status</SortableTableHead>
                 <SortableTableHead field="form_name"       sort={sort} dir={dir} onSort={toggle}>Form Name</SortableTableHead>
-                {!isCSR      && <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle}>CSR</SortableTableHead>}
+                {!isAgent    && <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle}>Agent</SortableTableHead>}
                 <SortableTableHead field="created_at"      sort={sort} dir={dir} onSort={toggle} className="pl-6">Review Date</SortableTableHead>
                 <SortableTableHead field="interaction_date" sort={sort} dir={dir} onSort={toggle} className="pl-6">Interaction Date</SortableTableHead>
                 <SortableTableHead field="score"           sort={sort} dir={dir} onSort={toggle}>Score</SortableTableHead>
@@ -198,7 +198,7 @@ export default function SubmissionsPage() {
                     <TableCell className="text-[13px] text-slate-500">{row.id}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[row.status] ?? row.status}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">{row.form_name}</TableCell>
-                    {!isCSR      && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}
+                    {!isAgent    && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-600 pl-6">{fmtDate(row.created_at)}</TableCell>
                     <TableCell className="text-[13px] text-slate-600 pl-6">{row.interaction_date ? fmtDate(row.interaction_date) : <span className="text-slate-400">—</span>}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">

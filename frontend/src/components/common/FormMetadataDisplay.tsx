@@ -1,7 +1,7 @@
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { FormMetadataField } from '@/types/form.types'
-import { isCsrMetadataField } from '@/utils/formMetadataOrder'
+import { isAgentMetadataField, displayFieldName } from '@/utils/formMetadataOrder'
 
 interface FormMetadataDisplayProps {
   metadataFields: FormMetadataField[]
@@ -9,7 +9,7 @@ interface FormMetadataDisplayProps {
   onChange?: (fieldId: string, value: string) => void
   readonly?: boolean
   currentUser?: { id: number; username: string }
-  /** Users to populate DROPDOWN fields that have no dropdown_source (e.g. CSR picker) */
+  /** Users to populate DROPDOWN fields that have no dropdown_source (e.g. Agent picker) */
   userOptions?: { id: number; username: string }[]
 }
 
@@ -48,7 +48,7 @@ export default function FormMetadataDisplay({
         return (
           <div key={idx} className="space-y-1">
             <label className="block text-[12px] font-medium text-slate-600">
-              {field.field_name}
+              {displayFieldName(field.field_name)}
               {field.is_required && <span className="text-red-500 ml-0.5">*</span>}
             </label>
 
@@ -71,7 +71,7 @@ export default function FormMetadataDisplay({
                 value={val}
                 readOnly={readonly}
                 onChange={e => handleChange(field, e.target.value)}
-                placeholder={field.field_name}
+                placeholder={displayFieldName(field.field_name)}
                 className="h-9 text-[13px]"
               />
             )}
@@ -89,9 +89,8 @@ export default function FormMetadataDisplay({
             {field.field_type === 'DROPDOWN' && (
               (() => {
                 const staticOpts = (field.dropdown_source ?? '').split(',').map(o => o.trim()).filter(Boolean)
-                const csrField = isCsrMetadataField(field)
-                // CSR always uses live user list when options are provided (ignore stale static dropdown_source).
-                const showUsers = userOptions.length > 0 && (csrField || staticOpts.length === 0)
+                const agentField = isAgentMetadataField(field)
+                const showUsers = userOptions.length > 0 && (agentField || staticOpts.length === 0)
 
                 if (readonly) {
                   const displayVal = showUsers
@@ -103,7 +102,7 @@ export default function FormMetadataDisplay({
                 return (
                   <Select value={val ? val : undefined} onValueChange={v => handleChange(field, v)}>
                     <SelectTrigger className="h-9 text-[13px]">
-                      <SelectValue placeholder={`Select ${field.field_name}…`} />
+                      <SelectValue placeholder={`Select ${displayFieldName(field.field_name)}…`} />
                     </SelectTrigger>
                     <SelectContent>
                       {showUsers

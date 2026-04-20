@@ -8,6 +8,8 @@ import {
   getWriteUpById,
   createWriteUp,
   updateWriteUp,
+  updateInternalNotes,
+  updateFollowUpNotes,
   transitionStatus,
   signWriteUp,
   setFollowUp,
@@ -60,6 +62,8 @@ router.get('/:id/attachments/:attachmentId',                                    
 router.post('/',                       authorizeManager as unknown as RequestHandler, createWriteUp                                                              as unknown as RequestHandler)
 router.post('/coaching-session',       authorizeManager as unknown as RequestHandler, createLinkedCoachingSession                                                as unknown as RequestHandler)
 router.put('/:id',                     authorizeManager as unknown as RequestHandler, updateWriteUp                                                              as unknown as RequestHandler)
+router.patch('/:id/internal-notes',    authorizeManager as unknown as RequestHandler, updateInternalNotes                                                        as unknown as RequestHandler)
+router.patch('/:id/follow-up-notes',   authorizeManager as unknown as RequestHandler, updateFollowUpNotes                                                        as unknown as RequestHandler)
 router.patch('/:id/status',            authorizeManager as unknown as RequestHandler, transitionStatus                                                           as unknown as RequestHandler)
 router.patch('/:id/follow-up',         authorizeManager as unknown as RequestHandler, setFollowUp                                                                as unknown as RequestHandler)
 router.post('/:id/attachments',        authorizeManager as unknown as RequestHandler, upload.single('file') as unknown as RequestHandler, uploadAttachment       as unknown as RequestHandler)

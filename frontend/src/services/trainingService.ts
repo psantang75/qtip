@@ -82,6 +82,10 @@ export interface CoachingSession {
   behavior_flags?: string           // legacy VARCHAR (kept for backward compat display)
   behavior_flag_ids?: number[]      // IDs from list_items (new)
   behavior_flag_items?: { id: number; category?: string; label: string; sort_order: number }[]
+  root_cause_ids?: number[]
+  root_cause_items?: { id: number; category?: string; label: string; sort_order: number }[]
+  support_needed_ids?: number[]
+  support_needed_items?: { id: number; category?: string; label: string; sort_order: number }[]
   kb_resources?: { id: number; title: string; resource_type?: string; url?: string; file_name?: string; description?: string }[]
   quizzes?: { id: number; quiz_title: string; pass_score: number; questions: QuizQuestion[] }[]
   require_acknowledgment: boolean
@@ -104,6 +108,7 @@ export interface CoachingSession {
   created_at: string
   is_overdue?: boolean
   recent_sessions?: RecentSession[]
+  prior_year_sessions?: RecentSession[]
   repeat_topics?: string[]
   quiz_attempts?: QuizAttemptSummary[]
   quiz_count?: number
@@ -151,6 +156,7 @@ export interface CoachingStats {
 
 export interface CSRHistoryResponse {
   sessions: RecentSession[]
+  prior_year_sessions: RecentSession[]
   repeat_topics: string[]
 }
 

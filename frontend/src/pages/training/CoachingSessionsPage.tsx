@@ -1,40 +1,32 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MessageSquare, Eye, ChevronDown, ChevronUp, Users, Flame, AlertTriangle } from 'lucide-react'
-import trainingService, { type CoachingSession, type CoachingPurpose, type CoachingFormat } from '@/services/trainingService'
+import { Plus, MessageSquare, Eye, ChevronDown, ChevronUp, Users, Flame } from 'lucide-react'
+import trainingService, { type CoachingSession } from '@/services/trainingService'
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
-import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { ListPagination } from '@/components/common/ListPagination'
+import { CoachingFilterBar, ALL_STATUSES } from '@/components/training/CoachingFilterBar'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 
-// ── Labels (from central file) ────────────────────────────────────────────────
-
 import {
   COACHING_PURPOSE_LABELS,
   COACHING_FORMAT_LABELS,
-  COACHING_STATUS_LABELS,
   STATUS_LABELS,
-  CLIENT_FETCH_LIMIT,
 } from '@/constants/labels'
 
 const PURPOSE_MAP = COACHING_PURPOSE_LABELS
 const FORMAT_MAP  = COACHING_FORMAT_LABELS
-const ALL_STATUSES = Object.keys(COACHING_STATUS_LABELS)
 
 
 export { TopicChips } from '@/components/training/TopicChips'
@@ -51,7 +43,7 @@ export function QuizStatusBadge({ session }: { session: CoachingSession }) {
     ? passedCount >= quizCount
     : attempts.some(a => a.passed)
 
-  if (allPassed || ['COMPLETED', 'CLOSED'].includes(session.status))
+  if (allPassed || ['COMPLETED', 'CLOSED', 'CANCELED'].includes(session.status))
     return <span className="text-[13px] text-slate-500">Passed</span>
 
   return <span className="text-[13px] text-slate-500">Assigned</span>
@@ -86,9 +78,9 @@ export default function CoachingSessionsPage() {
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    csrs: '', statuses: '', formats: '', topics: '',
-    from: defaultFrom, to: defaultTo, overdue: '', dueToday: '', page: '1', size: '20',
-    expanded: '',
+    agents: '', statuses: '', formats: '', topics: '',
+    from: defaultFrom, to: defaultTo, overdue: '', dueToday: '', sessionId: '',
+    page: '1', size: '20', expanded: '',
   })
 
   const expandedParam    = get('expanded')
@@ -99,7 +91,7 @@ export default function CoachingSessionsPage() {
     set('expanded', [...next].join(','))
   }
 
-  const csrsParam     = get('csrs')
+  const agentsParam   = get('agents')
   const statusesParam = get('statuses')
   const formatsParam  = get('formats')
   const topicsParam   = get('topics')
@@ -107,13 +99,14 @@ export default function CoachingSessionsPage() {
   const dateTo        = get('to')
   const overdue       = get('overdue')
   const dueToday      = get('dueToday')
+  const sessionId     = get('sessionId')
   const page          = parseInt(get('page')) || 1
   const pageSize      = parseInt(get('size')) || 20
 
   const setPage     = (p: number) => set('page', String(p))
   const setPageSize = (s: number) => setMany({ size: String(s), page: '1' })
 
-  const selectedCsrs     = useMemo(() => csrsParam     ? csrsParam.split(',').filter(Boolean)     : [], [csrsParam])
+  const selectedAgents   = useMemo(() => agentsParam   ? agentsParam.split(',').filter(Boolean)   : [], [agentsParam])
   const selectedStatuses = useMemo(() => statusesParam ? statusesParam.split(',').filter(Boolean)  : [], [statusesParam])
   const selectedFormats  = useMemo(() => formatsParam  ? formatsParam.split(',').filter(Boolean)   : [], [formatsParam])
   const selectedTopics   = useMemo(() => topicsParam   ? topicsParam.split(',').filter(Boolean)    : [], [topicsParam])
@@ -135,7 +128,7 @@ export default function CoachingSessionsPage() {
   const allItems = data?.items ?? []
 
   // Dropdown options from the FULL result set
-  const csrOptions = useMemo(() => {
+  const agentOptions = useMemo(() => {
     return Array.from(new Set(allItems.map(s => s.csr_name).filter(Boolean))).sort()
   }, [allItems])
 
@@ -143,23 +136,23 @@ export default function CoachingSessionsPage() {
     return Array.from(new Set(allItems.flatMap(s => s.topics))).sort()
   }, [allItems])
 
-  const statusOptions = ALL_STATUSES.map(s => STATUS_LABELS[s])
-  const allExceptClosed = useMemo(() => statusOptions.filter(s => s !== 'Closed'), [statusOptions])
+  const allExceptClosed = useMemo(
+    () => ALL_STATUSES.map(s => STATUS_LABELS[s]).filter(s => s !== 'Closed' && s !== 'Canceled'), [],
+  )
   const effectiveSelectedStatuses = useMemo(
     () => selectedStatuses.length === 0 ? allExceptClosed : selectedStatuses,
     [selectedStatuses, allExceptClosed],
   )
-  const formatOptions = Object.values(FORMAT_MAP)
 
-  // Client-side filtering on the full result set
   const filtered = useMemo(() => {
     let items = allItems
-    if (selectedCsrs.length)             items = items.filter(s => selectedCsrs.includes(s.csr_name))
+    if (sessionId)                        items = items.filter(s => String(s.id).includes(sessionId))
+    if (selectedAgents.length)            items = items.filter(s => selectedAgents.includes(s.csr_name))
     if (effectiveSelectedStatuses.length) items = items.filter(s => effectiveSelectedStatuses.includes(STATUS_LABELS[s.status] ?? s.status))
-    if (selectedFormats.length)          items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
-    if (selectedTopics.length)           items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
+    if (selectedFormats.length)           items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
+    if (selectedTopics.length)            items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
     return items
-  }, [allItems, selectedCsrs, effectiveSelectedStatuses, selectedFormats, selectedTopics])
+  }, [allItems, sessionId, selectedAgents, effectiveSelectedStatuses, selectedFormats, selectedTopics])
 
   const { sort, dir, toggle, sorted: sortedItems } = useListSort(filtered)
 
@@ -203,70 +196,17 @@ export default function CoachingSessionsPage() {
         }
       />
 
-      <QualityFilterBar
-        hasFilters={hasAnyFilter}
+      <CoachingFilterBar
+        values={{ statuses: selectedStatuses, formats: selectedFormats, topics: selectedTopics, sessionId, dateFrom, dateTo, dueToday, overdue }}
+        setMany={setMany}
+        hasAnyFilter={hasAnyFilter}
         onReset={reset}
-        resultCount={{ total: displayTotal }}
-        truncated={allItems.length >= CLIENT_FETCH_LIMIT}
-      >
-        {/* ── Row 1: CSR · Topics · Format · Status ── */}
-        <StagedMultiSelect
-          options={csrOptions}
-          selected={selectedCsrs}
-          onApply={v => setMany({ csrs: v.join(','), page: '1' })}
-          placeholder="All CSRs"
-          width="w-[280px]"
-        />
-        <StagedMultiSelect
-          options={topicOptions}
-          selected={selectedTopics}
-          onApply={v => setMany({ topics: v.join(','), page: '1' })}
-          placeholder="All Topics"
-          width="w-[280px]"
-        />
-        <StagedMultiSelect
-          options={formatOptions}
-          selected={selectedFormats}
-          onApply={v => setMany({ formats: v.join(','), page: '1' })}
-          placeholder="All Formats"
-          width="w-[200px]"
-        />
-        <StagedMultiSelect
-          options={statusOptions}
-          selected={effectiveSelectedStatuses}
-          onApply={v => {
-            const isDefault = v.length === allExceptClosed.length && allExceptClosed.every(s => v.includes(s))
-            setMany({ statuses: isDefault ? '' : v.join(','), page: '1' })
-          }}
-          placeholder="All Statuses"
-          width="w-[180px]"
-        />
-
-        {/* ── Row break ── */}
-        <div className="w-full" />
-
-        {/* ── Row 2: Session Date Range · Due Today · Overdue ── */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[12px] text-slate-500 shrink-0">Session</span>
-          <Input type="date" value={dateFrom} max={dateTo || undefined}
-            onChange={e => setMany({ from: e.target.value, page: '1' })}
-            className="h-9 w-[140px]" />
-          <span className="text-[12px] text-slate-400">–</span>
-          <Input type="date" value={dateTo} min={dateFrom || undefined}
-            onChange={e => setMany({ to: e.target.value, page: '1' })}
-            className="h-9 w-[140px]" />
-        </div>
-        <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
-          <Checkbox checked={dueToday === 'true'}
-            onCheckedChange={v => setMany({ dueToday: v ? 'true' : '', overdue: '', page: '1' })} />
-          Due Today
-        </label>
-        <label className="flex items-center gap-2 text-[13px] text-slate-600 cursor-pointer select-none">
-          <Checkbox checked={overdue === 'true'}
-            onCheckedChange={v => setMany({ overdue: v ? 'true' : '', dueToday: '', page: '1' })} />
-          Overdue
-        </label>
-      </QualityFilterBar>
+        resultTotal={displayTotal}
+        itemCount={allItems.length}
+        agentOptions={agentOptions}
+        selectedAgents={selectedAgents}
+        topicOptions={topicOptions}
+      />
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? (
@@ -277,14 +217,14 @@ export default function CoachingSessionsPage() {
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
-                <TableHead className="w-[60px] text-slate-400">#</TableHead>
+                <SortableTableHead field="id" sort={sort} dir={dir} onSort={toggle} className="w-[100px]">Session #</SortableTableHead>
                 <SortableTableHead field="session_date"  sort={sort} dir={dir} onSort={toggle} className="min-w-[110px]">Date</SortableTableHead>
                 <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle} className="min-w-[110px]">Status</SortableTableHead>
-                <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle} className="min-w-[200px]">CSR</SortableTableHead>
+                <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle} className="min-w-[200px]">Agent</SortableTableHead>
                 <TableHead className="min-w-[120px]">Purpose</TableHead>
                 <TableHead className="min-w-[120px]">Format</TableHead>
                 <TableHead className="min-w-[160px]">Topics</TableHead>
-                <TableHead className="min-w-[130px]">Quiz</TableHead>
+                <TableHead className="min-w-[80px]">Quiz</TableHead>
                 <SortableTableHead field="due_date" sort={sort} dir={dir} onSort={toggle} className="min-w-[130px]">Next Due</SortableTableHead>
                 <TableHead className="w-24" />
               </StandardTableHeaderRow>
@@ -309,7 +249,7 @@ export default function CoachingSessionsPage() {
                 {/* ── Batch parent row ── */}
                 {isBatch ? (
                   <TableRow className="bg-slate-50 border-l-4 border-l-primary hover:bg-slate-100/60">
-                    <TableCell className="text-[11px] text-slate-300 font-mono">&mdash;</TableCell>
+                    <TableCell className="text-[13px] text-slate-300">&mdash;</TableCell>
                     <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                       {formatQualityDate(s.session_date)}
                     </TableCell>
@@ -317,7 +257,7 @@ export default function CoachingSessionsPage() {
                     <TableCell>
                       <div className="flex items-center gap-2 text-[13px] text-slate-500">
                         <Users className="h-3.5 w-3.5 text-primary shrink-0" />
-                        <span>{batchSessions!.length} CSRs</span>
+                        <span>{batchSessions!.length} Agents</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-[13px] text-slate-600">{PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}</TableCell>
@@ -363,7 +303,7 @@ export default function CoachingSessionsPage() {
                     className="cursor-pointer hover:bg-slate-50/50"
                     onClick={() => navigate(`/app/training/coaching/${s.id}`)}
                   >
-                    <TableCell className="text-[11px] text-slate-400 font-mono">#{s.id}</TableCell>
+                    <TableCell className="text-[13px] text-slate-500">{s.id}</TableCell>
                     <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                       {formatQualityDate(s.session_date)}
                     </TableCell>
@@ -450,7 +390,7 @@ export default function CoachingSessionsPage() {
                 {isBatch && isExpanded && batchSessions!.map(bs => (
                   <TableRow key={bs.id} className="cursor-pointer hover:bg-primary/5 bg-blue-50/30 border-l-4 border-l-primary/30"
                     onClick={() => navigate(`/app/training/coaching/${bs.id}`)}>
-                    <TableCell className="text-[11px] text-slate-400 font-mono pl-8">#{bs.id}</TableCell>
+                    <TableCell className="text-[13px] text-slate-500 pl-8">{bs.id}</TableCell>
                     <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">
                       {formatQualityDate(bs.session_date)}
                     </TableCell>

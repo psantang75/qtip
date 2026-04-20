@@ -9,7 +9,9 @@ export type WriteUpStatus =
   | 'SCHEDULED'
   | 'AWAITING_SIGNATURE'
   | 'SIGNED'
+  | 'SIGNATURE_REFUSED'
   | 'FOLLOW_UP_PENDING'
+  | 'FOLLOW_UP_COMPLETED'
   | 'CLOSED'
 export type WriteUpExampleSource = 'MANUAL' | 'QA_IMPORT' | 'COACHING_IMPORT'
 
@@ -79,6 +81,10 @@ export interface WriteUpPayload {
   manager_id?:         number | null
   hr_witness_id?:      number | null
   meeting_notes?:      string | null
+  internal_notes?:     string | null
+  behavior_flag_ids?:  number[]
+  root_cause_ids?:     number[]
+  support_needed_ids?: number[]
   incidents?:          Array<{
     id?: number
     description: string
@@ -106,8 +112,15 @@ export interface WriteUpPayload {
 
 export type TransitionExtra =
   | { meeting_date: string }
-  | { meeting_notes: string }
+  | {
+      meeting_notes: string
+      follow_up_required?: boolean
+      follow_up_date?: string | null
+      follow_up_assigned_to?: number | null
+      follow_up_checklist?: string | null
+    }
   | { follow_up_notes: string }
+  | { refusal_reason: string }
   | undefined
 
 export interface WriteUpExample {
@@ -153,6 +166,9 @@ export interface WriteUp {
   document_type: WriteUpType
   status: WriteUpStatus
   meeting_date?: string | null
+  follow_up_required?: boolean | number | null
+  follow_up_date?: string | null
+  follow_up_completed_at?: string | null
   created_at: string
   csr_id: number
   csr_name: string
@@ -186,12 +202,22 @@ export interface WriteUpDetail extends WriteUp {
   follow_up_assignee_name?: string | null
   follow_up_checklist?: string | null
   follow_up_notes?: string | null
+  follow_up_completed_at?: string | null
   signed_at?: string | null
   signed_ip?: string | null
   acknowledged_at?: string | null
   delivered_at?: string | null
   closed_at?: string | null
   signature_data?: string | null
+  refused_at?: string | null
+  refusal_reason?: string | null
+  internal_notes?: string | null
+  behavior_flag_ids?: number[]
+  root_cause_ids?: number[]
+  support_needed_ids?: number[]
+  behavior_flag_items?: Array<{ id: number; category?: string | null; label: string; sort_order: number }>
+  root_cause_items?: Array<{ id: number; category?: string | null; label: string; sort_order: number }>
+  support_needed_items?: Array<{ id: number; category?: string | null; label: string; sort_order: number }>
   incidents: WriteUpIncident[]
   prior_discipline: PriorDisciplineRow[]
   attachments: WriteUpAttachment[]
@@ -244,9 +270,38 @@ const writeupService = {
 
   transitionStatus: async (
     id: number,
-    body: { status: WriteUpStatus; meeting_notes?: string; meeting_date?: string; follow_up_notes?: string },
+    body: {
+      status: WriteUpStatus
+      meeting_notes?: string
+      meeting_date?: string
+      follow_up_notes?: string
+      follow_up_required?: boolean
+      follow_up_date?: string | null
+      follow_up_assigned_to?: number | null
+      follow_up_checklist?: string | null
+      refusal_reason?: string
+    },
   ): Promise<void> => {
     await api.patch(`/writeups/${id}/status`, body)
+  },
+
+  updateInternalNotes: async (
+    id: number,
+    body: {
+      internal_notes?: string | null
+      behavior_flag_ids?: number[]
+      root_cause_ids?: number[]
+      support_needed_ids?: number[]
+    },
+  ): Promise<void> => {
+    await api.patch(`/writeups/${id}/internal-notes`, body)
+  },
+
+  updateFollowUpNotes: async (
+    id: number,
+    body: { follow_up_notes: string | null },
+  ): Promise<void> => {
+    await api.patch(`/writeups/${id}/follow-up-notes`, body)
   },
 
   signWriteUp: async (id: number, body: { signature_data: string }): Promise<void> => {
@@ -327,6 +382,13 @@ const writeupService = {
 
   deleteAttachment: async (writeUpId: number, attachmentId: number): Promise<void> => {
     await api.delete(`/writeups/${writeUpId}/attachments/${attachmentId}`)
+  },
+
+  downloadAttachment: async (writeUpId: number, attachmentId: number): Promise<Blob> => {
+    const { data } = await api.get(`/writeups/${writeUpId}/attachments/${attachmentId}`, {
+      responseType: 'blob',
+    })
+    return data
   },
 
 }

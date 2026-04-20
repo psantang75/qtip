@@ -29,12 +29,14 @@ export const STATUS_LABELS: Record<string, string> = {
   CLOSED:              'Closed',
   IN_PROCESS:          'In Process',
   IN_PROGRESS:         'In Progress',
-  AWAITING_CSR_ACTION: 'Awaiting CSR',
+  AWAITING_CSR_ACTION: 'Awaiting Agent',
   QUIZ_PENDING:        'Quiz Pending',
   FOLLOW_UP_REQUIRED:  'Follow-Up',
   AWAITING_SIGNATURE:  'Awaiting Signature',
   SIGNED:              'Signed',
   FOLLOW_UP_PENDING:   'Follow-Up Pending',
+  FOLLOW_UP_COMPLETED: 'Follow-Up Completed',
+  CANCELED:            'Canceled',
 }
 
 // ── Quality ──────────────────────────────────────────────────────────────────
@@ -81,10 +83,11 @@ export const COACHING_SOURCE_LABELS: Record<CoachingSourceType, string> = {
 export const COACHING_STATUS_LABELS: Record<string, string> = {
   DRAFT:               'Draft',
   SCHEDULED:           'Scheduled',
-  AWAITING_CSR_ACTION: 'Awaiting CSR',
+  AWAITING_CSR_ACTION: 'Awaiting Agent',
   COMPLETED:           'Completed',
   FOLLOW_UP_REQUIRED:  'Follow-Up',
   CLOSED:              'Closed',
+  CANCELED:            'Canceled',
 }
 
 // ── Write-Ups ────────────────────────────────────────────────────────────────
@@ -96,10 +99,12 @@ export const WRITE_UP_TYPE_LABELS: Record<WriteUpType, string> = {
 }
 
 export const WRITE_UP_STATUS_LABELS: Record<WriteUpStatus, string> = {
-  DRAFT:              'Draft',
-  SCHEDULED:          'Scheduled',
-  AWAITING_SIGNATURE: 'Awaiting Signature',
-  SIGNED:             'Signed',
-  FOLLOW_UP_PENDING:  'Follow-Up Pending',
-  CLOSED:             'Closed',
+  DRAFT:               'Draft',
+  SCHEDULED:           'Scheduled',
+  AWAITING_SIGNATURE:  'Awaiting Signature',
+  SIGNED:              'Signed',
+  SIGNATURE_REFUSED:   'Signature Refused',
+  FOLLOW_UP_PENDING:   'Follow-Up Pending',
+  FOLLOW_UP_COMPLETED: 'Follow-Up Completed',
+  CLOSED:              'Closed',
 }

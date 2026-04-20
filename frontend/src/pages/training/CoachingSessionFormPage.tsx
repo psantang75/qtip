@@ -12,12 +12,10 @@ import { QualityPageHeader } from '@/components/common/QualityPageHeader'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
-import { formatQualityDate } from '@/utils/dateFormat'
-import {
-  SessionSection, RequiredActionsSection, AccountabilitySection, InternalNotesSection, AttachmentSection,
+  SessionSection, RequiredActionsSection, AccountabilitySection, InternalNotesSection,
 } from './coaching-form/CoachingFormSections'
+import { AgentHistoryPanel } from './coaching-form/AgentHistoryPanel'
+import { AttachmentCard } from '@/components/training/AttachmentCard'
 import { emptyForm, type CoachingFormState, type CoachingFormErrors } from './coaching-form/types'
 
 export default function CoachingSessionFormPage() {
@@ -29,7 +27,7 @@ export default function CoachingSessionFormPage() {
   const qc         = useQueryClient()
 
   const [existingFilename, setExistingFilename] = useState<string | undefined>()
-  const [showAllHistory,   setShowAllHistory]   = useState(false)
+  const [removeAttachment, setRemoveAttachment] = useState(false)
 
   // ── React Hook Form ─────────────────────────────────────────────────────────
   const {
@@ -67,24 +65,26 @@ export default function CoachingSessionFormPage() {
     staleTime: 0,
   })
 
-  const { data: csrs = [] }         = useQuery({ queryKey: ['team-csrs'],           queryFn: () => trainingService.getTeamCSRs() })
+  const { data: agents = [] }       = useQuery({ queryKey: ['team-agents'],         queryFn: () => trainingService.getTeamCSRs() })
   const { data: coaches = [] }      = useQuery({ queryKey: ['eligible-coaches'],     queryFn: () => trainingService.getCoaches() })
   const { data: topicItems = [] }   = useQuery({ queryKey: ['list-items', 'training_topic'],   queryFn: () => listService.getItems('training_topic') })
   const { data: resourcesData }     = useQuery({ queryKey: ['resources'],            queryFn: () => trainingService.getResources({ is_active: true, limit: 200 }) })
   const { data: quizLibrary }       = useQuery({ queryKey: ['quiz-library'],         queryFn: () => trainingService.getQuizLibrary({ limit: 200 }) })
-  const { data: flagItems = [] }    = useQuery({ queryKey: ['list-items', 'behavior_flag'],    queryFn: () => listService.getItems('behavior_flag') })
-  const { data: purposeItems = [] } = useQuery({ queryKey: ['list-items', 'coaching_purpose'], queryFn: () => listService.getItems('coaching_purpose') })
-  const { data: formatItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_format'],  queryFn: () => listService.getItems('coaching_format') })
-  const { data: sourceItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_source'],  queryFn: () => listService.getItems('coaching_source') })
+  const { data: flagItems = [] }           = useQuery({ queryKey: ['list-items', 'behavior_flag'],    queryFn: () => listService.getItems('behavior_flag') })
+  const { data: rootCauseItems = [] }     = useQuery({ queryKey: ['list-items', 'root_cause'],       queryFn: () => listService.getItems('root_cause') })
+  const { data: supportNeededItems = [] } = useQuery({ queryKey: ['list-items', 'support_needed'],    queryFn: () => listService.getItems('support_needed') })
+  const { data: purposeItems = [] }       = useQuery({ queryKey: ['list-items', 'coaching_purpose'], queryFn: () => listService.getItems('coaching_purpose') })
+  const { data: formatItems = [] }        = useQuery({ queryKey: ['list-items', 'coaching_format'],  queryFn: () => listService.getItems('coaching_format') })
+  const { data: sourceItems = [] }        = useQuery({ queryKey: ['list-items', 'coaching_source'],  queryFn: () => listService.getItems('coaching_source') })
 
   const resources = resourcesData?.items ?? []
   const quizzes   = quizLibrary?.items   ?? []
 
-  const csrId = form.csr_ids[0] ?? 0
+  const agentId = form.csr_ids[0] ?? 0
   const { data: history, isLoading: historyLoading } = useQuery({
-    queryKey: ['csr-coaching-history', csrId],
-    queryFn:  () => trainingService.getCSRHistory(csrId),
-    enabled:  csrId > 0,
+    queryKey: ['agent-coaching-history', agentId],
+    queryFn:  () => trainingService.getCSRHistory(agentId),
+    enabled:  agentId > 0,
   })
 
   // ── Default coach to current user on new session ────────────────────────────
@@ -120,6 +120,8 @@ export default function CoachingSessionFormPage() {
       follow_up_notes:        s.follow_up_notes ?? '',
       internal_notes:         s.internal_notes ?? '',
       behavior_flag_ids:      s.behavior_flag_ids ?? [],
+      root_cause_ids:         s.root_cause_ids ?? [],
+      support_needed_ids:     s.support_needed_ids ?? [],
       attachment_file:        null,
     })
     setExistingFilename(s.attachment_filename ?? undefined)
@@ -131,7 +133,7 @@ export default function CoachingSessionFormPage() {
     clearErrors()
     const f = getValues()
     const issues: { field: keyof CoachingFormState; message: string }[] = []
-    if (!f.csr_ids.length)   issues.push({ field: 'csr_ids',          message: 'Select at least one CSR' })
+    if (!f.csr_ids.length)   issues.push({ field: 'csr_ids',          message: 'Select at least one Agent' })
     if (!f.session_date)     issues.push({ field: 'session_date',      message: 'Date is required' })
     if (!f.coaching_purpose) issues.push({ field: 'coaching_purpose',  message: 'Select a coaching purpose' })
     if (!f.coaching_format)  issues.push({ field: 'coaching_format',   message: 'Select a coaching format' })
@@ -171,7 +173,10 @@ export default function CoachingSessionFormPage() {
     fd.append('follow_up_notes',        f.follow_up_notes  || '')
     fd.append('internal_notes',         f.internal_notes   || '')
     fd.append('behavior_flag_ids',      f.behavior_flag_ids.join(','))
+    fd.append('root_cause_ids',         f.root_cause_ids.join(','))
+    fd.append('support_needed_ids',     f.support_needed_ids.join(','))
     if (f.attachment_file) fd.append('attachment', f.attachment_file)
+    if (removeAttachment && !f.attachment_file) fd.append('remove_attachment', 'true')
     return fd
   }
 
@@ -200,7 +205,7 @@ export default function CoachingSessionFormPage() {
     },
   })
 
-  // ── Schedule mutation (save + deliver to CSR) ────────────────────────────
+  // ── Schedule mutation (save + deliver to Agent) ──────────────────────────
 
   const scheduleMut = useMutation({
     mutationFn: async () => {
@@ -223,7 +228,7 @@ export default function CoachingSessionFormPage() {
       qc.invalidateQueries({ queryKey: ['coaching-session', id] })
       qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
       if (edited) {
-        toast({ title: 'Session scheduled — CSR will see it as Upcoming' })
+        toast({ title: 'Session scheduled — Agent will see it as Upcoming' })
         navigate(`/app/training/coaching/${id}`)
       } else if (count) {
         toast({ title: `${count} sessions scheduled` })
@@ -240,7 +245,9 @@ export default function CoachingSessionFormPage() {
   })
 
   const isSaving = saveMut.isPending || scheduleMut.isPending
-  const sessions = history?.sessions ?? []
+  const recentSessions    = history?.sessions ?? []
+  const priorYearSessions = history?.prior_year_sessions ?? []
+  const repeatTopics      = history?.repeat_topics ?? []
 
   if (isEdit && existingError) {
     return (
@@ -262,7 +269,7 @@ export default function CoachingSessionFormPage() {
         {/* ── Main Form ─────────────────────────────────────────────────── */}
         <div className="col-span-2 space-y-4">
           <SessionSection
-            form={form} errors={errors} csrs={csrs}
+            form={form} errors={errors} csrs={agents}
             coaches={coaches} topicItems={topicItems} isEdit={isEdit}
             purposeItems={purposeItems} formatItems={formatItems} sourceItems={sourceItems}
             update={update} toggleTopic={toggleTopic}
@@ -272,81 +279,28 @@ export default function CoachingSessionFormPage() {
             quizzes={quizzes} update={update}
           />
           <AccountabilitySection form={form} errors={errors} update={update} />
-          {[ROLE_IDS.ADMIN, ROLE_IDS.TRAINER, ROLE_IDS.MANAGER].some(r => r === (user?.role_id ?? 0)) && (
-            <InternalNotesSection form={form} flagItems={flagItems} update={update} />
-          )}
-          <AttachmentSection
-            form={form} update={update}
-            existingFilename={existingFilename}
-            onRemoveExisting={() => setExistingFilename(undefined)}
+          <AttachmentCard
+            filename={existingFilename || (form.attachment_file ? form.attachment_file.name : undefined)}
+            editable
+            onFileSelect={f => { update('attachment_file', f); setRemoveAttachment(false) }}
+            onRemove={() => { update('attachment_file', null); setExistingFilename(undefined); setRemoveAttachment(true) }}
           />
+          {[ROLE_IDS.ADMIN, ROLE_IDS.TRAINER, ROLE_IDS.MANAGER].some(r => r === (user?.role_id ?? 0)) && (
+            <InternalNotesSection form={form} flagItems={flagItems}
+              rootCauseItems={rootCauseItems} supportNeededItems={supportNeededItems}
+              update={update} />
+          )}
         </div>
 
-        {/* ── CSR History Panel ─────────────────────────────────────────── */}
+        {/* ── Agent History Panel (shared) ─────────────────────────────── */}
         <div className="col-span-1">
-          <div className="bg-white rounded-xl border border-slate-200 p-4 sticky top-6">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-[15px] font-semibold text-slate-800">Recent Coaching</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">Topics within the last 90 days</p>
-              </div>
-              {sessions.length > 0 && (
-                <Button variant="ghost" size="sm" className="text-[12px] text-primary h-auto p-0 hover:bg-transparent"
-                  onClick={() => setShowAllHistory(true)}>
-                  View all →
-                </Button>
-              )}
-            </div>
-
-            {!csrId ? (
-              <p className="text-[13px] text-slate-400">Select a CSR to see history</p>
-            ) : historyLoading ? (
-              <div className="space-y-3">
-                {[1,2,3].map(i => <div key={i} className="h-10 bg-slate-100 animate-pulse rounded" />)}
-              </div>
-            ) : sessions.length === 0 ? (
-              <p className="text-[13px] text-slate-400">No prior sessions</p>
-            ) : (
-              <>
-                <div className="space-y-0">
-                  {sessions.slice(0, 5).map(s => (
-                    <div key={s.id} className="grid grid-cols-[90px_1fr] gap-6 py-3 border-b border-slate-100 last:border-0 items-start">
-                      <span className="text-[11px] text-slate-400 pt-0.5 whitespace-nowrap">
-                        {formatQualityDate(s.session_date)}
-                      </span>
-                      <div>
-                        {s.topics.length > 0 ? (
-                          <ul className="space-y-1">
-                            {s.topics.map(t => (
-                              <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-                                {t}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <span className="text-[13px] text-slate-400">No topics</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {(history?.repeat_topics?.length ?? 0) > 0 && (
-                  <div className="mt-3 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Coached 2+ times in 90 days</p>
-                    <ul className="space-y-1 pl-3">
-                      {history!.repeat_topics!.map(t => (
-                        <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-                          {t}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          <AgentHistoryPanel
+            recentSessions={recentSessions}
+            priorYearSessions={priorYearSessions}
+            repeatTopics={repeatTopics}
+            loading={historyLoading}
+            noAgentMessage={!agentId ? 'Select an Agent to see history' : undefined}
+          />
         </div>
 
       </div>
@@ -380,43 +334,6 @@ export default function CoachingSessionFormPage() {
         </div>
       </div>
 
-      {/* ── View All History Modal ─────────────────────────────────────────── */}
-      <Dialog open={showAllHistory} onOpenChange={setShowAllHistory}>
-        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>All Coaching History</DialogTitle>
-          </DialogHeader>
-          <div className="overflow-y-auto flex-1 pr-1">
-            {sessions.length === 0 ? (
-              <p className="text-[13px] text-slate-400 py-4 text-center">No prior sessions</p>
-            ) : (
-              <div className="space-y-0">
-                {sessions.map(s => (
-                  <div key={s.id} className="grid grid-cols-[90px_1fr] gap-2 py-3 border-b border-slate-100 last:border-0 items-start">
-                    <span className="text-[11px] text-slate-400 pt-0.5 whitespace-nowrap">
-                      {formatQualityDate(s.session_date)}
-                    </span>
-                    <div>
-                      {s.topics.length > 0 ? (
-                        <ul className="space-y-0.5">
-                          {s.topics.map(t => (
-                            <li key={t} className="flex items-center gap-1.5 text-[12px] text-slate-700">
-                              <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-                              {t}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <span className="text-[12px] text-slate-400">No topics</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </QualityListPage>
   )
 }

@@ -1,10 +1,67 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { CheckCircle, XCircle, HelpCircle } from 'lucide-react'
+import { CheckCircle, XCircle, HelpCircle, Eye } from 'lucide-react'
 import trainingService, { type QuizQuestion, type QuizAttemptResult } from '@/services/trainingService'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
+
+// ── Read-only review for passed quizzes ────────────────────────────────────
+
+interface QuizReviewProps {
+  quiz: { quiz_title: string; pass_score: number; questions: QuizQuestion[] }
+  /** When true, renders the question list immediately (used inside table expansion) */
+  defaultOpen?: boolean
+}
+
+export function QuizReview({ quiz, defaultOpen = false }: QuizReviewProps) {
+  const [open, setOpen] = useState(defaultOpen)
+  const { questions } = quiz
+
+  if (!open) {
+    return (
+      <Button variant="outline" size="sm" className="gap-1.5 text-[12px]" onClick={() => setOpen(true)}>
+        <Eye className="h-3.5 w-3.5" /> Review Quiz
+      </Button>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {!defaultOpen && (
+        <div className="flex items-center justify-between">
+          <p className="text-[13px] font-semibold text-slate-700">{quiz.quiz_title}</p>
+          <Button variant="ghost" size="sm" className="text-[12px] text-slate-500" onClick={() => setOpen(false)}>
+            Close
+          </Button>
+        </div>
+      )}
+      {questions.map((q, idx) => (
+        <div key={q.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-[13px] font-medium text-slate-800 mb-2">{idx + 1}. {q.question_text}</p>
+          <div className="space-y-1.5 ml-1">
+            {q.options.map((opt, optIdx) => (
+              <div key={optIdx} className={cn(
+                'flex items-center gap-2 text-[12px] rounded-lg px-2.5 py-1.5',
+                optIdx === q.correct_option
+                  ? 'bg-emerald-50 text-emerald-800 font-medium'
+                  : 'text-slate-600',
+              )}>
+                <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-slate-200/60 text-slate-600 text-[11px] font-bold shrink-0">
+                  {String.fromCharCode(65 + optIdx)}
+                </span>
+                {opt}
+                {optIdx === q.correct_option && (
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-600 ml-auto shrink-0" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 interface QuizPlayerProps {
   quiz: { id: number; quiz_title: string; pass_score: number; questions: QuizQuestion[] }
@@ -70,7 +127,6 @@ export function QuizPlayer({ quiz, coachingSessionId, onPassed }: QuizPlayerProp
   if (phase === 'result' && result) {
     return (
       <div className="space-y-4">
-        {/* Pass / Fail header */}
         <div className={cn(
           'rounded-xl border p-5 text-center',
           result.passed ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200',
@@ -83,37 +139,41 @@ export function QuizPlayer({ quiz, coachingSessionId, onPassed }: QuizPlayerProp
             {result.passed ? 'Passed!' : 'Not Passed'}
           </p>
           <p className={cn('text-[13px] mt-1', result.passed ? 'text-emerald-700' : 'text-red-600')}>
-            Score: {Number(result.score).toFixed(0)}% &nbsp;·&nbsp; Required: {quiz.pass_score}%
+            {result.passed
+              ? <>Score: {Number(result.score).toFixed(0)}% &nbsp;·&nbsp; Required: {quiz.pass_score}%</>
+              : <>Required score: {quiz.pass_score}%</>
+            }
           </p>
         </div>
 
-        {/* Question review */}
-        <div className="space-y-2">
-          {questions.map((qItem, idx) => {
-            const userIdx    = selectedAnswers[qItem.id] ?? -1
-            const isCorrect  = result.correct_answers.includes(qItem.id)
-            return (
-              <div key={qItem.id}
-                className={cn('rounded-xl border p-4', isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200')}>
-                <div className="flex items-start gap-2 mb-2">
-                  {isCorrect
-                    ? <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                    : <XCircle    className="h-4 w-4 text-red-500    shrink-0 mt-0.5" />
-                  }
-                  <p className="text-[13px] font-medium text-slate-800">{idx + 1}. {qItem.question_text}</p>
-                </div>
-                <p className="text-[12px] text-slate-600 ml-6">
-                  Your answer: {userIdx >= 0 ? qItem.options[userIdx] : <span className="text-slate-400">No answer</span>}
-                </p>
-                {!isCorrect && (
-                  <p className="text-[12px] text-emerald-700 font-medium ml-6 mt-0.5">
-                    Correct: {qItem.options[qItem.correct_option]}
+        {result.passed && (
+          <div className="space-y-2">
+            {questions.map((qItem, idx) => {
+              const userIdx    = selectedAnswers[qItem.id] ?? -1
+              const isCorrect  = result.correct_answers.includes(qItem.id)
+              return (
+                <div key={qItem.id}
+                  className={cn('rounded-xl border p-4', isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200')}>
+                  <div className="flex items-start gap-2 mb-2">
+                    {isCorrect
+                      ? <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                      : <XCircle    className="h-4 w-4 text-red-500    shrink-0 mt-0.5" />
+                    }
+                    <p className="text-[13px] font-medium text-slate-800">{idx + 1}. {qItem.question_text}</p>
+                  </div>
+                  <p className="text-[12px] text-slate-600 ml-6">
+                    Your answer: {userIdx >= 0 ? qItem.options[userIdx] : <span className="text-slate-400">No answer</span>}
                   </p>
-                )}
-              </div>
-            )
-          })}
-        </div>
+                  {!isCorrect && (
+                    <p className="text-[12px] text-emerald-700 font-medium ml-6 mt-0.5">
+                      Correct: {qItem.options[qItem.correct_option]}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {!result.passed && (
           <Button variant="outline" className="w-full" onClick={resetTaking}>

@@ -42,6 +42,8 @@ const SECTIONS: ListSection[] = [
       { key: 'coaching_format',  label: 'Coaching Format',  description: '', tier: 'label-override', implemented: true,  listType: 'coaching_format'  },
       { key: 'coaching_source',  label: 'Coaching Source',  description: '', tier: 'label-override', implemented: true,  listType: 'coaching_source'  },
       { key: 'behavior_flags',   label: 'Behavior Flags',   description: '', tier: 'dynamic',        implemented: true,  listType: 'behavior_flag'    },
+      { key: 'root_causes',      label: 'Root Causes',      description: 'Predefined root cause options selectable by trainers during coaching sessions.', tier: 'dynamic', implemented: true, listType: 'root_cause' },
+      { key: 'support_needed',   label: 'Support Needed',   description: 'Predefined support options selectable by trainers during coaching sessions.',    tier: 'dynamic', implemented: true, listType: 'support_needed' },
     ],
   },
   {

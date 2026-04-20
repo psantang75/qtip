@@ -3,7 +3,7 @@ import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderR
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatQualityDate } from '@/utils/dateFormat'
-import { RichTextDisplay } from '@/components/common/RichTextDisplay'
+import { RichTextDisplay, stripHtml } from '@/components/common/RichTextDisplay'
 import { Section, Sub, InfoRow, NoteBlock, type DetailSectionProps } from './layout'
 import { COACHING_STATUS_LABELS, COACHING_PURPOSE_LABELS as PURPOSE_LABELS } from '@/constants/labels'
 
@@ -11,11 +11,10 @@ export function CorrectiveSection({ writeup }: DetailSectionProps) {
   return (
     <Section title="Corrective Action & Expectations">
       <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Required Corrective Action</p>
-      <NoteBlock text={writeup.corrective_action} placeholder="Not specified" />
+      <NoteBlock text={writeup.corrective_action} placeholder="Not specified" bold />
 
-      <div className="grid grid-cols-3 gap-x-8 gap-y-4 mt-4 pt-4 border-t border-slate-100">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-4 mt-4 pt-4 border-t border-slate-100">
         <InfoRow label="Timeline for Correction" value={writeup.correction_timeline ?? null} />
-        <InfoRow label="Follow-Up Meeting Date" value={writeup.checkin_date ? formatQualityDate(writeup.checkin_date) : null} />
         <InfoRow label="Consequence if Not Met" value={writeup.consequence ?? null} />
       </div>
 
@@ -57,7 +56,7 @@ export function CorrectiveSection({ writeup }: DetailSectionProps) {
                       <TableCell className="px-3 py-2.5">
                         {cs?.notes ? (
                           <Tooltip>
-                            <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{cs.notes}</span></TooltipTrigger>
+                            <TooltipTrigger asChild><span className="text-[13px] text-slate-500 truncate block cursor-default">{stripHtml(cs.notes)}</span></TooltipTrigger>
                             <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}><RichTextDisplay html={cs.notes} /></TooltipContent>
                           </Tooltip>
                         ) : <span className="text-slate-300">&mdash;</span>}

@@ -3,13 +3,14 @@ import { useQuery } from '@tanstack/react-query'
 import { BarChart3, RefreshCw, Filter, FileBarChart } from 'lucide-react'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import qaService from '@/services/qaService'
-import { useTeamCsrs, useAnalyticsFilters, useFormsForFilter } from '@/hooks/useQualityQueries'
+import { useTeamAgents, useAnalyticsFilters, useFormsForFilter } from '@/hooks/useQualityQueries'
 import { Button } from '@/components/ui/button'
 import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { TrendsChart, AveragesChart, RawScoresTable, type ChartData } from './analytics/AnalyticsCharts'
@@ -63,10 +64,10 @@ export default function QualityAnalyticsPage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [reportType, setReportType] = useState<'trends' | 'averages' | 'raw_scores' | 'summary'>('trends')
-  const [groupBy, setGroupBy] = useState<'csr' | 'department' | 'form'>('csr')
+  const [groupBy, setGroupBy] = useState<'csr' | 'department' | 'form'>('csr')  // API value stays 'csr'
   const [aggregation, setAggregation] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
   const [departmentId, setDepartmentId] = useState('all')
-  const [csrId, setCsrId] = useState('all')
+  const [agentId, setAgentId] = useState('all')
   const [formId, setFormId] = useState('all')
   const [runKey, setRunKey] = useState(0)
 
@@ -76,15 +77,15 @@ export default function QualityAnalyticsPage() {
   }, [preset, customStart, customEnd])
 
   const { data: filterOptions } = useAnalyticsFilters()
-  const { data: teamCSRs }      = useTeamCsrs(isManager)
+  const { data: teamAgents }    = useTeamAgents(isManager)
   const { data: forms }         = useFormsForFilter()
 
   const { data: report, isLoading: reportLoading, isError: reportError } = useQuery({
-    queryKey: ['analytics-report', runKey, dates, reportType, groupBy, aggregation, departmentId, csrId, formId],
+    queryKey: ['analytics-report', runKey, dates, reportType, groupBy, aggregation, departmentId, agentId, formId],
     queryFn: () => qaService.getComprehensiveReport({
       report_type: reportType, start_date: dates.start, end_date: dates.end,
       department_id: departmentId !== 'all' ? parseInt(departmentId) : undefined,
-      csr_id: csrId !== 'all' ? parseInt(csrId) : undefined,
+      csr_id: agentId !== 'all' ? parseInt(agentId) : undefined,
       form_id: formId !== 'all' ? parseInt(formId) : undefined,
       group_by: groupBy, aggregation,
     }),
@@ -104,8 +105,8 @@ export default function QualityAnalyticsPage() {
     )
   }
 
-  const csrOptions = isManager
-    ? (teamCSRs ?? [])
+  const agentOptions = isManager
+    ? (teamAgents ?? [])
     : (filterOptions?.csrs?.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })) ?? [])
 
   return (
@@ -132,13 +133,13 @@ export default function QualityAnalyticsPage() {
             <>
               <div className="space-y-1.5">
                 <Label className="text-xs">Start Date</Label>
-                <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                <Input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
+                  className="h-9 w-full" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">End Date</Label>
-                <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                <Input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
+                  className="h-9 w-full" />
               </div>
             </>
           )}
@@ -162,7 +163,7 @@ export default function QualityAnalyticsPage() {
               <Select value={groupBy} onValueChange={v => setGroupBy(v as typeof groupBy)}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="csr">CSR</SelectItem>
+                  <SelectItem value="csr">Agent</SelectItem>
                   {!isManager && <SelectItem value="department">Department</SelectItem>}
                   <SelectItem value="form">Form</SelectItem>
                 </SelectContent>
@@ -199,14 +200,14 @@ export default function QualityAnalyticsPage() {
             </div>
           )}
 
-          {csrOptions.length > 0 && (
+          {agentOptions.length > 0 && (
             <div className="space-y-1.5">
-              <Label className="text-xs">CSR</Label>
-              <Select value={csrId} onValueChange={setCsrId}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="All CSRs" /></SelectTrigger>
+              <Label className="text-xs">Agent</Label>
+              <Select value={agentId} onValueChange={setAgentId}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="All Agents" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All CSRs</SelectItem>
-                  {csrOptions.map((c: { id: number; name: string }) => (
+                  <SelectItem value="all">All Agents</SelectItem>
+                  {agentOptions.map((c: { id: number; name: string }) => (
                     <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>

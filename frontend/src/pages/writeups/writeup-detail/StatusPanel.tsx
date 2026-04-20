@@ -1,32 +1,42 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { RichTextEditor } from '@/components/common/RichTextEditor'
-import { RichTextDisplay } from '@/components/common/RichTextDisplay'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 import writeupService from '@/services/writeupService'
-import userService from '@/services/userService'
 import type { WriteUpDetail, WriteUpStatus, TransitionExtra } from '@/services/writeupService'
 import { WRITE_UP_STATUS_LABELS as STATUS_LABELS } from '@/constants/labels'
 
 function getTimeline(writeup: WriteUpDetail): string[] {
-  const base = ['DRAFT', 'SCHEDULED', 'AWAITING_SIGNATURE', 'SIGNED']
-  if (writeup.follow_up_required || writeup.status === 'FOLLOW_UP_PENDING') {
-    return [...base, 'FOLLOW_UP_PENDING', 'CLOSED']
+  // Follow-up path: SIGNED/SIGNATURE_REFUSED → FOLLOW_UP_PENDING → FOLLOW_UP_COMPLETED → CLOSED.
+  // Non-follow-up path: SIGNED/SIGNATURE_REFUSED → CLOSED.
+  // SIGNATURE_REFUSED occupies the same slot as SIGNED so the manager can see
+  // where the document stalled even after recording the refusal.
+  const base = ['DRAFT', 'SCHEDULED', 'AWAITING_SIGNATURE']
+  const isRefused = writeup.status === 'SIGNATURE_REFUSED' || !!writeup.refused_at
+  const milestone = isRefused ? 'SIGNATURE_REFUSED' : 'SIGNED'
+  const isFollowUp =
+    writeup.follow_up_required ||
+    writeup.status === 'FOLLOW_UP_PENDING' ||
+    writeup.status === 'FOLLOW_UP_COMPLETED'
+  if (isFollowUp && (writeup.status === 'SIGNED' || writeup.status === 'SIGNATURE_REFUSED')) {
+    return [...base, milestone, 'FOLLOW_UP_PENDING', 'FOLLOW_UP_COMPLETED', 'CLOSED']
   }
-  return [...base, 'CLOSED']
+  if (isFollowUp) {
+    return [...base, 'FOLLOW_UP_PENDING', 'FOLLOW_UP_COMPLETED', 'CLOSED']
+  }
+  return [...base, milestone, 'CLOSED']
 }
 
 // ── Status timeline ───────────────────────────────────────────────────────────
 
-function StatusTimeline({ writeup }: { writeup: WriteUpDetail }) {
+export function StatusTimeline({ writeup }: { writeup: WriteUpDetail }) {
   const steps   = getTimeline(writeup)
   const current = steps.indexOf(writeup.status)
 
@@ -64,6 +74,37 @@ function StatusTimeline({ writeup }: { writeup: WriteUpDetail }) {
   )
 }
 
+// ── Dated history (training-style) ────────────────────────────────────────────
+
+export function StatusHistory({ writeup }: { writeup: WriteUpDetail }) {
+  const rows: Array<{ label: string; date: string }> = []
+  if (writeup.created_at)   rows.push({ label: 'Created',            date: writeup.created_at })
+  if (writeup.meeting_date) rows.push({ label: 'Meeting',            date: writeup.meeting_date })
+  if (writeup.delivered_at) rows.push({ label: 'Sent for Signature', date: writeup.delivered_at })
+  if (writeup.signed_at)    rows.push({ label: 'Signed',             date: writeup.signed_at })
+  if (writeup.refused_at)   rows.push({ label: 'Signature Refused',  date: writeup.refused_at })
+  if (writeup.follow_up_required && writeup.follow_up_date) {
+    rows.push({ label: writeup.status === 'CLOSED' ? 'Follow-Up' : 'Follow-Up Due', date: writeup.follow_up_date })
+  }
+  if (writeup.follow_up_completed_at) {
+    rows.push({ label: 'Follow-Up Completed', date: writeup.follow_up_completed_at })
+  }
+  if (writeup.closed_at)    rows.push({ label: 'Closed',             date: writeup.closed_at })
+
+  if (rows.length === 0) return null
+
+  return (
+    <div className="space-y-0">
+      {rows.map(r => (
+        <div key={r.label} className="flex items-start justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
+          <span className="text-[12px] font-medium text-slate-500">{r.label}</span>
+          <span className="text-[12px] text-slate-700 text-right">{formatQualityDate(r.date)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Confirm dialog ────────────────────────────────────────────────────────────
 
 function ConfirmDialog({ open, title, message, onConfirm, onCancel, loading }: {
@@ -88,8 +129,6 @@ function ConfirmDialog({ open, title, message, onConfirm, onCancel, loading }: {
 }
 
 // ── Action panels per status ──────────────────────────────────────────────────
-
-type ActionState = 'schedule' | 'finalize_confirm' | 'recall_confirm' | 'follow_up' | 'close_followup' | null
 
 function DraftActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
   const navigate = useNavigate()
@@ -119,18 +158,14 @@ function DraftActions({ writeup, id, transition, busy }: { writeup: WriteUpDetai
       )}
       <Button variant="outline" className="w-full h-9 text-[13px]"
         onClick={() => navigate(`/app/performancewarnings/${id}/edit`)}>
-        Edit Write-Up
+        Edit Performance Warning
       </Button>
     </div>
   )
 }
 
-function ScheduledActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
+function ScheduledActions({ writeup, id }: { writeup: WriteUpDetail; id: number }) {
   const navigate = useNavigate()
-  const [show, setShow]   = useState(false)
-  const [notes, setNotes] = useState('')
-  const [confirm, setConfirm] = useState(false)
-
   return (
     <div className="space-y-3">
       {writeup.meeting_date && (
@@ -139,36 +174,13 @@ function ScheduledActions({ writeup, id, transition, busy }: { writeup: WriteUpD
           <p className="text-[14px] font-semibold text-slate-800">{formatQualityDate(writeup.meeting_date)}</p>
         </div>
       )}
-      {show ? (
-        <div className="space-y-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-          <p className="text-[12px] font-medium text-slate-600">Meeting Notes</p>
-          <RichTextEditor className="text-[13px]" placeholder="Record what occurred in the meeting…"
-            value={notes} onChange={setNotes} />
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="flex-1" onClick={() => setShow(false)}>Cancel</Button>
-            <Button size="sm" className="flex-1 bg-primary hover:bg-primary/90 text-white"
-              disabled={busy || !notes.trim()} onClick={() => setConfirm(true)}>
-              Finalize & Send to Agent
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button className="w-full bg-primary hover:bg-primary/90 text-white h-9 text-[13px]"
-          onClick={() => setShow(true)}>
-          Complete & Send for Signature
-        </Button>
-      )}
+      <p className="text-[12px] text-slate-500 italic">
+        Record meeting notes and finalize the document from the Next Action card below.
+      </p>
       <Button variant="outline" className="w-full h-9 text-[13px]"
         onClick={() => navigate(`/app/performancewarnings/${id}/edit`)}>
-        Edit Write-Up
+        Edit Performance Warning
       </Button>
-      <ConfirmDialog
-        open={confirm} loading={busy}
-        title="Finalize Write-Up"
-        message={`This will lock the document and send it to ${writeup.csr_name} for signature. Continue?`}
-        onConfirm={() => { setConfirm(false); transition('AWAITING_SIGNATURE', { meeting_notes: notes }) }}
-        onCancel={() => setConfirm(false)}
-      />
     </div>
   )
 }
@@ -176,6 +188,8 @@ function ScheduledActions({ writeup, id, transition, busy }: { writeup: WriteUpD
 function AwaitingSignatureActions({ writeup, id, transition, busy }: { writeup: WriteUpDetail; id: number; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
   const navigate = useNavigate()
   const [confirm, setConfirm] = useState(false)
+  const [refuseOpen, setRefuseOpen] = useState(false)
+  const [refusalReason, setRefusalReason] = useState('')
 
   return (
     <div className="space-y-3">
@@ -187,6 +201,10 @@ function AwaitingSignatureActions({ writeup, id, transition, busy }: { writeup: 
         </p>
       </div>
       <Button variant="outline" className="w-full h-9 text-[13px] border-red-200 text-red-600 hover:bg-red-50"
+        onClick={() => setRefuseOpen(true)}>
+        Refuse Signature
+      </Button>
+      <Button variant="outline" className="w-full h-9 text-[13px] border-amber-200 text-amber-700 hover:bg-amber-50"
         onClick={() => setConfirm(true)}>
         Recall Document
       </Button>
@@ -201,27 +219,61 @@ function AwaitingSignatureActions({ writeup, id, transition, busy }: { writeup: 
         onConfirm={() => { setConfirm(false); transition('SCHEDULED') }}
         onCancel={() => setConfirm(false)}
       />
+      <RefuseSignatureDialog
+        open={refuseOpen} loading={busy}
+        csrName={writeup.csr_name}
+        reason={refusalReason}
+        setReason={setRefusalReason}
+        onConfirm={() => {
+          const trimmed = refusalReason.trim()
+          if (!trimmed) return
+          setRefuseOpen(false)
+          transition('SIGNATURE_REFUSED', { refusal_reason: trimmed })
+          setRefusalReason('')
+        }}
+        onCancel={() => { setRefuseOpen(false); setRefusalReason('') }}
+      />
     </div>
   )
 }
 
-function SignedActions({ writeup, id, onSetFollowUp, transition, busy }: {
-  writeup: WriteUpDetail; id: number
-  onSetFollowUp: (body: { follow_up_date: string; follow_up_assigned_to: number; follow_up_checklist: string }) => void
-  transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean
+function RefuseSignatureDialog({
+  open, loading, csrName, reason, setReason, onConfirm, onCancel,
+}: {
+  open: boolean; loading: boolean; csrName: string; reason: string
+  setReason: (v: string) => void; onConfirm: () => void; onCancel: () => void
 }) {
-  const [showFollowUp, setShowFollowUp] = useState(false)
-  const [fuDate, setFuDate]     = useState('')
-  const [fuUser, setFuUser]     = useState('')
-  const [fuNotes, setFuNotes]   = useState('')
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onCancel()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Refuse Signature</DialogTitle></DialogHeader>
+        <p className="text-[13px] text-slate-600">
+          Record that <strong>{csrName}</strong> declined to sign this document.
+          The performance warning continues through its normal close-out workflow.
+        </p>
+        <div className="space-y-1.5">
+          <p className="text-[12px] font-medium text-slate-600">Reason for Refusal <span className="text-red-500">*</span></p>
+          <Textarea
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="Document the circumstances of the refusal…"
+            rows={4}
+            className="text-[13px]"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={loading}>Cancel</Button>
+          <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white"
+            onClick={onConfirm} disabled={loading || !reason.trim()}>
+            {loading ? 'Saving…' : 'Record Refusal'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
-  const { data: managersData } = useQuery({
-    queryKey: ['managers-for-followup'],
-    queryFn:  () => userService.getUsers(1, 100, { role_id: 5 }),
-    staleTime: Infinity,
-  })
-  const managers = managersData?.items ?? []
-
+function SignedActions({ writeup }: { writeup: WriteUpDetail }) {
   return (
     <div className="space-y-3">
       <div className="p-3 bg-green-50 rounded-lg border border-green-200">
@@ -230,86 +282,83 @@ function SignedActions({ writeup, id, onSetFollowUp, transition, busy }: {
           {writeup.signed_at ? ` on ${formatQualityDate(writeup.signed_at)}` : ''}.
         </p>
       </div>
-      <Button className="w-full bg-primary hover:bg-primary/90 text-white h-9 text-[13px]"
-        onClick={() => transition('CLOSED')} disabled={busy}>
-        {busy ? 'Saving…' : 'Close — No Follow-Up Needed'}
-      </Button>
-      {showFollowUp ? (
-        <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-          <p className="text-[12px] font-semibold text-slate-600">Set Follow-Up</p>
-          <Input type="date" className="h-8 text-[13px]" placeholder="Follow-up date"
-            value={fuDate} onChange={e => setFuDate(e.target.value)} />
-          <Select value={fuUser} onValueChange={setFuUser}>
-            <SelectTrigger className="h-8 text-[13px]">
-              <SelectValue placeholder="Assign to…" />
-            </SelectTrigger>
-            <SelectContent>
-              {managers.map(m => (
-                <SelectItem key={m.id} value={String(m.id)}>{m.username}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <RichTextEditor className="text-[13px]" placeholder="Follow-up checklist…"
-            value={fuNotes} onChange={setFuNotes} />
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="flex-1" onClick={() => setShowFollowUp(false)}>Cancel</Button>
-            <Button size="sm" className="flex-1 bg-primary hover:bg-primary/90 text-white"
-              disabled={!fuDate || !fuUser || busy}
-              onClick={() => onSetFollowUp({ follow_up_date: fuDate, follow_up_assigned_to: Number(fuUser), follow_up_checklist: fuNotes })}>
-              {busy ? 'Saving…' : 'Set Follow-Up'}
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button variant="outline" className="w-full h-9 text-[13px]"
-          onClick={() => setShowFollowUp(true)}>
-          Requires Follow-Up
-        </Button>
+      <p className="text-[12px] text-slate-500 italic">
+        Record internal notes and close the performance warning from the Internal Notes section below.
+      </p>
+    </div>
+  )
+}
+
+function SignatureRefusedActions({ writeup }: { writeup: WriteUpDetail }) {
+  return (
+    <div className="space-y-3">
+      <RefusalSummaryCard writeup={writeup} />
+      <p className="text-[12px] text-slate-500 italic">
+        Record internal notes and close the performance warning from the Internal Notes section below.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Persistent rose card summarizing a recorded signature refusal. Rendered at
+ * the top of StatusPanel any time `refused_at` is set so the refusal + reason
+ * remain visible after the warning is closed.
+ */
+function RefusalSummaryCard({ writeup }: { writeup: WriteUpDetail }) {
+  return (
+    <div className="p-3 bg-rose-50 rounded-lg border border-rose-200 space-y-1">
+      <p className="text-[12px] font-semibold text-rose-800">Signature Refused</p>
+      <p className="text-[12px] text-rose-700">
+        <strong>{writeup.csr_name}</strong> declined to sign
+        {writeup.refused_at ? ` on ${formatQualityDate(writeup.refused_at)}` : ''}.
+      </p>
+      {writeup.refusal_reason && (
+        <p className="text-[12px] text-rose-700 whitespace-pre-line">
+          <span className="font-medium">Reason:</span> {writeup.refusal_reason}
+        </p>
       )}
     </div>
   )
 }
 
-function FollowUpPendingActions({ writeup, transition, busy }: { writeup: WriteUpDetail; transition: (s: WriteUpStatus, extra?: TransitionExtra) => void; busy: boolean }) {
-  const [notes, setNotes] = useState(writeup.follow_up_notes ?? '')
-
+function FollowUpPendingStatus({ writeup }: { writeup: WriteUpDetail }) {
   return (
     <div className="space-y-3">
       <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-1">
+        <p className="text-[12px] font-semibold text-amber-800">Follow-Up Pending</p>
         {writeup.follow_up_date && (
           <p className="text-[12px] text-amber-700">
             Due: <strong>{formatQualityDate(writeup.follow_up_date)}</strong>
           </p>
         )}
-        {writeup.follow_up_checklist && (
-          <RichTextDisplay html={writeup.follow_up_checklist} className="text-[12px] text-amber-700" />
+        {writeup.follow_up_assignee_name && (
+          <p className="text-[12px] text-amber-700">
+            Meeting with: <strong>{writeup.follow_up_assignee_name}</strong>
+          </p>
         )}
       </div>
-      <div className="space-y-1">
-        <p className="text-[12px] font-medium text-slate-600">Follow-Up Notes</p>
-        <RichTextEditor className="text-[13px]"
-          placeholder="What happened at the check-in?"
-          value={notes} onChange={setNotes} />
-      </div>
-      <Button className="w-full bg-primary hover:bg-primary/90 text-white h-9 text-[13px]"
-        onClick={() => transition('CLOSED', { follow_up_notes: notes })}
-        disabled={busy || (!notes.trim() && !writeup.follow_up_notes)}>
-        {busy ? 'Saving…' : 'Add Notes & Close Document'}
-      </Button>
+      <p className="text-[12px] text-slate-500 italic">
+        Save follow-up notes from the Follow-Up section and mark the follow-up complete.
+      </p>
     </div>
   )
 }
 
-function ClosedBanner({ writeup }: { writeup: WriteUpDetail }) {
+function FollowUpCompletedStatus({ writeup }: { writeup: WriteUpDetail }) {
   return (
-    <div className="p-3 bg-slate-100 rounded-lg border border-slate-200">
-      <p className="text-[12px] font-semibold text-slate-600 mb-0.5">Document Closed</p>
-      {writeup.closed_at && (
-        <p className="text-[11px] text-slate-400">{formatQualityDate(writeup.closed_at)}</p>
-      )}
-      {writeup.follow_up_notes && (
-        <RichTextDisplay html={writeup.follow_up_notes} className="text-[12px] text-slate-600 mt-2" />
-      )}
+    <div className="space-y-3">
+      <div className="p-3 bg-green-50 rounded-lg border border-green-200 space-y-1">
+        <p className="text-[12px] font-semibold text-green-800">Follow-Up Completed</p>
+        {writeup.follow_up_completed_at && (
+          <p className="text-[12px] text-green-700">
+            Completed on: <strong>{formatQualityDate(writeup.follow_up_completed_at)}</strong>
+          </p>
+        )}
+      </div>
+      <p className="text-[12px] text-slate-500 italic">
+        Record internal notes and close the performance warning from the Internal Notes section below.
+      </p>
     </div>
   )
 }
@@ -340,18 +389,17 @@ export function StatusPanel({ writeup, id, onInvalidate }: StatusPanelProps) {
     onError: (err: Error) => toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
   })
 
-  const setFollowUpMut = useMutation({
-    mutationFn: (body: { follow_up_date: string; follow_up_assigned_to: number; follow_up_checklist: string }) =>
-      writeupService.setFollowUp(id, body),
-    onSuccess: () => onSuccess('Follow-up set'),
-    onError: (err: Error) => toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
-  })
-
   const transition = (status: WriteUpStatus, extra?: TransitionExtra) =>
     transitionMut.mutate({ status, extra })
-  const busy = transitionMut.isPending || setFollowUpMut.isPending
+  const busy = transitionMut.isPending
 
-  const actionProps = { writeup, id, transition, busy }
+  // Once a refusal has been recorded, keep the refusal + reason visible for
+  // the manager even after the warning moves on to FOLLOW_UP_* or CLOSED. The
+  // SIGNATURE_REFUSED status itself already surfaces this card via its
+  // dedicated Actions panel below, so we only render the persistent variant
+  // for downstream statuses to avoid showing it twice.
+  const showPersistentRefusal =
+    !!writeup.refused_at && writeup.status !== 'SIGNATURE_REFUSED'
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4 sticky top-6 space-y-4">
@@ -362,19 +410,31 @@ export function StatusPanel({ writeup, id, onInvalidate }: StatusPanelProps) {
         <StatusTimeline writeup={writeup} />
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
-        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Actions</p>
+      {writeup.status !== 'CLOSED' && (
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Actions</p>
 
-        {writeup.status === 'DRAFT'               && <DraftActions {...actionProps} />}
-        {writeup.status === 'SCHEDULED'           && <ScheduledActions {...actionProps} />}
-        {writeup.status === 'AWAITING_SIGNATURE'  && <AwaitingSignatureActions {...actionProps} />}
-        {writeup.status === 'SIGNED'              && (
-          <SignedActions {...actionProps}
-            onSetFollowUp={body => setFollowUpMut.mutate(body)} />
-        )}
-        {writeup.status === 'FOLLOW_UP_PENDING'   && <FollowUpPendingActions {...actionProps} />}
-        {writeup.status === 'CLOSED'              && <ClosedBanner writeup={writeup} />}
+          {writeup.status === 'DRAFT'               && <DraftActions writeup={writeup} id={id} transition={transition} busy={busy} />}
+          {writeup.status === 'SCHEDULED'           && <ScheduledActions writeup={writeup} id={id} />}
+          {writeup.status === 'AWAITING_SIGNATURE'  && <AwaitingSignatureActions writeup={writeup} id={id} transition={transition} busy={busy} />}
+          {writeup.status === 'SIGNED'              && <SignedActions writeup={writeup} />}
+          {writeup.status === 'SIGNATURE_REFUSED'   && <SignatureRefusedActions writeup={writeup} />}
+          {writeup.status === 'FOLLOW_UP_PENDING'   && <FollowUpPendingStatus writeup={writeup} />}
+          {writeup.status === 'FOLLOW_UP_COMPLETED' && <FollowUpCompletedStatus writeup={writeup} />}
+        </div>
+      )}
+
+      <div className="border-t border-slate-100 pt-4">
+        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">History</p>
+        <StatusHistory writeup={writeup} />
       </div>
+
+      {showPersistentRefusal && (
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Signature Review</p>
+          <RefusalSummaryCard writeup={writeup} />
+        </div>
+      )}
     </div>
   )
 }

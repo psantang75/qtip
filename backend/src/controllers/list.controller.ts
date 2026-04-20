@@ -108,11 +108,11 @@ export const toggleListItemStatus = async (req: AuthReq, res: Response) => {
   }
 };
 
-// ── DELETE a list item ────────────────────────────────────────────────────────
+// ── DELETE a list item (soft delete — preserves referential integrity) ────────
 export const deleteListItem = async (req: AuthReq, res: Response) => {
   try {
     const itemId = parseInt(req.params.id);
-    await prisma.$executeRaw(Prisma.sql`DELETE FROM list_items WHERE id = ${itemId}`);
+    await prisma.$executeRaw(Prisma.sql`UPDATE list_items SET is_active = 0 WHERE id = ${itemId}`);
 
     res.json({ success: true });
   } catch (error) {

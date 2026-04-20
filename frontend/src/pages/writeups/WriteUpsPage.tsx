@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, FileWarning, Eye } from 'lucide-react'
-import writeupService, { type WriteUp, type WriteUpType, type WriteUpStatus } from '@/services/writeupService'
+import writeupService, { type WriteUp } from '@/services/writeupService'
 
 import { QualityListPage } from '@/components/common/QualityListPage'
 import { QualityPageHeader } from '@/components/common/QualityPageHeader'
@@ -28,14 +28,7 @@ import {
   STATUS_LABELS,
   CLIENT_FETCH_LIMIT,
 } from '@/constants/labels'
-
-const ALL_STATUSES = Object.keys(WRITE_UP_STATUS_LABELS) as WriteUpStatus[]
-const ALL_TYPES    = Object.keys(WRITE_UP_TYPE_LABELS)   as WriteUpType[]
-const CLOSED_LABEL = WRITE_UP_STATUS_LABELS['CLOSED']
-
-export function WriteUpTypeBadge({ type }: { type: WriteUpType }) {
-  return <span className="text-[13px] text-slate-600">{WRITE_UP_TYPE_LABELS[type] ?? type}</span>
-}
+import { ALL_STATUSES, ALL_TYPE_LABELS, CLOSED_LABEL, WriteUpTypeBadge, WarningIdSearch } from './warningListHelpers'
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -44,14 +37,14 @@ export default function WriteUpsPage() {
   const { canManage: canCreate } = useWriteUpRole()
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    csrs: '', statuses: '', types: '', search: '',
+    csrs: '', statuses: '', types: '', warningId: '',
     from: '', to: '', page: '1', size: '20',
   })
 
   const csrsParam   = get('csrs')
   const statusParam = get('statuses')
   const typeParam   = get('types')
-  const searchParam = get('search')
+  const warningId   = get('warningId')
   const dateFrom    = get('from')
   const dateTo      = get('to')
   const page        = parseInt(get('page')) || 1
@@ -64,15 +57,13 @@ export default function WriteUpsPage() {
   const selectedStatuses = useMemo(() => statusParam ? statusParam.split(',').filter(Boolean) : [], [statusParam])
   const selectedTypes    = useMemo(() => typeParam   ? typeParam.split(',').filter(Boolean)   : [], [typeParam])
 
-  // Fetch ALL write-ups for the date range in one call
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['writeups', dateFrom, dateTo, searchParam],
+    queryKey: ['writeups', dateFrom, dateTo],
     queryFn: () => writeupService.getWriteUps({
       page:      1,
       limit:     5000,
-      date_from: dateFrom    || undefined,
-      date_to:   dateTo      || undefined,
-      search:    searchParam || undefined,
+      date_from: dateFrom || undefined,
+      date_to:   dateTo   || undefined,
     }),
     placeholderData: (prev) => prev,
   })
@@ -86,7 +77,7 @@ export default function WriteUpsPage() {
   }, [allItems])
 
   const statusOptions = useMemo(() => ALL_STATUSES.map(s => WRITE_UP_STATUS_LABELS[s]), [])
-  const typeOptions   = useMemo(() => ALL_TYPES.map(t => WRITE_UP_TYPE_LABELS[t]), [])
+  const typeOptions   = ALL_TYPE_LABELS
 
   const allExceptClosed = useMemo(() => statusOptions.filter(s => s !== CLOSED_LABEL), [statusOptions])
   const effectiveSelectedStatuses = useMemo(
@@ -94,14 +85,14 @@ export default function WriteUpsPage() {
     [selectedStatuses, allExceptClosed],
   )
 
-  // Client-side filtering on the full result set
   const filtered = useMemo(() => {
     let items = allItems
+    if (warningId)                          items = items.filter(w => String(w.id).includes(warningId))
     if (selectedCsrs.length)               items = items.filter(w => selectedCsrs.includes(w.csr_name))
     if (effectiveSelectedStatuses.length)  items = items.filter(w => effectiveSelectedStatuses.includes(WRITE_UP_STATUS_LABELS[w.status]))
     if (selectedTypes.length)              items = items.filter(w => selectedTypes.includes(WRITE_UP_TYPE_LABELS[w.document_type]))
     return items
-  }, [allItems, selectedCsrs, effectiveSelectedStatuses, selectedTypes])
+  }, [allItems, warningId, selectedCsrs, effectiveSelectedStatuses, selectedTypes])
 
   const { sort, dir, toggle, sorted } = useListSort(filtered)
 
@@ -112,29 +103,25 @@ export default function WriteUpsPage() {
   return (
     <QualityListPage>
       <QualityPageHeader
-        title="Write-Ups"
+        title="Performance Warnings"
         actions={
           canCreate ? (
             <Button
               className="bg-primary hover:bg-primary/90 text-white"
               onClick={() => navigate('/app/performancewarnings/new')}
             >
-              <Plus className="h-4 w-4 mr-1" /> New Write-Up
+              <Plus className="h-4 w-4 mr-1" /> New Performance Warning
             </Button>
           ) : undefined
         }
       />
 
       <QualityFilterBar
-        search={searchParam}
-        onSearchChange={v => setMany({ search: v, page: '1' })}
-        searchPlaceholder="Search by employee or creator…"
         hasFilters={hasAnyFilter}
         onReset={reset}
         resultCount={{ total: displayTotal }}
         truncated={allItems.length >= CLIENT_FETCH_LIMIT}
       >
-        {/* ── Row 1: Employee · Type · Status ── */}
         <GroupedStagedMultiSelect
           options={csrOptions}
           selected={selectedCsrs}
@@ -159,11 +146,10 @@ export default function WriteUpsPage() {
           placeholder="All Statuses"
           width="w-[200px]"
         />
+        <WarningIdSearch value={warningId} onChange={v => setMany({ warningId: v, page: '1' })} />
 
-        {/* ── Row break ── */}
         <div className="w-full" />
 
-        {/* ── Row 2: Meeting Date Range ── */}
         <div className="flex items-center gap-1.5">
           <span className="text-[12px] text-slate-500 shrink-0">Meeting</span>
           <Input type="date" value={dateFrom} max={dateTo || undefined}
@@ -180,17 +166,17 @@ export default function WriteUpsPage() {
         {isLoading ? (
           <TableLoadingSkeleton rows={8} />
         ) : isError ? (
-          <TableErrorState message="Failed to load write-ups." onRetry={refetch} />
+          <TableErrorState message="Failed to load performance warnings." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
-                <TableHead className="w-[50px] text-slate-400">#</TableHead>
+                <SortableTableHead field="id" sort={sort} dir={dir} onSort={toggle} className="w-[100px]">Warning #</SortableTableHead>
                 <SortableTableHead field="document_type" sort={sort} dir={dir} onSort={toggle} className="min-w-[150px]">Type</SortableTableHead>
                 <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle} className="min-w-[180px]">Employee</SortableTableHead>
                 <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle} className="min-w-[160px]">Status</SortableTableHead>
                 <SortableTableHead field="meeting_date"  sort={sort} dir={dir} onSort={toggle} className="min-w-[120px]">Meeting Date</SortableTableHead>
-                <SortableTableHead field="created_by_name" sort={sort} dir={dir} onSort={toggle} className="min-w-[150px]">Created By</SortableTableHead>
+                <SortableTableHead field="follow_up_date" sort={sort} dir={dir} onSort={toggle} className="min-w-[140px]">Follow-Up Date</SortableTableHead>
                 <SortableTableHead field="created_at"   sort={sort} dir={dir} onSort={toggle} className="min-w-[110px]">Created</SortableTableHead>
                 <TableHead className="w-20" />
               </StandardTableHeaderRow>
@@ -200,9 +186,9 @@ export default function WriteUpsPage() {
                 <TableEmptyState
                   colSpan={8}
                   icon={FileWarning}
-                  title="No write-ups found"
-                  description={canCreate ? 'Create a new write-up to get started' : 'No write-ups have been issued yet'}
-                  action={canCreate ? { label: 'New Write-Up', onClick: () => navigate('/app/performancewarnings/new') } : undefined}
+                  title="No performance warnings found"
+                  description={canCreate ? 'Create a new performance warning to get started' : 'No performance warnings have been issued yet'}
+                  action={canCreate ? { label: 'New Performance Warning', onClick: () => navigate('/app/performancewarnings/new') } : undefined}
                 />
               ) : paginatedItems.map((w: WriteUp) => (
                 <TableRow
@@ -210,14 +196,18 @@ export default function WriteUpsPage() {
                   className="cursor-pointer hover:bg-slate-50/50"
                   onClick={() => navigate(`/app/performancewarnings/${w.id}`)}
                 >
-                  <TableCell className="text-[11px] text-slate-400 font-mono">#{w.id}</TableCell>
-                  <TableCell className="text-[13px] text-slate-600">{WRITE_UP_TYPE_LABELS[w.document_type] ?? w.document_type}</TableCell>
+                  <TableCell className="text-[13px] text-slate-500">{w.id}</TableCell>
+                  <TableCell><WriteUpTypeBadge type={w.document_type} /></TableCell>
                   <TableCell className="text-[13px] text-slate-600">{w.csr_name}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[w.status] ?? w.status}</TableCell>
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {w.meeting_date ? formatQualityDate(w.meeting_date) : <span className="text-slate-300">—</span>}
                   </TableCell>
-                  <TableCell className="text-[13px] text-slate-600">{w.created_by_name}</TableCell>
+                  <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
+                    {w.follow_up_date
+                      ? formatQualityDate(w.follow_up_date)
+                      : <span className="text-slate-300">—</span>}
+                  </TableCell>
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {formatQualityDate(w.created_at)}
                   </TableCell>

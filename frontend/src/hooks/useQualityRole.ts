@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 export const ROLE_IDS = {
   ADMIN:    1,
   QA:       2,
-  CSR:      3,
+  AGENT:    3,
   TRAINER:  4,
   MANAGER:  5,
   DIRECTOR: 6,
@@ -22,7 +22,7 @@ export function useQualityRole() {
 
   const isAdmin    = roleId === ROLE_IDS.ADMIN
   const isQA       = roleId === ROLE_IDS.QA
-  const isCSR      = roleId === ROLE_IDS.CSR
+  const isAgent    = roleId === ROLE_IDS.AGENT
   const isTrainer  = roleId === ROLE_IDS.TRAINER
   const isManager  = roleId === ROLE_IDS.MANAGER
   const isDirector = roleId === ROLE_IDS.DIRECTOR
@@ -31,7 +31,7 @@ export function useQualityRole() {
     roleId,
     isAdmin,
     isQA,
-    isCSR,
+    isAgent,
     isTrainer,
     isManager,
     isDirector,

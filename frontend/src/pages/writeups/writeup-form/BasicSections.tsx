@@ -71,10 +71,15 @@ export function AttachmentsSection({
                   <span className="flex-1 text-[13px] text-slate-700 truncate">{a.filename}</span>
                   {a.file_size && <span className="text-[11px] text-slate-400">{(a.file_size / 1024).toFixed(0)} KB</span>}
                   {writeUpId && (
-                    <a href={`/api/writeups/${writeUpId}/attachments/${a.id}`} target="_blank" rel="noopener noreferrer"
+                    <button onClick={async () => {
+                      const blob = await writeupService.downloadAttachment(writeUpId, a.id)
+                      const url = URL.createObjectURL(blob)
+                      if (/\.(jpe?g|png|gif|pdf)$/i.test(a.filename)) { window.open(url, '_blank') }
+                      else { Object.assign(document.createElement('a'), { href: url, download: a.filename }).click(); URL.revokeObjectURL(url) }
+                    }}
                       className="text-primary hover:text-primary/80" title="View / Download">
                       <Download className="h-3.5 w-3.5" />
-                    </a>
+                    </button>
                   )}
                   <Button type="button" variant="ghost" size="sm"
                     className="h-auto w-auto p-0 text-slate-400 hover:text-red-500 hover:bg-transparent"

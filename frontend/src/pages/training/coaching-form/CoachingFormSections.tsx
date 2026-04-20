@@ -3,7 +3,7 @@
  * Keeps the main page file focused on state / logic.
  */
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Search, Paperclip, X } from 'lucide-react'
+import { ChevronDown, Search, X } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -174,7 +174,7 @@ const NOTES_PLACEHOLDER: Record<CoachingPurpose, string> = {
 
 interface S1Props {
   form: CoachingFormState; errors: CoachingFormErrors
-  csrs: { id: number; name: string; department: string }[]
+  csrs: { id: number; name: string; department: string }[]  // prop name kept for API compat
   coaches: { id: number; name: string }[]
   topicItems?: ListItem[]
   purposeItems?: { item_key?: string; label: string }[]
@@ -201,33 +201,33 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems = [],
   const purposes = (purposeItems?.length ? purposeItems : DEFAULT_PURPOSES)
   const formats  = (formatItems?.length  ? formatItems  : DEFAULT_FORMATS)
   const sources  = (sourceItems?.length  ? sourceItems  : DEFAULT_SOURCES)
-  const toggleCsr = (csrId: number) => {
-    const next = form.csr_ids.includes(csrId)
-      ? form.csr_ids.filter(x => x !== csrId)
-      : [...form.csr_ids, csrId]
+  const toggleAgent = (agentId: number) => {
+    const next = form.csr_ids.includes(agentId)
+      ? form.csr_ids.filter(x => x !== agentId)
+      : [...form.csr_ids, agentId]
     update('csr_ids', next)
   }
-  const selectedCsrs = csrs.filter(c => form.csr_ids.includes(c.id))
+  const selectedAgents = csrs.filter(c => form.csr_ids.includes(c.id))
 
   return (
     <FormSection title="Session">
       <div className="grid grid-cols-2 gap-4">
         {isEdit ? (
           <div>
-            <p className="text-[13px] font-medium text-slate-700 mb-1">CSR</p>
+            <p className="text-[13px] font-medium text-slate-700 mb-1">Agent</p>
             <p className="text-[13px] text-slate-600 h-9 flex items-center">
-              {selectedCsrs.map(c => c.name).join(', ') || csrs.find(c => form.csr_ids.includes(c.id))?.name || '—'}
+              {selectedAgents.map(c => c.name).join(', ') || csrs.find(c => form.csr_ids.includes(c.id))?.name || '—'}
             </p>
           </div>
         ) : (
-          <Field label="CSR(s)" required error={errors.csr_ids}>
+          <Field label="Agent(s)" required error={errors.csr_ids}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant="outline" className="w-full justify-between font-normal text-[13px] h-9">
                   <span className={form.csr_ids.length === 0 ? 'text-slate-400' : 'text-slate-700'}>
-                    {form.csr_ids.length === 0 ? 'Select CSR(s)…'
-                      : form.csr_ids.length === 1 ? selectedCsrs[0]?.name
-                      : `${form.csr_ids.length} CSRs selected`}
+                    {form.csr_ids.length === 0 ? 'Select Agent(s)…'
+                      : form.csr_ids.length === 1 ? selectedAgents[0]?.name
+                      : `${form.csr_ids.length} Agents selected`}
                   </span>
                   <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
                 </Button>
@@ -235,24 +235,24 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems = [],
               <DropdownMenuContent className="w-[340px] max-h-[280px] overflow-y-auto py-1" onCloseAutoFocus={e => e.preventDefault()}>
                 {csrs.map(c => (
                   <DropdownMenuCheckboxItem key={c.id} checked={form.csr_ids.includes(c.id)}
-                    onCheckedChange={() => toggleCsr(c.id)} onSelect={e => e.preventDefault()}>
+                    onCheckedChange={() => toggleAgent(c.id)} onSelect={e => e.preventDefault()}>
                     {c.name} — {c.department}
                   </DropdownMenuCheckboxItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            {selectedCsrs.length > 1 && (
+            {selectedAgents.length > 1 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {selectedCsrs.map(c => (
+                {selectedAgents.map(c => (
                   <span key={c.id} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-slate-100 text-slate-700 text-[12px] rounded-md border border-slate-200">
                     {c.name}
-                    <ChipRemove onClick={() => toggleCsr(c.id)} />
+                    <ChipRemove onClick={() => toggleAgent(c.id)} />
                   </span>
                 ))}
               </div>
             )}
-            {selectedCsrs.length > 1 && (
-              <p className="text-[11px] text-primary mt-1">{selectedCsrs.length} sessions will be created</p>
+            {selectedAgents.length > 1 && (
+              <p className="text-[11px] text-primary mt-1">{selectedAgents.length} sessions will be created</p>
             )}
           </Field>
         )}
@@ -437,7 +437,7 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, updat
             onChange={html => update('required_action', html)}
           />
           <p className="text-[11px] text-slate-400 mt-1">
-            Shown prominently to the CSR as what must change.
+            Shown prominently to the Agent as what must change.
           </p>
         </Field>
 
@@ -461,7 +461,7 @@ export function RequiredActionsSection({ form, errors, resources, quizzes, updat
   )
 }
 
-// ── Section 4: CSR Accountability ────────────────────────────────────────────
+// ── Section 4: Agent Accountability ──────────────────────────────────────────
 
 interface S4Props {
   form: CoachingFormState
@@ -472,11 +472,11 @@ interface S4Props {
 
 export function AccountabilitySection({ form, errors, update, hideFollowUpNotes }: S4Props) {
   return (
-    <FormSection title="CSR Accountability">
+    <FormSection title="Agent Accountability">
       <div className="space-y-4">
         {([
-          ['require_action_plan',    'Require Action Plan',    'CSR must write a response before completing'],
-          ['require_acknowledgment', 'Require Acknowledgment', 'CSR must check the acknowledgment box'],
+          ['require_action_plan',    'Require Action Plan',    'Agent must write a response before completing'],
+          ['require_acknowledgment', 'Require Acknowledgment', 'Agent must check the acknowledgment box'],
         ] as const).map(([key, label, helper]) => (
           <div key={key} className="flex items-start gap-3">
             <Switch checked={form[key]} onCheckedChange={v => update(key, v)} className="mt-0.5" />
@@ -518,20 +518,23 @@ export function AccountabilitySection({ form, errors, update, hideFollowUpNotes 
   )
 }
 
-// ── Dynamic behavior flag multi-select ───────────────────────────────────────
+// ── Reusable list-item multi-select ──────────────────────────────────────────
 
-function BehaviorFlagSelect({ flagItems, selectedIds, onToggle }: {
-  flagItems: ListItem[]; selectedIds: number[]; onToggle: (id: number) => void
+export function ListItemMultiSelect({ items, selectedIds, onToggle, placeholder, emptyMessage }: {
+  items: ListItem[]; selectedIds: number[]; onToggle: (id: number) => void
+  placeholder: string; emptyMessage: string
 }) {
   const [open, setOpen]     = useState(false)
   const [search, setSearch] = useState('')
 
-  const selectedItems = flagItems.filter(f => selectedIds.includes(f.id))
+  const selectedItems = items.filter(f => selectedIds.includes(f.id))
   const label = selectedItems.length === 0
-    ? 'Select behavior flags…'
-    : `${selectedItems.length} flag${selectedItems.length !== 1 ? 's' : ''} selected`
+    ? placeholder
+    : `${selectedItems.length} selected`
 
-  const categories = [...new Set(flagItems.map(f => f.category ?? 'Other'))]
+  const hasCategories = items.some(f => f.category)
+  const categories = hasCategories ? [...new Set(items.map(f => f.category ?? 'Other'))] : []
+  const matchesSearch = (f: ListItem) => !search || f.label.toLowerCase().includes(search.toLowerCase())
 
   return (
     <div>
@@ -547,33 +550,39 @@ function BehaviorFlagSelect({ flagItems, selectedIds, onToggle }: {
             <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
             <Input
               className="flex-1 border-0 h-7 text-[13px] focus-visible:ring-0 px-0 placeholder:text-slate-400"
-              placeholder="Search flags…" value={search}
+              placeholder="Search…" value={search}
               onChange={e => setSearch(e.target.value)} onKeyDown={e => e.stopPropagation()} />
           </div>
           <div className="max-h-[280px] overflow-y-auto py-1">
-            {categories.map((cat, ci) => {
-              const items = flagItems.filter(f =>
-                (f.category ?? 'Other') === cat &&
-                (!search || f.label.toLowerCase().includes(search.toLowerCase()))
-              )
-              if (!items.length) return null
-              return (
-                <DropdownMenuGroup key={cat}>
-                  {ci > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuLabel className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
-                    {cat}
-                  </DropdownMenuLabel>
-                  {items.map(f => (
-                    <DropdownMenuCheckboxItem key={f.id} checked={selectedIds.includes(f.id)}
-                      onCheckedChange={() => onToggle(f.id)} onSelect={e => e.preventDefault()}>
-                      {f.label}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuGroup>
-              )
-            })}
-            {flagItems.length === 0 && (
-              <p className="px-3 py-2 text-[12px] text-slate-400 italic">No behavior flags configured</p>
+            {hasCategories ? (
+              categories.map((cat, ci) => {
+                const catItems = items.filter(f => (f.category ?? 'Other') === cat && matchesSearch(f))
+                if (!catItems.length) return null
+                return (
+                  <DropdownMenuGroup key={cat}>
+                    {ci > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuLabel className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
+                      {cat}
+                    </DropdownMenuLabel>
+                    {catItems.map(f => (
+                      <DropdownMenuCheckboxItem key={f.id} checked={selectedIds.includes(f.id)}
+                        onCheckedChange={() => onToggle(f.id)} onSelect={e => e.preventDefault()}>
+                        {f.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuGroup>
+                )
+              })
+            ) : (
+              items.filter(matchesSearch).map(f => (
+                <DropdownMenuCheckboxItem key={f.id} checked={selectedIds.includes(f.id)}
+                  onCheckedChange={() => onToggle(f.id)} onSelect={e => e.preventDefault()}>
+                  {f.label}
+                </DropdownMenuCheckboxItem>
+              ))
+            )}
+            {items.length === 0 && (
+              <p className="px-3 py-2 text-[12px] text-slate-400 italic">{emptyMessage}</p>
             )}
           </div>
           {selectedItems.length > 0 && (
@@ -604,24 +613,46 @@ function BehaviorFlagSelect({ flagItems, selectedIds, onToggle }: {
 interface S5InternalProps {
   form: CoachingFormState
   flagItems: ListItem[]
+  rootCauseItems?: ListItem[]
+  supportNeededItems?: ListItem[]
   update: <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
 }
 
-export function InternalNotesSection({ form, flagItems, update }: S5InternalProps) {
-  const selectedIds = form.behavior_flag_ids ?? []
-  const toggleFlag = (id: number) => update('behavior_flag_ids',
-    selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id])
+export function InternalNotesSection({ form, flagItems, rootCauseItems = [], supportNeededItems = [], update }: S5InternalProps) {
+  const toggleList = (field: 'behavior_flag_ids' | 'root_cause_ids' | 'support_needed_ids', id: number) => {
+    const current = form[field] ?? []
+    update(field, current.includes(id) ? current.filter(x => x !== id) : [...current, id])
+  }
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
       <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100">
         <h3 className="text-[15px] font-semibold text-slate-800">Internal Notes</h3>
-        <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-full">Private — Not visible to CSR</span>
+        <span className="text-[11px] text-primary bg-primary/10 px-2 py-0.5 rounded-full">Private — Not visible to Agent</span>
       </div>
       <div className="p-5 space-y-4">
-        <Field label="Behavior Flags">
-          <BehaviorFlagSelect flagItems={flagItems} selectedIds={selectedIds} onToggle={toggleFlag} />
-        </Field>
+        {/* Row 1: Root Cause + Support Needed | Behavior Flags */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4">
+            <Field label="Root Cause">
+              <ListItemMultiSelect items={rootCauseItems} selectedIds={form.root_cause_ids ?? []}
+                onToggle={id => toggleList('root_cause_ids', id)}
+                placeholder="Select root causes…" emptyMessage="No root causes configured" />
+            </Field>
+            <Field label="Support Needed">
+              <ListItemMultiSelect items={supportNeededItems} selectedIds={form.support_needed_ids ?? []}
+                onToggle={id => toggleList('support_needed_ids', id)}
+                placeholder="Select support needed…" emptyMessage="No support options configured" />
+            </Field>
+          </div>
+          <Field label="Behavior Flags">
+            <ListItemMultiSelect items={flagItems} selectedIds={form.behavior_flag_ids ?? []}
+              onToggle={id => toggleList('behavior_flag_ids', id)}
+              placeholder="Select behavior flags…" emptyMessage="No behavior flags configured" />
+          </Field>
+        </div>
+
+        {/* Row 2: Internal Notes (full width) */}
         <Field label="Internal Notes">
           <RichTextEditor value={form.internal_notes}
             placeholder="Context, observations, concerns…"
@@ -633,53 +664,3 @@ export function InternalNotesSection({ form, flagItems, update }: S5InternalProp
   )
 }
 
-// ── Section 6: Attachment (optional) ─────────────────────────────────────────
-
-interface AttachmentProps {
-  form: CoachingFormState; update: <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
-  existingFilename?: string; onRemoveExisting: () => void
-}
-
-export function AttachmentSection({ form, update, existingFilename, onRemoveExisting }: AttachmentProps) {
-  const [expanded, setExpanded] = useState(!!(existingFilename || form.attachment_file))
-
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <Button type="button" variant="ghost"
-        onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2 px-5 py-4 justify-start h-auto rounded-none hover:bg-slate-50">
-        {expanded
-          ? <ChevronDown  className="h-4 w-4 text-slate-400 shrink-0" />
-          : <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
-        }
-        <Paperclip className="h-4 w-4 text-slate-400 shrink-0" />
-        <span className="text-[15px] font-semibold text-slate-800">Attachment</span>
-        <span className="text-[11px] text-slate-400">(optional)</span>
-        {(existingFilename || form.attachment_file) && (
-          <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-1">1 file</span>
-        )}
-      </Button>
-
-      {expanded && (
-        <div className="px-5 pb-5 border-t border-slate-100 pt-4">
-          {existingFilename && (
-            <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg mb-3">
-              <span className="text-[13px] text-slate-700 truncate">{existingFilename}</span>
-              <Button type="button" variant="ghost" size="sm"
-                className="text-[12px] text-red-500 hover:text-red-700 ml-3 shrink-0 h-auto"
-                onClick={onRemoveExisting}>
-                Remove
-              </Button>
-            </div>
-          )}
-          <Input
-            type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-            className="text-[13px] text-slate-600 file:mr-3 file:py-1 file:px-3 file:border-0 file:rounded file:bg-primary/10 file:text-primary file:text-[12px] file:cursor-pointer"
-            onChange={e => update('attachment_file', e.target.files?.[0] ?? null)}
-          />
-          <p className="text-[11px] text-slate-400 mt-1">Max 10 MB · PDF, Word, Images</p>
-        </div>
-      )}
-    </div>
-  )
-}

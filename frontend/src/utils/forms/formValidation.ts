@@ -74,19 +74,21 @@ export const validateMetadataFields = (form: Form): { valid: boolean; errors: st
   
   // Check for required metadata fields based on interaction type
   const requiredFields = {
-    call: ['Call ID', 'CSR', 'Call Date'],
-    ticket: ['Ticket ID', 'CSR', 'Ticket Date'],
-    email: ['Email ID', 'CSR', 'Email Date'],
-    chat: ['Chat ID', 'CSR', 'Chat Date'],
-    universal: ['Interaction ID', 'CSR', 'Date']
+    call: ['Call ID', 'Agent', 'Call Date'],
+    ticket: ['Ticket ID', 'Agent', 'Ticket Date'],
+    email: ['Email ID', 'Agent', 'Email Date'],
+    chat: ['Chat ID', 'Agent', 'Chat Date'],
+    universal: ['Interaction ID', 'Agent', 'Date']
   };
+
+  const FIELD_ALIASES: Record<string, string[]> = { agent: ['agent', 'csr'] }
   
   const formFields = form.metadata_fields.map(f => f.field_name);
   const interactionType = form.interaction_type as keyof typeof requiredFields;
   
-  // Check for each required field
   requiredFields[interactionType].forEach(fieldName => {
-    if (!formFields.some(f => f.toLowerCase().includes(fieldName.toLowerCase()))) {
+    const aliases = FIELD_ALIASES[fieldName.toLowerCase()] ?? [fieldName.toLowerCase()]
+    if (!formFields.some(f => aliases.some(a => f.toLowerCase().includes(a)))) {
       errors.push(`Missing required metadata field: ${fieldName}`);
     }
   });

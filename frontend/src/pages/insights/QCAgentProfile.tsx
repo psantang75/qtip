@@ -41,7 +41,11 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
     return formScoresData.find(f => f.form === selectedForms[0])?.id ?? null
   }, [selectedForms, formScoresData])
 
-  const catParams = useMemo(() => ({ ...apiParams, ...(selectedFormId ? { form: selectedFormId } : {}) }), [apiParams, selectedFormId])
+  const catParams = useMemo(() => ({
+    ...apiParams,
+    userId: String(agent.userId),
+    ...(selectedFormId ? { form: selectedFormId } : {}),
+  }), [apiParams, agent.userId, selectedFormId])
   const { data: catScores = [] } = useQuery({ queryKey: ['qc-cats', catParams], queryFn: () => getCategoryScores(catParams), enabled: !!profile })
 
   const qaTrend = trendData?.map(r => ({ label: String(r.label ?? ''), value: r['avg_qa_score'] != null ? Number(r['avg_qa_score']) : null })) ?? []

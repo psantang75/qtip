@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { formatQualityDate } from '@/utils/dateFormat'
+import { stripHtml } from '@/components/common/RichTextDisplay'
 import { useToast } from '@/hooks/use-toast'
 import writeupService, { type CoachingSearchResult } from '@/services/writeupService'
 import { COACHING_PURPOSE_LABELS } from '@/constants/labels'
@@ -72,7 +73,7 @@ export function CoachingSearchModal({ csrId, onImport, onImportRefs, onClose }: 
       const examples: ExampleInput[] = Array.from(selected).map(idx => {
         const r = results[idx]
         const topicStr = Array.isArray(r.topic_names) ? r.topic_names.join(', ') : (r.topic_names ?? '')
-        return { example_date: r.session_date?.slice(0, 10) ?? '', description: `[${r.coaching_purpose ?? 'Coaching'}]${topicStr ? ` ${topicStr}` : ''} — ${(r.notes ?? '').slice(0, 100)}`, source: 'COACHING_IMPORT' as const, sort_order: idx }
+        return { example_date: r.session_date?.slice(0, 10) ?? '', description: `[${r.coaching_purpose ?? 'Coaching'}]${topicStr ? ` ${topicStr}` : ''} — ${stripHtml(r.notes).slice(0, 100)}`, source: 'COACHING_IMPORT' as const, sort_order: idx }
       })
       onImport(examples)
     }
@@ -170,7 +171,7 @@ export function CoachingSearchModal({ csrId, onImport, onImportRefs, onClose }: 
                       {(r.topic_names as any)?.length > 0 && (
                         <p className="text-[11px] text-slate-500 mt-0.5">{Array.isArray(r.topic_names) ? r.topic_names.join(', ') : r.topic_names}</p>
                       )}
-                      {r.notes && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{r.notes.slice(0, 100)}</p>}
+                      {r.notes && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{stripHtml(r.notes).slice(0, 100)}</p>}
                     </div>
                   </div>
                 ))}
