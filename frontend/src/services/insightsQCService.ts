@@ -67,9 +67,39 @@ export interface ActiveWriteUp {
   id: number; userId: number; agent: string; dept: string; type: string; status: string
   date: string; meetingDate: string | null; followUpDate: string | null; priorCount: number; policies: string[]
 }
-export interface EscalationData  { verbal: number; written: number; final: number }
-export interface PolicyViolationAgent { userId: number; name: string; dept: string; type: string; status: string }
-export interface PolicyViolation { policy: string; count: number; agentCount: number; agentDetails: PolicyViolationAgent[] }
+export interface StepUpCounts {
+  verbalToWritten: number
+  writtenToFinal:  number
+  distinctAgents:  number
+}
+export interface EscalationData {
+  stepUps:       { current: StepUpCounts; prior: StepUpCounts }
+  agentsOnFinal: number
+}
+export interface RepeatWarningAgent {
+  userId:       number
+  agent:        string
+  dept:         string
+  inPeriod:     number
+  prior90d:     number
+  prior12mo:    number
+  latestType:   string | null
+  latestStatus: string | null
+}
+export interface PolicyViolationAgent {
+  userId:     number
+  name:       string
+  dept:       string
+  violations: number
+  type:       string
+  status:     string
+}
+export interface PolicyViolation {
+  policy:       string
+  count:        number
+  agentCount:   number
+  agentDetails: PolicyViolationAgent[]
+}
 export interface DeptWarningsRow { dept: string; writeups: number; closed: number; resolutionRate: number }
 
 export interface FilterOptions { departments: string[]; forms: string[] }
@@ -135,6 +165,9 @@ export const getActiveWriteUps = async (p: QCParams): Promise<ActiveWriteUp[]> =
 
 export const getEscalationData = async (p: QCParams): Promise<EscalationData> =>
   (await api.get('/insights/qc/warnings/escalation', { params: p })).data
+
+export const getRepeatWarningAgents = async (p: QCParams): Promise<RepeatWarningAgent[]> =>
+  (await api.get('/insights/qc/warnings/repeat-agents', { params: p })).data
 
 export const getPolicyViolations = async (p: QCParams): Promise<PolicyViolation[]> =>
   (await api.get('/insights/qc/warnings/policies', { params: p })).data

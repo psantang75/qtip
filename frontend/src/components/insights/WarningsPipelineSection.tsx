@@ -41,7 +41,7 @@ export default function WarningsPipelineSection({ pipeline }: Props) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <InsightsSection title="Status Pipeline">
+      <InsightsSection title="Status Pipeline" infoKpiCodes={['warnings_status_pipeline']}>
         {PIPELINE_STATUSES.map((s, i) => (
           <div key={s.key} className={`flex items-center justify-between py-2 ${i < PIPELINE_STATUSES.length - 1 ? 'border-b border-slate-100' : ''}`}>
             <span className="text-sm font-medium text-slate-700">{s.label}</span>
@@ -56,7 +56,7 @@ export default function WarningsPipelineSection({ pipeline }: Props) {
         </div>
       </InsightsSection>
 
-      <InsightsSection title="Type Distribution">
+      <InsightsSection title="Type Distribution" infoKpiCodes={['warnings_type_distribution']}>
         {[
           { key: 'VERBAL_WARNING',  label: 'Verbal Warning' },
           { key: 'WRITTEN_WARNING', label: 'Written Warning' },

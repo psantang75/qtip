@@ -8,7 +8,7 @@ import { useQCFilters } from '@/hooks/useQCFilters'
 import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
 import {
   getQCKpis, getFilterOptions, getWriteUpPipeline, getActiveWriteUps,
-  getEscalationData, getPolicyViolations, getWarningsDeptComparison,
+  getEscalationData, getRepeatWarningAgents, getPolicyViolations, getWarningsDeptComparison,
 } from '@/services/insightsQCService'
 
 const TYPE_LABEL: Record<string, string> = { VERBAL_WARNING: 'Verbal', WRITTEN_WARNING: 'Written', FINAL_WARNING: 'Final' }
@@ -40,6 +40,7 @@ export default function QCWarningsPage() {
   const { data: pipeline }      = useQuery({ queryKey: ['qc-pipeline', apiParams],        queryFn: () => getWriteUpPipeline(apiParams) })
   const { data: activeWUs = []} = useQuery({ queryKey: ['qc-active-wu', apiParams],       queryFn: () => getActiveWriteUps(apiParams) })
   const { data: escalation }    = useQuery({ queryKey: ['qc-escalation', apiParams],      queryFn: () => getEscalationData(apiParams) })
+  const { data: repeatAgents = [] } = useQuery({ queryKey: ['qc-repeat-agents', apiParams], queryFn: () => getRepeatWarningAgents(apiParams) })
   const { data: policies = [] } = useQuery({ queryKey: ['qc-policies', apiParams],        queryFn: () => getPolicyViolations(apiParams) })
   const { data: deptComp = [] } = useQuery({ queryKey: ['qc-warn-dept', apiParams],       queryFn: () => getWarningsDeptComparison(apiParams) })
 
@@ -87,12 +88,16 @@ export default function QCWarningsPage() {
         <WarningsActiveSection
           activeWriteUps={activeWUs}
           escalation={escalation}
+          repeatAgents={repeatAgents}
           cur={cur}
           onNavAgent={navAgent}
         />
 
         {/* Most Violated Policies */}
-        <InsightsSection title="Most Violated Policies">
+        <InsightsSection
+          title="Most Violated Policies (Selected Period)"
+          infoKpiCodes={['warnings_top_policies']}
+        >
           {policies.length === 0 && <p className="text-sm text-slate-400 text-center py-4">No policy violations data for this period.</p>}
           {(showAllPolicies ? policies : policies.slice(0, 5)).map(pol => (
             <ExpandableRow
@@ -112,15 +117,21 @@ export default function QCWarningsPage() {
                 pol.agentDetails.length === 0 ? <p className="text-xs text-slate-400">No agent data available.</p> : (
                   <table className="w-full text-xs">
                     <thead><tr className="text-slate-400 border-b border-slate-200">
-                      {['Agent','Department','Type','Status'].map(h => <th key={h} className="text-left py-1.5 font-medium pr-3">{h}</th>)}
+                      <th className="text-left py-1.5 font-medium pr-10 whitespace-nowrap w-px">Agent</th>
+                      <th className="text-left py-1.5 font-medium pr-10">Department</th>
+                      <th className="text-left py-1.5 font-medium pr-10 whitespace-nowrap w-px">Last Written Type</th>
+                      <th
+                        className="text-right py-1.5 font-medium whitespace-nowrap w-px"
+                        title="Total write-ups citing this policy for this agent within the selected period. The per-agent values sum to the policy total."
+                      >Violations</th>
                     </tr></thead>
                     <tbody>
                       {pol.agentDetails.map(a => (
                         <tr key={a.userId} className="border-b border-slate-100 last:border-0 hover:bg-white cursor-pointer" onClick={() => navAgent(a.userId)}>
-                          <td className="py-1.5 pr-3 font-medium text-primary">{a.name}</td>
-                          <td className="py-1.5 pr-3 text-slate-500">{a.dept}</td>
-                          <td className="py-1.5 pr-3"><TypeBadge type={a.type} /></td>
-                          <td className="py-1.5 text-slate-500">{STATUS_LABEL[a.status] ?? a.status}</td>
+                          <td className="py-1.5 pr-10 font-medium text-primary whitespace-nowrap">{a.name}</td>
+                          <td className="py-1.5 pr-10 text-slate-500">{a.dept}</td>
+                          <td className="py-1.5 pr-10 whitespace-nowrap"><TypeBadge type={a.type} /></td>
+                          <td className={`py-1.5 text-right font-semibold tabular-nums whitespace-nowrap ${a.violations >= 2 ? 'text-orange-600' : 'text-slate-700'}`}>{a.violations}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -137,7 +148,7 @@ export default function QCWarningsPage() {
         </InsightsSection>
 
         {/* Dept Comparison */}
-        <InsightsSection title="Department Performance Warning Comparison">
+        <InsightsSection title="Department Performance Warning Comparison" infoKpiCodes={['warnings_dept_comparison']}>
           <table className="w-full text-sm">
             <thead><tr className="text-xs text-slate-400 border-b border-slate-200">
               {['Department','Warnings','Closed','Resolution Rate'].map(h => <th key={h} className="text-left pb-2 font-medium pr-4">{h}</th>)}

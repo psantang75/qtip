@@ -265,8 +265,19 @@ export const getActiveWriteUps = qcHandler('qc_warnings', (deptFilter, ranges) =
   qcData.getActiveWriteUps(deptFilter, ranges),
 )
 
-export const getEscalationData = qcHandler('qc_warnings', (deptFilter, ranges) =>
-  qcData.getEscalationData(deptFilter, ranges),
+// Combined step-up + agents-on-final payload powering the Escalation Path
+// section. Step-Up Counts replaced the old tier-count boxes (which duplicated
+// the Type Distribution bars in WarningsPipelineSection).
+export const getEscalationData = qcHandler('qc_warnings', async (deptFilter, ranges) => {
+  const [stepUps, agentsOnFinal] = await Promise.all([
+    qcData.getStepUpData(deptFilter, ranges),
+    qcData.getAgentsOnFinalWarning(deptFilter, ranges),
+  ])
+  return { stepUps, agentsOnFinal }
+})
+
+export const getRepeatWarningAgents = qcHandler('qc_warnings', (deptFilter, ranges) =>
+  qcData.getRepeatWarningAgents(deptFilter, ranges),
 )
 
 export const getPolicyViolations = qcHandler('qc_warnings', (deptFilter, ranges) =>

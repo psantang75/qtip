@@ -5,7 +5,7 @@ import {
   getFilterOptions,
   getScoreDistribution, getCategoryScores, getMissedQuestions, getQualityDeptComparison, getFormScores,
   getCoachingTopics, getRepeatOffenders, getCoachingTopicAgents, getSessionsByStatus, getAgentsFailedQuizzes, getQuizBreakdown, getCoachingDeptComparison,
-  getWriteUpPipeline, getActiveWriteUps, getEscalationData, getPolicyViolations, getWarningsDeptComparison,
+  getWriteUpPipeline, getActiveWriteUps, getEscalationData, getRepeatWarningAgents, getPolicyViolations, getWarningsDeptComparison,
 } from '../controllers/insightsQC.controller'
 
 const router = express.Router()
@@ -32,6 +32,7 @@ router.get('/coaching/dept-comparison',   h(getCoachingDeptComparison))
 router.get('/warnings/pipeline',          h(getWriteUpPipeline))
 router.get('/warnings/active',            h(getActiveWriteUps))
 router.get('/warnings/escalation',        h(getEscalationData))
+router.get('/warnings/repeat-agents',     h(getRepeatWarningAgents))
 router.get('/warnings/policies',          h(getPolicyViolations))
 router.get('/warnings/dept-comparison',   h(getWarningsDeptComparison))
 

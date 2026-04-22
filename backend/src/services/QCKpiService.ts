@@ -273,7 +273,15 @@ export class QCKpiService {
     ])
 
     // ── Discipline ────────────────────────────────────────────────────────────
-    const [wuCount, activeUsers, wuEscalated, wuTotal, wuRepeatAgents, wuWithWu, wuClosed] =
+    // escalation_rate: write-ups in the period that escalated the agent to a
+    //   higher tier (vs their most recent tier in the trailing 12mo) divided
+    //   by total write-ups in the period. Mirrors the Step-Up cards on the
+    //   Warnings page so the rate and the visualization always agree.
+    // repeat_offender_rate: distinct agents with >=2 write-ups whose
+    //   created_at falls inside the selected period, divided by distinct
+    //   agents written up in the period. Mirrors the Repeat Warning Agents
+    //   table on the Warnings page.
+    const [wuCount, activeUsers, wuStepUps, wuRepeatAgents, wuWithWu, wuTotal, wuClosed] =
       await Promise.all([
         scalar(
           `SELECT COUNT(*) AS value FROM write_ups wu
@@ -283,32 +291,40 @@ export class QCKpiService {
         ),
         scalar(`SELECT COUNT(*) AS value FROM users WHERE role_id = 3 AND is_active = 1`, []),
         scalar(
-          `SELECT COUNT(DISTINCT wupd.write_up_id) AS value
-           FROM write_up_prior_discipline wupd
-           JOIN write_ups wu ON wu.id = wupd.write_up_id
+          `SELECT SUM(CASE
+                        WHEN (curr.document_type = 'WRITTEN_WARNING' AND curr.prev_tier = 'VERBAL_WARNING')
+                          OR (curr.document_type = 'FINAL_WARNING'   AND curr.prev_tier IN ('VERBAL_WARNING','WRITTEN_WARNING'))
+                        THEN 1 ELSE 0 END) AS value
+           FROM (
+             SELECT wu.document_type,
+               (SELECT prev.document_type FROM write_ups prev
+                  WHERE prev.csr_id = wu.csr_id
+                    AND prev.created_at < wu.created_at
+                    AND prev.created_at >= DATE_SUB(wu.created_at, INTERVAL 12 MONTH)
+                  ORDER BY prev.created_at DESC LIMIT 1) AS prev_tier
+             FROM write_ups wu
+             JOIN users csr ON wu.csr_id = csr.id
+             WHERE wu.created_at BETWEEN ? AND ? ${dc.sql}
+           ) curr`,
+          [s, e, ...dp],
+        ),
+        scalar(
+          `SELECT COUNT(*) AS value FROM (
+             SELECT wu.csr_id FROM write_ups wu
+             JOIN users csr ON wu.csr_id = csr.id
+             WHERE wu.created_at BETWEEN ? AND ? ${dc.sql}
+             GROUP BY wu.csr_id HAVING COUNT(*) >= 2
+           ) repeat_agents`,
+          [s, e, ...dp],
+        ),
+        scalar(
+          `SELECT COUNT(DISTINCT wu.csr_id) AS value FROM write_ups wu
            JOIN users csr ON wu.csr_id = csr.id
            WHERE wu.created_at BETWEEN ? AND ? ${dc.sql}`,
           [s, e, ...dp],
         ),
         scalar(
           `SELECT COUNT(*) AS value FROM write_ups wu
-           JOIN users csr ON wu.csr_id = csr.id
-           WHERE wu.created_at BETWEEN ? AND ? ${dc.sql}`,
-          [s, e, ...dp],
-        ),
-        scalar(
-          `SELECT COUNT(DISTINCT wu1.csr_id) AS value FROM write_ups wu1
-           JOIN users csr ON wu1.csr_id = csr.id
-           WHERE wu1.created_at BETWEEN ? AND ? ${dc.sql}
-             AND EXISTS (
-               SELECT 1 FROM write_ups wu2
-               WHERE wu2.csr_id = wu1.csr_id AND wu2.id != wu1.id
-                 AND wu2.created_at BETWEEN wu1.created_at
-                     AND DATE_ADD(wu1.created_at, INTERVAL 90 DAY))`,
-          [s, e, ...dp],
-        ),
-        scalar(
-          `SELECT COUNT(DISTINCT wu.csr_id) AS value FROM write_ups wu
            JOIN users csr ON wu.csr_id = csr.id
            WHERE wu.created_at BETWEEN ? AND ? ${dc.sql}`,
           [s, e, ...dp],
@@ -357,7 +373,7 @@ export class QCKpiService {
       avg_attempts_to_pass:           avgAttempts,
       total_writeups_issued:          wuCount,
       writeup_rate:                   safePct(wuCount, activeUsers),
-      escalation_rate:                safePct(wuEscalated, wuTotal),
+      escalation_rate:                safePct(wuStepUps, wuTotal),
       repeat_offender_rate:           safePct(wuRepeatAgents, wuWithWu),
       writeup_resolution_rate:        safePct(wuClosed, wuTotal),
       },
