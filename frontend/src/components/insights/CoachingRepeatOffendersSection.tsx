@@ -26,7 +26,7 @@ export default function CoachingRepeatOffendersSection({
   repeaters, expandedAgent, onToggleAgent, onNavAgent,
 }: Props) {
   return (
-    <InsightsSection title="Repeat Coaching">
+    <InsightsSection title="Repeat Coaching" infoKpiCodes={['coaching_repeat_offenders']}>
       {repeaters.length === 0 && <p className="text-sm text-slate-400 py-4 text-center">No repeat coaching agents for this period.</p>}
       {repeaters.map(a => (
         <ExpandableRow
@@ -39,8 +39,7 @@ export default function CoachingRepeatOffendersSection({
               <span className="flex-1" />
               <span className="text-slate-700 w-20 text-right shrink-0">{a.sessions} Sessions</span>
               <span className="text-slate-700 w-16 text-right shrink-0 ml-4">{a.uniqueTopics} Topics</span>
-              <span className={`font-semibold w-16 text-right shrink-0 ml-4 ${a.repeatTopics >= 2 ? 'text-red-600' : 'text-orange-500'}`}>{a.repeatTopics} Repeat</span>
-              <span className="shrink-0 ml-4"><StatusBadge label={a.repeatTopics >= 2 ? 'Watch' : 'Monitor'} variant={a.repeatTopics >= 2 ? 'bad' : 'warning'} /></span>
+              <span className={`font-semibold w-28 text-right shrink-0 ml-4 ${a.repeatTopics >= 2 ? 'text-red-600' : 'text-orange-500'}`}>{a.repeatTopics} Repeat Topics</span>
             </div>
           }
           detail={

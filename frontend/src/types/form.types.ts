@@ -77,6 +77,7 @@ export interface FormQuestion {
   radio_options?: RadioOption[]; // Radio options if question_type is RADIO
   is_required?: boolean; // UI field for form builder
   visible_to_csr?: boolean; // Whether this question is visible to CSR users (default: true)
+  is_critical?: boolean; // When true, a NO answer triggers the form's critical-fail cap
 }
 
 /**
@@ -134,6 +135,7 @@ export interface BaseForm {
   parent_form_id?: number;
   user_version?: number;
   user_version_date?: string;
+  critical_cap_percent?: number; // Score ceiling applied when any critical question is missed (default 79.00)
 }
 
 /**

@@ -1,8 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { Plus, Pencil, Eye, Copy, ClipboardList } from 'lucide-react'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { StatusActiveFilter, type StatusActiveValue } from '@/components/common/StatusActiveFilter'
 import { useAllForms } from '@/hooks/useQualityQueries'
 import type { FormSummary } from '@/services/qaService'
 import { useFormListFilters } from '@/hooks/useFormListFilters'
@@ -11,16 +9,19 @@ import { Button } from '@/components/ui/button'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
+import { ListCard } from '@/components/common/ListCard'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { formatQualityDate } from '@/utils/dateFormat'
 
 const FORMS_BASE = '/app/quality/forms'
@@ -47,8 +48,8 @@ export function FormBuilderList() {
   const displayed  = sorted.slice((page - 1) * pageSize, page * pageSize)
 
   return (
-    <QualityListPage>
-      <QualityPageHeader
+    <ListPageShell>
+      <ListPageHeader
         title="Form Builder"
         actions={
           <Button onClick={() => navigate(`${FORMS_BASE}/new`)} className="gap-1.5">
@@ -57,7 +58,7 @@ export function FormBuilderList() {
         }
       />
 
-      <QualityFilterBar
+      <ListFilterBar
         hasFilters={hasFilters}
         onReset={resetFilters}
         resultCount={{ filtered: sorted.length, total: rawForms.length }}
@@ -76,21 +77,15 @@ export function FormBuilderList() {
           placeholder="All Types"
           width="w-[160px]"
         />
-        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1) }}>
-          <SelectTrigger className="w-[145px]">
-            <SelectValue placeholder="All Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-      </QualityFilterBar>
+        <StatusActiveFilter
+          value={statusFilter as StatusActiveValue}
+          onChange={v => { setStatusFilter(v); setPage(1) }}
+        />
+      </ListFilterBar>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <ListCard>
         {isLoading ? (
-          <TableLoadingSkeleton rows={5} />
+          <ListLoadingSkeleton rows={5} />
         ) : isError ? (
           <TableErrorState message="Failed to load forms." onRetry={refetch} />
         ) : (
@@ -115,27 +110,29 @@ export function FormBuilderList() {
                   action={hasFilters ? { label: 'Clear filters', onClick: resetFilters } : undefined}
                 />
               ) : displayed.map((f: FormSummary) => (
-                <TableRow key={f.id} className="hover:bg-slate-50/50">
+                <TableRow
+                  key={f.id}
+                  className="cursor-pointer hover:bg-slate-50/50"
+                  onClick={() => navigate(`${FORMS_BASE}/${f.id}/edit`)}
+                >
                   <TableCell className="text-[13px] text-slate-600">{f.form_name}</TableCell>
-                  <TableCell className="text-[13px] text-slate-600">
-                    {f.is_active ? 'Active' : 'Inactive'}
-                  </TableCell>
+                  <TableCell><StatusBadge status={f.is_active ? 'ACTIVE' : 'INACTIVE'} /></TableCell>
                   <TableCell className="text-[13px] text-slate-600">{f.interaction_type ?? '—'}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">v{f.version ?? 1}</TableCell>
                   <TableCell className="text-[13px] text-slate-500">
                     {formatQualityDate(f.created_at)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={e => e.stopPropagation()}>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => navigate(`${FORMS_BASE}/${f.id}/edit`)}>
-                        <Pencil size={12} className="mr-1" /> Edit
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => navigate(`${FORMS_BASE}/${f.id}/preview`)}>
-                        <Eye size={12} className="mr-1" /> Preview
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => navigate(`${FORMS_BASE}/${f.id}/duplicate`)}>
-                        <Copy size={12} className="mr-1" /> Duplicate
-                      </Button>
+                      <RowActionButton icon={Pencil} onClick={() => navigate(`${FORMS_BASE}/${f.id}/edit`)}>
+                        Edit
+                      </RowActionButton>
+                      <RowActionButton icon={Eye} onClick={() => navigate(`${FORMS_BASE}/${f.id}/preview`)}>
+                        Preview
+                      </RowActionButton>
+                      <RowActionButton icon={Copy} onClick={() => navigate(`${FORMS_BASE}/${f.id}/duplicate`)}>
+                        Duplicate
+                      </RowActionButton>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -143,7 +140,7 @@ export function FormBuilderList() {
             </TableBody>
           </Table>
         )}
-      </div>
+      </ListCard>
 
       <ListPagination
         page={page}
@@ -153,6 +150,6 @@ export function FormBuilderList() {
         onPageChange={setPage}
         onPageSizeChange={size => { setPageSize(size); setPage(1) }}
       />
-    </QualityListPage>
+    </ListPageShell>
   )
 }

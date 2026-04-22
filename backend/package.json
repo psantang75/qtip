@@ -8,7 +8,8 @@
     "build": "tsc",
     "build:clean": "rimraf dist && npm run build",
     "prod": "npm run build && npm start",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:seed": "ts-node prisma/seed.ts"
@@ -64,6 +65,7 @@
     "@types/swagger-ui-express": "^4.1.8",
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.4"
   }
 }

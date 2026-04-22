@@ -1,24 +1,26 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { BarChart, DonutChart } from '@tremor/react'
 import {
-  BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell,
+  PieChart, Pie, Legend,
 } from 'recharts'
 import { MessageSquare, TrendingUp, Clock, CheckCircle, RefreshCw } from 'lucide-react'
 import trainingService from '@/services/trainingService'
 import { Button } from '@/components/ui/button'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
+import { ListCard } from '@/components/common/ListCard'
 import { DateRangeFilter } from '@/components/common/DateRangeFilter'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
@@ -48,15 +50,26 @@ const typeLabel = (t: string) =>
 
 // ── Stat Card (Tremor-styled) ─────────────────────────────────────────────────
 
-function StatCard({ label, value, icon: Icon, valueClass }: {
+function StatCard({ label, value, icon: Icon, valueClass, loading }: {
   label: string; value: string | number
-  icon: React.ComponentType<{ className?: string }>; valueClass?: string
+  icon: React.ComponentType<{ className?: string }>
+  valueClass?: string
+  loading?: boolean
 }) {
   return (
     <div className="relative bg-white rounded-xl border border-slate-200 p-5 overflow-hidden">
       <Icon className="h-8 w-8 absolute top-4 right-4 text-slate-900 opacity-10" />
-      <p className={cn('text-3xl font-bold text-slate-900', valueClass)}>{value}</p>
-      <p className="text-sm text-slate-500 mt-1">{label}</p>
+      {loading ? (
+        <>
+          <Skeleton className="h-8 w-20" />
+          <Skeleton className="h-4 w-28 mt-2" />
+        </>
+      ) : (
+        <>
+          <p className={cn('text-3xl font-bold text-slate-900', valueClass)}>{value}</p>
+          <p className="text-sm text-slate-500 mt-1">{label}</p>
+        </>
+      )}
     </div>
   )
 }
@@ -70,6 +83,10 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
       {children}
     </div>
   )
+}
+
+function ChartEmpty() {
+  return <p className="text-center text-slate-400 text-[13px] py-10">No data in range</p>
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -122,17 +139,14 @@ export default function TrainingReportsPage() {
   const compRate = Number(s.completion_rate ?? 0)
   const quizRate = Number(s.quiz_pass_rate   ?? 0)
 
-  // Tremor BarChart data: sessions by week
   const weekData = (s.sessions_by_week ?? []).map(
-    (r: { week: string; count: number | string }) => ({ Week: r.week, Sessions: Number(r.count) })
+    (r: { week: string; count: number | string }) => ({ name: r.week, count: Number(r.count) })
   )
 
-  // Tremor BarChart data: top topics (horizontal)
   const topicData = (s.top_topics ?? []).slice(0, 10).map(
-    (r: { topic_name: string; count: number | string }) => ({ Topic: r.topic_name, Sessions: Number(r.count) })
+    (r: { topic_name: string; count: number | string }) => ({ name: r.topic_name, count: Number(r.count) })
   )
 
-  // Recharts data for multi-color bars (Sessions by Type)
   const typeData = (s.sessions_by_type ?? []).map(
     (r: { coaching_purpose?: string; coaching_type?: string; count: number | string }) => ({
       name:  typeLabel(r.coaching_purpose ?? r.coaching_type ?? ''),
@@ -141,25 +155,16 @@ export default function TrainingReportsPage() {
     })
   )
 
-  // Tremor DonutChart data: status distribution
   const statusData = (s.sessions_by_status ?? []).map(
-    (r: { status: string; count: number | string }) => ({ name: r.status, Sessions: Number(r.count) })
-  )
-
-  // Tremor DonutChart needs colors as Tremor color names; map status to closest Tremor color
-  const donutColors: string[] = statusData.map((d: { name: string }) =>
-    ({ DRAFT: 'slate', SCHEDULED: 'indigo', AWAITING_CSR_ACTION: 'amber',
-       COMPLETED: 'emerald', FOLLOW_UP_REQUIRED: 'orange', CLOSED: 'gray',
-       CANCELED: 'red' } as Record<string, string>
-    )[d.name] ?? 'slate'
+    (r: { status: string; count: number | string }) => ({ name: r.status, value: Number(r.count) })
   )
 
 
   return (
-    <QualityListPage>
-      <QualityPageHeader title="Training Reports" />
+    <ListPageShell>
+      <ListPageHeader title="Training Reports" />
 
-      <QualityFilterBar hasFilters={hasAnyFilter} onReset={reset}
+      <ListFilterBar hasFilters={hasAnyFilter} onReset={reset}
         resultCount={{ filtered: agentRows.length, total: allAgentItems.length }}
         truncated={allAgentItems.length >= CLIENT_FETCH_LIMIT}>
         <DateRangeFilter
@@ -169,7 +174,7 @@ export default function TrainingReportsPage() {
         <div className="flex items-center gap-1.5 text-[12px] text-slate-500">
           <span className="font-medium text-slate-700">{s.total_sessions ?? '—'}</span> sessions in range
         </div>
-      </QualityFilterBar>
+      </ListFilterBar>
 
       {summaryError && (
         <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -179,51 +184,56 @@ export default function TrainingReportsPage() {
 
       {/* ── Stat cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
-        <StatCard label="Total Sessions"      value={summaryLoading ? '—' : (s.total_sessions ?? 0)} icon={MessageSquare} />
-        <StatCard label="Completion Rate"     value={summaryLoading ? '—' : `${compRate}%`} icon={TrendingUp}
+        <StatCard label="Total Sessions"      value={s.total_sessions ?? 0} icon={MessageSquare} loading={summaryLoading} />
+        <StatCard label="Completion Rate"     value={`${compRate}%`} icon={TrendingUp} loading={summaryLoading}
           valueClass={compRate >= 70 ? 'text-emerald-600' : compRate >= 40 ? 'text-amber-600' : 'text-red-600'} />
         <StatCard label="Avg Days to Complete"
-          value={summaryLoading ? '—' : s.avg_days_to_completion != null ? `${s.avg_days_to_completion}d` : '—'}
-          icon={Clock} />
-        <StatCard label="Quiz Pass Rate"      value={summaryLoading ? '—' : `${quizRate}%`} icon={CheckCircle} />
-        <StatCard label="Repeat Coaching"     value={summaryLoading ? '—' : `${s.repeat_coaching_rate ?? 0}%`}
-          icon={RefreshCw}
+          value={s.avg_days_to_completion != null ? `${s.avg_days_to_completion}d` : '—'}
+          icon={Clock} loading={summaryLoading} />
+        <StatCard label="Quiz Pass Rate"      value={`${quizRate}%`} icon={CheckCircle} loading={summaryLoading} />
+        <StatCard label="Repeat Coaching"     value={`${s.repeat_coaching_rate ?? 0}%`}
+          icon={RefreshCw} loading={summaryLoading}
           valueClass={(s.repeat_coaching_rate ?? 0) > 20 ? 'text-amber-600' : undefined} />
       </div>
 
       {/* ── Charts 2x2 grid ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
 
-        {/* Sessions by Week — Tremor BarChart */}
         <ChartCard title="Sessions by Week">
           {weekData.length === 0
-            ? <p className="text-center text-slate-400 text-[13px] py-10">No data in range</p>
-            : <BarChart
-                data={weekData} index="Week" categories={['Sessions']}
-                colors={['blue']} showLegend={false} yAxisWidth={32}
-                className="h-[220px]"
-              />
+            ? <ChartEmpty />
+            : <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={weekData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} width={32} />
+                  <Tooltip />
+                  <Bar dataKey="count" name="Sessions" radius={[3, 3, 0, 0]} fill="#3b82f6" />
+                </BarChart>
+              </ResponsiveContainer>
           }
         </ChartCard>
 
-        {/* Top Topics — Tremor BarChart (layout vertical) */}
         <ChartCard title="Top Topics">
           {topicData.length === 0
-            ? <p className="text-center text-slate-400 text-[13px] py-10">No data in range</p>
-            : <BarChart
-                data={topicData} index="Topic" categories={['Sessions']}
-                colors={['blue']} layout="vertical" showLegend={false}
-                yAxisWidth={120} className="h-[220px]"
-              />
+            ? <ChartEmpty />
+            : <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={topicData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="count" name="Sessions" radius={[0, 3, 3, 0]} fill="#3b82f6" />
+                </BarChart>
+              </ResponsiveContainer>
           }
         </ChartCard>
 
-        {/* Sessions by Type — Recharts (per-bar custom colors, not supported in Tremor) */}
         <ChartCard title="Sessions by Type">
           {typeData.length === 0
-            ? <p className="text-center text-slate-400 text-[13px] py-10">No data in range</p>
+            ? <ChartEmpty />
             : <ResponsiveContainer width="100%" height={220}>
-                <RechartsBarChart data={typeData}>
+                <BarChart data={typeData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
@@ -233,27 +243,41 @@ export default function TrainingReportsPage() {
                       <Cell key={idx} fill={TYPE_COLORS[entry.type] ?? '#94a3b8'} />
                     ))}
                   </Bar>
-                </RechartsBarChart>
+                </BarChart>
               </ResponsiveContainer>
           }
         </ChartCard>
 
-        {/* Status Distribution — Tremor DonutChart */}
         <ChartCard title="Status Distribution">
           {statusData.length === 0
-            ? <p className="text-center text-slate-400 text-[13px] py-10">No data in range</p>
-            : <DonutChart
-                data={statusData} index="name" category="Sessions"
-                colors={donutColors} className="h-[220px]"
-                valueFormatter={v => `${v} sessions`}
-              />
+            ? <ChartEmpty />
+            : <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie
+                    data={statusData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={2}
+                  >
+                    {statusData.map((entry: { name: string }, idx: number) => (
+                      <Cell key={idx} fill={STATUS_COLORS[entry.name] ?? '#94a3b8'} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => [`${v} sessions`, '']} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
           }
         </ChartCard>
 
       </div>
 
       {/* ── Agent Drill-Down Table ──────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <ListCard>
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <p className="text-[15px] font-semibold text-slate-800">Agent Breakdown</p>
           {agentOptions.length > 0 && (
@@ -271,7 +295,7 @@ export default function TrainingReportsPage() {
         </div>
 
         {agentLoading ? (
-          <TableLoadingSkeleton rows={8} />
+          <ListLoadingSkeleton rows={8} />
         ) : agentError ? (
           <TableErrorState message="Failed to load coaching data." onRetry={agentRefetch} />
         ) : (
@@ -320,7 +344,7 @@ export default function TrainingReportsPage() {
             </TableBody>
           </Table>
         )}
-      </div>
+      </ListCard>
 
       <ListPagination
         page={page}
@@ -330,6 +354,6 @@ export default function TrainingReportsPage() {
         onPageChange={setPage}
         onPageSizeChange={s => setMany({ size: String(s), page: '1' })}
       />
-    </QualityListPage>
+    </ListPageShell>
   )
 }

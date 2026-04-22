@@ -6,8 +6,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil } from 'lucide-react'
 import trainingService, { type CoachingSession, type CoachingSourceType, type CoachingFormat, type CoachingPurpose } from '@/services/trainingService'
 import listService from '@/services/listService'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
@@ -341,7 +341,7 @@ export default function CoachingSessionDetailPage() {
     catch { toast({ title: 'Download failed', variant: 'destructive' }) }
   }
 
-  if (isLoading) return <div className="p-6"><TableLoadingSkeleton rows={10} /></div>
+  if (isLoading) return <div className="p-6"><ListLoadingSkeleton rows={10} /></div>
   if (isError || !session) return (
     <div className="p-6">
       <TableErrorState message="Failed to load session."
@@ -362,7 +362,7 @@ export default function CoachingSessionDetailPage() {
     <div className="flex flex-col" style={{ height: 'calc(100% + 24px)', marginBottom: '-24px' }}>
 
       <div className="shrink-0 px-6 pt-6 pb-5">
-        <QualityPageHeader
+        <ListPageHeader
           title={`Training Session #${id}`}
           actions={
             <div className="flex gap-2">

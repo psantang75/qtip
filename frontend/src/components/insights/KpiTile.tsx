@@ -1,11 +1,27 @@
+import { useState } from 'react'
+import { FilterX, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   getKpiDef,
+  getKpiScope,
   formatKpiValue,
   getThresholdStatus,
 } from '@/constants/kpiDefs'
 import type { KpiDef } from '@/constants/kpiDefs'
 import { THRESHOLD_BG } from './thresholdColors'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import KpiInfoCard from './KpiInfoCard'
+import { useKpiConfig } from '@/hooks/useKpiConfig'
+
+export interface KpiFilterContext {
+  /** A department filter is currently applied on the page. */
+  dept?: boolean
+  /** A user/agent filter is currently applied on the page. */
+  user?: boolean
+  /** A form filter is currently applied on the page. */
+  form?: boolean
+}
 
 interface KpiTileProps {
   kpiCode: string
@@ -14,6 +30,12 @@ interface KpiTileProps {
   small?: boolean
   onClick?: () => void
   thresholds?: Pick<KpiDef, 'goal' | 'warn' | 'crit' | 'direction'>
+  /**
+   * Active dashboard filters. When a filter is active and this KPI's scope is
+   * 'non_filtered' or 'mixed', a small icon appears next to the KPI name to
+   * disclose that the value does not change with the current filter.
+   */
+  filterContext?: KpiFilterContext
 }
 
 export default function KpiTile({
@@ -23,10 +45,21 @@ export default function KpiTile({
   small = false,
   onClick,
   thresholds: thresholdsProp,
+  filterContext,
 }: KpiTileProps) {
   const def = getKpiDef(kpiCode)
   const name   = def?.name   ?? kpiCode
   const format = def?.format ?? 'NUMBER'
+  const scope  = getKpiScope(kpiCode)
+
+  // Pull `decimal_places` from ie_kpi (cached, shared query). Falls back to
+  // 1 decimal for PERCENT and 0 for NUMBER so existing tiles render unchanged
+  // until an admin tunes the value in the KPI settings page.
+  const { data: liveConfig } = useKpiConfig()
+  const decimals = liveConfig?.[kpiCode]?.decimal_places
+    ?? (format === 'PERCENT' ? 1 : 0)
+
+  const [infoOpen, setInfoOpen] = useState(false)
 
   // Prefer live IE thresholds from the prop; fall back to static kpiDefs
   const thresholds: Pick<KpiDef, 'goal' | 'warn' | 'crit' | 'direction'> =
@@ -43,7 +76,7 @@ export default function KpiTile({
     ? getThresholdStatus(value, thresholds)
     : 'neutral'
 
-  // Delta calculation
+  // Delta calculation (skipped entirely when value is suppressed)
   let deltaEl: React.ReactNode = null
   if (priorValue !== undefined && value !== null && value !== undefined) {
     const delta = value - priorValue
@@ -76,6 +109,15 @@ export default function KpiTile({
 
   const isClickable = typeof onClick === 'function'
 
+  // When a filter is active AND this KPI ignores it (or only partially honors it),
+  // showing the value is misleading — suppress it and surface the Non-Filtered icon instead.
+  const filterActive = !!(filterContext?.dept || filterContext?.user || filterContext?.form)
+  const showNonFilteredIcon = filterActive && (scope === 'non_filtered' || scope === 'mixed')
+  const suppressValue       = showNonFilteredIcon
+
+  // Stop tile click from firing when interacting with the (i) button or icons
+  const stop = (e: React.MouseEvent | React.KeyboardEvent) => e.stopPropagation()
+
   return (
     <div
       role={isClickable ? 'button' : undefined}
@@ -90,36 +132,88 @@ export default function KpiTile({
           : 'border-slate-200',
       )}
     >
-      {/* Header row: name + status dot */}
+      {/* Header row: name (+ optional non-filtered icon) + status dot + (i) info button */}
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <span className={cn(
-          'font-medium text-slate-600 leading-tight',
-          small ? 'text-[11px]' : 'text-xs',
-        )}>
-          {name}
-        </span>
-        <span className={cn(
-          'inline-block rounded-full shrink-0 mt-0.5',
-          small ? 'w-1.5 h-1.5' : 'w-2 h-2',
-          THRESHOLD_BG[status],
-        )} />
+        <div className="flex items-center gap-1 min-w-0">
+          <span className={cn(
+            'font-medium text-slate-600 leading-tight truncate',
+            small ? 'text-[11px]' : 'text-xs',
+          )}>
+            {name}
+          </span>
+
+          {showNonFilteredIcon && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    onClick={stop}
+                    className="inline-flex items-center text-slate-400 shrink-0"
+                    aria-label="KPI does not apply to current filter"
+                  >
+                    <FilterX className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[240px] text-xs leading-snug">
+                  This metric is only calculated across all departments and forms.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className={cn(
+            'inline-block rounded-full',
+            small ? 'w-1.5 h-1.5' : 'w-2 h-2',
+            'mt-0.5',
+            THRESHOLD_BG[suppressValue ? 'neutral' : status],
+          )} />
+
+          <Popover open={infoOpen} onOpenChange={setInfoOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => { stop(e); setInfoOpen(o => !o) }}
+                onKeyDown={stop}
+                aria-label={`More info about ${name}`}
+                className="text-slate-400 hover:text-primary transition-colors"
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="bottom"
+              align="end"
+              className="w-96"
+              onClick={stop}
+            >
+              <KpiInfoCard kpiCode={kpiCode} displayName={name} />
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
-      {/* Main value */}
+      {/* Main value (dashed out when a filter would make this KPI misleading) */}
       <div className={cn(
-        'font-bold text-slate-900 leading-none',
+        'font-bold leading-none',
+        suppressValue ? 'text-slate-300' : 'text-slate-900',
         small ? 'text-xl' : 'text-2xl',
       )}>
-        {formatKpiValue(value, format, format === 'NUMBER' ? 0 : 1)}
+        {suppressValue ? '—' : formatKpiValue(value, format, decimals)}
       </div>
 
-      {/* Goal — always reserve the line height so delta stays aligned */}
+      {/* Goal (or suppression caption) — always reserve the line height so delta stays aligned */}
       {!small && (
-        <div className="mt-1 text-[10px] text-slate-400">{goalDisplay ?? '\u00A0'}</div>
+        <div className="mt-1 text-[10px] text-slate-400">
+          {suppressValue
+            ? <span className="italic">KPI does not apply to current filter.</span>
+            : (goalDisplay ?? '\u00A0')}
+        </div>
       )}
 
       {/* Delta + label */}
-      {deltaEl && (
+      {!suppressValue && deltaEl && (
         <div className="mt-1.5 flex items-center gap-1">
           {deltaEl}
           <span className="text-[10px] text-slate-400">vs prior period</span>

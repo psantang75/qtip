@@ -14,8 +14,9 @@ import {
 import { UserFormSheet } from './users/UserFormSheet'
 import { UserFilterBar, ROLE_NAMES } from './users/UserFilterBar'
 import { TableErrorState } from '@/components/common/TableErrorState'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { useToast } from '@/hooks/use-toast'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 
@@ -160,7 +161,7 @@ export default function AdminUsersPage() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={7} className="p-0"><TableLoadingSkeleton rows={6} /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="p-0"><ListLoadingSkeleton rows={6} /></TableCell></TableRow>
             ) : isError ? (
               <TableRow><TableCell colSpan={7} className="py-4"><TableErrorState message="Failed to load users." onRetry={refetch} /></TableCell></TableRow>
             ) : pagedUsers.length === 0 ? (
@@ -183,10 +184,10 @@ export default function AdminUsersPage() {
                   </Button>
                 </TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
+                  <RowActionButton icon={Pencil}
                     onClick={() => { setEditUser(u); setSheetOpen(true) }}>
-                    <Pencil size={12} className="mr-1" /> Edit
-                  </Button>
+                    Edit
+                  </RowActionButton>
                 </TableCell>
               </TableRow>
             ))}

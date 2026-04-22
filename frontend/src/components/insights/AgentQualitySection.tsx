@@ -32,8 +32,8 @@ export default function AgentQualitySection({
         </InsightsSection>
         <InsightsSection title="Dispute Activity">
           <StatRow label="Total Disputes Filed"           value={String(ds?.total ?? 0)} valueColor={(ds?.total ?? 0) > 0 ? 'text-orange-500' : 'text-emerald-600'} />
-          <StatRow label="Upheld (Original Score Kept)"   value={String(ds?.upheld ?? 0)} />
-          <StatRow label="Adjusted (Score Changed)"       value={String(ds?.adjusted ?? 0)} />
+          <StatRow label="Disputes Upheld"                value={String(ds?.upheld ?? 0)} />
+          <StatRow label="Disputes Adjusted"              value={String(ds?.adjusted ?? 0)} />
           <StatRow label="Open"                           value={String(ds?.open ?? 0)} valueColor={(ds?.open ?? 0) > 0 ? 'text-orange-500' : undefined} />
           <StatRow label="Avg Resolution Time"            value={fmtN(ds?.avgResolutionDays, ' days')} />
         </InsightsSection>

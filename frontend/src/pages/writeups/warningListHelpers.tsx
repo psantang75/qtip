@@ -1,5 +1,5 @@
-import { Search } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { StatusBadge } from '@/components/common/StatusBadge'
+import { IdSearchInput } from '@/components/common/IdSearchInput'
 import {
   WRITE_UP_TYPE_LABELS,
   WRITE_UP_STATUS_LABELS,
@@ -13,22 +13,14 @@ export const ALL_TYPE_LABELS   = ALL_TYPES.map(t => WRITE_UP_TYPE_LABELS[t])
 export const CLOSED_LABEL      = WRITE_UP_STATUS_LABELS['CLOSED']
 
 export function WriteUpTypeBadge({ type }: { type: WriteUpType }) {
-  return <span className="text-[13px] text-slate-600">{WRITE_UP_TYPE_LABELS[type] ?? type}</span>
+  return <StatusBadge status={type} label={WRITE_UP_TYPE_LABELS[type] ?? type} />
 }
 
+/**
+ * Thin wrapper around the shared {@link IdSearchInput} that preserves the
+ * Performance Warnings module's "Warning #" placeholder. New pages should
+ * import IdSearchInput directly.
+ */
 export function WarningIdSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="relative w-[150px]">
-      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-      <Input
-        type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        placeholder="Warning #"
-        value={value}
-        onChange={e => onChange(e.target.value.replace(/\D/g, ''))}
-        className="pl-8 h-9 text-[13px]"
-      />
-    </div>
-  )
+  return <IdSearchInput value={value} onChange={onChange} placeholder="Warning #" />
 }

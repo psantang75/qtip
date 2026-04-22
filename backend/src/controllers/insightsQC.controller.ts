@@ -114,8 +114,12 @@ function qcHandler(
 
 // ── Shared KPIs & Trends ──────────────────────────────────────────────────────
 
-export const getQCKpis = qcHandler('qc_overview', (deptFilter, ranges) =>
-  qcKpiService.getKpiValues(deptFilter, ranges),
+// `forms` filter is applied by qcKpiService to Quality queries only. Coaching,
+// quiz, and discipline KPIs ignore it (those tables have no form association),
+// matching the fact that only the Quality + Agent Profile pages expose a Form
+// filter in the UI.
+export const getQCKpis = qcHandler('qc_overview', (deptFilter, ranges, req) =>
+  qcKpiService.getKpiValues(deptFilter, ranges, parseFormNames(req)),
 )
 
 // Trends are also used by the Agent Profile drill-down (with ?userId=X), so
@@ -127,7 +131,7 @@ export const getQCTrends = qcHandler(['qc_overview', 'qc_agents'], (deptFilter, 
     : ['avg_qa_score', 'coaching_completion_rate', 'quiz_pass_rate']
   const requestedUserId = req.query.userId ? parseInt(req.query.userId as string, 10) : undefined
   const userId = access.dataScope === 'SELF' ? req.user?.user_id : requestedUserId
-  return qcKpiService.getTrends(deptFilter, codes, ranges.current.end, userId)
+  return qcKpiService.getTrends(deptFilter, codes, ranges.current.end, userId, parseFormNames(req))
 })
 
 // ── Agents ────────────────────────────────────────────────────────────────────
@@ -211,8 +215,8 @@ export const getMissedQuestions = qcHandler(['qc_quality', 'qc_agents'], (deptFi
   qcData.getMissedQuestions(deptFilter, parseFormNames(req), ranges),
 )
 
-export const getQualityDeptComparison = qcHandler('qc_quality', (deptFilter, ranges) =>
-  qcData.getQualityDeptComparison(deptFilter, ranges),
+export const getQualityDeptComparison = qcHandler('qc_quality', (deptFilter, ranges, req) =>
+  qcData.getQualityDeptComparison(deptFilter, ranges, parseFormNames(req)),
 )
 
 export const getFormScores = qcHandler(['qc_quality', 'qc_agents'], (deptFilter, ranges) =>

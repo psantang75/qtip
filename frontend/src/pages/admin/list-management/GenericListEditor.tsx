@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -323,7 +323,7 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
     availableCategories: categories,
   }
 
-  if (isLoading) return <div className="bg-white rounded-xl border border-slate-200 overflow-hidden"><TableLoadingSkeleton rows={4} /></div>
+  if (isLoading) return <div className="bg-white rounded-xl border border-slate-200 overflow-hidden"><ListLoadingSkeleton rows={4} /></div>
   if (isError)   return <div className="bg-white rounded-xl border border-slate-200 p-4"><TableErrorState message="Failed to load list items." onRetry={refetch} /></div>
 
   return (

@@ -14,7 +14,7 @@ export default function AgentCoachingSection({ coachingSessions, topicCounts }: 
     <>
       <div className="text-sm font-bold text-slate-800 pb-1.5 border-b-2 border-primary">Coaching</div>
 
-      <InsightsSection title="Coaching Sessions">
+      <InsightsSection title="Coaching Sessions" infoKpiCodes={['coaching_sessions_completed']}>
         <TooltipProvider delayDuration={200}>
         {(!coachingSessions.length)
           ? <p className="text-sm text-slate-400 py-3 text-center">No coaching sessions this period.</p>
@@ -62,7 +62,7 @@ export default function AgentCoachingSection({ coachingSessions, topicCounts }: 
         </TooltipProvider>
       </InsightsSection>
 
-      <InsightsSection title="Topic Frequency">
+      <InsightsSection title="Topic Frequency" infoKpiCodes={['coaching_top_topics']}>
         {topicCounts.size === 0
           ? <p className="text-sm text-slate-400 py-3 text-center">No coaching topics this period.</p>
           : (

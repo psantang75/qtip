@@ -4,9 +4,9 @@ import { useToast } from '@/hooks/use-toast'
 import { Copy, Pencil, FileText, Loader2 } from 'lucide-react'
 import { useWriteUpRole } from '@/hooks/useWriteUpRole'
 import writeupService, { type WriteUpPayload } from '@/services/writeupService'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { ContentSections } from './writeup-detail/ContentSections'
@@ -43,11 +43,11 @@ export default function WriteUpDetailPage() {
     onError: () => toast({ title: 'Duplicate failed', variant: 'destructive' }),
   })
 
-  if (isLoading) return <QualityListPage><TableLoadingSkeleton rows={10} /></QualityListPage>
+  if (isLoading) return <ListPageShell><ListLoadingSkeleton rows={10} /></ListPageShell>
   if (isError || !writeup) return (
-    <QualityListPage>
+    <ListPageShell>
       <TableErrorState message="Failed to load performance warning." onRetry={refetch} />
-    </QualityListPage>
+    </ListPageShell>
   )
 
   const isEditable = !LOCKED_STATUSES.includes(writeup.status as typeof LOCKED_STATUSES[number])
@@ -55,7 +55,7 @@ export default function WriteUpDetailPage() {
   return (
     <div className="flex flex-col" style={{ height: 'calc(100% + 24px)', marginBottom: '-24px' }}>
       <div className="shrink-0 px-6 pt-6 pb-5">
-        <QualityPageHeader
+        <ListPageHeader
           title={`Performance Warning #${writeup.id}`}
           actions={
             <div className="flex items-center gap-2">

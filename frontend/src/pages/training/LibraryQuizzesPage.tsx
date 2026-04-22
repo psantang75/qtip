@@ -3,23 +3,25 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Eye } from 'lucide-react'
 import trainingService, { type LibraryQuiz } from '@/services/trainingService'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
+import { ListCard } from '@/components/common/ListCard'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { StatusActiveFilter } from '@/components/common/StatusActiveFilter'
 import { useToast } from '@/hooks/use-toast'
 import { useListSort } from '@/hooks/useListSort'
 import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
+import { TopicListTooltip } from '@/components/training/TopicListTooltip'
 
 type StatusFilter = 'all' | 'active' | 'inactive'
 
@@ -92,18 +94,18 @@ export default function LibraryQuizzesPage() {
   const openPreview = (id: number) => previewMut.mutate(id)
 
   return (
-    <QualityListPage>
-      <QualityPageHeader
+    <ListPageShell>
+      <ListPageHeader
         title="Quizzes"
         actions={
-          <Button className="bg-primary hover:bg-primary/90 text-white"
+          <Button variant="primary"
             onClick={() => navigate('/app/training/library/quizzes/new')}>
             <Plus className="h-4 w-4 mr-1" /> New Quiz
           </Button>
         }
       />
 
-      <QualityFilterBar
+      <ListFilterBar
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search quizzes..."
@@ -118,20 +120,16 @@ export default function LibraryQuizzesPage() {
           placeholder="All Topics"
           width="w-[280px]"
         />
-        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v as StatusFilter); setPage(1) }}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="All Statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-      </QualityFilterBar>
+        <StatusActiveFilter
+          value={statusFilter}
+          onChange={v => { setStatusFilter(v); setPage(1) }}
+          allLabel="All Statuses"
+          widthClass="w-[160px]"
+        />
+      </ListFilterBar>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        {isLoading ? <TableLoadingSkeleton rows={6} /> : isError ? (
+      <ListCard>
+        {isLoading ? <ListLoadingSkeleton rows={6} /> : isError ? (
           <TableErrorState message="Failed to load quizzes." onRetry={refetch} />
         ) : (
           <Table>
@@ -155,30 +153,7 @@ export default function LibraryQuizzesPage() {
 
                   {/* Topics with tooltip — same as resources */}
                   <TableCell className="max-w-[180px]">
-                    {q.topic_names.length > 0 ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="text-[13px] text-slate-500 truncate block max-w-[180px] cursor-default">
-                            {[...q.topic_names].sort().join(', ')}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg"
-                          sideOffset={6}
-                        >
-                          <ul className="space-y-1">
-                            {[...q.topic_names].sort().map(name => (
-                              <li key={name} className="flex items-center gap-2 text-[13px] text-slate-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-                                {name}
-                              </li>
-                            ))}
-                          </ul>
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span className="text-[13px] text-slate-300">&mdash;</span>
-                    )}
+                    <TopicListTooltip topics={q.topic_names} />
                   </TableCell>
 
                   <TableCell className="text-center text-[13px] text-slate-600">{q.question_count}</TableCell>
@@ -188,14 +163,13 @@ export default function LibraryQuizzesPage() {
 
                   <TableCell>
                     <div className="flex items-center gap-1 justify-end">
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
-                        onClick={() => openPreview(q.id)}>
-                        <Eye className="h-3.5 w-3.5" /> Preview
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
+                      <RowActionButton icon={Eye} onClick={() => openPreview(q.id)}>
+                        Preview
+                      </RowActionButton>
+                      <RowActionButton icon={Pencil}
                         onClick={() => navigate(`/app/training/library/quizzes/${q.id}/edit`)}>
-                        <Pencil className="h-3.5 w-3.5" /> Edit
-                      </Button>
+                        Edit
+                      </RowActionButton>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -203,7 +177,7 @@ export default function LibraryQuizzesPage() {
             </TableBody>
           </Table>
         )}
-      </div>
+      </ListCard>
 
       <ListPagination
         page={page}
@@ -219,6 +193,6 @@ export default function LibraryQuizzesPage() {
         open={previewOpen}
         onClose={() => { setPreviewOpen(false); setPreviewQuiz(null) }}
       />
-    </QualityListPage>
+    </ListPageShell>
   )
 }

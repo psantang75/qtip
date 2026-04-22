@@ -182,7 +182,7 @@ export function MetadataStep({ form, onChange }: { form: Form; onChange: (f: For
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="space-y-1.5">
           <Label>Form Name <span className="text-red-500">*</span></Label>
           <Input value={form.form_name} onChange={e => onChange({ ...form, form_name: e.target.value })}
@@ -205,6 +205,27 @@ export function MetadataStep({ form, onChange }: { form: Form; onChange: (f: For
             <Input value={form.version || 1} disabled className="h-9 bg-slate-50 text-slate-500 pr-28" />
             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-slate-200 px-2 py-0.5 rounded text-slate-600">Auto-incremented</span>
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>
+            Critical Fail Cap %
+            <span className="ml-1 text-xs font-normal text-slate-500">(default 79)</span>
+          </Label>
+          <Input
+            type="number"
+            min={0}
+            max={100}
+            step={0.01}
+            value={form.critical_cap_percent ?? 79}
+            onChange={e => {
+              const raw = e.target.value
+              const num = raw === '' ? 0 : Number(raw)
+              const clamped = Number.isFinite(num) ? Math.min(100, Math.max(0, num)) : 79
+              onChange({ ...form, critical_cap_percent: clamped })
+            }}
+            className="h-9"
+            title="If any question flagged 'Critical fail' is answered No, the final score is capped at this value."
+          />
         </div>
       </div>
 

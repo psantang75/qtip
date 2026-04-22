@@ -90,14 +90,19 @@ export interface Submission {
   has_dispute?: boolean
   dispute_status?: string
   interaction_date?: string | null
+  critical_fail_count?: number
+  score_capped?: boolean
+  critical_cap_percent?: number
 }
 
 export interface AnswerRow {
+  question_id?: number
   question_text: string
   answer: string
   score?: number
   category_name?: string
   weight?: number
+  is_critical?: boolean
 }
 
 export interface DisputeRecord {

@@ -12,12 +12,12 @@ export {
   findQuestionById
 } from './formConditions';
 
-// Form scoring logic
+// Form scoring logic — mirrors backend/src/utils/scoringUtil.ts for live preview.
 export {
   calculateFormScore,
   getQuestionScore,
   getMaxPossibleScore
-} from './scoringAdapter';
+} from './scoringEngine';
 
 // Form building and structure
 export {

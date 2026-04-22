@@ -1,6 +1,6 @@
 import React from 'react';
 import { processConditionalLogic } from './formConditions';
-import { getMaxPossibleScore, getQuestionScore } from './scoringAdapter';
+import { getMaxPossibleScore, getQuestionScore } from './scoringEngine';
 
 interface QuestionWithScore {
   id: number;
@@ -9,6 +9,8 @@ interface QuestionWithScore {
   pointsEarned: number;
   pointsPossible: number;
   questionType: string;
+  isCritical?: boolean;
+  criticalMissed?: boolean;
 }
 
 interface CategoryScore {
@@ -127,6 +129,10 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         }
       }
 
+      const rawAnswer = String(answer?.answer ?? '').trim().toLowerCase();
+      const isCritical = question.is_critical === true || question.is_critical === 1;
+      const criticalMissed = isCritical && (rawAnswer === 'no' || rawAnswer === 'false');
+
       subCategories[subCategoryKey].push({
         id: question.id,
         text: question.question_text,
@@ -134,6 +140,8 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         pointsEarned,
         pointsPossible,
         questionType: qType,
+        isCritical,
+        criticalMissed,
       });
     });
 
@@ -270,8 +278,22 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                           const isText = q.questionType === 'text';
                           const hasScore = !(q.pointsEarned === 0 && q.pointsPossible === 0);
                           return (
-                            <tr key={q.id} className="hover:bg-slate-50/60 transition-colors">
-                              <td className="px-4 py-2.5 text-slate-700 leading-snug">{q.text}</td>
+                            <tr key={q.id} className={`hover:bg-slate-50/60 transition-colors ${q.criticalMissed ? 'bg-red-50/40' : ''}`}>
+                              <td className="px-4 py-2.5 text-slate-700 leading-snug">
+                                <span className="inline-flex items-start gap-2 flex-wrap">
+                                  <span>{q.text}</span>
+                                  {q.criticalMissed && (
+                                    <span className="inline-flex items-center rounded-full bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                                      Critical fail
+                                    </span>
+                                  )}
+                                  {q.isCritical && !q.criticalMissed && (
+                                    <span className="inline-flex items-center rounded-full bg-white text-red-700 border border-red-200 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+                                      Critical
+                                    </span>
+                                  )}
+                                </span>
+                              </td>
                               {isText ? (
                                 <td colSpan={3} className="px-3 py-2.5 text-slate-600">
                                   {q.answer === 'No answer' ? <span className="text-slate-300">—</span> : q.answer}

@@ -12,6 +12,7 @@ export interface QuestionRenderData {
   isVisible: boolean;
   isNaAllowed?: boolean;
   isRequired?: boolean;
+  isCritical?: boolean;
   weight?: number;
   options?: Array<{ value: string; label: string }>;
   min?: number;

@@ -4,9 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/hooks/use-toast'
 import writeupService, { type WriteUpPayload } from '@/services/writeupService'
 import listService from '@/services/listService'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { emptyForm, type WriteUpFormState } from './writeup-form/types'
@@ -224,20 +224,20 @@ export default function WriteUpFormPage() {
   const LOCKED_STATUSES = ['AWAITING_SIGNATURE', 'SIGNED', 'FOLLOW_UP_PENDING', 'CLOSED']
 
   if (isEdit && isLoadingEdit) {
-    return <QualityListPage><TableLoadingSkeleton rows={8} /></QualityListPage>
+    return <ListPageShell><ListLoadingSkeleton rows={8} /></ListPageShell>
   }
 
   if (isEdit && loadError) {
     return (
-      <QualityListPage>
+      <ListPageShell>
         <TableErrorState message="Failed to load performance warning." onRetry={loadRefetch} />
-      </QualityListPage>
+      </ListPageShell>
     )
   }
 
   if (isEdit && existing && LOCKED_STATUSES.includes(existing.status)) {
     return (
-      <QualityListPage>
+      <ListPageShell>
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 max-w-lg mt-4">
           <p className="text-[14px] font-semibold text-amber-900 mb-1">Document locked for editing</p>
           <p className="text-[13px] text-amber-700 mb-4">
@@ -247,13 +247,13 @@ export default function WriteUpFormPage() {
             View Performance Warning
           </Button>
         </div>
-      </QualityListPage>
+      </ListPageShell>
     )
   }
 
   return (
-    <QualityListPage>
-      <QualityPageHeader
+    <ListPageShell>
+      <ListPageHeader
         title={isEdit ? 'Edit Performance Warning' : 'New Performance Warning'}
         actions={<Button variant="outline" onClick={() => navigate(-1)}>Cancel</Button>}
       />
@@ -303,6 +303,6 @@ export default function WriteUpFormPage() {
           )}
         </div>
       </div>
-    </QualityListPage>
+    </ListPageShell>
   )
 }

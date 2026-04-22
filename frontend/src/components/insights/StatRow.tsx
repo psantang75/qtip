@@ -1,4 +1,7 @@
+import { Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import KpiInfoCard from './KpiInfoCard'
 
 type Direction = 'UP_IS_GOOD' | 'DOWN_IS_GOOD' | 'NEUTRAL'
 
@@ -6,6 +9,8 @@ interface StatRowProps {
   label: string
   value: string
   valueColor?: string
+  /** When set, renders an (i) icon that opens KpiInfoCard for this KPI. */
+  kpiCode?: string
   trend?: {
     current: number | null
     prior: number | null
@@ -40,10 +45,33 @@ function resolveValueColor(
   return undefined
 }
 
-export default function StatRow({ label, value, valueColor, trend, thresholds }: StatRowProps) {
+export default function StatRow({ label, value, valueColor, kpiCode, trend, thresholds }: StatRowProps) {
   const autoColor = thresholds ? resolveValueColor(trend?.current ?? null, thresholds) : undefined
   const finalColor = valueColor ?? autoColor
   const hasCols = !!(trend || thresholds)
+
+  const labelNode = (
+    <span className="text-xs text-slate-500 inline-flex items-center gap-1">
+      {label}
+      {kpiCode && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={`More info about ${label}`}
+              className="text-slate-400 hover:text-primary transition-colors focus:outline-none"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Info className="h-3.5 w-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" side="top" className="w-96">
+            <KpiInfoCard kpiCode={kpiCode} displayName={label} />
+          </PopoverContent>
+        </Popover>
+      )}
+    </span>
+  )
 
   let trendText = ''
   let trendColor = 'text-slate-400'
@@ -69,7 +97,7 @@ export default function StatRow({ label, value, valueColor, trend, thresholds }:
   if (!hasCols) {
     return (
       <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
-        <span className="text-xs text-slate-500">{label}</span>
+        {labelNode}
         <span className={cn('text-xs font-semibold text-slate-800', finalColor)}>{value}</span>
       </div>
     )
@@ -77,7 +105,7 @@ export default function StatRow({ label, value, valueColor, trend, thresholds }:
 
   return (
     <div className="grid grid-cols-[1fr_5rem_5.5rem_6rem] items-center py-2.5 border-b border-slate-100 last:border-0 gap-x-2">
-      <span className="text-xs text-slate-500">{label}</span>
+      {labelNode}
       <span className={cn('text-xs font-semibold text-right', finalColor ?? 'text-slate-800')}>{value}</span>
       <span className={cn('text-[10px] font-medium text-right', trendColor)}>{trendText || '—'}</span>
       <span className="text-[10px] text-slate-400 text-right">{goalText}</span>

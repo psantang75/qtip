@@ -4,19 +4,21 @@ import { Plus, Pencil, FileText, Image, FileSpreadsheet, Film, Link, File } from
 import trainingService, { type TrainingResource, type ResourceType } from '@/services/trainingService'
 import { ResourceLink } from '@/components/training/ResourceLink'
 import listService, { type ListItem } from '@/services/listService'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
+import { ListCard } from '@/components/common/ListCard'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { StatusActiveFilter } from '@/components/common/StatusActiveFilter'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -25,6 +27,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast'
 import { useListSort } from '@/hooks/useListSort'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
+import { TopicListTooltip } from '@/components/training/TopicListTooltip'
 import { cn } from '@/lib/utils'
 
 // ── Resource type config ──────────────────────────────────────────────────────
@@ -177,16 +180,16 @@ export default function LibraryResourcesPage() {
   const sel = 'w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-primary/40'
 
   return (
-    <QualityListPage>
-      <QualityPageHeader title="Resources"
+    <ListPageShell>
+      <ListPageHeader title="Resources"
         actions={
-          <Button className="bg-primary hover:bg-primary/90 text-white" onClick={openCreate}>
+          <Button variant="primary" onClick={openCreate}>
             <Plus className="h-4 w-4 mr-1" /> Add Resource
           </Button>
         }
       />
 
-      <QualityFilterBar
+      <ListFilterBar
         search={search} onSearchChange={setSearch} searchPlaceholder="Search resources..."
         hasFilters={hasFilters}
         onReset={() => { setSearch(''); setStatusFilter('active'); setTopicFilter([]); setPage(1) }}
@@ -199,20 +202,16 @@ export default function LibraryResourcesPage() {
           placeholder="All Topics"
           width="w-[280px]"
         />
-        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v as StatusFilter); setPage(1) }}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="All Statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-      </QualityFilterBar>
+        <StatusActiveFilter
+          value={statusFilter}
+          onChange={v => { setStatusFilter(v); setPage(1) }}
+          allLabel="All Statuses"
+          widthClass="w-[160px]"
+        />
+      </ListFilterBar>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        {isLoading ? <TableLoadingSkeleton rows={6} />
+      <ListCard>
+        {isLoading ? <ListLoadingSkeleton rows={6} />
         : isError ? <TableErrorState message="Failed to load resources." onRetry={refetch} />
         : (
           <Table>
@@ -253,43 +252,20 @@ export default function LibraryResourcesPage() {
                   </TableCell>
                   <TableCell><ResourceTypeBadge type={r.resource_type} /></TableCell>
                   <TableCell className="max-w-[160px]">
-                    {r.topic_names.length > 0 ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="text-[13px] text-slate-500 truncate block max-w-[160px] cursor-default">
-                            {[...r.topic_names].sort().join(', ')}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent
-                          className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg"
-                          sideOffset={6}
-                        >
-                          <ul className="space-y-1">
-                            {[...r.topic_names].sort().map(name => (
-                              <li key={name} className="flex items-center gap-2 text-[13px] text-slate-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-                                {name}
-                              </li>
-                            ))}
-                          </ul>
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span className="text-[13px] text-slate-300">&mdash;</span>
-                    )}
+                    <TopicListTooltip topics={r.topic_names} maxWidthClass="max-w-[160px]" />
                   </TableCell>
                   <TableCell className="text-[13px] text-slate-600">{r.is_active ? 'Active' : 'Inactive'}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => openEdit(r)}>
-                      <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
-                    </Button>
+                    <RowActionButton icon={Pencil} onClick={() => openEdit(r)}>
+                      Edit
+                    </RowActionButton>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-      </div>
+      </ListCard>
 
       <ListPagination
         page={page}
@@ -380,12 +356,12 @@ export default function LibraryResourcesPage() {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
-            <Button className="bg-primary hover:bg-primary/90 text-white" onClick={handleSave} disabled={saveMut.isPending}>
+            <Button variant="primary" onClick={handleSave} disabled={saveMut.isPending}>
               {saveMut.isPending ? 'Saving...' : 'Save Resource'}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
-    </QualityListPage>
+    </ListPageShell>
   )
 }

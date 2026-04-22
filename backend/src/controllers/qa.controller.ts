@@ -55,7 +55,7 @@ export const getCompletedSubmissions = async (req: Request, res: Response): Prom
     
     const whereClause = Prisma.sql`WHERE ${Prisma.join(sqlConditions, ' AND ')}`;
     
-    const rows = await prisma.$queryRaw<{id: number, form_id: number, form_name: string, auditor_name: string, csr_name: string, submitted_at: Date, total_score: number, status: string, interaction_date: string | null}[]>(
+    const rows = await prisma.$queryRaw<{id: number, form_id: number, form_name: string, auditor_name: string, csr_name: string, submitted_at: Date, total_score: number, status: string, interaction_date: string | null, critical_fail_count: number, score_capped: number}[]>(
       Prisma.sql`
         SELECT 
           s.id,
@@ -66,6 +66,8 @@ export const getCompletedSubmissions = async (req: Request, res: Response): Prom
           s.submitted_at,
           s.total_score,
           s.status,
+          s.critical_fail_count,
+          s.score_capped,
           (
             SELECT sm.value
             FROM submission_metadata sm
@@ -168,11 +170,14 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
             s.submitted_at,
             s.total_score,
             s.status,
+            s.critical_fail_count,
+            s.score_capped,
             f.form_name,
             f.version,
             f.user_version,
             f.user_version_date,
             f.interaction_type,
+            f.critical_cap_percent,
             reviewer.username   AS reviewer_name,
             (
               SELECT u.username
@@ -247,6 +252,7 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
           SELECT 
             sa.question_id,
             fq.question_text,
+            fq.is_critical,
             sa.answer,
             sa.notes
           FROM 
@@ -298,13 +304,21 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
         submitted_at: submission.submitted_at,
         reviewer_name: submission.reviewer_name ?? null,
         csr_name: submission.csr_name ?? null,
+        critical_fail_count: Number(submission.critical_fail_count ?? 0),
+        score_capped: Boolean(submission.score_capped),
+        critical_cap_percent: submission.critical_cap_percent !== null && submission.critical_cap_percent !== undefined
+          ? Number(submission.critical_cap_percent)
+          : 79,
         form: {
           id: submission.form_id,
           form_name: submission.form_name,
           version: submission.version,
           user_version: submission.user_version,
           user_version_date: submission.user_version_date,
-          interaction_type: submission.interaction_type
+          interaction_type: submission.interaction_type,
+          critical_cap_percent: submission.critical_cap_percent !== null && submission.critical_cap_percent !== undefined
+            ? Number(submission.critical_cap_percent)
+            : 79,
         },
         metadata: metadataRows,
         calls: callsRows,
@@ -361,6 +375,7 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
                 fq.yes_value,
                 fq.no_value,
                 fq.na_value,
+                fq.is_critical,
                 fq.sort_order
               FROM 
                 form_questions fq

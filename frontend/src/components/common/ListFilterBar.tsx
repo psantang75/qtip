@@ -14,7 +14,7 @@ export interface SelectFilterConfig {
   options: { value: string; label: string }[]
 }
 
-interface QualityFilterBarProps {
+interface ListFilterBarProps {
   search?: string
   onSearchChange?: (v: string) => void
   searchPlaceholder?: string
@@ -33,7 +33,7 @@ interface QualityFilterBarProps {
   children?: React.ReactNode
 }
 
-export function QualityFilterBar({
+export function ListFilterBar({
   search,
   onSearchChange,
   searchPlaceholder = 'Search…',
@@ -43,7 +43,7 @@ export function QualityFilterBar({
   resultCount,
   truncated,
   children,
-}: QualityFilterBarProps) {
+}: ListFilterBarProps) {
   const showCount = resultCount != null
   const countLabel = showCount
     ? resultCount.filtered != null

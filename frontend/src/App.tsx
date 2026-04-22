@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ROLE_IDS } from './hooks/useQualityRole'
 import { Toaster } from './components/ui/toaster'
 import { TooltipProvider } from './components/ui/tooltip'
+import { PageSpinner } from './components/common/PageSpinner'
 import { getInsightsAccess, getInsightsNavigation } from './services/insightsService'
 
 // Shell components — NOT lazy (load immediately)
@@ -106,17 +107,7 @@ function RoleRedirect() {
 // ── Page suspense wrapper ─────────────────────────────────────────────────────
 
 function PageLoader({ children }: { children: React.ReactNode }) {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-40">
-          <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        </div>
-      }
-    >
-      {children}
-    </Suspense>
-  )
+  return <Suspense fallback={<PageSpinner />}>{children}</Suspense>
 }
 
 // ── Cache reset on user switch ────────────────────────────────────────────────

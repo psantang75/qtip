@@ -1,4 +1,4 @@
-﻿/**
+/**
  * TypeScript interfaces for Form-related tables
  * Aligned with database schema and frontend types for consistency
  */
@@ -39,6 +39,7 @@ export interface Form {
   parent_form_id?: number;
   user_version?: number;
   user_version_date?: string;
+  critical_cap_percent?: number;
 }
 
 /**
@@ -110,7 +111,8 @@ export interface FormQuestion {
   // UI-only fields
   is_required?: boolean;
   visible_to_csr?: boolean; // Whether this question is visible to CSR users (default: true)
-  
+  is_critical?: boolean; // When true, a NO answer triggers the form's critical-fail cap
+
   // Related data (not in main table but joined)
   radio_options?: RadioOption[];
   conditions?: FormQuestionCondition[];
@@ -142,6 +144,7 @@ export interface CreateFormDTO {
   is_active?: boolean;
   user_version?: number;
   user_version_date?: string;
+  critical_cap_percent?: number;
   categories: CreateFormCategoryDTO[];
   metadata_fields?: CreateFormMetadataFieldDTO[];
 }
@@ -191,7 +194,8 @@ export interface CreateFormQuestionDTO {
   // UI-only fields
   is_required?: boolean;
   visible_to_csr?: boolean; // Whether this question is visible to CSR users (default: true)
-  
+  is_critical?: boolean; // When true, a NO answer triggers the form's critical-fail cap
+
   conditions?: CreateQuestionConditionDTO[];
   radio_options?: CreateRadioOptionDTO[];
 }

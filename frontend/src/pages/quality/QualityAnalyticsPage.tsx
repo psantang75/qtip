@@ -5,7 +5,7 @@ import { useQualityRole } from '@/hooks/useQualityRole'
 import qaService from '@/services/qaService'
 import { useTeamAgents, useAnalyticsFilters, useFormsForFilter } from '@/hooks/useQualityQueries'
 import { Button } from '@/components/ui/button'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -246,7 +246,7 @@ export default function QualityAnalyticsPage() {
 
       {reportLoading && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <TableLoadingSkeleton rows={4} />
+          <ListLoadingSkeleton rows={4} />
         </div>
       )}
 

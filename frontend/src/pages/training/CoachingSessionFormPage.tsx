@@ -7,8 +7,8 @@ import { ROLE_IDS } from '@/hooks/useQualityRole'
 import { useToast } from '@/hooks/use-toast'
 import trainingService from '@/services/trainingService'
 import listService from '@/services/listService'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import {
@@ -251,15 +251,15 @@ export default function CoachingSessionFormPage() {
 
   if (isEdit && existingError) {
     return (
-      <QualityListPage>
+      <ListPageShell>
         <TableErrorState message="Failed to load training session." onRetry={existingRefetch} />
-      </QualityListPage>
+      </ListPageShell>
     )
   }
 
   return (
-    <QualityListPage>
-      <QualityPageHeader
+    <ListPageShell>
+      <ListPageHeader
         title={isEdit ? 'Edit Training Session' : 'New Training Session'}
         actions={<Button variant="outline" onClick={() => navigate(-1)}>Cancel</Button>}
       />
@@ -334,6 +334,6 @@ export default function CoachingSessionFormPage() {
         </div>
       </div>
 
-    </QualityListPage>
+    </ListPageShell>
   )
 }

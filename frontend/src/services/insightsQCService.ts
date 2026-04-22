@@ -53,7 +53,7 @@ export interface CoachingTopicAgent   { userId: number; name: string; dept: stri
 export interface RepeatOffenderTopic  { topic: string; count: number }
 export interface RepeatOffender       { userId: number; name: string; dept: string; sessions: number; uniqueTopics: number; repeatTopics: number; topics: RepeatOffenderTopic[] }
 export interface AgentFailedQuizzes   { userId: number; name: string; dept: string; failed: number; quizzes: string[]; avgScore: number | null }
-export interface QuizAgentResult       { userId: number; name: string; dept: string; score: number; passed: boolean; attempts: number }
+export interface QuizAgentResult       { userId: number; name: string; dept: string; score: number; passed: boolean; failed: number; attempts: number }
 export interface QuizBreakdown        { quiz: string; attempts: number; passed: number; avgScore: number | null; passRate: number; agents?: QuizAgentResult[] }
 export interface SessionStatusAgent    { userId: number; name: string; dept: string; purpose: string; format: string; sessions: number; topics: string[] }
 export interface SessionStatusGroup   { status: string; count: number; topics: string[]; agents: SessionStatusAgent[] }

@@ -110,6 +110,12 @@ export interface KpiConfigEntry {
   goal:           number | null
   warn:           number | null
   crit:           number | null
+  /** Plain-language description, sourced from ie_kpi.description. */
+  description:    string | null
+  /** Formula (typically SQL-ish), sourced from ie_kpi.formula. */
+  formula:        string | null
+  /** Source table(s) hint, sourced from ie_kpi.source_table. */
+  source:         string | null
 }
 
 export type KpiConfig = Record<string, KpiConfigEntry>

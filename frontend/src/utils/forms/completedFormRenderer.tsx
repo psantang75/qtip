@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/authService';
 import { prepareFormForRender } from './formRenderPrep';
 import { FormRenderer } from './formRendererComponents';
-import { calculateFormScore } from './scoringAdapter';
+import { calculateFormScore } from './scoringEngine';
 import { processConditionalLogic } from './formConditions';
 import type { Form as FormType, Answer as AnswerType } from '../../types/form.types';
 

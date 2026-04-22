@@ -4,7 +4,7 @@ import userService, { type User } from '@/services/userService'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { TableErrorState } from '@/components/common/TableErrorState'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 
 const ROLE_META: Record<number, { name: string; description: string; access: string[] }> = {
   1: {
@@ -59,7 +59,7 @@ export default function AdminRolesPage() {
         <p className="text-sm text-muted-foreground mt-0.5">System-defined roles and their access levels</p>
       </div>
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <TableLoadingSkeleton rows={5} />
+        <ListLoadingSkeleton rows={5} />
       </div>
     </div>
   )

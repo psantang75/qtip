@@ -1,9 +1,9 @@
-interface TableLoadingSkeletonProps {
+interface ListLoadingSkeletonProps {
   rows?: number
 }
 
-/** Pulsing skeleton rows shown while a table's data is loading */
-export function TableLoadingSkeleton({ rows = 8 }: TableLoadingSkeletonProps) {
+/** Pulsing skeleton rows shown while a list/table's data is loading */
+export function ListLoadingSkeleton({ rows = 8 }: ListLoadingSkeletonProps) {
   return (
     <div className="p-4 space-y-2">
       {[...Array(rows)].map((_, i) => (

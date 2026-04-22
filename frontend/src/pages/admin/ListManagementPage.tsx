@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronRight, ChevronDown, List, Settings2, ArrowLeft } from 'lucide-react'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { GenericListEditor } from './list-management/GenericListEditor'
@@ -69,8 +69,8 @@ export default function ListManagementPage() {
   const currentSection = SECTIONS.find(s => s.id === openSection)
 
   return (
-    <QualityListPage>
-      <QualityPageHeader
+    <ListPageShell>
+      <ListPageHeader
         title="List Management"
         subtitle="Manage dropdown values, labels and ordering used throughout the system."
       />
@@ -163,6 +163,6 @@ export default function ListManagementPage() {
           )}
         </div>
       </div>
-    </QualityListPage>
+    </ListPageShell>
   )
 }

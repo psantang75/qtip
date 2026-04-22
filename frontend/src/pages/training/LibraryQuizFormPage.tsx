@@ -5,8 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import trainingService, { type QuizQuestion } from '@/services/trainingService'
 import listService from '@/services/listService'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { QuizBuilder, validateQuizBuilder, type QuizBuilderData, type QuizBuilderErrors } from '@/components/training/QuizBuilder'
 import { Button } from '@/components/ui/button'
@@ -100,15 +100,15 @@ export default function LibraryQuizFormPage() {
 
   if (isEdit && detailError) {
     return (
-      <QualityListPage>
+      <ListPageShell>
         <TableErrorState message="Failed to load quiz." onRetry={detailRefetch} />
-      </QualityListPage>
+      </ListPageShell>
     )
   }
 
   return (
-    <QualityListPage>
-      <QualityPageHeader
+    <ListPageShell>
+      <ListPageHeader
         title={isEdit ? 'Edit Quiz' : 'New Quiz'}
         actions={
           <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
@@ -155,6 +155,6 @@ export default function LibraryQuizFormPage() {
           </div>
         </div>
       </div>
-    </QualityListPage>
+    </ListPageShell>
   )
 }

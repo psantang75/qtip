@@ -13,6 +13,7 @@ import { useQualityRole } from '@/hooks/useQualityRole'
 import { getFormById, createForm, updateForm } from '@/services/formService'
 import type { Form } from '@/types/form.types'
 import { Button } from '@/components/ui/button'
+import { PageSpinner } from '@/components/common/PageSpinner'
 import { useToast } from '@/hooks/use-toast'
 
 const FORMS_BASE = '/app/quality/forms'
@@ -149,11 +150,7 @@ export default function FormsPage() {
   }
 
   if (isLoading && formId) {
-    return (
-      <div className="p-6">
-        <div className="text-sm text-slate-500">Loading form...</div>
-      </div>
-    )
+    return <PageSpinner />
   }
 
   if (step === 'preview') {

@@ -5,7 +5,7 @@
 
 import type { Form, Answer, FormSubmission, FormQuestion, FormCategory, FormQuestionCondition, RadioOption } from '../../types/form.types';
 import { processConditionalLogic } from './formConditions';
-import { calculateFormScore } from './scoringAdapter';
+import { calculateFormScore } from './scoringEngine';
 import type { QuestionRenderData, CategoryRenderData, FormRenderData } from './formRenderTypes';
 
 // ── generateFormPreview ───────────────────────────────────────────────────────
@@ -103,6 +103,7 @@ export const prepareQuestionForRender = (
     isVisible,
     isNaAllowed:   !!question.is_na_allowed,
     isRequired:    !!question.is_required,
+    isCritical:    !!question.is_critical,
     weight:        question.weight,
     currentValue:  currentAnswer?.answer,
     notes:         currentAnswer?.notes,

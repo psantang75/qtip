@@ -1,26 +1,29 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Eye, Search } from 'lucide-react'
+import { AlertTriangle, Eye } from 'lucide-react'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import qaService, { type DisputeRecord, type DisputeHistoryItem } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
+import { ListCard } from '@/components/common/ListCard'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
+import { StatusBadge } from '@/components/common/StatusBadge'
+import { IdSearchInput } from '@/components/common/IdSearchInput'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { DateRangeFilter, type DateRange } from '@/components/common/DateRangeFilter'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
-import { DISPUTE_STATUSES, STATUS_LABELS, CLIENT_FETCH_LIMIT } from '@/constants/labels'
+import { DISPUTE_STATUSES, CLIENT_FETCH_LIMIT } from '@/constants/labels'
 
 const DEFAULT_PAGE_SIZE = 20
 
@@ -147,10 +150,10 @@ function DisputeListView() {
   const colSpan   = isAgent ? 8 : 10
 
   return (
-    <QualityListPage>
-      <QualityPageHeader title={fromLabel} />
+    <ListPageShell>
+      <ListPageHeader title={fromLabel} />
 
-      <QualityFilterBar
+      <ListFilterBar
         hasFilters={hasFilters}
         onReset={resetFilters}
         resultCount={{ total: resultTotal }}
@@ -206,27 +209,16 @@ function DisputeListView() {
         <DateRangeFilter value={dateRange} onChange={v => { setDateRange(v); setPage(1) }} />
 
         {/* 6. Dispute # search */}
-        <div className="relative w-[150px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-          <Input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="Dispute #"
-            value={disputeId}
-            onChange={e => {
-              const v = e.target.value.replace(/\D/g, '')
-              setDisputeId(v)
-              setPage(1)
-            }}
-            className="pl-8 h-9 text-[13px]"
-          />
-        </div>
-      </QualityFilterBar>
+        <IdSearchInput
+          value={disputeId}
+          onChange={v => { setDisputeId(v); setPage(1) }}
+          placeholder="Dispute #"
+        />
+      </ListFilterBar>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <ListCard>
         {isLoading ? (
-          <TableLoadingSkeleton rows={8} />
+          <ListLoadingSkeleton rows={8} />
         ) : isError ? (
           <TableErrorState message="Failed to load disputes." onRetry={refetch} />
         ) : (
@@ -254,7 +246,7 @@ function DisputeListView() {
                     })}>
                     <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">#{d.id ?? '—'}</TableCell>
                     <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">#{d.submission_id ?? '—'}</TableCell>
-                    <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[d.status] ?? d.status}</TableCell>
+                    <TableCell><StatusBadge status={d.status} /></TableCell>
                     <TableCell className="text-[13px] text-slate-600">{d.form_name ?? '—'}</TableCell>
                     {!isAgent && <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{d.csr_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{fmtDate(d.created_at)}</TableCell>
@@ -272,16 +264,15 @@ function DisputeListView() {
                       }
                     </TableCell>
                     <TableCell className="pl-8">
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
+                      <RowActionButton icon={Eye}
                         onClick={e => {
                           e.stopPropagation()
                           navigate(`/app/quality/submissions/${d.submission_id}`, {
                             state: { from: fromLabel, fromPath },
                           })
                         }}>
-                        <Eye size={12} className="mr-1" />
                         {!isAgent && d.status === 'OPEN' ? 'Resolve' : 'View'}
-                      </Button>
+                      </RowActionButton>
                     </TableCell>
                   </TableRow>
                 ))
@@ -296,7 +287,7 @@ function DisputeListView() {
             </TableBody>
           </Table>
         )}
-      </div>
+      </ListCard>
 
       <ListPagination
         page={page}
@@ -306,7 +297,7 @@ function DisputeListView() {
         onPageChange={setPage}
         onPageSizeChange={size => { setPageSize(size); setPage(1) }}
       />
-    </QualityListPage>
+    </ListPageShell>
   )
 }
 

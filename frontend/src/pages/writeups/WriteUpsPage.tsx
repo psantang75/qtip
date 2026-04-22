@@ -4,19 +4,22 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, FileWarning, Eye } from 'lucide-react'
 import writeupService, { type WriteUp } from '@/services/writeupService'
 
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { GroupedStagedMultiSelect, type GroupedOption } from '@/components/common/GroupedStagedMultiSelect'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { DateRangeFilter } from '@/components/common/DateRangeFilter'
+import { StatusBadge } from '@/components/common/StatusBadge'
+import { ListCard } from '@/components/common/ListCard'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { ListPagination } from '@/components/common/ListPagination'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
@@ -25,7 +28,6 @@ import { formatQualityDate } from '@/utils/dateFormat'
 import {
   WRITE_UP_TYPE_LABELS,
   WRITE_UP_STATUS_LABELS,
-  STATUS_LABELS,
   CLIENT_FETCH_LIMIT,
 } from '@/constants/labels'
 import { ALL_STATUSES, ALL_TYPE_LABELS, CLOSED_LABEL, WriteUpTypeBadge, WarningIdSearch } from './warningListHelpers'
@@ -101,13 +103,13 @@ export default function WriteUpsPage() {
   const displayTotal   = filtered.length
 
   return (
-    <QualityListPage>
-      <QualityPageHeader
+    <ListPageShell>
+      <ListPageHeader
         title="Performance Warnings"
         actions={
           canCreate ? (
             <Button
-              className="bg-primary hover:bg-primary/90 text-white"
+              variant="primary"
               onClick={() => navigate('/app/performancewarnings/new')}
             >
               <Plus className="h-4 w-4 mr-1" /> New Performance Warning
@@ -116,7 +118,7 @@ export default function WriteUpsPage() {
         }
       />
 
-      <QualityFilterBar
+      <ListFilterBar
         hasFilters={hasAnyFilter}
         onReset={reset}
         resultCount={{ total: displayTotal }}
@@ -126,7 +128,7 @@ export default function WriteUpsPage() {
           options={csrOptions}
           selected={selectedCsrs}
           onApply={v => setMany({ csrs: v.join(','), page: '1' })}
-          placeholder="All Employees"
+          placeholder="All Agents"
           width="w-[390px]"
         />
         <StagedMultiSelect
@@ -146,25 +148,20 @@ export default function WriteUpsPage() {
           placeholder="All Statuses"
           width="w-[200px]"
         />
+
+        {/* Line break — date + search on second row */}
+        <div className="basis-full" />
+
+        <DateRangeFilter
+          value={{ start: dateFrom, end: dateTo }}
+          onChange={r => setMany({ from: r.start, to: r.end, page: '1' })}
+        />
         <WarningIdSearch value={warningId} onChange={v => setMany({ warningId: v, page: '1' })} />
+      </ListFilterBar>
 
-        <div className="w-full" />
-
-        <div className="flex items-center gap-1.5">
-          <span className="text-[12px] text-slate-500 shrink-0">Meeting</span>
-          <Input type="date" value={dateFrom} max={dateTo || undefined}
-            onChange={e => setMany({ from: e.target.value, page: '1' })}
-            className="h-9 w-[140px]" />
-          <span className="text-[12px] text-slate-400">–</span>
-          <Input type="date" value={dateTo} min={dateFrom || undefined}
-            onChange={e => setMany({ to: e.target.value, page: '1' })}
-            className="h-9 w-[140px]" />
-        </div>
-      </QualityFilterBar>
-
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <ListCard>
         {isLoading ? (
-          <TableLoadingSkeleton rows={8} />
+          <ListLoadingSkeleton rows={8} />
         ) : isError ? (
           <TableErrorState message="Failed to load performance warnings." onRetry={refetch} />
         ) : (
@@ -199,7 +196,7 @@ export default function WriteUpsPage() {
                   <TableCell className="text-[13px] text-slate-500">{w.id}</TableCell>
                   <TableCell><WriteUpTypeBadge type={w.document_type} /></TableCell>
                   <TableCell className="text-[13px] text-slate-600">{w.csr_name}</TableCell>
-                  <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[w.status] ?? w.status}</TableCell>
+                  <TableCell><StatusBadge status={w.status} /></TableCell>
                   <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">
                     {w.meeting_date ? formatQualityDate(w.meeting_date) : <span className="text-slate-300">—</span>}
                   </TableCell>
@@ -212,21 +209,19 @@ export default function WriteUpsPage() {
                     {formatQualityDate(w.created_at)}
                   </TableCell>
                   <TableCell onClick={e => e.stopPropagation()}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-[12px] text-slate-600 gap-1"
+                    <RowActionButton
+                      icon={Eye}
                       onClick={() => navigate(`/app/performancewarnings/${w.id}`)}
                     >
-                      <Eye className="h-3.5 w-3.5" /> View
-                    </Button>
+                      View
+                    </RowActionButton>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-      </div>
+      </ListCard>
 
       <ListPagination
         page={page}
@@ -236,6 +231,6 @@ export default function WriteUpsPage() {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />
-    </QualityListPage>
+    </ListPageShell>
   )
 }

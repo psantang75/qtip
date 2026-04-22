@@ -61,6 +61,22 @@ export function ScorePanel({
           </div>
         )}
 
+        {!disputeAdjusted && detail?.score_capped && (
+          <div className="border-t border-red-200 bg-red-50 px-4 py-3">
+            <div className="flex items-start gap-2">
+              <span aria-hidden className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-white text-[12px] font-bold">!</span>
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-red-800">
+                  Score capped at {Number(detail.critical_cap_percent ?? 79).toFixed(0)}%
+                </p>
+                <p className="text-[12px] text-red-700">
+                  This audit had {detail.critical_fail_count ?? 0} critical fail{(detail.critical_fail_count ?? 0) === 1 ? '' : 's'}. The form's critical-fail cap was applied.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {resolutionMode && (
           <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
             <span className="text-[12px] font-medium text-amber-800">Live adjusted score</span>

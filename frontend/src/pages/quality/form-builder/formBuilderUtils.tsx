@@ -48,7 +48,7 @@ export function freshForm(): Form {
     { field_name: 'Call Conversation ID', field_type: 'TEXT', is_required: true, interaction_type: 'CALL', sort_order: 8 },
     { field_name: 'Call Date',     field_type: 'DATE',     is_required: true,  interaction_type: 'CALL', sort_order: 9 },
   ]
-  return { form_name: '', interaction_type: 'CALL', is_active: true, version: 1, categories: [], metadata_fields: defaultMetadata }
+  return { form_name: '', interaction_type: 'CALL', is_active: true, version: 1, critical_cap_percent: 79, categories: [], metadata_fields: defaultMetadata }
 }
 
 export function totalCategoryWeight(categories: FormCategory[]): number {

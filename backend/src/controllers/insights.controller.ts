@@ -92,6 +92,9 @@ export const getKpiConfig = async (_req: Request, res: Response): Promise<void> 
          k.format_type,
          k.direction,
          k.decimal_places,
+         k.description,
+         k.formula,
+         k.source_table,
          t.goal_value,
          t.warning_value,
          t.critical_value
@@ -108,6 +111,7 @@ export const getKpiConfig = async (_req: Request, res: Response): Promise<void> 
     const config: Record<string, {
       name: string; format: string; direction: string; decimal_places: number
       goal: number | null; warn: number | null; crit: number | null
+      description: string | null; formula: string | null; source: string | null
     }> = {}
 
     for (const row of rows) {
@@ -119,6 +123,9 @@ export const getKpiConfig = async (_req: Request, res: Response): Promise<void> 
         goal:  row.goal_value     != null ? parseFloat(row.goal_value)     : null,
         warn:  row.warning_value  != null ? parseFloat(row.warning_value)  : null,
         crit:  row.critical_value != null ? parseFloat(row.critical_value) : null,
+        description: (row.description  as string | null) ?? null,
+        formula:     (row.formula      as string | null) ?? null,
+        source:      (row.source_table as string | null) ?? null,
       }
     }
 

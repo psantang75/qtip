@@ -115,16 +115,16 @@ export default function QCCoachingPage() {
 
         {/* 2. Trend charts — Scheduled + Completed side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <InsightsSection title="Sessions Scheduled">
+          <InsightsSection title="Sessions Scheduled" infoKpiCodes={['coaching_sessions_scheduled']}>
             <TrendChart data={schedTrends} color="#00aeef" goalValue={schedGoal} height={120} />
           </InsightsSection>
-          <InsightsSection title="Sessions Completed">
+          <InsightsSection title="Sessions Completed" infoKpiCodes={['coaching_sessions_completed']}>
             <TrendChart data={compTrends} color="#00aeef" goalValue={compGoal} height={120} />
           </InsightsSection>
         </div>
 
         {/* 3. Coaching Sessions by Status */}
-        <InsightsSection title="Coaching Sessions by Status">
+        <InsightsSection title="Coaching Sessions by Status" infoKpiCodes={['coaching_status_distribution']}>
           <TooltipProvider delayDuration={200}>
             {statusGroups.length === 0 && <p className="text-sm text-slate-400 py-4 text-center">No session data for this period.</p>}
             {STATUS_ORDER.filter(s => statusMap.has(s)).map(status => {
@@ -231,7 +231,7 @@ export default function QCCoachingPage() {
 
         {/* 7. Department Comparison */}
         {deptWithData.length > 0 && (
-          <InsightsSection title="Department Coaching Comparison">
+          <InsightsSection title="Department Coaching Comparison" infoKpiCodes={['coaching_dept_comparison']}>
             <table className="w-full text-sm">
               <thead><tr className="text-xs text-slate-400 border-b border-slate-200">
                 {['Department','Sessions','Completed','Completion %','Avg Days to Close'].map(h => <th key={h} className="text-left pb-2 font-medium pr-4">{h}</th>)}

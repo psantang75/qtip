@@ -7,6 +7,7 @@ interface QuizAgent {
   dept: string
   score: number
   passed: boolean
+  failed: number
   attempts: number
 }
 
@@ -44,7 +45,7 @@ export default function CoachingQuizSection({
   const quizScoreThresh = resolveThresholds('avg_quiz_score', kpiConfig)
 
   return (
-    <InsightsSection title="Quiz Performance">
+    <InsightsSection title="Quiz Performance" infoKpiCodes={['coaching_quiz_performance']}>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
         {['quizzes_assigned','quizzes_passed','quiz_pass_rate','avg_quiz_score','avg_attempts_to_pass'].map(code => (
           <KpiTile key={code} kpiCode={code} small value={cur[code] ?? null} priorValue={prv[code] ?? undefined}
@@ -75,18 +76,19 @@ export default function CoachingQuizSection({
             }
             detail={
               <div className="pt-1">
-                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4.5rem_5rem_4rem] text-[11px] text-slate-400 font-medium border-b border-slate-200 pb-1.5 mb-0.5 gap-x-5">
-                  <span>Agent</span><span>Department</span><span className="text-right">Score</span><span className="text-right">Status</span><span className="text-right">Attempts</span>
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_5rem_5rem_4rem_4rem] text-[11px] text-slate-400 font-medium border-b border-slate-200 pb-1.5 mb-0.5 gap-x-5">
+                  <span>Agent</span><span>Department</span><span className="text-right">Best Score</span><span className="text-right">Status</span><span className="text-right">Failed</span><span className="text-right">Total</span>
                 </div>
                 {agents.map(a => (
                   <div key={a.userId}
-                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4.5rem_5rem_4rem] items-center text-xs py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer gap-x-5"
+                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_5rem_5rem_4rem_4rem] items-center text-xs py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer gap-x-5"
                     onClick={() => onNavAgent(a.userId)}
                   >
                     <span className="text-primary hover:underline font-medium truncate">{a.name}</span>
                     <span className="text-slate-500 truncate">{a.dept}</span>
                     <span className={`text-right font-semibold ${a.score >= (quizScoreThresh.goal ?? 80) ? 'text-emerald-600' : a.score >= (quizScoreThresh.warn ?? 65) ? 'text-orange-500' : 'text-red-600'}`}>{a.score.toFixed(0)}%</span>
                     <span className="text-right"><StatusBadge label={a.passed ? 'Passed' : 'Failed'} variant={a.passed ? 'good' : 'bad'} /></span>
+                    <span className={`text-right font-semibold ${a.failed > 0 ? 'text-red-600' : 'text-slate-600'}`}>{a.failed}</span>
                     <span className="text-slate-600 text-right">{a.attempts}</span>
                   </div>
                 ))}

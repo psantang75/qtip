@@ -1,8 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { CalendarClock, FileText, Loader2 } from 'lucide-react'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { ContentSections } from './writeup-detail/ContentSections'
@@ -17,11 +17,11 @@ export default function MyWriteUpDetailPage() {
   const { writeup, isLoading, isError, refetch, invalidate, pdfLoading, handleViewPdf } =
     useWriteUpDetail(id, [['my-writeups']])
 
-  if (isLoading) return <QualityListPage><TableLoadingSkeleton rows={8} /></QualityListPage>
+  if (isLoading) return <ListPageShell><ListLoadingSkeleton rows={8} /></ListPageShell>
   if (isError || !writeup) return (
-    <QualityListPage>
+    <ListPageShell>
       <TableErrorState message="Failed to load performance warning." onRetry={refetch} />
-    </QualityListPage>
+    </ListPageShell>
   )
 
   const isDraft     = writeup.status === 'DRAFT'
@@ -29,8 +29,8 @@ export default function MyWriteUpDetailPage() {
   const showDetails = !isDraft && !isScheduled
 
   return (
-    <QualityListPage>
-      <QualityPageHeader
+    <ListPageShell>
+      <ListPageHeader
         title={`Performance Warning #${writeup.id}`}
         actions={
           <div className="flex items-center gap-2">
@@ -93,6 +93,6 @@ export default function MyWriteUpDetailPage() {
           </div>
         </>
       )}
-    </QualityListPage>
+    </ListPageShell>
   )
 }

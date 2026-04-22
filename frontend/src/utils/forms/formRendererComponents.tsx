@@ -31,7 +31,7 @@ const optionCls = (selected: boolean) =>
 
 export const YesNoQuestion: React.FC<QuestionProps> = ({ question, isDisabled = false, onAnswerChange }) => {
   if (!question.isVisible) return null;
-  const { id, text, currentValue, isNaAllowed } = question;
+  const { id, text, currentValue, isNaAllowed, isCritical } = question;
   const options = [
     { value: 'yes', label: 'Yes' },
     { value: 'no',  label: 'No'  },
@@ -39,7 +39,18 @@ export const YesNoQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
   ];
   return (
     <div className="flex items-start gap-3">
-      <p className="flex-1 text-[13px] text-slate-800 leading-snug pt-0.5">{text}</p>
+      <p className="flex-1 text-[13px] text-slate-800 leading-snug pt-0.5 inline-flex items-start gap-2 flex-wrap">
+        {isCritical && (
+          <span
+            aria-label="Critical question"
+            title="Critical: a 'No' answer triggers the form's critical-fail cap"
+            className="inline-flex items-center rounded-full bg-red-100 text-red-700 border border-red-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+          >
+            !
+          </span>
+        )}
+        <span>{text}</span>
+      </p>
       <div className="flex items-center gap-1 shrink-0">
         {options.map(opt => (
           <button key={opt.value} type="button" disabled={isDisabled}

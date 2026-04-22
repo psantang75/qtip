@@ -130,6 +130,7 @@ model Form {
   parent_form_id    Int?
   user_version      Int?
   user_version_date DateTime?           @db.Date
+  critical_cap_percent Decimal           @default(79.00) @db.Decimal(5, 2)
 
   creator     User   @relation(fields: [created_by], references: [id], onDelete: Cascade)
   parent_form Form?  @relation("FormVersions", fields: [parent_form_id], references: [id], onDelete: SetNull)
@@ -193,6 +194,7 @@ model FormQuestion {
   no_value       Int              @default(0)
   na_value       Int              @default(0)
   visible_to_csr Boolean          @default(true) @db.TinyInt
+  is_critical    Boolean          @default(false) @db.TinyInt
 
   category                   FormCategory            @relation(fields: [category_id], references: [id], onDelete: Cascade)
   radio_options              RadioOption[]
@@ -633,6 +635,8 @@ model Submission {
   submitted_at DateTime         @default(now()) @db.DateTime(0)
   total_score  Decimal?         @db.Decimal(5, 2)
   status       SubmissionStatus @default(DRAFT)
+  critical_fail_count Int       @default(0)
+  score_capped Boolean          @default(false) @db.TinyInt
 
   form      Form  @relation(fields: [form_id], references: [id], onDelete: Cascade)
   call      Call? @relation(fields: [call_id], references: [id], onDelete: Cascade)

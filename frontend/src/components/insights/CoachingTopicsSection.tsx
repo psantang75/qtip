@@ -32,7 +32,7 @@ export default function CoachingTopicsSection({
   topicAgents, showAllTopics, onToggleShowAll, onNavAgent,
 }: Props) {
   return (
-    <InsightsSection title="Most Coached Topics">
+    <InsightsSection title="Most Coached Topics" infoKpiCodes={['coaching_top_topics']}>
       <div className="space-y-1">
         {topics.length === 0 && <p className="text-sm text-slate-400 py-4 text-center">No coaching data for this period.</p>}
         {visibleTopics.map(t => {

@@ -14,14 +14,14 @@ export default function QCMissedQuestions({ questions }: Props) {
 
   if (questions.length === 0) {
     return (
-      <InsightsSection title="Top Missed Questions">
+      <InsightsSection title="Top Missed Questions" infoKpiCodes={['top_missed_questions']}>
         <p className="text-sm text-slate-400 text-center py-6">No data for the selected period.</p>
       </InsightsSection>
     )
   }
 
   return (
-    <InsightsSection title="Top Missed Questions">
+    <InsightsSection title="Top Missed Questions" infoKpiCodes={['top_missed_questions']}>
       {questions.map((q) => {
         const barPct = Math.min(q.missRate, 100)
         return (

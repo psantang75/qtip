@@ -18,6 +18,7 @@ export interface EditState {
   lRadio: RadioOption[]
   newOptText: string; newOptScore: number
   lCond: boolean; lGroups: FormQuestionCondition[][]
+  lCritical: boolean
   err: string | null
 }
 
@@ -32,6 +33,7 @@ export interface EditActions {
   setNewOptScore: (v: number) => void
   setLCond: (v: boolean) => void
   setLGroups: React.Dispatch<React.SetStateAction<FormQuestionCondition[][]>>
+  setLCritical: (v: boolean) => void
   setErr: (v: string | null) => void
   addOpt: () => void; saveEdit: () => void; onCancelEdit: () => void
 }
@@ -41,11 +43,15 @@ export function QuestionEditPanel({ qi, state, actions, categoryQuestions }: {
   state: EditState; actions: EditActions
   categoryQuestions: AllQuestionRef[]
 }) {
-  const { lText, lType, lRequired, lVisible, lNa, lYes, lNo, lNaVal, lScaleMin, lScaleMax, lRadio, newOptText, newOptScore, lCond, lGroups, err } = state
-  const { setLText, setLType, setLRequired, setLVisible, setLNa, setLYes, setLNo, setLNaVal, setLScaleMin, setLScaleMax, setLRadio, setNewOptText, setNewOptScore, setLCond, setLGroups, setErr, addOpt, saveEdit, onCancelEdit } = actions
+  const { lText, lType, lRequired, lVisible, lNa, lYes, lNo, lNaVal, lScaleMin, lScaleMax, lRadio, newOptText, newOptScore, lCond, lGroups, lCritical, err } = state
+  const { setLText, setLType, setLRequired, setLVisible, setLNa, setLYes, setLNo, setLNaVal, setLScaleMin, setLScaleMax, setLRadio, setNewOptText, setNewOptScore, setLCond, setLGroups, setLCritical, setErr, addOpt, saveEdit, onCancelEdit } = actions
 
   const noPoints  = lType === 'INFO_BLOCK' || lType === 'TEXT' || lType === 'SUB_CATEGORY'
   const hasOptions = lType === 'RADIO' || lType === 'MULTI_SELECT'
+  // Critical fail only triggers the cap when an answer is "no"/"false", which is
+  // unambiguous on Yes/No questions. Allowing it on Radio / Multi-Select would let
+  // managers flag a question that the scoring engine can never actually fail.
+  const criticalSupported = lType === 'YES_NO'
   const needsValue = (ct: ConditionType) => ct === 'EQUALS' || ct === 'NOT_EQUALS'
 
   return (
@@ -98,6 +104,10 @@ export function QuestionEditPanel({ qi, state, actions, categoryQuestions }: {
       <div className="flex flex-wrap gap-5 pt-1 border-t border-slate-100">
         <div className="flex items-center gap-2"><Switch checked={lRequired} onCheckedChange={setLRequired} /><Label className="text-xs cursor-pointer">Required</Label></div>
         <div className="flex items-center gap-2"><Switch checked={lVisible} onCheckedChange={setLVisible} /><Label className="text-xs cursor-pointer">Visible to User</Label></div>
+        <div className={`flex items-center gap-2 ${criticalSupported ? '' : 'opacity-50'}`} title={criticalSupported ? 'Triggers the form\u2019s critical-fail cap when answered No.' : 'Critical fail is only available for Yes/No questions.'}>
+          <Switch checked={criticalSupported && lCritical} onCheckedChange={v => setLCritical(criticalSupported ? v : false)} disabled={!criticalSupported} />
+          <Label className="text-xs cursor-pointer text-red-700">Critical fail</Label>
+        </div>
       </div>
 
       <div className="flex gap-2">

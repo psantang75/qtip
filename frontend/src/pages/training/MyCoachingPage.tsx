@@ -3,18 +3,21 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { BookOpen, Eye } from 'lucide-react'
 import trainingService from '@/services/trainingService'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListCard } from '@/components/common/ListCard'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { CoachingFilterBar, ALL_STATUSES } from '@/components/training/CoachingFilterBar'
+import { TopicListTooltip } from '@/components/training/TopicListTooltip'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
@@ -116,8 +119,8 @@ export default function MyCoachingPage() {
   const sessions   = sorted.slice((page - 1) * pageSize, page * pageSize)
 
   return (
-    <QualityListPage>
-      <QualityPageHeader title="My Training" />
+    <ListPageShell>
+      <ListPageHeader title="My Training" />
 
 
       <CoachingFilterBar
@@ -130,9 +133,9 @@ export default function MyCoachingPage() {
         topicOptions={topicOptions}
       />
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <ListCard>
         {isLoading ? (
-          <TableLoadingSkeleton rows={5} />
+          <ListLoadingSkeleton rows={5} />
         ) : isError ? (
           <TableErrorState message="Failed to load training sessions." onRetry={refetch} />
         ) : (
@@ -163,7 +166,7 @@ export default function MyCoachingPage() {
                     {formatQualityDate(s.session_date)}
                   </TableCell>
 
-                  <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[s.status] ?? s.status}</TableCell>
+                  <TableCell><StatusBadge status={s.status} /></TableCell>
 
                   <TableCell className="text-[13px] text-slate-600">
                     {PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}
@@ -175,26 +178,7 @@ export default function MyCoachingPage() {
 
                   {/* Topics with tooltip */}
                   <TableCell className="max-w-[200px]">
-                    {s.topics.length > 0 ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="text-[13px] text-slate-500 truncate block max-w-[200px] cursor-default">
-                            {[...s.topics].sort().join(', ')}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs rounded-xl border border-slate-200 bg-white p-3 shadow-lg" sideOffset={6}>
-                          <ul className="space-y-1">
-                            {[...s.topics].sort().map(t => (
-                              <li key={t} className="flex items-center gap-2 text-[13px] text-slate-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />{t}
-                              </li>
-                            ))}
-                          </ul>
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span className="text-[13px] text-slate-300">&mdash;</span>
-                    )}
+                    <TopicListTooltip topics={s.topics} maxWidthClass="max-w-[200px]" />
                   </TableCell>
 
                   <TableCell><QuizStatusBadge session={s} /></TableCell>
@@ -208,17 +192,17 @@ export default function MyCoachingPage() {
                   </TableCell>
 
                   <TableCell onClick={e => e.stopPropagation()}>
-                    <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-600 gap-1"
+                    <RowActionButton icon={Eye}
                       onClick={() => navigate(`/app/training/my-coaching/${s.id}`)}>
-                      <Eye className="h-3.5 w-3.5" /> View
-                    </Button>
+                      View
+                    </RowActionButton>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-      </div>
+      </ListCard>
 
       <ListPagination
         page={page}
@@ -228,6 +212,6 @@ export default function MyCoachingPage() {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />
-    </QualityListPage>
+    </ListPageShell>
   )
 }

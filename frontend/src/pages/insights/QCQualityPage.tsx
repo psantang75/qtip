@@ -41,7 +41,10 @@ function CategoryPerformance({ catData, auditGoal, auditWarn, qaThresh }: {
   const visible = showAll ? sorted : sorted.slice(0, 5)
 
   return (
-    <InsightsSection title="Category Performance">
+    <InsightsSection
+      title="Category Performance"
+      infoKpiCodes={['category_performance']}
+    >
       {catData.length === 0
         ? <p className="text-sm text-slate-400 text-center py-4">No category data for the selected period.</p>
         : (<>
@@ -162,19 +165,31 @@ export default function QCQualityPage() {
         </div>
 
         {/* KPI Row 1 */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-          {['avg_qa_score','audits_assigned','audits_completed','audit_completion_rate','critical_fail_rate'].map(code => (
-            <KpiTile key={code} kpiCode={code} value={cur[code] ?? null} priorValue={prv[code] ?? undefined}
-              thresholds={resolveThresholds(code, kpiConfig)} />
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+          {['avg_qa_score','audits_assigned','audits_completed','audit_completion_rate','critical_fail_rate','avg_criticals_per_audit'].map(code => (
+            <KpiTile
+              key={code}
+              kpiCode={code}
+              value={cur[code] ?? null}
+              priorValue={prv[code] ?? undefined}
+              thresholds={resolveThresholds(code, kpiConfig)}
+              filterContext={{ dept: departments.length > 0, form: forms.length > 0 }}
+            />
           ))}
         </div>
 
         {/* Trend + Distribution charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <InsightsSection title="QA Score Trend">
+          <InsightsSection
+            title="QA Score Trend"
+            infoKpiCodes={['qa_score_trend']}
+          >
             <TrendChart data={qaTrends} color="#00aeef" goalValue={auditGoal} height={120} metricLabel="%" />
           </InsightsSection>
-          <InsightsSection title="Score Distribution">
+          <InsightsSection
+            title="Score Distribution"
+            infoKpiCodes={['avg_qa_score']}
+          >
             <ScoreHistogram data={distData} goalScore={auditGoal} />
           </InsightsSection>
         </div>
@@ -183,13 +198,14 @@ export default function QCQualityPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <InsightsSection title="Dispute Analysis">
             {([
-              ['Dispute Rate',                 'dispute_rate',           cur.dispute_rate,           prv.dispute_rate,           '%'],
-              ['Upheld (Original Score Kept)',  'dispute_upheld_rate',   cur.dispute_upheld_rate,    prv.dispute_upheld_rate,    '%'],
-              ['Adjusted (Score Changed)',      'dispute_adjusted_rate', cur.dispute_adjusted_rate,  prv.dispute_adjusted_rate,  '%'],
+              ['Dispute Rate',          'dispute_rate',           cur.dispute_rate,           prv.dispute_rate,           '%'],
+              ['Dispute Upheld Rate',   'dispute_upheld_rate',    cur.dispute_upheld_rate,    prv.dispute_upheld_rate,    '%'],
+              ['Dispute Adjusted Rate', 'dispute_adjusted_rate',  cur.dispute_adjusted_rate,  prv.dispute_adjusted_rate,  '%'],
             ] as [string, string, number | null | undefined, number | null | undefined, string][]).map(([lbl, code, curVal, prvVal, sfx]) => {
               const th = resolveThresholds(code, kpiConfig)
               return (
                 <StatRow key={code} label={lbl}
+                  kpiCode={code}
                   value={fmt(curVal ?? null, '%')}
                   trend={{ current: curVal ?? null, prior: prvVal ?? null, direction: th.direction as 'UP_IS_GOOD' | 'DOWN_IS_GOOD' | 'NEUTRAL', suffix: sfx }}
                   thresholds={{ goal: th.goal, warn: th.warn, crit: th.crit, direction: th.direction, suffix: '%' }}
@@ -205,6 +221,7 @@ export default function QCQualityPage() {
               const th = resolveThresholds(code, kpiConfig)
               return (
                 <StatRow key={code} label={lbl}
+                  kpiCode={code}
                   value={fmt(curVal ?? null, ' days')}
                   trend={{ current: curVal ?? null, prior: prvVal ?? null, direction: th.direction as 'UP_IS_GOOD' | 'DOWN_IS_GOOD' | 'NEUTRAL', suffix: 'd' }}
                   thresholds={{ goal: th.goal, warn: th.warn, crit: th.crit, direction: th.direction, suffix: ' days' }}
@@ -215,7 +232,10 @@ export default function QCQualityPage() {
         </div>
 
         {/* Average Score by Form */}
-        <InsightsSection title="Average Score by Form">
+        <InsightsSection
+          title="Average Score by Form"
+          infoKpiCodes={['avg_score_by_form']}
+        >
           {formScores.length === 0
             ? <p className="text-sm text-slate-400 text-center py-4">No form data for this period.</p>
             : (
@@ -273,7 +293,10 @@ export default function QCQualityPage() {
         <QCMissedQuestions questions={missData} />
 
         {/* Department Comparison */}
-        <InsightsSection title="Department Comparison">
+        <InsightsSection
+          title="Department Comparison"
+          infoKpiCodes={['dept_comparison']}
+        >
           {deptComp.length === 0
             ? <p className="text-sm text-slate-400 text-center py-4">No data available.</p>
             : (

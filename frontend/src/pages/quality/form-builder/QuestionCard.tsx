@@ -81,6 +81,7 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
   const [newOptScore, setNewOptScore] = useState(0)
   const [lCond, setLCond] = useState(q.is_conditional ?? false)
   const [lGroups, setLGroups] = useState<FormQuestionCondition[][]>(() => parseConditionGroups(q))
+  const [lCritical, setLCritical] = useState(q.is_critical === true)
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
@@ -93,6 +94,7 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
     setLRadio((q.radio_options ?? []).map(o => ({ ...o, has_free_text: false })))
     setLCond(q.is_conditional ?? false)
     setLGroups(parseConditionGroups(q))
+    setLCritical(q.is_critical === true)
     setErr(null)
   }, [isEditing, q])
 
@@ -106,9 +108,11 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
     const flatConditions: FormQuestionCondition[] = lGroups.flatMap((group, gIdx) =>
       group.map((c, ci) => ({ ...c, group_id: gIdx, sort_order: ci, logical_operator: 'AND' as LogicalOperator }))
     )
+    const criticalSupported = lType === 'YES_NO'
     const updated: FormQuestion = {
       ...q, question_text: lText.trim(), question_type: lType, weight: 0,
       is_required: lRequired, visible_to_csr: lVisible, is_na_allowed: lNa,
+      is_critical: criticalSupported && lCritical,
       ...(lType === 'YES_NO' && { yes_value: lYes, no_value: lNo, ...(lNa && { na_value: lNaVal }) }),
       ...(lType === 'SCALE' && { scale_min: lScaleMin, scale_max: lScaleMax }),
       ...(hasOptions && {
@@ -150,6 +154,21 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
     onChange({ ...form, categories: cats })
   }
 
+  // Mirrors quickToggleVisible: lets the user flip the critical flag from the
+  // collapsed card with one click, so the toggle always commits to the form
+  // payload (avoids the trap of toggling inside the edit panel and forgetting
+  // to click the per-question Save before the form-level Save).
+  const criticalSupportedForType = q.question_type === 'YES_NO'
+  const quickToggleCritical = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!criticalSupportedForType) return
+    const cats = [...form.categories]
+    const qs = [...cats[catIdx].questions]
+    qs[qi] = { ...qs[qi], is_critical: q.is_critical !== true }
+    cats[catIdx] = { ...cats[catIdx], questions: qs }
+    onChange({ ...form, categories: cats })
+  }
+
   const isVisible = q.visible_to_csr !== false
   const condCount = (q.conditions?.length ?? 0) || (q.is_conditional ? 1 : 0)
   const allConditions = getAllConditions(q)
@@ -175,8 +194,13 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
             <GripVertical className="h-4 w-4" />
           </button>
           <div className="flex-1 min-w-0">
-            <p className={cn('text-sm font-medium leading-snug', isEditing ? 'text-primary' : 'text-slate-900')}>
-              {q.question_text}
+            <p className={cn('text-sm font-medium leading-snug flex items-start gap-2 flex-wrap', isEditing ? 'text-primary' : 'text-slate-900')}>
+              <span>{q.question_text}</span>
+              {q.is_critical && (
+                <span className="inline-flex items-center rounded-full bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase">
+                  Critical
+                </span>
+              )}
             </p>
             {!isEditing && (
               <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
@@ -184,6 +208,23 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
                 <div><span className="text-slate-400 block">Scoring</span><span className="text-slate-600">{scoringText(q)}</span></div>
                 <div><span className="text-slate-400 block">Required</span><span className={cn('font-medium', q.is_required !== false ? 'text-slate-700' : 'text-slate-400')}>{q.is_required !== false ? 'Yes' : 'No'}</span></div>
                 <div><span className="text-slate-400 block">Agent Visible</span><button onClick={quickToggleVisible} title="Click to toggle" className={cn('font-medium', isVisible ? 'text-emerald-600' : 'text-slate-400')}>{isVisible ? 'Yes' : 'No'}</button></div>
+                <div>
+                  <span className="text-slate-400 block">Critical</span>
+                  <button
+                    onClick={quickToggleCritical}
+                    disabled={!criticalSupportedForType}
+                    title={criticalSupportedForType
+                      ? 'Click to toggle. When On, missing this question caps the form score at the form\u2019s critical-fail cap.'
+                      : 'Critical is only available for Yes/No questions.'}
+                    className={cn(
+                      'font-medium',
+                      !criticalSupportedForType && 'text-slate-300 cursor-not-allowed',
+                      criticalSupportedForType && (q.is_critical ? 'text-red-600' : 'text-slate-400'),
+                    )}
+                  >
+                    {q.is_critical ? 'Yes' : 'No'}
+                  </button>
+                </div>
                 {dependentCount > 0 && <div><span className="text-slate-400 block">Dependents</span><span className="text-amber-700 font-medium">{dependentCount}</span></div>}
               </div>
             )}
@@ -204,8 +245,8 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
       {isEditing && (
         <QuestionEditPanel
           qi={qi}
-          state={{ lText, lType, lRequired, lVisible, lNa, lYes, lNo, lNaVal, lScaleMin, lScaleMax, lRadio, newOptText, newOptScore, lCond, lGroups, err }}
-          actions={{ setLText, setLType, setLRequired, setLVisible, setLNa, setLYes, setLNo, setLNaVal, setLScaleMin, setLScaleMax, setLRadio, setNewOptText, setNewOptScore, setLCond, setLGroups, setErr, addOpt, saveEdit, onCancelEdit: () => onCancelEdit(qi) }}
+          state={{ lText, lType, lRequired, lVisible, lNa, lYes, lNo, lNaVal, lScaleMin, lScaleMax, lRadio, newOptText, newOptScore, lCond, lGroups, lCritical, err }}
+          actions={{ setLText, setLType, setLRequired, setLVisible, setLNa, setLYes, setLNo, setLNaVal, setLScaleMin, setLScaleMax, setLRadio, setNewOptText, setNewOptScore, setLCond, setLGroups, setLCritical, setErr, addOpt, saveEdit, onCancelEdit: () => onCancelEdit(qi) }}
           categoryQuestions={categoryQuestions}
         />
       )}

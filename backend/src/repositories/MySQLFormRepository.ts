@@ -39,6 +39,7 @@ export class MySQLFormRepository {
           is_active: formData.is_active !== undefined ? formData.is_active : true,
           user_version: formData.user_version ?? null,
           user_version_date: formData.user_version_date ? new Date(formData.user_version_date) : null,
+          critical_cap_percent: (formData.critical_cap_percent ?? 79.0) as any,
         },
       });
 
@@ -74,6 +75,7 @@ export class MySQLFormRepository {
               no_value: safeParam(question.no_value) ?? 0,
               na_value: safeParam(question.na_value) ?? 0,
               visible_to_csr: question.visible_to_csr === false ? false : true,
+              is_critical: question.is_critical === true,
             },
           });
 
@@ -257,6 +259,7 @@ export class MySQLFormRepository {
           no_value: q.no_value,
           na_value: q.na_value,
           visible_to_csr: q.visible_to_csr,
+          is_critical: (q as any).is_critical ?? false,
           conditions: q.conditions_source.map((c) => ({
             id: c.id,
             question_id: c.question_id,
@@ -301,6 +304,9 @@ export class MySQLFormRepository {
       is_active: form.is_active,
       user_version: form.user_version ?? undefined,
       user_version_date: form.user_version_date ? form.user_version_date.toISOString().split('T')[0] : undefined,
+      critical_cap_percent: (form as any).critical_cap_percent !== undefined && (form as any).critical_cap_percent !== null
+        ? Number((form as any).critical_cap_percent)
+        : 79.0,
       categories: builtCategories,
       metadata_fields: metadata_fields.map((f) => ({
         id: f.id,
@@ -342,6 +348,7 @@ export class MySQLFormRepository {
           is_active: formData.is_active !== undefined ? formData.is_active : true,
           user_version: formData.user_version ?? null,
           user_version_date: formData.user_version_date ? new Date(formData.user_version_date) : null,
+          critical_cap_percent: (formData.critical_cap_percent ?? 79.0) as any,
         },
       });
 
@@ -377,6 +384,7 @@ export class MySQLFormRepository {
               no_value: safeParam(question.no_value) ?? 0,
               na_value: safeParam(question.na_value) ?? 0,
               visible_to_csr: question.visible_to_csr === false ? false : true,
+              is_critical: question.is_critical === true,
             },
           });
 

@@ -181,23 +181,33 @@ export async function getQuizBreakdownWithAgents(deptFilter: number[], ranges: P
   const [agentRows] = await pool.execute<RowDataPacket[]>(
     `SELECT qa.quiz_id AS quizId, u.id AS userId, u.username AS name,
        COALESCE(d.department_name,'Unknown') AS dept,
-       MAX(qa.score) AS bestScore, MAX(qa.passed) AS passed, COUNT(*) AS attempts
+       MAX(qa.score) AS bestScore,
+       SUM(CASE WHEN qa.passed = 0 THEN 1 ELSE 0 END) AS failed,
+       COUNT(*) AS attempts,
+       (SELECT qa2.passed
+          FROM quiz_attempts qa2
+          WHERE qa2.quiz_id = qa.quiz_id
+            AND qa2.user_id = u.id
+            AND qa2.submitted_at BETWEEN ? AND ?
+          ORDER BY qa2.submitted_at DESC
+          LIMIT 1) AS currentPassed
      FROM quiz_attempts qa
      JOIN users u ON qa.user_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
      WHERE qa.quiz_id IN (${ph}) AND qa.submitted_at BETWEEN ? AND ? ${dc.sql}
      GROUP BY qa.quiz_id, u.id
-     ORDER BY qa.quiz_id, passed ASC, bestScore ASC`,
-    [...quizIds, s, e, ...dc.params],
+     ORDER BY qa.quiz_id, currentPassed ASC, bestScore ASC`,
+    [s, e, ...quizIds, s, e, ...dc.params],
   )
 
-  const agentMap = new Map<number, Array<{ userId: number; name: string; dept: string; score: number; passed: boolean; attempts: number }>>()
+  const agentMap = new Map<number, Array<{ userId: number; name: string; dept: string; score: number; passed: boolean; failed: number; attempts: number }>>()
   for (const r of agentRows) {
     const qid = r.quizId as number
     const list = agentMap.get(qid) ?? []
     list.push({
       userId: r.userId as number, name: r.name as string, dept: r.dept as string,
-      score: parseFloat(r.bestScore), passed: Boolean(r.passed), attempts: parseInt(r.attempts, 10),
+      score: parseFloat(r.bestScore), passed: Boolean(r.currentPassed),
+      failed: parseInt(r.failed ?? '0', 10), attempts: parseInt(r.attempts, 10),
     })
     agentMap.set(qid, list)
   }

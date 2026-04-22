@@ -34,6 +34,15 @@ const STATUS_MAP: Record<string, StatusConfig> = {
   SIGNED:              { label: 'Signed',             classes: 'bg-emerald-100 text-emerald-800' },
   SIGNATURE_REFUSED:   { label: 'Signature Refused',  classes: 'bg-rose-100    text-rose-800'    },
   FOLLOW_UP_PENDING:   { label: 'Follow-Up Pending',  classes: 'bg-orange-100  text-orange-800'  },
+  FOLLOW_UP_COMPLETED: { label: 'Follow-Up Completed',classes: 'bg-emerald-100 text-emerald-800' },
+  CANCELED:            { label: 'Canceled',           classes: 'bg-slate-100   text-slate-500'   },
+  // Write-up type variants (used by WriteUpTypeBadge)
+  VERBAL_WARNING:      { label: 'Verbal Warning',     classes: 'bg-amber-50    text-amber-700'   },
+  WRITTEN_WARNING:     { label: 'Written Warning',    classes: 'bg-orange-100  text-orange-800'  },
+  FINAL_WARNING:       { label: 'Final Warning',      classes: 'bg-red-100     text-red-800'     },
+  // Quiz states (derived, used by QuizStatusBadge)
+  QUIZ_PASSED:         { label: 'Passed',             classes: 'bg-emerald-100 text-emerald-800' },
+  QUIZ_ASSIGNED:       { label: 'Assigned',           classes: 'bg-slate-100   text-slate-600'   },
 }
 
 interface StatusBadgeProps {

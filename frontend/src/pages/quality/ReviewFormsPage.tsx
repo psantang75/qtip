@@ -9,17 +9,20 @@ import { Button } from '@/components/ui/button'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
+import { ListCard } from '@/components/common/ListCard'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { useListSort } from '@/hooks/useListSort'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { formatQualityDate } from '@/utils/dateFormat'
 
 export default function ReviewFormsPage() {
@@ -50,10 +53,10 @@ export default function ReviewFormsPage() {
   }
 
   return (
-    <QualityListPage>
-      <QualityPageHeader title="Review Forms" />
+    <ListPageShell>
+      <ListPageHeader title="Review Forms" />
 
-      <QualityFilterBar
+      <ListFilterBar
         hasFilters={hasFilters}
         onReset={resetFilters}
         resultCount={{ filtered: sorted.length, total: rawForms.length }}
@@ -72,11 +75,11 @@ export default function ReviewFormsPage() {
           placeholder="All Types"
           width="w-[160px]"
         />
-      </QualityFilterBar>
+      </ListFilterBar>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <ListCard>
         {isLoading ? (
-          <TableLoadingSkeleton rows={6} />
+          <ListLoadingSkeleton rows={6} />
         ) : isError ? (
           <TableErrorState message="Failed to load forms." onRetry={refetch} />
         ) : (
@@ -88,7 +91,7 @@ export default function ReviewFormsPage() {
                 <SortableTableHead field="interaction_type" sort={sort} dir={dir} onSort={v => { toggle(v); setPage(1) }}>Type</SortableTableHead>
                 <SortableTableHead field="version"          sort={sort} dir={dir} onSort={v => { toggle(v); setPage(1) }}>Version</SortableTableHead>
                 <SortableTableHead field="created_at"       sort={sort} dir={dir} onSort={v => { toggle(v); setPage(1) }}>Created On</SortableTableHead>
-                <TableHead className="py-4 w-[120px]" />
+                <TableHead className="py-4 w-[140px]" />
               </StandardTableHeaderRow>
             </TableHeader>
             <TableBody>
@@ -101,28 +104,30 @@ export default function ReviewFormsPage() {
                   action={hasFilters ? { label: 'Clear filters', onClick: resetFilters } : undefined}
                 />
               ) : forms.map((f: FormSummary) => (
-                <TableRow key={f.id} className="hover:bg-slate-50/50">
+                <TableRow
+                  key={f.id}
+                  className="cursor-pointer hover:bg-slate-50/50"
+                  onClick={() => navigate(`/app/quality/audit?formId=${f.id}`)}
+                >
                   <TableCell className="text-[13px] text-slate-600">{f.form_name}</TableCell>
-                  <TableCell className="text-[13px] text-slate-600">
-                    {f.is_active ? 'Active' : 'Inactive'}
-                  </TableCell>
+                  <TableCell><StatusBadge status={f.is_active ? 'ACTIVE' : 'INACTIVE'} /></TableCell>
                   <TableCell className="text-[13px] text-slate-600">{f.interaction_type ?? '—'}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">v{f.version ?? 1}</TableCell>
                   <TableCell className="text-[13px] text-slate-500">
                     {formatQualityDate(f.created_at)}
                   </TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
+                  <TableCell onClick={e => e.stopPropagation()}>
+                    <RowActionButton icon={PlayCircle}
                       onClick={() => navigate(`/app/quality/audit?formId=${f.id}`)}>
-                      <PlayCircle size={12} className="mr-1" /> Start Review
-                    </Button>
+                      Start Review
+                    </RowActionButton>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-      </div>
+      </ListCard>
 
       <ListPagination
         page={page}
@@ -132,6 +137,6 @@ export default function ReviewFormsPage() {
         onPageChange={setPage}
         onPageSizeChange={size => { setPageSize(size); setPage(1) }}
       />
-    </QualityListPage>
+    </ListPageShell>
   )
 }

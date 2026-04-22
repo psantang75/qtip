@@ -6,10 +6,12 @@ import qaService, { type Submission } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
+import { ListCard } from '@/components/common/ListCard'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
+import { StatusBadge } from '@/components/common/StatusBadge'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
@@ -19,9 +21,10 @@ import { DateRangeFilter } from '@/components/common/DateRangeFilter'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
 import { useQualityRole } from '@/hooks/useQualityRole'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
-import { SUBMISSION_STATUSES, STATUS_LABELS, CLIENT_FETCH_LIMIT } from '@/constants/labels'
+import { SUBMISSION_STATUSES, CLIENT_FETCH_LIMIT } from '@/constants/labels'
 
 export default function SubmissionsPage() {
   const navigate = useNavigate()
@@ -101,10 +104,10 @@ export default function SubmissionsPage() {
   const colSpan = isAdminOrQA ? 8 : isManager ? 7 : 6
 
   return (
-    <QualityListPage>
-      <QualityPageHeader title={pageTitle} />
+    <ListPageShell>
+      <ListPageHeader title={pageTitle} />
 
-      <QualityFilterBar
+      <ListFilterBar
         hasFilters={hasFilters}
         onReset={reset}
         resultCount={{ total: filtered.length }}
@@ -167,11 +170,11 @@ export default function SubmissionsPage() {
             className="pl-8 h-9 text-[13px]"
           />
         </div>
-      </QualityFilterBar>
+      </ListFilterBar>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <ListCard>
         {isLoading ? (
-          <TableLoadingSkeleton rows={8} />
+          <ListLoadingSkeleton rows={8} />
         ) : isError ? (
           <TableErrorState message="Failed to load submissions." onRetry={refetch} />
         ) : (
@@ -196,27 +199,38 @@ export default function SubmissionsPage() {
                       state: { from: pageTitle, fromPath: '/app/quality/submissions' },
                     })}>
                     <TableCell className="text-[13px] text-slate-500">{row.id}</TableCell>
-                    <TableCell className="text-[13px] text-slate-600">{STATUS_LABELS[row.status] ?? row.status}</TableCell>
+                    <TableCell><StatusBadge status={row.status} /></TableCell>
                     <TableCell className="text-[13px] text-slate-600">{row.form_name}</TableCell>
                     {!isAgent    && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-600 pl-6">{fmtDate(row.created_at)}</TableCell>
                     <TableCell className="text-[13px] text-slate-600 pl-6">{row.interaction_date ? fmtDate(row.interaction_date) : <span className="text-slate-400">—</span>}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">
-                      {row.score != null && row.score > 0
-                        ? `${row.score.toFixed(1)}%`
-                        : <span className="text-slate-400">—</span>
-                      }
+                      <span className="inline-flex items-center gap-1.5">
+                        {row.score != null && row.score > 0
+                          ? `${row.score.toFixed(1)}%`
+                          : <span className="text-slate-400">—</span>
+                        }
+                        {row.score_capped && (
+                          <span
+                            aria-label="Score capped due to critical fail"
+                            title={`Capped due to critical fail (${row.critical_fail_count ?? 0} miss${(row.critical_fail_count ?? 0) === 1 ? '' : 'es'})`}
+                            className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold leading-none"
+                          >
+                            !
+                          </span>
+                        )}
+                      </span>
                     </TableCell>
                     <TableCell className="pl-2">
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]"
+                      <RowActionButton icon={Eye}
                         onClick={e => {
                           e.stopPropagation()
                           navigate(`/app/quality/submissions/${row.id}`, {
                             state: { from: pageTitle, fromPath: '/app/quality/submissions' },
                           })
                         }}>
-                        <Eye size={12} className="mr-1" /> View
-                      </Button>
+                        View
+                      </RowActionButton>
                     </TableCell>
                   </TableRow>
                 ))
@@ -231,7 +245,7 @@ export default function SubmissionsPage() {
             </TableBody>
           </Table>
         )}
-      </div>
+      </ListCard>
 
       <ListPagination
         page={page}
@@ -241,6 +255,6 @@ export default function SubmissionsPage() {
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />
-    </QualityListPage>
+    </ListPageShell>
   )
 }

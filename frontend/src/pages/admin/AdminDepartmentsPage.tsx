@@ -19,6 +19,7 @@ import type { Department } from '@/services/departmentService'
 import { Button } from '@/components/ui/button'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -334,9 +335,9 @@ export default function AdminDepartmentsPage() {
                   </button>
                 </TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px]" onClick={() => openEdit(d)}>
-                    <Pencil size={12} className="mr-1" /> Edit
-                  </Button>
+                  <RowActionButton icon={Pencil} onClick={() => openEdit(d)}>
+                    Edit
+                  </RowActionButton>
                 </TableCell>
               </TableRow>
             ))}

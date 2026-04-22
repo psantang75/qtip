@@ -2,7 +2,7 @@ import pool from '../config/database'
 import { RowDataPacket } from 'mysql2'
 import type { PeriodRanges } from '../utils/periodUtils'
 import { fmtDatetime as fmt } from '../utils/dateHelpers'
-import { deptClause, formClause, CSR_JOIN } from './qcQueryHelpers'
+import { deptClause, formClause, formFilter, CSR_JOIN } from './qcQueryHelpers'
 
 // ── Filter options (cross-filtered) ──────────────────────────────────────────
 
@@ -215,6 +215,13 @@ export async function getMissedQuestions(
 
   const qIds = rows.map(r => r.qId as number)
   const ph   = qIds.map(() => '?').join(',')
+  // Re-apply dept + form filters here so the agent drill-down for each
+  // question only includes audits that match the active filter — otherwise an
+  // agent from a different department / form can show up under the question.
+  // The base submission alias is `sub`, so we ask deptClause to scope to
+  // `csr` (already aliased via the JOIN) and formFilter to scope to `sub`.
+  const dcAgent = deptClause(deptFilter, 'csr')
+  const ffAgent = formFilter(formNames, 'sub')
   const [agentRows] = await pool.execute<RowDataPacket[]>(
     `SELECT sa.question_id AS qId, csr.id AS userId, csr.username AS name,
        COALESCE(d.department_name,'Unknown') AS dept,
@@ -227,14 +234,16 @@ export async function getMissedQuestions(
      JOIN form_metadata_fields fmf2 ON sm2.field_id = fmf2.id AND fmf2.field_name = 'CSR'
      JOIN users csr ON csr.id = CAST(sm2.value AS UNSIGNED)
      LEFT JOIN departments d ON csr.department_id = d.id
+     ${ffAgent.join}
      WHERE sa.question_id IN (${ph})
        AND (${POSSIBLE_EXPR}) > 0
        AND sub.status = 'FINALIZED'
        AND sub.submitted_at BETWEEN ? AND ?
+       ${dcAgent.sql} ${ffAgent.where}
      GROUP BY sa.question_id, csr.id, csr.username, d.department_name
      HAVING agentMissed > 0
      ORDER BY sa.question_id, agentMissed DESC, csr.username`,
-    [...qIds, s, e],
+    [...qIds, s, e, ...dcAgent.params, ...ffAgent.params],
   )
   const agentMap = new Map<number, Array<{ userId: number; name: string; dept: string; missed: number; total: number }>>()
   for (const ar of agentRows) {
@@ -285,9 +294,12 @@ export async function getFormScores(deptFilter: number[], ranges: PeriodRanges) 
   }))
 }
 
-export async function getQualityDeptComparison(deptFilter: number[], ranges: PeriodRanges) {
+export async function getQualityDeptComparison(
+  deptFilter: number[], ranges: PeriodRanges, formNames: string[] = [],
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
+  const ff = formFilter(formNames, 's')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT d.department_name AS dept,
        COUNT(DISTINCT s.id) AS audits,
@@ -296,12 +308,13 @@ export async function getQualityDeptComparison(deptFilter: number[], ranges: Per
      FROM submissions s
      LEFT JOIN score_snapshots ss ON ss.submission_id = s.id
      ${CSR_JOIN}
+     ${ff.join}
      JOIN departments d ON csr.department_id = d.id
      LEFT JOIN disputes disp ON disp.submission_id = s.id
      WHERE s.status = 'FINALIZED'
-       AND s.submitted_at BETWEEN ? AND ? ${dc.sql}
+       AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${ff.where}
      GROUP BY d.id, d.department_name ORDER BY avgScore DESC`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...ff.params],
   )
   return rows.map(r => ({
     dept: r.dept,

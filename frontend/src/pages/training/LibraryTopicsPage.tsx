@@ -5,12 +5,15 @@ import trainingService, { type TrainingResource, type LibraryQuiz } from '@/serv
 import listService, { type ListItem } from '@/services/listService'
 import { ResourceLink } from '@/components/training/ResourceLink'
 import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
-import { QualityListPage } from '@/components/common/QualityListPage'
-import { QualityPageHeader } from '@/components/common/QualityPageHeader'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
-import { TableLoadingSkeleton } from '@/components/common/TableLoadingSkeleton'
+import { ListPageShell } from '@/components/common/ListPageShell'
+import { ListPageHeader } from '@/components/common/ListPageHeader'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
+import { ListCard } from '@/components/common/ListCard'
+import { EmptyState } from '@/components/common/EmptyState'
+import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
+import { RowActionButton } from '@/components/common/RowActionButton'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
@@ -196,10 +199,13 @@ export default function LibraryTopicsPage() {
             {topicQuizzes.length > 0 ? `${topicQuizzes.length} quiz${topicQuizzes.length !== 1 ? 'zes' : ''}` : ''}
           </span>
           <div onClick={e => e.stopPropagation()}>
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-[12px] text-slate-500 gap-1 opacity-0 group-hover:opacity-100"
-              onClick={() => openEdit(topic)}>
-              <Pencil className="h-3 w-3" /> Edit
-            </Button>
+            <RowActionButton
+              icon={Pencil}
+              className="opacity-0 group-hover:opacity-100"
+              onClick={() => openEdit(topic)}
+            >
+              Edit
+            </RowActionButton>
           </div>
         </div>
 
@@ -245,10 +251,10 @@ export default function LibraryTopicsPage() {
   }
 
   return (
-    <QualityListPage>
-      <QualityPageHeader title="Training Topics" />
+    <ListPageShell>
+      <ListPageHeader title="Training Topics" />
 
-      <QualityFilterBar
+      <ListFilterBar
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search topics…"
@@ -258,23 +264,25 @@ export default function LibraryTopicsPage() {
       />
 
       {isLoading ? (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <TableLoadingSkeleton rows={6} />
-        </div>
+        <ListCard>
+          <ListLoadingSkeleton rows={6} />
+        </ListCard>
       ) : isError ? (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <ListCard>
           <TableErrorState message="Failed to load topics." onRetry={refetch} />
-        </div>
+        </ListCard>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-10 text-center">
-          <p className="text-[13px] text-slate-500 font-medium">No topics found</p>
-          <p className="text-[12px] text-slate-400 mt-1">Try adjusting your search or filters.</p>
-        </div>
+        <ListCard>
+          <EmptyState
+            title="No topics found"
+            description="Try adjusting your search or filters."
+          />
+        </ListCard>
       ) : (
         <div className="space-y-3">
           {/* ── Categorised blocks ── */}
           {groupedFiltered.catOrder.map(cat => (
-            <div key={cat} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <ListCard key={cat}>
               <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">{cat}</p>
@@ -284,12 +292,12 @@ export default function LibraryTopicsPage() {
               <div className="divide-y divide-slate-100">
                 {groupedFiltered.byCategory.get(cat)!.map(renderTopicRow)}
               </div>
-            </div>
+            </ListCard>
           ))}
 
           {/* ── Uncategorised block ── */}
           {groupedFiltered.uncategorized.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 border-dashed overflow-hidden">
+            <ListCard className="border-dashed">
               <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/50 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Uncategorized</p>
@@ -299,7 +307,7 @@ export default function LibraryTopicsPage() {
               <div className="divide-y divide-slate-100">
                 {groupedFiltered.uncategorized.map(renderTopicRow)}
               </div>
-            </div>
+            </ListCard>
           )}
         </div>
       )}
@@ -357,13 +365,13 @@ export default function LibraryTopicsPage() {
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 mt-2">
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button className="bg-primary hover:bg-primary/90 text-white"
+            <Button variant="primary"
               onClick={handleSave} disabled={saveMut.isPending}>
               {saveMut.isPending ? 'Saving…' : 'Save Changes'}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
-    </QualityListPage>
+    </ListPageShell>
   )
 }

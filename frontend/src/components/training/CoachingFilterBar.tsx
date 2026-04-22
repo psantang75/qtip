@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
-import { Search } from 'lucide-react'
-import { QualityFilterBar } from '@/components/common/QualityFilterBar'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
+import { IdSearchInput } from '@/components/common/IdSearchInput'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -57,7 +57,7 @@ export function CoachingFilterBar({
   )
 
   return (
-    <QualityFilterBar
+    <ListFilterBar
       hasFilters={hasAnyFilter}
       onReset={onReset}
       resultCount={{ total: resultTotal }}
@@ -96,21 +96,11 @@ export function CoachingFilterBar({
         placeholder="All Statuses"
         width="w-[180px]"
       />
-      <div className="relative w-[150px]">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-        <Input
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          placeholder="Session #"
-          value={values.sessionId}
-          onChange={e => {
-            const v = e.target.value.replace(/\D/g, '')
-            setMany({ sessionId: v, page: '1' })
-          }}
-          className="pl-8 h-9 text-[13px]"
-        />
-      </div>
+      <IdSearchInput
+        value={values.sessionId}
+        onChange={v => setMany({ sessionId: v, page: '1' })}
+        placeholder="Session #"
+      />
 
       <div className="w-full" />
       <div className="flex items-center gap-1.5">
@@ -133,7 +123,7 @@ export function CoachingFilterBar({
           onCheckedChange={v => setMany({ overdue: v ? 'true' : '', dueToday: '', page: '1' })} />
         Overdue
       </label>
-    </QualityFilterBar>
+    </ListFilterBar>
   )
 }
 

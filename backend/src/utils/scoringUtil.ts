@@ -1,8 +1,24 @@
-﻿/**
- * Scoring Utility - Backend Implementation using Prisma
+/**
+ * Backend QA scoring engine — system of record for submission scores.
  *
- * Handles calculation of scores for QA forms.
- * THIS IMPLEMENTATION MATCHES THE WORKING FRONTEND LOGIC EXACTLY
+ * Two layers in this file:
+ *
+ *   1. The pure algorithm (`scoreForm`, `getQuestionScore`, `getMaxPossibleScore`,
+ *      `buildVisibilityMap`) — operates on plain in-memory data. No DB access.
+ *      Mirrors `frontend/src/utils/forms/scoringEngine.ts` so the live preview
+ *      and the persisted score stay in lockstep. Any change to scoring rules
+ *      (per-question math, conditional visibility, N/A handling, weighting, or
+ *      the critical-fail cap rule) MUST be made in both files.
+ *
+ *   2. Prisma-backed wrappers (`calculateFormScore`,
+ *      `calculateFormScoreBySubmissionId`, `recalculateScores`,
+ *      `getScoreBreakdown`) — load the form/categories/questions/options/
+ *      conditions out of the DB, hand them to the pure algorithm, and persist
+ *      the result back to `submissions` and `score_snapshots`.
+ *
+ * Critical-fail rule: if any visible, scored question marked `is_critical`
+ * receives a "no" answer, the final score is capped at the form's
+ * `critical_cap_percent` (default 79). The cap is a ceiling, never a floor.
  */
 
 import prisma from '../config/prisma';
@@ -25,6 +41,7 @@ interface Question {
   is_na_allowed?: boolean;
   scale_max?: number;
   sort_order?: number;
+  is_critical?: boolean;
   conditions?: QuestionCondition[];
 }
 
@@ -65,150 +82,179 @@ interface CategoryScore {
 
 interface FormScoreResult {
   total_score: number;
+  raw_score: number;
   categoryScores: Record<number, CategoryScore>;
+  critical_fail_count: number;
+  score_capped: boolean;
+  critical_cap_percent: number;
 }
 
-/**
- * Calculate form score - matches frontend scoringAdapter.ts calculateFormScore
- */
-export async function calculateFormScore(
-  _connectionOrPrisma: any,
-  form_id: number,
-  answers: Answer[]
-): Promise<FormScoreResult> {
-  const answersMap: Record<number, Answer> = {};
-  answers.forEach((answer) => { answersMap[answer.question_id] = answer; });
+const DEFAULT_CRITICAL_CAP = 79.0;
+const NON_SCORING_TYPES = new Set(['info', 'text', 'info_block', 'sub_category']);
+const NA_ANSWERS = new Set(['na', 'n/a']);
+const NO_ANSWERS = new Set(['no', 'false']);
+const YES_LIKE = new Set(['yes', 'true', '1', 'on']);
+const NO_LIKE = new Set(['no', 'false', '0', 'off']);
 
-  const categoriesRows = await prisma.formCategory.findMany({
-    where: { form_id: form_id },
-    orderBy: { sort_order: 'asc' },
-  });
-  const categories = categoriesRows as unknown as Category[];
+// ── Pure algorithm ──────────────────────────────────────────────────────────
 
-  const categoryIds = categories.map((c) => c.id);
-
-  const questionsRows = await prisma.formQuestion.findMany({
-    where: { category_id: { in: categoryIds } },
-    orderBy: [{ category_id: 'asc' }, { sort_order: 'asc' }],
-  });
-  const allQuestions = questionsRows as unknown as Question[];
-
-  const questionIds = allQuestions.map((q) => q.id);
-
-  const radioOptionsRows = await prisma.radioOption.findMany({
-    where: { question_id: { in: questionIds } },
-    orderBy: [{ question_id: 'asc' }, { sort_order: 'asc' }],
-  });
-  const radioOptions = radioOptionsRows as unknown as RadioOption[];
-
-  const radioOptionsMap: Record<number, RadioOption[]> = {};
-  radioOptions.forEach((option) => {
-    if (!radioOptionsMap[option.question_id]) radioOptionsMap[option.question_id] = [];
-    radioOptionsMap[option.question_id].push(option);
-  });
-
-  const conditionsRows = await prisma.formQuestionCondition.findMany({
-    where: { question_id: { in: questionIds } },
-  });
-
-  const conditionsByQuestion: Record<number, QuestionCondition[]> = {};
-  conditionsRows.forEach((condition) => {
-    if (!conditionsByQuestion[condition.question_id]) conditionsByQuestion[condition.question_id] = [];
-    conditionsByQuestion[condition.question_id].push(condition as unknown as QuestionCondition);
-  });
-
-  const excludedQuestions = new Set<number>();
+function buildVisibilityMap(
+  questions: Question[],
+  answersMap: Record<number, Answer>,
+  conditionsByQuestion: Record<number, QuestionCondition[]>,
+): Record<number, boolean> {
+  const excluded = new Set<number>();
 
   Object.entries(conditionsByQuestion).forEach(([questionIdStr, questionConditions]) => {
     const question_id = parseInt(questionIdStr);
 
-    const conditionGroups: Record<number, QuestionCondition[]> = {};
-    questionConditions.forEach((condition) => {
-      const group_id = condition.group_id || 0;
-      if (!conditionGroups[group_id]) conditionGroups[group_id] = [];
-      conditionGroups[group_id].push(condition);
+    const groups: Record<number, QuestionCondition[]> = {};
+    questionConditions.forEach((c) => {
+      const g = c.group_id || 0;
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(c);
     });
 
-    const groupResults = Object.values(conditionGroups).map((groupConditions) => {
-      return groupConditions.every((condition) => {
+    const groupResults = Object.values(groups).map((groupConditions) =>
+      groupConditions.every((condition) => {
         const targetAnswer = answersMap[condition.target_question_id];
-        let conditionMet = false;
-
-        if (targetAnswer) {
-          const normalizedTargetAnswer = String(targetAnswer.answer || '').trim().toLowerCase();
-          const normalizedTargetValue = String(condition.target_value || '').trim().toLowerCase();
-
-          switch (condition.condition_type) {
-            case 'EQUALS': {
-              const isYesValue = ['yes', 'true', '1', 'on'].includes(normalizedTargetAnswer);
-              const isNoValue = ['no', 'false', '0', 'off'].includes(normalizedTargetAnswer);
-              const expectedYes = ['yes', 'true', '1', 'on'].includes(normalizedTargetValue);
-              const expectedNo = ['no', 'false', '0', 'off'].includes(normalizedTargetValue);
-              if ((isYesValue && expectedYes) || (isNoValue && expectedNo)) {
-                conditionMet = true;
-              } else {
-                conditionMet = normalizedTargetAnswer === normalizedTargetValue;
-              }
-              break;
-            }
-            case 'NOT_EQUALS':
-              conditionMet = normalizedTargetAnswer !== normalizedTargetValue;
-              break;
-            case 'EXISTS':
-              conditionMet = normalizedTargetAnswer !== '';
-              break;
-            case 'NOT_EXISTS':
-              conditionMet = normalizedTargetAnswer === '';
-              break;
-          }
-        } else if (condition.condition_type === 'NOT_EXISTS') {
-          conditionMet = true;
+        if (!targetAnswer) {
+          return condition.condition_type === 'NOT_EXISTS';
         }
-        return conditionMet;
-      });
-    });
+        const normalizedAnswer = String(targetAnswer.answer || '').trim().toLowerCase();
+        const normalizedValue = String(condition.target_value || '').trim().toLowerCase();
 
-    const isQuestionVisible = groupResults.some((result) => result);
-    if (!isQuestionVisible) excludedQuestions.add(question_id);
+        switch (condition.condition_type) {
+          case 'EQUALS': {
+            const answerIsYes = YES_LIKE.has(normalizedAnswer);
+            const answerIsNo = NO_LIKE.has(normalizedAnswer);
+            const expectsYes = YES_LIKE.has(normalizedValue);
+            const expectsNo = NO_LIKE.has(normalizedValue);
+            if ((answerIsYes && expectsYes) || (answerIsNo && expectsNo)) return true;
+            return normalizedAnswer === normalizedValue;
+          }
+          case 'NOT_EQUALS': return normalizedAnswer !== normalizedValue;
+          case 'EXISTS':     return normalizedAnswer !== '';
+          case 'NOT_EXISTS': return normalizedAnswer === '';
+          default:           return false;
+        }
+      }),
+    );
+
+    if (!groupResults.some((r) => r)) excluded.add(question_id);
   });
 
-  const visibilityMap: Record<number, boolean> = {};
-  allQuestions.forEach((question) => {
-    visibilityMap[question.id] = !excludedQuestions.has(question.id);
-  });
+  const visibility: Record<number, boolean> = {};
+  questions.forEach((q) => { visibility[q.id] = !excluded.has(q.id); });
+  return visibility;
+}
+
+function getQuestionScore(
+  question: Question,
+  answer: string,
+  radioOptionsMap: Record<number, RadioOption[]>,
+): number {
+  if (!answer) return 0;
+  const questionType = question.question_type.toLowerCase();
+  const answerLower = answer.toLowerCase();
+
+  switch (questionType) {
+    case 'yes_no':
+      if (answerLower === 'yes' || answer === 'true') return question.yes_value !== undefined ? Number(question.yes_value) : 0;
+      if (answerLower === 'no'  || answer === 'false') return question.no_value  !== undefined ? Number(question.no_value)  : 0;
+      return 0;
+    case 'scale': {
+      const numericAnswer = parseInt(answer, 10);
+      return !isNaN(numericAnswer) ? numericAnswer : 0;
+    }
+    case 'radio': {
+      const opts = radioOptionsMap[question.id] || [];
+      const selected = opts.find((o) => o.option_value === answer || o.option_text === answer);
+      return selected?.score || 0;
+    }
+    case 'multi_select': {
+      const opts = radioOptionsMap[question.id] || [];
+      if (opts.length === 0 || !answer) return 0;
+      const selected = answer.split(',').map((v) => v.trim()).filter(Boolean);
+      return selected.reduce((sum, val) => {
+        const opt = opts.find((o) => o.option_value === val || o.option_text === val);
+        return sum + (opt?.score || 0);
+      }, 0);
+    }
+    default:
+      return 0;
+  }
+}
+
+function getMaxPossibleScore(question: Question, radioOptionsMap: Record<number, RadioOption[]>): number {
+  const questionType = question.question_type.toLowerCase();
+
+  switch (questionType) {
+    case 'yes_no':
+      return question.yes_value !== undefined ? Number(question.yes_value) : 0;
+    case 'scale':
+      return question.scale_max || 5;
+    case 'radio': {
+      const opts = radioOptionsMap[question.id] || [];
+      return opts.length > 0 ? Math.max(...opts.map((o) => o.score || 0)) : 0;
+    }
+    case 'multi_select': {
+      const opts = radioOptionsMap[question.id] || [];
+      return opts.reduce((sum, o) => sum + Math.max(0, o.score || 0), 0);
+    }
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Pure scoring algorithm. Takes already-loaded form structure and answers,
+ * returns the score breakdown and the critical-fail cap result.
+ */
+function scoreForm(
+  categories: Category[],
+  questions: Question[],
+  radioOptionsMap: Record<number, RadioOption[]>,
+  conditionsByQuestion: Record<number, QuestionCondition[]>,
+  answers: Answer[],
+  criticalCapPercent: number,
+): FormScoreResult {
+  const answersMap: Record<number, Answer> = {};
+  answers.forEach((a) => { answersMap[a.question_id] = a; });
+
+  const visibilityMap = buildVisibilityMap(questions, answersMap, conditionsByQuestion);
 
   const questionsByCategory: Record<number, Question[]> = {};
-  allQuestions.forEach((question) => {
-    if (!questionsByCategory[question.category_id]) questionsByCategory[question.category_id] = [];
-    questionsByCategory[question.category_id].push(question);
+  questions.forEach((q) => {
+    if (!questionsByCategory[q.category_id]) questionsByCategory[q.category_id] = [];
+    questionsByCategory[q.category_id].push(q);
   });
 
+  const categoryScores: Record<number, CategoryScore> = {};
   let totalWeightedNumerator = 0;
   let totalWeightedDenominator = 0;
-  const categoryScores: Record<number, CategoryScore> = {};
+  let critical_fail_count = 0;
 
   categories.forEach((category) => {
     let earnedPoints = 0;
     let possiblePoints = 0;
 
-    const categoryQuestions = questionsByCategory[category.id] || [];
-
-    categoryQuestions.forEach((question) => {
-      const questionType = question.question_type.toLowerCase();
-      if (['info', 'text', 'info_block', 'sub_category'].includes(questionType)) return;
+    (questionsByCategory[category.id] || []).forEach((question) => {
+      if (NON_SCORING_TYPES.has(question.question_type.toLowerCase())) return;
       if (!visibilityMap[question.id]) return;
 
       const answer = answersMap[question.id];
-      if (answer && (answer.answer?.toLowerCase() === 'na' || answer.answer?.toLowerCase() === 'n/a')) {
-        if (question.is_na_allowed) return;
-      }
+      const answerLower = (answer?.answer || '').toLowerCase();
+      if (answer && NA_ANSWERS.has(answerLower) && question.is_na_allowed) return;
 
-      const possibleScore = getMaxPossibleScore(question, radioOptionsMap);
-      possiblePoints += possibleScore;
+      possiblePoints += getMaxPossibleScore(question, radioOptionsMap);
       if (!answer) return;
 
-      const answerScore = getQuestionScore(question, answer.answer || '', radioOptionsMap);
-      earnedPoints += answerScore;
+      earnedPoints += getQuestionScore(question, answer.answer || '', radioOptionsMap);
+
+      if (question.is_critical && NO_ANSWERS.has(answerLower)) {
+        critical_fail_count += 1;
+      }
     });
 
     const rawScore = possiblePoints > 0 ? (earnedPoints / possiblePoints) * 100 : 0;
@@ -231,83 +277,87 @@ export async function calculateFormScore(
     }
   });
 
-  let total_score = 0;
-  if (totalWeightedDenominator > 0) {
-    total_score = (totalWeightedNumerator / totalWeightedDenominator) * 100;
-  }
-  total_score = Math.round(total_score * 100) / 100;
+  let raw_score = totalWeightedDenominator > 0
+    ? (totalWeightedNumerator / totalWeightedDenominator) * 100
+    : 0;
+  raw_score = Math.round(raw_score * 100) / 100;
 
-  return { total_score, categoryScores };
+  let total_score = raw_score;
+  let score_capped = false;
+  if (critical_fail_count > 0 && raw_score > criticalCapPercent) {
+    total_score = criticalCapPercent;
+    score_capped = true;
+  }
+
+  return {
+    total_score,
+    raw_score,
+    categoryScores,
+    critical_fail_count,
+    score_capped,
+    critical_cap_percent: criticalCapPercent,
+  };
 }
 
-function getQuestionScore(
-  question: Question,
-  answer: string,
-  radioOptionsMap: Record<number, RadioOption[]>
-): number {
-  if (!answer) return 0;
-  const questionType = question.question_type.toLowerCase();
-  const answerLower = answer.toLowerCase();
+// ── Prisma-backed wrappers ──────────────────────────────────────────────────
 
-  switch (questionType) {
-    case 'yes_no':
-      if (answerLower === 'yes' || answer === 'true') return question.yes_value !== undefined ? Number(question.yes_value) : 0;
-      if (answerLower === 'no' || answer === 'false') return question.no_value !== undefined ? Number(question.no_value) : 0;
-      return 0;
-    case 'scale': {
-      const numericAnswer = parseInt(answer, 10);
-      return !isNaN(numericAnswer) ? numericAnswer : 0;
-    }
-    case 'radio': {
-      const radioOptions = radioOptionsMap[question.id] || [];
-      if (radioOptions.length > 0) {
-        const selectedOption = radioOptions.find((opt) => opt.option_value === answer || opt.option_text === answer);
-        return selectedOption?.score || 0;
-      }
-      return 0;
-    }
-    case 'multi_select': {
-      const multiOpts = radioOptionsMap[question.id] || [];
-      if (multiOpts.length > 0 && answer) {
-        const selected = answer.split(',').map((v: string) => v.trim()).filter(Boolean);
-        return selected.reduce((sum: number, val: string) => {
-          const opt = multiOpts.find((o) => o.option_value === val || o.option_text === val);
-          return sum + (opt?.score || 0);
-        }, 0);
-      }
-      return 0;
-    }
-    default:
-      return 0;
-  }
-}
+/**
+ * Loads the form structure for `form_id` from the database and runs the pure
+ * scoring algorithm against `answers`. The system-of-record entry point.
+ */
+export async function calculateFormScore(
+  _connectionOrPrisma: any,
+  form_id: number,
+  answers: Answer[]
+): Promise<FormScoreResult> {
+  const categoriesRows = await prisma.formCategory.findMany({
+    where: { form_id: form_id },
+    orderBy: { sort_order: 'asc' },
+  });
+  const categories = categoriesRows as unknown as Category[];
+  const categoryIds = categories.map((c) => c.id);
 
-function getMaxPossibleScore(question: Question, radioOptionsMap: Record<number, RadioOption[]>): number {
-  const questionType = question.question_type.toLowerCase();
+  const questionsRows = await prisma.formQuestion.findMany({
+    where: { category_id: { in: categoryIds } },
+    orderBy: [{ category_id: 'asc' }, { sort_order: 'asc' }],
+  });
+  const questions = questionsRows as unknown as Question[];
+  const questionIds = questions.map((q) => q.id);
 
-  switch (questionType) {
-    case 'yes_no':
-      return question.yes_value !== undefined ? Number(question.yes_value) : 0;
-    case 'scale':
-      return question.scale_max || 5;
-    case 'radio': {
-      const radioOptions = radioOptionsMap[question.id] || [];
-      if (radioOptions.length > 0) return Math.max(...radioOptions.map((opt) => opt.score || 0));
-      return 0;
-    }
-    case 'multi_select': {
-      const multiOpts = radioOptionsMap[question.id] || [];
-      return multiOpts.reduce((sum: number, opt) => sum + Math.max(0, opt.score || 0), 0);
-    }
-    default:
-      return 0;
-  }
+  const radioOptionsRows = await prisma.radioOption.findMany({
+    where: { question_id: { in: questionIds } },
+    orderBy: [{ question_id: 'asc' }, { sort_order: 'asc' }],
+  });
+  const radioOptionsMap: Record<number, RadioOption[]> = {};
+  (radioOptionsRows as unknown as RadioOption[]).forEach((o) => {
+    if (!radioOptionsMap[o.question_id]) radioOptionsMap[o.question_id] = [];
+    radioOptionsMap[o.question_id].push(o);
+  });
+
+  const conditionsRows = await prisma.formQuestionCondition.findMany({
+    where: { question_id: { in: questionIds } },
+  });
+  const conditionsByQuestion: Record<number, QuestionCondition[]> = {};
+  conditionsRows.forEach((c) => {
+    if (!conditionsByQuestion[c.question_id]) conditionsByQuestion[c.question_id] = [];
+    conditionsByQuestion[c.question_id].push(c as unknown as QuestionCondition);
+  });
+
+  const formRow = await prisma.form.findUnique({
+    where: { id: form_id },
+    select: { critical_cap_percent: true },
+  });
+  const criticalCapPercent = formRow?.critical_cap_percent !== undefined && formRow?.critical_cap_percent !== null
+    ? Number(formRow.critical_cap_percent)
+    : DEFAULT_CRITICAL_CAP;
+
+  return scoreForm(categories, questions, radioOptionsMap, conditionsByQuestion, answers, criticalCapPercent);
 }
 
 export async function calculateFormScoreBySubmissionId(
   _connection: any,
   submission_id: number
-): Promise<{ total_score: number; scoreSnapshot: any[] }> {
+): Promise<{ total_score: number; scoreSnapshot: any[]; critical_fail_count: number; score_capped: boolean }> {
   try {
     const submission = await prisma.submission.findUnique({
       where: { id: submission_id },
@@ -344,16 +394,27 @@ export async function calculateFormScoreBySubmissionId(
       };
     });
 
-    await saveScoreData(submission_id, result.total_score, scoreSnapshot);
+    await saveScoreData(submission_id, result.total_score, scoreSnapshot, result.critical_fail_count, result.score_capped);
 
-    return { total_score: result.total_score, scoreSnapshot };
+    return {
+      total_score: result.total_score,
+      scoreSnapshot,
+      critical_fail_count: result.critical_fail_count,
+      score_capped: result.score_capped,
+    };
   } catch (error) {
     console.error('Error calculating form score by submission ID:', error);
     throw error;
   }
 }
 
-async function saveScoreData(submission_id: number, total_score: number, scoreSnapshot: any[]): Promise<void> {
+async function saveScoreData(
+  submission_id: number,
+  total_score: number,
+  scoreSnapshot: any[],
+  critical_fail_count: number = 0,
+  score_capped: boolean = false,
+): Promise<void> {
   try {
     const submission = await prisma.submission.findUnique({
       where: { id: submission_id },
@@ -367,7 +428,11 @@ async function saveScoreData(submission_id: number, total_score: number, scoreSn
     await prisma.$transaction(async (tx) => {
       await tx.submission.update({
         where: { id: submission_id },
-        data: { total_score: total_score },
+        data: {
+          total_score: total_score,
+          critical_fail_count,
+          score_capped,
+        },
       });
 
       const existing = await tx.scoreSnapshot.findFirst({ where: { submission_id: submission_id } });
