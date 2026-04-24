@@ -80,6 +80,5 @@ The system emphasizes manual control, role-specific views, and seamless integrat
 - Write-up module (deferred)
 
 ## 🛠️ Development Notes
-- Use `database_schema.sql` to set up the MySQL database.
-- Import `.md` files into Cursor for reference during development.
-- Follow `cursor_build_instructions.md` for setup guidance.
+- Use `backend/prisma/schema.prisma` (and `backend/prisma/migrations/`) as the canonical database source-of-truth; `prisma migrate dev` applies migrations locally.
+- See the top-level [`README.md`](../README.md) for setup, dev, build, and test commands.

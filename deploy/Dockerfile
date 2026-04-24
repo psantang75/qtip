@@ -45,7 +45,7 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # Copy configuration files
 COPY ecosystem.config.js ./
-COPY docs/production_environment_template.env ./.env.example
+COPY deploy/production_environment_template.env ./.env.example
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \

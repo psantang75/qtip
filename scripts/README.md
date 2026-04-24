@@ -16,7 +16,7 @@ delete it. We removed a batch of one-offs in the pre-production cleanup
 | Script                          | Purpose                                                                  |
 | ------------------------------- | ------------------------------------------------------------------------ |
 | `deploy_application.ps1`        | Deploy frontend + backend to a target env. Wired to `npm run deploy:*`.  |
-| `prepare_production.ps1`        | Pre-flight environment checks before a prod deploy.                      |
+| `prepare_production.ps1`        | Legacy one-off pre-prod cleanup (most targets already pruned via git).   |
 | `start_app.ps1`                 | Bring up the local dev stack (backend + frontend).                       |
 | `kill-dev-servers.ps1`          | Kill processes holding port 3000 (backend) / 5173 (frontend) / 4173.     |
 

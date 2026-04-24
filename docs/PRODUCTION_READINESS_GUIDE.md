@@ -8,7 +8,7 @@ This guide provides a comprehensive checklist and step-by-step instructions for 
 
 #### 1.1 Environment Configuration
 - [ ] **Remove hardcoded credentials** - All hardcoded passwords and secrets removed
-- [ ] **Create production .env file** from `docs/production_environment_template.env`
+- [ ] **Create production .env file** from `deploy/production_environment_template.env`
 - [ ] **Generate secure JWT secrets** (minimum 32 characters, cryptographically random)
 - [ ] **Set strong database passwords** (minimum 16 characters, mixed case, numbers, symbols)
 - [ ] **Configure CORS origins** for production domains only
@@ -80,7 +80,7 @@ This guide provides a comprehensive checklist and step-by-step instructions for 
 
 1. **Copy environment template**:
    ```bash
-   cp docs/production_environment_template.env .env
+   cp deploy/production_environment_template.env .env
    ```
 
 2. **Generate secure secrets**:

@@ -182,7 +182,7 @@ Write-Host "  ✅ Updated .gitignore" -ForegroundColor Green
 
 Write-Host "`n🎉 Production preparation complete!" -ForegroundColor Green
 Write-Host "`n⚠️  NEXT STEPS:" -ForegroundColor Yellow
-Write-Host "1. Create .env file from docs/production_environment_template.env" -ForegroundColor White
+Write-Host "1. Create .env file from deploy/production_environment_template.env" -ForegroundColor White
 Write-Host "2. Update all environment variables with production values" -ForegroundColor White
 Write-Host "3. Set up SSL certificates" -ForegroundColor White
 Write-Host "4. Configure production database" -ForegroundColor White
