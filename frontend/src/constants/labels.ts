@@ -8,7 +8,7 @@
 export const CLIENT_FETCH_LIMIT = 5000
 
 import type { WriteUpType, WriteUpStatus } from '@/services/writeupService'
-import type { CoachingPurpose, CoachingFormat, CoachingSourceType } from '@/services/trainingService'
+import type { CoachingPurpose, CoachingFormat, CoachingSourceType, CoachingStatus } from '@/services/trainingService'
 
 // ── Universal status → display-text lookup (all domains) ─────────────────────
 
@@ -80,10 +80,15 @@ export const COACHING_SOURCE_LABELS: Record<CoachingSourceType, string> = {
   OTHER:                'Other',
 }
 
-export const COACHING_STATUS_LABELS: Record<string, string> = {
+// Mirrors backend Prisma enum CoachingSessionStatus exactly. Keep in sync with
+// `CoachingStatus` in `@/services/trainingService` and the SQL whitelist in
+// `coaching.controller.setSessionStatus`.
+export const COACHING_STATUS_LABELS: Record<CoachingStatus, string> = {
   DRAFT:               'Draft',
   SCHEDULED:           'Scheduled',
+  IN_PROCESS:          'In Process',
   AWAITING_CSR_ACTION: 'Awaiting Agent',
+  QUIZ_PENDING:        'Quiz Pending',
   COMPLETED:           'Completed',
   FOLLOW_UP_REQUIRED:  'Follow-Up',
   CLOSED:              'Closed',

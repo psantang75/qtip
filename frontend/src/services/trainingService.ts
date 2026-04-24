@@ -21,7 +21,11 @@ export type CoachingSourceType =
   | 'SCHEDULED'
   | 'OTHER'
 
+// Mirrors backend Prisma enum CoachingSessionStatus (backend/prisma/schema.prisma).
+// Keep these in lock-step with `COACHING_STATUS_LABELS` in `@/constants/labels`
+// and the SQL whitelist in `coaching.controller.setSessionStatus`.
 export type CoachingStatus =
+  | 'DRAFT'
   | 'SCHEDULED'
   | 'IN_PROCESS'
   | 'AWAITING_CSR_ACTION'
@@ -29,6 +33,7 @@ export type CoachingStatus =
   | 'COMPLETED'
   | 'FOLLOW_UP_REQUIRED'
   | 'CLOSED'
+  | 'CANCELED'
 
 export interface QuizQuestion {
   id: number

@@ -37,10 +37,12 @@ const coachingColumns: OnDemandReportColumn[] = COACHING_SESSIONS_COLUMNS.map(c 
   label: c.label,
 }))
 
-/** All coaching session statuses in display order. Mirrors the Prisma enum. */
+/** All coaching session statuses in display order. Mirrors the Prisma enum
+ *  `CoachingSessionStatus` exactly so the filter UI cannot offer a value the
+ *  DB can't accept (and cannot hide a value the DB does store). */
 export const COACHING_SESSION_STATUSES = [
   'DRAFT', 'SCHEDULED', 'IN_PROCESS', 'AWAITING_CSR_ACTION',
-  'QUIZ_PENDING', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED',
+  'QUIZ_PENDING', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED', 'CANCELED',
 ] as const
 
 /**

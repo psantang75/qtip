@@ -23,14 +23,13 @@ import {
 } from '../controllers/csr.controller';
 import { getDisputeHistory, submitDispute, downloadDisputeAttachment } from '../controllers/dispute.controller';
 import { authenticate } from '../middleware/auth';
-import { 
+import {
   validateSchema,
   CSRAuditFiltersSchema,
   AuditIdSchema,
   FinalizeSubmissionSchema,
   CoachingSessionFiltersSchema,
   SessionIdSchema,
-  CertificateIdSchema
 } from '../validation/csr.validation';
 
 const router = express.Router();

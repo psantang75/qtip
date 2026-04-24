@@ -24,6 +24,28 @@ export interface PaginatedResult<T> {
 }
 
 /**
+ * Loose shape of a backend paginated response. Several backend endpoints use
+ * slightly different envelope shapes — `normalizePaginated` collapses all of
+ * them into `PaginatedResult<T>`.
+ */
+type RawPaginatedEnvelope = {
+  data?: unknown[]
+  items?: unknown[]
+  pagination?: {
+    total?: number | string
+    page?: number | string
+    limit?: number | string
+    perPage?: number | string
+    totalPages?: number | string
+  }
+  total?: number | string
+  page?: number | string
+  limit?: number | string
+  perPage?: number | string
+  totalPages?: number | string
+} & Record<string, unknown>
+
+/**
  * Normalizes any backend paginated response into PaginatedResult<T>.
  * Handles the three shapes currently in use:
  *   { data, pagination: { total, page, limit, totalPages } }  — QA list
@@ -31,12 +53,18 @@ export interface PaginatedResult<T> {
  *   { disputes, total, page, limit, totalPages }               — Manager disputes
  */
 export function normalizePaginated<T>(
-  raw: any,
+  raw: unknown,
   itemKey: string = 'data',
-  mapItem?: (item: any) => T,
+  mapItem?: (item: unknown) => T,
 ): PaginatedResult<T> {
-  const items: any[] = raw?.[itemKey] ?? raw?.data ?? raw?.items ?? (Array.isArray(raw) ? raw : [])
-  const pagination   = raw?.pagination ?? raw
+  const env = (raw ?? {}) as RawPaginatedEnvelope
+  const itemsRaw =
+    (env[itemKey] as unknown[] | undefined) ??
+    env.data ??
+    env.items ??
+    (Array.isArray(raw) ? (raw as unknown[]) : [])
+  const items = itemsRaw ?? []
+  const pagination = env.pagination ?? env
   return {
     items:      mapItem ? items.map(mapItem) : (items as T[]),
     total:      Number(pagination?.total      ?? items.length),

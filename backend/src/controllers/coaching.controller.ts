@@ -712,7 +712,12 @@ export const setSessionStatus = async (req: AuthReq, res: Response) => {
     const sessionId = parseInt(req.params.id);
     const { status } = req.body as { status: string };
 
-    const validStatuses = ['DRAFT', 'SCHEDULED', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED', 'CANCELED'];
+    // Mirrors Prisma enum CoachingSessionStatus (backend/prisma/schema.prisma).
+    // CLOSED + CANCELED are still rejected below as terminal states (cannot be reopened).
+    const validStatuses = [
+      'DRAFT', 'SCHEDULED', 'IN_PROCESS', 'AWAITING_CSR_ACTION',
+      'QUIZ_PENDING', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED', 'CANCELED',
+    ];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }

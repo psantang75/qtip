@@ -1,17 +1,36 @@
 ﻿import { z } from 'zod';
+import {
+  PageSchema,
+  PageSizeSchema,
+  optionalString,
+  optionalDate,
+  SubmissionStatusSchema,
+  CoachingSessionStatusSchema,
+  CoachingPurposeSchema,
+  CoachingFormatSchema,
+} from './common';
 
 /**
- * CSR validation schemas using Zod
+ * CSR validation schemas using Zod.
+ *
+ * Field names in these schemas must match what the corresponding controller
+ * actually reads from `req.query` / `req.body`. Z.object's default `.strip()`
+ * mode silently drops anything unknown, so a mismatched name turns the whole
+ * schema into a no-op (pre-production review item #32). Status / purpose /
+ * format enums come from `validation/common.ts`, which mirrors the Prisma
+ * enums exactly.
  */
 
 export const CSRAuditFiltersSchema = z.object({
-  page: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(5000).optional(),
-  form_name: z.preprocess(val => val === '' ? undefined : val, z.string().optional()),
-  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format. Expected YYYY-MM-DD').optional(),
-  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format. Expected YYYY-MM-DD').optional(),
-  status: z.preprocess(val => val === '' ? undefined : val, z.enum(['DRAFT', 'SUBMITTED', 'FINALIZED', 'DISPUTED']).optional()),
-  searchTerm: z.preprocess(val => val === '' ? undefined : val, z.string().optional())
+  page: PageSchema,
+  limit: PageSizeSchema,
+  // `csrAudit.controller.getCSRAudits` reads camelCase form/date keys.
+  formName: optionalString(),
+  form_id_search: optionalString(),
+  startDate: optionalDate(),
+  endDate: optionalDate(),
+  status: z.preprocess(v => (v === '' ? undefined : v), SubmissionStatusSchema.optional()),
+  searchTerm: optionalString(),
 });
 
 export const AuditIdSchema = z.object({
@@ -27,58 +46,42 @@ export const FinalizeSubmissionSchema = z.object({
   })
 });
 
-export const QuizSubmissionSchema = z.object({
-  params: z.object({
-    quiz_id: z.coerce.number().int().min(1)
-  }),
-  body: z.object({
-    answers: z.array(z.object({
-      question_id: z.number().int().min(1),
-      selected_answer: z.string().min(1)
-    })).min(1)
-  })
-});
-
-export const CourseProgressSchema = z.object({
-  params: z.object({
-    enrollment_id: z.coerce.number().int().min(1)
-  }),
-  body: z.object({
-    progress: z.number().min(0).max(100),
-    last_accessed: z.string().datetime().optional()
-  })
-});
-
-export const PositionUpdateSchema = z.object({
-  params: z.object({
-    enrollment_id: z.coerce.number().int().min(1)
-  }),
-  body: z.object({
-    position: z.number().min(0),
-    section_id: z.string().optional(),
-    page_id: z.string().optional()
-  })
-});
+// QuizSubmissionSchema / CourseProgressSchema / PositionUpdateSchema were
+// removed during the pre-production review (item #31): they were never
+// imported, used drifted field names that no controller actually read, and
+// referenced enrollment / course-progress flows that have since been removed.
+// Add new validation here only when a controller will actively call it.
 
 export const CoachingSessionFiltersSchema = z.object({
-  page: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(5000).optional(),
-  status: z.preprocess(val => val === '' ? undefined : val, z.enum(['SCHEDULED', 'COMPLETED', 'CANCELLED']).optional()),
-  coaching_type: z.preprocess(val => val === '' ? undefined : val, z.enum(['IMPROVEMENT', 'DEVELOPMENT', 'PERFORMANCE']).optional()),
-  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format. Expected YYYY-MM-DD').optional(),
-  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format. Expected YYYY-MM-DD').optional(),
-  search: z.preprocess(val => val === '' ? undefined : val, z.string().optional())
+  page: PageSchema,
+  limit: PageSizeSchema,
+  pageSize: PageSizeSchema,
+  // `csr.controller.getCSRCoachingSessions` reads these exact keys.
+  status: z.preprocess(v => (v === '' ? undefined : v), CoachingSessionStatusSchema.optional()),
+  coaching_purpose: z.preprocess(v => (v === '' ? undefined : v), CoachingPurposeSchema.optional()),
+  coaching_format: z.preprocess(v => (v === '' ? undefined : v), CoachingFormatSchema.optional()),
+  startDate: optionalDate(),
+  endDate: optionalDate(),
+  search: optionalString(),
 });
 
 export const SessionIdSchema = z.object({
   sessionId: z.coerce.number().int().min(1)
 });
 
-export const CertificateIdSchema = z.object({
-  certificate_id: z.coerce.number().int().min(1)
-});
+// CertificateIdSchema removed during pre-production review (item #31) — no
+// controller reads `certificate_id` and no route mounted it.
 
-// Validation middleware helper
+/**
+ * Validation middleware helper. Spreads `req.query`, `req.params`, and
+ * `req.body` into one object so flat schemas (most of the ones above) can
+ * read their fields directly, while still exposing `params` / `body` as
+ * sub-objects for nested schemas like `FinalizeSubmissionSchema`.
+ *
+ * Note: this validates only — it does **not** rewrite `req.query`, so the
+ * controller still reads raw values. The controller is responsible for the
+ * coercion that the schema describes.
+ */
 export const validateSchema = (schema: z.ZodSchema) => {
   return (req: any, res: any, next: any) => {
     try {
@@ -87,7 +90,7 @@ export const validateSchema = (schema: z.ZodSchema) => {
         ...req.params,
         ...req.body,
         params: req.params,
-        body: req.body
+        body: req.body,
       });
       next();
     } catch (error) {
@@ -96,11 +99,11 @@ export const validateSchema = (schema: z.ZodSchema) => {
           message: 'Validation error',
           errors: error.errors.map(err => ({
             path: err.path.join('.'),
-            message: err.message
-          }))
+            message: err.message,
+          })),
         });
       }
       next(error);
     }
   };
-}; 
+};

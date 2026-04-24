@@ -1,5 +1,64 @@
 import { api } from './authService';
 
+// ── Submission payload + response types ──────────────────────────────────────
+// Mirrors backend `CreateSubmissionDTO` / `CreateSubmissionAnswerDTO` /
+// `SubmissionMetadataDTO` in `backend/src/models/Submission.ts`. Kept here as
+// a thin frontend mirror so that `submitAudit` / `saveDraft` no longer have
+// `any` payloads (pre-production review item #33). Update both sides together.
+
+export interface SubmissionAnswerPayload {
+  question_id: number;
+  answer: string;
+  notes?: string;
+}
+
+export interface SubmissionMetadataPayload {
+  field_id: number | string;
+  value: string;
+}
+
+export interface SubmissionCallDataPayload {
+  call_id: string;
+  department_id?: number | null;
+  customer_id?: string | null;
+  call_date?: string | Date;
+  duration?: number;
+  recording_url?: string | null;
+  transcript?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface SubmissionPayload {
+  form_id: number;
+  call_id?: number | null;
+  call_ids?: number[];
+  call_data?: SubmissionCallDataPayload[];
+  csr_id?: number | null;
+  submitted_by?: number;
+  answers: SubmissionAnswerPayload[];
+  status?: 'DRAFT' | 'SUBMITTED' | 'DISPUTED' | 'FINALIZED';
+  metadata?: SubmissionMetadataPayload[];
+}
+
+export interface SubmissionResult {
+  submission_id?: number;
+  total_score?: number;
+  message?: string;
+}
+
+export interface FinalizePayload {
+  acknowledged?: boolean;
+  notes?: string | null;
+  total_score?: number;
+}
+
+export interface ScoreSnapshotPayload {
+  created_by?: number;
+  created_at?: string;
+  total_score?: number;
+  notes?: string | null;
+}
+
 // Types for submissions and audits
 export interface AssignedAudit {
   assignment_id: number;
@@ -102,10 +161,10 @@ const submissionService = {
   },
 
   // Submit completed audit
-  submitAudit: async (submissionData: any): Promise<any> => {
+  submitAudit: async (submissionData: SubmissionPayload): Promise<SubmissionResult> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.post('/submissions', submissionData);
+      const response = await api.post<SubmissionResult>('/submissions', submissionData);
       return response.data;
     } catch (error: any) {
       console.error('Error submitting audit:', error);
@@ -128,10 +187,10 @@ const submissionService = {
   },
 
   // Save audit draft
-  saveDraft: async (submissionData: any): Promise<any> => {
+  saveDraft: async (submissionData: SubmissionPayload): Promise<SubmissionResult> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.post('/submissions/draft', submissionData);
+      const response = await api.post<SubmissionResult>('/submissions/draft', submissionData);
       return response.data;
     } catch (error) {
       console.error('Error saving draft:', error);
@@ -140,10 +199,13 @@ const submissionService = {
   },
 
   // Update existing submission (for managers)
-  updateSubmission: async (submissionId: number, updateData: any): Promise<any> => {
+  updateSubmission: async (
+    submissionId: number,
+    updateData: Partial<SubmissionPayload> & { updated_by?: number; updated_at?: string },
+  ): Promise<SubmissionResult> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.put(`/submissions/${submissionId}`, updateData);
+      const response = await api.put<SubmissionResult>(`/submissions/${submissionId}`, updateData);
       return response.data;
     } catch (error) {
       console.error('Error updating submission:', error);
@@ -152,10 +214,13 @@ const submissionService = {
   },
 
   // Create a snapshot of scores
-  createScoreSnapshot: async (submissionId: number, snapshotData: any): Promise<any> => {
+  createScoreSnapshot: async (
+    submissionId: number,
+    snapshotData: ScoreSnapshotPayload,
+  ): Promise<SubmissionResult> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.post(`/submissions/${submissionId}/snapshots`, snapshotData);
+      const response = await api.post<SubmissionResult>(`/submissions/${submissionId}/snapshots`, snapshotData);
       return response.data;
     } catch (error) {
       console.error('Error creating score snapshot:', error);
@@ -164,10 +229,13 @@ const submissionService = {
   },
 
   // Finalize a submission after dispute resolution
-  finalizeSubmission: async (submissionId: number, finalData: any): Promise<any> => {
+  finalizeSubmission: async (
+    submissionId: number,
+    finalData: FinalizePayload,
+  ): Promise<SubmissionResult> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.put(`/submissions/${submissionId}/finalize`, finalData);
+      const response = await api.put<SubmissionResult>(`/submissions/${submissionId}/finalize`, finalData);
       return response.data;
     } catch (error) {
       console.error('Error finalizing submission:', error);
@@ -176,16 +244,16 @@ const submissionService = {
   },
 
   // Flag a submission for review
-  flagSubmission: async (submissionId: number, reason: string): Promise<any> => {
+  flagSubmission: async (submissionId: number, reason: string): Promise<{ message?: string }> => {
     try {
       const api = getAuthorizedAxios();
-      const response = await api.post(`/submissions/${submissionId}/flag`, { reason });
+      const response = await api.post<{ message?: string }>(`/submissions/${submissionId}/flag`, { reason });
       return response.data;
     } catch (error) {
       console.error('Error flagging submission:', error);
       throw error;
     }
-  }
+  },
 };
 
 export default submissionService; 
