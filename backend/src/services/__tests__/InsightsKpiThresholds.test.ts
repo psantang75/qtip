@@ -18,6 +18,9 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import pool, { closeDatabaseConnections } from '../../config/database'
 import { RowDataPacket } from 'mysql2'
+import { DB_TESTS_ENABLED } from '../../__tests__/setup'
+
+const describeDb = describe.skipIf(!DB_TESTS_ENABLED)
 
 type Direction = 'UP_IS_GOOD' | 'DOWN_IS_GOOD' | 'NEUTRAL'
 interface ThresholdDef {
@@ -72,10 +75,10 @@ const EXPECTED: Record<string, {
 }
 
 afterAll(async () => {
-  await closeDatabaseConnections()
+  if (DB_TESTS_ENABLED) await closeDatabaseConnections()
 })
 
-describe('Insights KPI thresholds — Phase 6', () => {
+describeDb('Insights KPI thresholds — Phase 6', () => {
   it('every Quality KPI has a current dept-wide threshold row matching the report', async () => {
     const codes = Object.keys(EXPECTED)
     const placeholders = codes.map(() => '?').join(',')

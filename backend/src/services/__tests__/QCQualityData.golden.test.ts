@@ -20,6 +20,9 @@ import {
   getScoreDistribution,
 } from '../QCQualityData'
 import { closeDatabaseConnections } from '../../config/database'
+import { DB_TESTS_ENABLED } from '../../__tests__/setup'
+
+const describeDb = describe.skipIf(!DB_TESTS_ENABLED)
 
 const SLICE_RANGES = {
   current: { start: new Date(2026, 1, 1, 0, 0, 0),  end: new Date(2026, 1, 28, 23, 59, 59, 999) },
@@ -31,10 +34,10 @@ const USER_MARC = 23
 const FORM_NAME = 'Contact Call Review Form'
 
 afterAll(async () => {
-  await closeDatabaseConnections()
+  if (DB_TESTS_ENABLED) await closeDatabaseConnections()
 })
 
-describe('QCQualityData — golden slice', () => {
+describeDb('QCQualityData — golden slice', () => {
   it('getScoreDistribution returns the dept-wide buckets for Tech Support / Feb 2026', async () => {
     const buckets = await getScoreDistribution(DEPT_TECH_SUPPORT, [], SLICE_RANGES)
     const map = Object.fromEntries(buckets.map(b => [b.bucket, b.count]))

@@ -7,6 +7,9 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import { QCKpiService } from '../QCKpiService'
 import { closeDatabaseConnections } from '../../config/database'
+import { DB_TESTS_ENABLED } from '../../__tests__/setup'
+
+const describeDb = describe.skipIf(!DB_TESTS_ENABLED)
 
 const SLICE_RANGE  = { start: new Date(2026, 1, 1, 0, 0, 0), end: new Date(2026, 1, 28, 23, 59, 59, 999) }
 const SLICE_RANGES = {
@@ -17,10 +20,10 @@ const DEPT_TECH_SUPPORT = [2]
 const USER_MARC = 23
 
 afterAll(async () => {
-  await closeDatabaseConnections()
+  if (DB_TESTS_ENABLED) await closeDatabaseConnections()
 })
 
-describe('QCKpiService — golden slice', () => {
+describeDb('QCKpiService — golden slice', () => {
   const svc = new QCKpiService()
 
   it('computeKpisForRange dept-scoped pins every KPI for Feb 2026', async () => {

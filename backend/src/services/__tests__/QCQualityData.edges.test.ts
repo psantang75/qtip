@@ -19,6 +19,9 @@ import {
 } from '../QCQualityData'
 import { QCKpiService } from '../QCKpiService'
 import pool, { closeDatabaseConnections } from '../../config/database'
+import { DB_TESTS_ENABLED } from '../../__tests__/setup'
+
+const describeDb = describe.skipIf(!DB_TESTS_ENABLED)
 
 const DEPT_A = [99001]
 const DEPT_B = [99002]
@@ -57,11 +60,13 @@ async function execMulti(sql: string) {
 const FIXTURE_PATH = path.resolve(__dirname, '..', '..', '..', 'prisma', 'test-fixtures', 'quality-edge-cases.sql')
 
 beforeAll(async () => {
+  if (!DB_TESTS_ENABLED) return
   const sql = fs.readFileSync(FIXTURE_PATH, 'utf8')
   await execMulti(sql)
 })
 
 afterAll(async () => {
+  if (!DB_TESTS_ENABLED) return
   // Same DELETE block as the top of the fixture, idempotent cleanup.
   await pool.query('DELETE FROM disputes WHERE submission_id BETWEEN 99000 AND 99999')
   await pool.query('DELETE FROM submission_answers WHERE submission_id BETWEEN 99000 AND 99999')
@@ -77,7 +82,7 @@ afterAll(async () => {
   await closeDatabaseConnections()
 })
 
-describe('QCQualityData — edge cases', () => {
+describeDb('QCQualityData — edge cases', () => {
   it('empty period returns empty / safe values (no NaN)', async () => {
     const buckets = await getScoreDistribution(DEPT_A, [], EMPTY_RANGES)
     expect(buckets).toEqual([])

@@ -14,6 +14,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { InsightsPermissionService } from '../InsightsPermissionService'
 import pool, { closeDatabaseConnections } from '../../config/database'
 import { RowDataPacket } from 'mysql2'
+import { DB_TESTS_ENABLED } from '../../__tests__/setup'
+
+const describeDb = describe.skipIf(!DB_TESTS_ENABLED)
 
 const SVC = new InsightsPermissionService()
 
@@ -54,6 +57,7 @@ async function insertPage(key: string): Promise<number> {
 }
 
 beforeAll(async () => {
+  if (!DB_TESTS_ENABLED) return
   // Idempotent cleanup of any orphaned fixtures from a prior aborted run.
   await pool.query(
     `DELETE FROM ie_page WHERE page_key LIKE '__test_perm_%'`
@@ -118,13 +122,14 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  if (!DB_TESTS_ENABLED) return
   await pool.query(
     `DELETE FROM ie_page WHERE page_key LIKE '__test_perm_%'`
   )
   await closeDatabaseConnections()
 })
 
-describe('InsightsPermissionService — resolveAccess', () => {
+describeDb('InsightsPermissionService — resolveAccess', () => {
   it('returns NO_ACCESS for an unknown page key', async () => {
     const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, 'this_page_does_not_exist_xyz')
     expect(result.canAccess).toBe(false)

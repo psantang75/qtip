@@ -56,6 +56,9 @@ test-results/
 Thumbs.db
 .vscode/settings.json
 .idea/
+# Visual Studio per-developer state (machine paths, copilot indices, sln cache)
+# Pre-production review item #50 — never commit.
+.vs/
 
 # ── Testing ──────────────────────────────────────────────────────────────────
 coverage/
