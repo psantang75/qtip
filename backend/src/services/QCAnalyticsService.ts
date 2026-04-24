@@ -7,8 +7,7 @@ import { deptClause } from './qcQueryHelpers'
 export interface AgentSummary {
   userId: number; name: string; dept: string
   qa: number | null; trend: string
-  coaching: number; quiz: number; disputes: number; writeups: number
-  risk: boolean; cadence: number; expected: number
+  qaCount: number; coaching: number; writeups: number
 }
 export interface AgentProfile {
   user: { id: number; name: string; dept: string; title: string | null }
@@ -40,65 +39,89 @@ export class QCAnalyticsService {
     const userClause = forUserId !== null ? 'AND u.id = ?' : ''
     const userParams = forUserId !== null ? [forUserId] : []
 
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT u.id AS userId, u.username AS name,
-         COALESCE(d.department_name, 'Unknown') AS dept,
-         AVG(COALESCE(sub.total_score, ss.score)) AS qa,
-         COUNT(DISTINCT cs.id)   AS coaching,
-         COUNT(DISTINCT qa.id)   AS quiz,
-         COUNT(DISTINCT disp.id) AS disputes,
-         COUNT(DISTINCT wu.id)   AS writeups
-       FROM users u
-       LEFT JOIN departments d ON u.department_id = d.id
-       LEFT JOIN submission_metadata sm_csr ON CAST(sm_csr.value AS UNSIGNED) = u.id
-       LEFT JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
-       LEFT JOIN submissions sub
-         ON sub.id = sm_csr.submission_id AND sub.status = 'FINALIZED'
-         AND sub.submitted_at BETWEEN ? AND ?
-       LEFT JOIN score_snapshots ss ON ss.submission_id = sub.id
-       LEFT JOIN coaching_sessions cs ON cs.csr_id = u.id AND cs.created_at BETWEEN ? AND ?
-       LEFT JOIN quiz_attempts qa ON qa.user_id = u.id AND qa.submitted_at BETWEEN ? AND ?
-       LEFT JOIN disputes disp ON disp.submission_id = sub.id
-       LEFT JOIN write_ups wu ON wu.csr_id = u.id AND wu.created_at BETWEEN ? AND ?
-       WHERE u.role_id = 3 AND u.is_active = 1 ${dc.sql} ${userClause}
-       GROUP BY u.id, u.username, d.department_name`,
-      [s, e, s, e, s, e, s, e, ...dc.params, ...userParams],
-    )
+    // Run the agent roster query and one aggregate-per-table query in parallel.
+    // Per-table grouped queries keep row counts bounded by the size of each
+    // table and avoid the Cartesian-style row explosion of a single mega-join.
+    const [
+      [agentRows],
+      [qaRows],
+      [priorQaRows],
+      [coachingRows],
+      [writeupRows],
+    ] = await Promise.all([
+      pool.execute<RowDataPacket[]>(
+        `SELECT u.id AS userId, u.username AS name,
+           COALESCE(d.department_name, 'Unknown') AS dept
+         FROM users u
+         LEFT JOIN departments d ON u.department_id = d.id
+         WHERE u.role_id = 3 AND u.is_active = 1 ${dc.sql} ${userClause}`,
+        [...dc.params, ...userParams],
+      ),
+      pool.execute<RowDataPacket[]>(
+        `SELECT CAST(sm_csr.value AS UNSIGNED) AS userId,
+           AVG(COALESCE(sub.total_score, ss.score)) AS qa,
+           COUNT(DISTINCT sub.id) AS cnt
+         FROM submissions sub
+         JOIN submission_metadata sm_csr ON sm_csr.submission_id = sub.id
+         JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
+         LEFT JOIN score_snapshots ss ON ss.submission_id = sub.id
+         WHERE sub.status = 'FINALIZED' AND sub.submitted_at BETWEEN ? AND ?
+         GROUP BY CAST(sm_csr.value AS UNSIGNED)`,
+        [s, e],
+      ),
+      pool.execute<RowDataPacket[]>(
+        `SELECT CAST(sm_csr.value AS UNSIGNED) AS userId,
+           AVG(COALESCE(sub.total_score, ss.score)) AS qa
+         FROM submissions sub
+         JOIN submission_metadata sm_csr ON sm_csr.submission_id = sub.id
+         JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
+         LEFT JOIN score_snapshots ss ON ss.submission_id = sub.id
+         WHERE sub.status = 'FINALIZED' AND sub.submitted_at BETWEEN ? AND ?
+         GROUP BY CAST(sm_csr.value AS UNSIGNED)`,
+        [ps, pe],
+      ),
+      pool.execute<RowDataPacket[]>(
+        `SELECT cs.csr_id AS userId, COUNT(*) AS cnt
+         FROM coaching_sessions cs
+         WHERE cs.created_at BETWEEN ? AND ?
+         GROUP BY cs.csr_id`,
+        [s, e],
+      ),
+      pool.execute<RowDataPacket[]>(
+        `SELECT wu.csr_id AS userId, COUNT(*) AS cnt
+         FROM write_ups wu
+         WHERE wu.created_at BETWEEN ? AND ?
+         GROUP BY wu.csr_id`,
+        [s, e],
+      ),
+    ])
 
-    // Prior-period QA for trend
-    const [priorRows] = await pool.execute<RowDataPacket[]>(
-      `SELECT CAST(sm_csr.value AS UNSIGNED) AS userId,
-         AVG(COALESCE(sub.total_score, ss.score)) AS qa
-       FROM submissions sub
-       JOIN submission_metadata sm_csr ON sm_csr.submission_id = sub.id
-       JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
-       LEFT JOIN score_snapshots ss ON ss.submission_id = sub.id
-       WHERE sub.status = 'FINALIZED' AND sub.submitted_at BETWEEN ? AND ?
-       GROUP BY CAST(sm_csr.value AS UNSIGNED)`,
-      [ps, pe],
-    )
-    const priorMap = new Map<number, number>()
-    for (const r of priorRows) priorMap.set(r.userId, parseFloat(r.qa ?? '0'))
+    const qaMap       = new Map<number, number>()
+    const qaCountMap  = new Map<number, number>()
+    const priorMap    = new Map<number, number>()
+    const coachingMap = new Map<number, number>()
+    const writeupMap  = new Map<number, number>()
+    for (const r of qaRows) {
+      if (r.qa != null) qaMap.set(r.userId, parseFloat(r.qa))
+      qaCountMap.set(r.userId, parseInt(r.cnt, 10))
+    }
+    for (const r of priorQaRows)  if (r.qa != null) priorMap.set(r.userId, parseFloat(r.qa))
+    for (const r of coachingRows) coachingMap.set(r.userId, parseInt(r.cnt, 10))
+    for (const r of writeupRows)  writeupMap.set(r.userId, parseInt(r.cnt, 10))
 
-    return rows.map(r => {
-      const currQa  = r.qa != null ? parseFloat(r.qa) : null
-      const priorQa = priorMap.get(r.userId) ?? null
-      const delta   = currQa !== null && priorQa !== null ? currQa - priorQa : null
-      const coaching = parseInt(r.coaching, 10)
-      const expected = 4 // default expectation; driven by KPI thresholds in future
+    return agentRows.map(r => {
+      const currQa   = qaMap.get(r.userId) ?? null
+      const priorQa  = priorMap.get(r.userId) ?? null
+      const delta    = currQa !== null && priorQa !== null ? currQa - priorQa : null
       return {
         userId:   r.userId,
         name:     r.name,
         dept:     r.dept,
         qa:       currQa,
         trend:    delta !== null ? (delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)) : '—',
-        coaching,
-        quiz:     parseInt(r.quiz, 10),
-        disputes: parseInt(r.disputes, 10),
-        writeups: parseInt(r.writeups, 10),
-        risk:     parseInt(r.writeups, 10) > 0 || parseInt(r.disputes, 10) > 2,
-        cadence:  coaching,
-        expected,
+        qaCount:  qaCountMap.get(r.userId) ?? 0,
+        coaching: coachingMap.get(r.userId) ?? 0,
+        writeups: writeupMap.get(r.userId) ?? 0,
       }
     })
   }

@@ -6,6 +6,7 @@ import qaService, { type Submission } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ListPageShell } from '@/components/common/ListPageShell'
 import { ListPageHeader } from '@/components/common/ListPageHeader'
 import { ListFilterBar } from '@/components/common/ListFilterBar'
@@ -210,14 +211,25 @@ export default function SubmissionsPage() {
                           ? `${row.score.toFixed(1)}%`
                           : <span className="text-slate-400">—</span>
                         }
-                        {row.score_capped && (
-                          <span
-                            aria-label="Score capped due to critical fail"
-                            title={`Capped due to critical fail (${row.critical_fail_count ?? 0} miss${(row.critical_fail_count ?? 0) === 1 ? '' : 'es'})`}
-                            className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold leading-none"
-                          >
-                            !
-                          </span>
+                        {(row.critical_fail_count ?? 0) > 0 && (
+                          <TooltipProvider delayDuration={200}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  onClick={e => e.stopPropagation()}
+                                  aria-label="Critical fail on this review"
+                                  className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold leading-none"
+                                >
+                                  !
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[240px] text-xs leading-snug">
+                                {row.score_capped
+                                  ? `Critical fail (${row.critical_fail_count} miss${row.critical_fail_count === 1 ? '' : 'es'}) — score capped`
+                                  : `Critical fail (${row.critical_fail_count} miss${row.critical_fail_count === 1 ? '' : 'es'})`}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         )}
                       </span>
                     </TableCell>

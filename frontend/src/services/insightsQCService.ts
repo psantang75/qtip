@@ -23,8 +23,7 @@ export interface TrendRow {
 export interface AgentSummary {
   userId: number; name: string; dept: string
   qa: number | null; trend: string
-  coaching: number; quiz: number; disputes: number; writeups: number
-  risk: boolean; cadence: number; expected: number
+  qaCount: number; coaching: number; writeups: number
 }
 
 export interface AgentProfile {
@@ -42,10 +41,12 @@ export interface AgentProfile {
 }
 
 export interface ScoreBucket    { bucket: string; count: number }
-export interface CategoryScore  { category: string; form: string; audits: number; avgScore: number | null; priorScore: number | null }
+export interface CategoryScore  { categoryId: number; category: string; formId: number; form: string; audits: number; avgScore: number | null; priorScore: number | null }
 export interface MissedQuestionAgent { userId: number; name: string; dept: string; missed: number; total: number }
 export interface MissedQuestion { questionId: number; question: string; form: string; missRate: number; missed: number; total: number; agents: MissedQuestionAgent[] }
 export interface FormScore { id: number; form: string; submissions: number; avgScore: number | null }
+export interface FormAgentRow { userId: number; name: string; dept: string; audits: number; avgScore: number | null }
+export interface CategoryAgentRow { userId: number; name: string; dept: string; audits: number; avgScore: number | null }
 export interface DeptQualityRow { dept: string; audits: number; avgScore: number | null; disputes: number }
 
 export interface CoachingTopic        { topic: string; sessions: number; agents: number }
@@ -109,7 +110,7 @@ export interface FilterOptions { departments: string[]; forms: string[] }
 export const getFilterOptions = async (p: QCParams): Promise<FilterOptions> =>
   (await api.get('/insights/qc/filter-options', { params: p })).data
 
-export const getQCKpis = async (p: QCParams): Promise<QCKpiResponse> =>
+export const getQCKpis = async (p: QCParams & { userId?: string }): Promise<QCKpiResponse> =>
   (await api.get('/insights/qc/kpis', { params: p })).data
 
 export const getQCTrends = async (p: QCParams & { kpis?: string; userId?: string }): Promise<TrendRow[]> =>
@@ -120,6 +121,23 @@ export const getQCAgents = async (p: QCParams): Promise<AgentSummary[]> =>
 
 export const getQCAgentProfile = async (userId: number, p: QCParams): Promise<AgentProfile> =>
   (await api.get(`/insights/qc/agent/${userId}`, { params: p })).data
+
+// Combined initial-load bundle for the Agent Profile page. Used as
+// placeholderData for the per-section queries so the page renders in one
+// round trip; subsequent filter changes still hit the per-section endpoints
+// directly so only the affected data refetches.
+export interface QCAgentFullResponse {
+  profile:        AgentProfile
+  kpis:           QCKpiResponse
+  trends:         TrendRow[]
+  formScores:     FormScore[]
+  categoryScores: CategoryScore[]
+}
+export const getQCAgentFull = async (
+  userId: number,
+  p: QCParams & { kpis?: string },
+): Promise<QCAgentFullResponse> =>
+  (await api.get(`/insights/qc/agent/${userId}/full`, { params: p })).data
 
 export const getScoreDistribution = async (p: QCParams): Promise<ScoreBucket[]> =>
   (await api.get('/insights/qc/quality/score-distribution', { params: p })).data
@@ -133,8 +151,29 @@ export const getMissedQuestions = async (p: QCParams): Promise<MissedQuestion[]>
 export const getQualityDeptComparison = async (p: QCParams): Promise<DeptQualityRow[]> =>
   (await api.get('/insights/qc/quality/dept-comparison', { params: p })).data
 
-export const getFormScores = async (p: QCParams): Promise<FormScore[]> =>
+export const getFormScores = async (p: QCParams & { userId?: string }): Promise<FormScore[]> =>
   (await api.get('/insights/qc/quality/forms', { params: p })).data
+
+// Per-agent breakdown for a single form. Used by the Quality page's expandable
+// Average Score by Form rows; lazy-fetched only when a row is opened.
+export const getFormAgentBreakdown = async (
+  formId: number,
+  p: QCParams,
+): Promise<FormAgentRow[]> =>
+  (await api.get(`/insights/qc/quality/forms/${formId}/agents`, { params: p })).data
+
+// Per-agent breakdown for a single (form, category). Used by the Quality
+// page's expandable Category Performance rows; lazy-fetched on row open.
+// Pass categoryId (preferred — every CategoryScore row carries one) so the
+// backend doesn't have to resolve a name lookup.
+export const getCategoryAgentBreakdown = async (
+  formId: number,
+  categoryId: number,
+  p: QCParams,
+): Promise<CategoryAgentRow[]> =>
+  (await api.get('/insights/qc/quality/category-agents', {
+    params: { ...p, formId, categoryId },
+  })).data
 
 export const getCoachingTopics = async (p: QCParams): Promise<CoachingTopic[]> =>
   (await api.get('/insights/qc/coaching/topics', { params: p })).data

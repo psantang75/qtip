@@ -118,9 +118,15 @@ function qcHandler(
 // quiz, and discipline KPIs ignore it (those tables have no form association),
 // matching the fact that only the Quality + Agent Profile pages expose a Form
 // filter in the UI.
-export const getQCKpis = qcHandler('qc_overview', (deptFilter, ranges, req) =>
-  qcKpiService.getKpiValues(deptFilter, ranges, parseFormNames(req)),
-)
+//
+// Also serves the Agent Profile drill-down (with ?userId=X) — users with
+// qc_agents access can request KPIs for a single agent. SELF scope is forced
+// to the requesting user's own id.
+export const getQCKpis = qcHandler(['qc_overview', 'qc_agents'], (deptFilter, ranges, req, access) => {
+  const requestedUserId = req.query.userId ? parseInt(req.query.userId as string, 10) : undefined
+  const userId = access.dataScope === 'SELF' ? req.user?.user_id : requestedUserId
+  return qcKpiService.getKpiValues(deptFilter, ranges, parseFormNames(req), userId)
+})
 
 // Trends are also used by the Agent Profile drill-down (with ?userId=X), so
 // users with qc_agents access can request them too. SELF scope is forced to
@@ -150,6 +156,31 @@ export const getQCAgentProfile = qcHandler('qc_agents', (_deptFilter, ranges, re
     throw new BadRequestError('You can only view your own profile')
   }
   return qcAnalyticsService.getAgentProfile(userId, ranges)
+})
+
+// Combined initial-load endpoint for the Agent Profile page. Bundles the five
+// fetches that previously cost five round-trips (profile, KPIs, trends, form
+// scores, category scores) into a single Promise.all call. Saves the cold-load
+// HTTP overhead while leaving the per-section endpoints intact so filter
+// changes still trigger only the affected queries.
+export const getQCAgentFull = qcHandler('qc_agents', async (deptFilter, ranges, req, access) => {
+  const userId = parseInt(req.params.userId, 10)
+  if (isNaN(userId)) throw new BadRequestError('Invalid userId')
+  if (access.dataScope === 'SELF' && userId !== req.user?.user_id) {
+    throw new BadRequestError('You can only view your own profile')
+  }
+  const formNames = parseFormNames(req)
+  const trendCodes = req.query.kpis
+    ? (req.query.kpis as string).split(',')
+    : ['avg_qa_score']
+  const [profile, kpis, trends, formScores, categoryScores] = await Promise.all([
+    qcAnalyticsService.getAgentProfile(userId, ranges),
+    qcKpiService.getKpiValues(deptFilter, ranges, formNames, userId),
+    qcKpiService.getTrends(deptFilter, trendCodes, ranges.current.end, userId, formNames),
+    qcData.getFormScores(deptFilter, ranges, userId),
+    qcData.getCategoryScores(deptFilter, formNames, ranges, userId),
+  ])
+  return { profile, kpis, trends, formScores, categoryScores }
 })
 
 // ── Filter options ────────────────────────────────────────────────────────────
@@ -219,9 +250,43 @@ export const getQualityDeptComparison = qcHandler('qc_quality', (deptFilter, ran
   qcData.getQualityDeptComparison(deptFilter, ranges, parseFormNames(req)),
 )
 
-export const getFormScores = qcHandler(['qc_quality', 'qc_agents'], (deptFilter, ranges) =>
-  qcData.getFormScores(deptFilter, ranges),
-)
+// Form scores are also surfaced inside the Agent Profile drill-down on the
+// qc_agents page. When ?userId=X is supplied the data is scoped to that
+// user's audits; SELF scope forces userId to the requesting user.
+export const getFormScores = qcHandler(['qc_quality', 'qc_agents'], (deptFilter, ranges, req, access) => {
+  const requestedUserId = req.query.userId ? parseInt(req.query.userId as string, 10) : null
+  const userId = access.dataScope === 'SELF'
+    ? req.user?.user_id ?? null
+    : (Number.isFinite(requestedUserId) ? requestedUserId : null)
+  return qcData.getFormScores(deptFilter, ranges, userId)
+})
+
+// Lazy-loaded per-agent breakdown for a single form. Backs the Quality page's
+// "Average Score by Form" expandable rows. Honors current dept and period
+// filters via the shared qcHandler wrapper.
+export const getFormAgentBreakdown = qcHandler('qc_quality', (deptFilter, ranges, req) => {
+  const formId = parseInt(req.params.formId, 10)
+  if (isNaN(formId)) throw new BadRequestError('Invalid formId')
+  return qcData.getFormAgentBreakdown(deptFilter, formId, ranges)
+})
+
+// Lazy-loaded per-agent breakdown for a single (form, category). Backs the
+// Quality page's "Category Performance" expandable rows. Accepts either an
+// explicit categoryId (preferred — comes back on every category row) or a
+// fallback (formId + category name) for callers that only have those.
+export const getCategoryAgentBreakdown = qcHandler('qc_quality', async (deptFilter, ranges, req) => {
+  const formId = parseInt(req.query.formId as string, 10)
+  if (isNaN(formId)) throw new BadRequestError('Invalid formId')
+  let categoryId = req.query.categoryId ? parseInt(req.query.categoryId as string, 10) : NaN
+  if (isNaN(categoryId)) {
+    const categoryName = (req.query.category as string | undefined)?.trim()
+    if (!categoryName) throw new BadRequestError('categoryId or category query parameter is required')
+    const found = await qcData.findCategoryId(formId, categoryName)
+    if (found == null) return []
+    categoryId = found
+  }
+  return qcData.getCategoryAgentBreakdown(deptFilter, formId, categoryId, ranges)
+})
 
 // ── Coaching ──────────────────────────────────────────────────────────────────
 

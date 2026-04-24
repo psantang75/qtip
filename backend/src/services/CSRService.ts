@@ -12,6 +12,8 @@ export interface CSRAudit {
   submittedDate: string;
   score: number;
   status: string;
+  critical_fail_count: number;
+  score_capped: boolean;
 }
 
 export interface CSRAuditDetail {
@@ -127,7 +129,9 @@ export class CSRService {
               f.form_name as formName,
               s.submitted_at as submittedDate,
               s.total_score as score,
-              s.status
+              s.status,
+              s.critical_fail_count,
+              s.score_capped
             FROM submissions s
             JOIN forms f ON s.form_id = f.id
             JOIN submission_metadata sm ON sm.submission_id = s.id
@@ -148,7 +152,9 @@ export class CSRService {
           formName: audit.formName,
           submittedDate: audit.submittedDate,
           score: audit.score || 0,
-          status: audit.status
+          status: audit.status,
+          critical_fail_count: Number(audit.critical_fail_count ?? 0),
+          score_capped: Boolean(audit.score_capped),
         })),
         totalCount
       };

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -6,8 +6,10 @@ import {
   flexRender, createColumnHelper, type SortingState,
 } from '@tanstack/react-table'
 import { ChevronUp, ChevronDown } from 'lucide-react'
-import { InsightsFilterBar, InsightsSection, StatusBadge, StatusDot, SkeletonTable, ErrorCard } from '@/components/insights'
+import { InsightsFilterBar, InsightsSection, StatusDot, SkeletonTable, ErrorCard } from '@/components/insights'
 import { useQCFilters } from '@/hooks/useQCFilters'
+import { useQualityRole } from '@/hooks/useQualityRole'
+import { useAuth } from '@/contexts/AuthContext'
 import { getKpiDef } from '@/constants/kpiDefs'
 import { getQCAgents, getFilterOptions } from '@/services/insightsQCService'
 import type { AgentSummary } from '@/services/insightsQCService'
@@ -41,33 +43,13 @@ const COLUMNS = [
       return <span className={`font-medium text-xs ${v.startsWith('+') ? 'text-emerald-600' : v.startsWith('-') ? 'text-red-500' : 'text-slate-400'}`}>{v}</span>
     },
   }),
-  col.accessor('cadence', {
-    header: 'Cadence',
-    cell: i => {
-      const a = i.row.original
-      const color = a.cadence >= a.expected ? 'text-emerald-600' : a.cadence >= a.expected * 0.75 ? 'text-orange-500' : 'text-red-600'
-      return <span className={`font-semibold text-sm ${color}`}>{a.cadence}/{a.expected}</span>
-    },
+  col.accessor('qaCount', {
+    header: 'QA Reviews',
+    cell: i => <span className="text-slate-600 text-sm">{i.getValue()}</span>,
   }),
-  col.accessor('quiz', {
-    header: 'Quiz',
-    cell: i => {
-      const v = i.getValue()
-      return (
-        <span className="flex items-center gap-1">
-          <StatusDot value={v} thresholds={getKpiDef('avg_quiz_score') ?? { direction: 'UP_IS_GOOD', goal: 82, warn: 70, crit: 60 }} />
-          <span className="text-sm">{v}%</span>
-        </span>
-      )
-    },
-  }),
-  col.accessor('coaching', { header: 'Sessions', cell: i => <span className="text-slate-600 text-sm">{i.getValue()}</span> }),
-  col.accessor('disputes', {
-    header: 'Disputes',
-    cell: i => {
-      const v = i.getValue()
-      return v > 0 ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-orange-50 text-orange-600 border border-orange-200">{v}</span> : <span className="text-slate-400">0</span>
-    },
+  col.accessor('coaching', {
+    header: 'Coaching Sessions',
+    cell: i => <span className="text-slate-600 text-sm">{i.getValue()}</span>,
   }),
   col.accessor('writeups', {
     header: 'Warnings',
@@ -76,27 +58,94 @@ const COLUMNS = [
       return v > 0 ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-50 text-red-600 border border-red-200">{v}</span> : <span className="text-slate-400">0</span>
     },
   }),
-  col.accessor('risk', {
-    header: 'Status',
-    cell: i => i.getValue() ? <StatusBadge label="At Risk" variant="bad" /> : <StatusBadge label="OK" variant="good" />,
-  }),
 ]
 
 export default function QCAgentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const agentId = searchParams.get('agent') ? parseInt(searchParams.get('agent')!, 10) : null
   const { toast } = useToast()
+  const { isAgent } = useQualityRole()
+  const { user } = useAuth()
 
   const { departments, setDepartments, period, setPeriod,
           customStart, setCustomStart, customEnd, setCustomEnd,
-          resetFilters, params } = useQCFilters()
-  const [selectedForms, setSelectedForms]  = useState<string[]>([])
-  const [sorting, setSorting]              = useState<SortingState>([{ id: 'qa', desc: false }])
+          forms, setForms, resetFilters, params } = useQCFilters()
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'qa', desc: false }])
 
   const apiParams = useMemo(() => ({ ...params }), [params])
 
+  // CSRs short-circuit the entire list flow: render their own profile
+  // directly off auth context. We never call /qc/agents for them — that
+  // endpoint can be slow or unavailable for SELF-scoped users, and there's
+  // nothing for them to choose from anyway.
+  if (isAgent && user) {
+    const selfAgent: AgentSummary = {
+      userId:   user.id,
+      name:     user.username,
+      dept:     user.department_name ?? '',
+      qa:       null,
+      trend:    '—',
+      qaCount:  0,
+      coaching: 0,
+      writeups: 0,
+    }
+    return (
+      <QCAgentProfile
+        agent={selfAgent}
+        apiParams={apiParams}
+        selectedForms={forms}
+        onFormsChange={setForms}
+        onBack={() => { /* no list to return to */ }}
+        period={period} setPeriod={setPeriod}
+        customStart={customStart} setCustomStart={setCustomStart}
+        customEnd={customEnd} setCustomEnd={setCustomEnd}
+        showBackButton={false}
+      />
+    )
+  }
+
+  // Admin / manager / QA / director path — full list view follows.
+  return (
+    <AdminAgentsList
+      agentId={agentId}
+      setSearchParams={setSearchParams}
+      apiParams={apiParams}
+      sorting={sorting} setSorting={setSorting}
+      departments={departments} setDepartments={setDepartments}
+      period={period} setPeriod={setPeriod}
+      customStart={customStart} setCustomStart={setCustomStart}
+      customEnd={customEnd} setCustomEnd={setCustomEnd}
+      forms={forms} setForms={setForms}
+      resetFilters={resetFilters}
+      toast={toast}
+    />
+  )
+}
+
+interface AdminAgentsListProps {
+  agentId: number | null
+  setSearchParams: ReturnType<typeof useSearchParams>[1]
+  apiParams: ReturnType<typeof useQCFilters>['params']
+  sorting: SortingState
+  setSorting: React.Dispatch<React.SetStateAction<SortingState>>
+  departments: string[]; setDepartments: (v: string[]) => void
+  period: string; setPeriod: (v: string) => void
+  customStart: string; setCustomStart: (v: string) => void
+  customEnd: string; setCustomEnd: (v: string) => void
+  forms: string[]; setForms: (v: string[]) => void
+  resetFilters: () => void
+  toast: ReturnType<typeof useToast>['toast']
+}
+
+function AdminAgentsList({
+  agentId, setSearchParams, apiParams, sorting, setSorting,
+  departments, setDepartments, period, setPeriod,
+  customStart, setCustomStart, customEnd, setCustomEnd,
+  forms, setForms, resetFilters, toast,
+}: AdminAgentsListProps) {
   const { data: filterOpts } = useQuery({ queryKey: ['qc-filter-opts', apiParams], queryFn: () => getFilterOptions(apiParams) })
   const deptOptions = filterOpts?.departments ?? []
+  const formOptions = filterOpts?.forms ?? []
   const { data: agents = [], isLoading, isError, refetch } = useQuery({ queryKey: ['qc-agents', apiParams], queryFn: () => getQCAgents(apiParams) })
 
   const selectedAgent = useMemo(() => {
@@ -105,8 +154,8 @@ export default function QCAgentsPage() {
   }, [agentId, agents])
 
   // Guard against URL tampering: if the user requests an agent they cannot
-  // see (e.g. a SELF-scoped agent rewriting ?agent=17), strip the param and
-  // surface an access-denied toast instead of silently swapping data.
+  // see, strip the param and surface an access-denied toast instead of
+  // silently swapping data.
   useEffect(() => {
     if (!agentId) return
     if (isLoading || isError) return
@@ -130,7 +179,7 @@ export default function QCAgentsPage() {
   }
 
   function clearAgent() {
-    setSelectedForms([])
+    setForms([])
     setSearchParams({})
   }
 
@@ -147,12 +196,9 @@ export default function QCAgentsPage() {
       <QCAgentProfile
         agent={selectedAgent}
         apiParams={apiParams}
-        selectedForms={selectedForms}
-        onFormsChange={setSelectedForms}
+        selectedForms={forms}
+        onFormsChange={setForms}
         onBack={clearAgent}
-        deptOptions={deptOptions}
-        departments={departments}
-        setDepartments={setDepartments}
         period={period} setPeriod={setPeriod}
         customStart={customStart} setCustomStart={setCustomStart}
         customEnd={customEnd} setCustomEnd={setCustomEnd}
@@ -160,8 +206,8 @@ export default function QCAgentsPage() {
     )
   }
 
-  // An agent was requested via URL but the agents list is still loading —
-  // show a skeleton so we don't flash the table before the access guard runs.
+  // An agent was requested via URL but the list is still loading — show a
+  // skeleton so we don't flash the table before the access guard runs.
   if (agentId && isLoading) {
     return <SkeletonTable rows={6} />
   }
@@ -173,6 +219,8 @@ export default function QCAgentsPage() {
         period={period} onPeriodChange={setPeriod}
         customStart={customStart} customEnd={customEnd}
         onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
+        showFormFilter selectedForms={forms} onFormsChange={setForms}
+        availableForms={formOptions}
         onReset={resetFilters}
       />
       <div className="space-y-4">
@@ -211,7 +259,7 @@ export default function QCAgentsPage() {
                 </tr>
               ))}
               {agents.length === 0 && (
-                <tr><td colSpan={10} className="py-8 text-center text-sm text-slate-400">No agents match the selected filters.</td></tr>
+                <tr><td colSpan={7} className="py-8 text-center text-sm text-slate-400">No agents match the selected filters.</td></tr>
               )}
             </tbody>
           </table>

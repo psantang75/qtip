@@ -101,6 +101,7 @@ model User {
   insightsOverridesGranted              IePageUserOverride[] @relation("InsightsOverrideGranter")
 
   @@index([last_login])
+  @@index([role_id, is_active, department_id], map: "idx_users_role_active_dept")
   @@map("users")
 }
 
@@ -416,6 +417,8 @@ model QuizAttempt {
 
   @@index([quiz_id, user_id])
   @@index([coaching_session_id])
+  @@index([submitted_at, user_id], map: "idx_quiz_attempts_date_user")
+  @@index([user_id, submitted_at], map: "idx_quiz_attempts_user_date")
   @@map("quiz_attempts")
 }
 
@@ -488,6 +491,8 @@ model CoachingSession {
   @@index([session_date, coaching_purpose])
   @@index([coaching_purpose])
   @@index([coaching_format])
+  @@index([session_date, status], map: "idx_coaching_date_status")
+  @@index([csr_id, session_date], map: "idx_coaching_csr_date")
   @@map("coaching_sessions")
 }
 
@@ -536,6 +541,8 @@ model WriteUp {
   @@index([status])
   @@index([created_by])
   @@index([created_at])
+  @@index([csr_id, created_at], map: "idx_write_ups_csr_date")
+  @@index([created_at, csr_id], map: "idx_write_ups_date_csr")
   @@map("write_ups")
 }
 
@@ -649,6 +656,8 @@ model Submission {
   disputes              Dispute[]
   dispute_score_history DisputeScoreHistory[]
 
+  @@index([status, submitted_at], map: "idx_submissions_status_date")
+  @@index([form_id, status, submitted_at], map: "idx_submissions_form_status_date")
   @@map("submissions")
 }
 
@@ -664,6 +673,7 @@ model SubmissionMetadata {
   field      FormMetadataField @relation(fields: [field_id], references: [id], onDelete: Cascade)
 
   @@index([date_value])
+  @@index([submission_id, field_id], map: "idx_subm_meta_subid_field")
   @@map("submission_metadata")
 }
 
@@ -741,6 +751,7 @@ model Dispute {
 
   dispute_score_history DisputeScoreHistory[]
 
+  @@index([created_at, status], map: "idx_disputes_created_status")
   @@map("disputes")
 }
 

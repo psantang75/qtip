@@ -81,7 +81,9 @@ async function queryCategoryScores(
   const userParams  = userId !== null ? [userId] : []
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT
+       fc.id                           AS category_id,
        fc.category_name                AS category_name,
+       f.id                            AS form_id,
        f.form_name                     AS form_name,
        COUNT(DISTINCT s.id)            AS audits,
        SUM(
@@ -135,10 +137,12 @@ async function queryCategoryScores(
     const key = `${r.form_name}::${r.category_name}`
     result.set(key, score)
     return {
-      category: r.category_name as string,
-      form:     r.form_name     as string,
-      audits:   parseInt(r.audits, 10),
-      avgScore: score,
+      categoryId: r.category_id as number,
+      category:   r.category_name as string,
+      formId:     r.form_id as number,
+      form:       r.form_name as string,
+      audits:     parseInt(r.audits, 10),
+      avgScore:   score,
     }
   })
   return { list, scoreMap: result }
@@ -269,9 +273,15 @@ export async function getMissedQuestions(
   }))
 }
 
-export async function getFormScores(deptFilter: number[], ranges: PeriodRanges) {
+export async function getFormScores(
+  deptFilter: number[],
+  ranges: PeriodRanges,
+  userId?: number | null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
+  const userSql    = userId != null ? 'AND csr.id = ?' : ''
+  const userParams: (string | number)[] = userId != null ? [userId] : []
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT f.id, f.form_name AS form,
        COUNT(DISTINCT s.id) AS submissions,
@@ -281,10 +291,10 @@ export async function getFormScores(deptFilter: number[], ranges: PeriodRanges) 
      LEFT JOIN score_snapshots ss ON ss.submission_id = s.id
      ${CSR_JOIN}
      WHERE s.status = 'FINALIZED'
-       AND s.submitted_at BETWEEN ? AND ? ${dc.sql}
+       AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${userSql}
      GROUP BY f.id, f.form_name
      ORDER BY avg_score DESC`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...userParams],
   )
   return rows.map(r => ({
     id:          r.id as number,
@@ -292,6 +302,104 @@ export async function getFormScores(deptFilter: number[], ranges: PeriodRanges) 
     submissions: parseInt(r.submissions, 10),
     avgScore:    r.avg_score != null ? Math.round(parseFloat(r.avg_score) * 10) / 10 : null,
   }))
+}
+
+// Per-agent breakdown for a single form. Used by the Quality page's
+// "Average Score by Form" expandable rows. Returns one row per agent that
+// submitted at least one finalized audit on the given form within the period,
+// ordered by lowest avg score first so coachable agents surface immediately.
+export async function getFormAgentBreakdown(
+  deptFilter: number[],
+  formId: number,
+  ranges: PeriodRanges,
+) {
+  const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
+  const dc = deptClause(deptFilter)
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT csr.id AS userId, csr.username AS name,
+       COALESCE(d.department_name, 'Unknown') AS dept,
+       COUNT(DISTINCT s.id) AS audits,
+       AVG(COALESCE(s.total_score, ss.score)) AS avgScore
+     FROM submissions s
+     LEFT JOIN score_snapshots ss ON ss.submission_id = s.id
+     ${CSR_JOIN}
+     LEFT JOIN departments d ON csr.department_id = d.id
+     WHERE s.status = 'FINALIZED'
+       AND s.submitted_at BETWEEN ? AND ?
+       AND s.form_id = ?
+       ${dc.sql}
+     GROUP BY csr.id, csr.username, d.department_name
+     ORDER BY avgScore ASC, csr.username`,
+    [s, e, formId, ...dc.params],
+  )
+  return rows.map(r => ({
+    userId:   r.userId as number,
+    name:     r.name as string,
+    dept:     r.dept as string,
+    audits:   parseInt(r.audits, 10),
+    avgScore: r.avgScore != null ? Math.round(parseFloat(r.avgScore) * 10) / 10 : null,
+  }))
+}
+
+// Per-agent breakdown for a single (form, category) pair. Used by the Quality
+// page's "Category Performance" expandable rows. Computes each agent's average
+// score on that category in the period, ordered by lowest first.
+export async function getCategoryAgentBreakdown(
+  deptFilter: number[],
+  formId: number,
+  categoryId: number,
+  ranges: PeriodRanges,
+) {
+  const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
+  const dc = deptClause(deptFilter)
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT csr.id AS userId, csr.username AS name,
+       COALESCE(d.department_name, 'Unknown') AS dept,
+       COUNT(DISTINCT s.id) AS audits,
+       SUM(${EARNED_EXPR})   AS earned_points,
+       SUM(${POSSIBLE_EXPR}) AS possible_points
+     FROM submission_answers sa
+     JOIN form_questions fq ON sa.question_id = fq.id
+     JOIN submissions     s  ON sa.submission_id = s.id
+     ${CSR_JOIN}
+     LEFT JOIN departments d ON csr.department_id = d.id
+     WHERE s.status = 'FINALIZED'
+       AND s.submitted_at BETWEEN ? AND ?
+       AND s.form_id = ?
+       AND fq.category_id = ?
+       AND fq.question_type IN ('YES_NO','SCALE','RADIO')
+       ${dc.sql}
+     GROUP BY csr.id, csr.username, d.department_name
+     HAVING possible_points > 0
+     ORDER BY (earned_points / possible_points) ASC, csr.username`,
+    [s, e, formId, categoryId, ...dc.params],
+  )
+  return rows.map(r => {
+    const earned   = parseFloat(r.earned_points)
+    const possible = parseFloat(r.possible_points)
+    const avgScore = possible > 0 ? Math.round((earned / possible) * 1000) / 10 : null
+    return {
+      userId:   r.userId as number,
+      name:     r.name as string,
+      dept:     r.dept as string,
+      audits:   parseInt(r.audits, 10),
+      avgScore,
+    }
+  })
+}
+
+// Lookup helper: resolve a (form_name, category_name) pair to its category_id
+// so the Category Performance expandable can pass an unambiguous identifier
+// to getCategoryAgentBreakdown without leaking the id into the table response.
+export async function findCategoryId(
+  formId: number,
+  categoryName: string,
+): Promise<number | null> {
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id FROM form_categories WHERE form_id = ? AND category_name = ? LIMIT 1`,
+    [formId, categoryName],
+  )
+  return rows.length ? (rows[0].id as number) : null
 }
 
 export async function getQualityDeptComparison(

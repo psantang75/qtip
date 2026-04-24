@@ -105,7 +105,7 @@ export const config: EnvironmentConfig = {
     return 'development_password_change_for_production';
   })(),
   DB_NAME: process.env.DB_NAME || 'qtip',
-  DB_CONNECTION_LIMIT: parseInt(process.env.DB_CONNECTION_LIMIT || '10', 10),
+  DB_CONNECTION_LIMIT: parseInt(process.env.DB_CONNECTION_LIMIT || '25', 10),
   
   // Secondary Database Configuration (Optional)
   DB2_HOST: process.env.DB2_HOST,

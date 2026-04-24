@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { Users } from 'lucide-react'
 import {
   InsightsFilterBar, InsightsSection, KpiTile, StatRow,
-  TrendChart, ScoreHistogram, StatusBadge, StatusDot,
+  TrendChart, ScoreHistogram, StatusBadge, StatusDot, ExpandableRow,
   QCPageSkeleton, ErrorCard,
 } from '@/components/insights'
 import { useQCFilters } from '@/hooks/useQCFilters'
@@ -11,7 +12,10 @@ import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
 import {
   getQCKpis, getQCTrends, getScoreDistribution, getCategoryScores,
   getMissedQuestions, getQualityDeptComparison, getFormScores, getFilterOptions,
+  getFormAgentBreakdown, getCategoryAgentBreakdown,
 } from '@/services/insightsQCService'
+import type { CategoryScore, FormScore, QCParams } from '@/services/insightsQCService'
+import { scoreColor, fmtN } from '@/components/insights/agentProfileHelpers'
 import QCMissedQuestions from './QCMissedQuestions'
 
 function fmt(v: number | null | undefined, suffix = ''): string {
@@ -30,78 +34,239 @@ function scoreStatus(
   return 'bad'
 }
 
-function CategoryPerformance({ catData, auditGoal, auditWarn, qaThresh }: {
-  catData: Array<{ category: string; form: string; audits: number; avgScore: number | null; priorScore: number | null }>
-  auditGoal: number
-  auditWarn: number | null
-  qaThresh: { goal: number | null; warn: number | null; crit: number | null; direction: string }
+// Quality page Average Score by Form — expandable rows that mirror the
+// Top Missed Questions pattern exactly: caret summary with form name + a
+// score bar, expanded detail showing the per-agent breakdown for that form
+// with click-to-navigate to the agent profile.
+function FormScoresSection({ formScores, params, qaGoal, qaWarn }: {
+  formScores: FormScore[]
+  params:     QCParams
+  qaGoal:     number
+  qaWarn:     number
 }) {
-  const [showAll, setShowAll] = useState(false)
-  const sorted = [...catData].sort((a, b) => (a.avgScore ?? 0) - (b.avgScore ?? 0))
-  const visible = showAll ? sorted : sorted.slice(0, 5)
+  const navigate = useNavigate()
+  const [expanded, setExpanded] = useState<number | null>(null)
+
+  const { data: agentRows = [], isFetching } = useQuery({
+    queryKey: ['qc-form-agents', expanded, params],
+    queryFn:  () => getFormAgentBreakdown(expanded as number, params),
+    enabled:  expanded !== null,
+  })
+
+  if (formScores.length === 0) {
+    return (
+      <InsightsSection title="Average Score by Form" infoKpiCodes={['avg_score_by_form']}>
+        <p className="text-sm text-slate-400 text-center py-6">No data for the selected period.</p>
+      </InsightsSection>
+    )
+  }
 
   return (
-    <InsightsSection
-      title="Category Performance"
-      infoKpiCodes={['category_performance']}
-    >
-      {catData.length === 0
+    <InsightsSection title="Average Score by Form" infoKpiCodes={['avg_score_by_form']}>
+      {formScores.map(row => {
+        const score   = row.avgScore ?? 0
+        const barPct  = Math.min(score, 100)
+        // Score bar colour follows the same goal/warn semantics as the rest
+        // of the QC pages so the visual matches StatusDot / score badges.
+        const barColor = score >= qaGoal ? 'bg-emerald-400' : score >= qaWarn ? 'bg-orange-400' : 'bg-red-400'
+        const txtColor = score >= qaGoal ? 'text-emerald-600' : score >= qaWarn ? 'text-orange-600' : 'text-red-600'
+        return (
+          <ExpandableRow
+            key={row.id}
+            isExpanded={expanded === row.id}
+            onToggle={() => setExpanded(expanded === row.id ? null : row.id)}
+            summary={
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <span className="text-[13px] font-medium text-slate-800 truncate flex-1">{row.form}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${barColor}`} style={{ width: `${barPct}%` }} />
+                  </div>
+                  <span className={`text-xs font-semibold ${txtColor} w-12 text-right`}>{fmtN(row.avgScore, '%')}</span>
+                  <span className="text-[11px] text-slate-400 w-16 text-right">{row.submissions} Reviews</span>
+                </div>
+              </div>
+            }
+            detail={
+              isFetching ? (
+                <p className="text-xs text-slate-400">Loading agent breakdown…</p>
+              ) : agentRows.length === 0 ? (
+                <p className="text-xs text-slate-400">No agent data available.</p>
+              ) : (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Users size={12} className="text-slate-500" />
+                    <span className="text-xs font-semibold text-slate-600">Agents reviewed on this form</span>
+                  </div>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-slate-400 border-b border-slate-200">
+                        <th className="text-left  py-1 font-medium">Agent</th>
+                        <th className="text-left  py-1 font-medium">Department</th>
+                        <th className="text-right py-1 font-medium">Reviews</th>
+                        <th className="text-right py-1 font-medium">Avg Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {agentRows.map(a => (
+                        <tr
+                          key={a.userId}
+                          className="border-b border-slate-100 last:border-0 hover:bg-slate-100 cursor-pointer"
+                          onClick={() => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
+                        >
+                          <td className="py-1.5 text-primary hover:underline">{a.name}</td>
+                          <td className="py-1.5 text-slate-500">{a.dept}</td>
+                          <td className="py-1.5 text-right text-slate-600 font-medium">{a.audits}</td>
+                          <td className={`py-1.5 text-right font-semibold ${scoreColor(a.avgScore, qaGoal, qaWarn)}`}>{fmtN(a.avgScore, '%')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            }
+          />
+        )
+      })}
+    </InsightsSection>
+  )
+}
+
+// Quality page Category Performance — expandable rows grouped by form. Each
+// row's summary aggregates the form's category averages; expanding lazily
+// fetches the per-(form, category) per-agent breakdown for the underperforming
+// categories within that form. Same visual style as Top Missed Questions.
+function CategoryPerformanceSection({ catData, params, qaGoal, qaWarn }: {
+  catData: CategoryScore[]
+  params:  QCParams
+  qaGoal:  number
+  qaWarn:  number
+}) {
+  const navigate = useNavigate()
+  const [showAll, setShowAll] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [expandedCat, setExpandedCat] = useState<string | null>(null)
+
+  // Group categories by form so each form is one expandable row. Average is
+  // the mean of its scored categories so the summary number aligns with the
+  // detail rows under it.
+  const formsWithCats = useMemo(() => {
+    const map = new Map<string, { form: string; categories: CategoryScore[] }>()
+    for (const c of catData) {
+      if (!map.has(c.form)) map.set(c.form, { form: c.form, categories: [] })
+      map.get(c.form)!.categories.push(c)
+    }
+    return [...map.values()].map(g => {
+      const scored = g.categories.filter(c => c.avgScore != null)
+      const avg    = scored.length ? scored.reduce((s, c) => s + (c.avgScore ?? 0), 0) / scored.length : null
+      const audits = g.categories.reduce((s, c) => s + c.audits, 0)
+      return { ...g, avgScore: avg, audits }
+    }).sort((a, b) => (a.avgScore ?? 0) - (b.avgScore ?? 0))
+  }, [catData])
+
+  const visible = showAll ? formsWithCats : formsWithCats.slice(0, 5)
+
+  // Per-(form, category) lazy fetch. Key shape `${formId}::${categoryId}` so
+  // the same category name appearing on different forms doesn't collide.
+  const expandedCatRow = useMemo(() => {
+    if (!expandedCat) return null
+    return catData.find(r => `${r.formId}::${r.categoryId}` === expandedCat) ?? null
+  }, [expandedCat, catData])
+
+  const { data: agentRows = [], isFetching } = useQuery({
+    queryKey: ['qc-cat-agents', expandedCat, params],
+    queryFn:  () => getCategoryAgentBreakdown(expandedCatRow!.formId, expandedCatRow!.categoryId, params),
+    enabled:  expandedCat !== null && !!expandedCatRow && !!expandedCatRow.formId && !!expandedCatRow.categoryId,
+  })
+
+  return (
+    <InsightsSection title="Category Performance" infoKpiCodes={['category_performance']}>
+      {formsWithCats.length === 0
         ? <p className="text-sm text-slate-400 text-center py-4">No category data for the selected period.</p>
-        : (<>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-slate-400 border-b border-slate-200">
-                {['Category','Form','Audits','Avg Score','Trend','vs Goal','Status'].map(h => (
-                  <th key={h} className="text-left pb-2 font-medium pr-4 last:pr-0">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((row, i) => {
-                const delta = row.avgScore != null ? row.avgScore - auditGoal : null
-                const st    = scoreStatus(row.avgScore, auditGoal, auditWarn)
-                const trend = row.avgScore != null && row.priorScore != null ? row.avgScore - row.priorScore : null
-                return (
-                  <tr key={`${row.form}-${row.category}-${i}`} className="border-b border-slate-100 last:border-0">
-                    <td className="py-2.5 pr-4 font-medium text-slate-800">{row.category}</td>
-                    <td className="py-2.5 pr-4 text-slate-500 text-xs">{row.form}</td>
-                    <td className="py-2.5 pr-4 text-slate-500">{row.audits}</td>
-                    <td className="py-2.5 pr-4">
-                      <span className="flex items-center gap-1.5">
-                        <StatusDot value={row.avgScore ?? 0} thresholds={qaThresh} />
-                        <span className="font-semibold">{fmt(row.avgScore, '%')}</span>
-                      </span>
-                    </td>
-                    <td className={`py-2.5 pr-4 text-xs font-medium ${
-                      trend === null ? 'text-slate-400' :
-                      trend > 0 ? 'text-emerald-600' :
-                      trend < 0 ? 'text-red-500' : 'text-slate-400'
-                    }`}>
-                      {trend === null ? '—' :
-                       trend === 0 ? '— flat' :
-                       `${trend > 0 ? '▲' : '▼'} ${Math.abs(trend).toFixed(1)}%`}
-                    </td>
-                    <td className={`py-2.5 pr-4 font-medium ${delta != null && delta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {delta != null ? (delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)) : '—'}
-                    </td>
-                    <td className="py-2.5">
-                      <StatusBadge label={st === 'good' ? 'On Track' : st === 'warning' ? 'Near Goal' : 'Below Goal'} variant={st === 'bad' ? 'bad' : st === 'warning' ? 'warning' : 'good'} />
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          {sorted.length > 5 && (
-            <button
-              onClick={() => setShowAll(!showAll)}
-              className="mt-3 text-xs text-primary hover:underline"
-            >
-              {showAll ? 'Show bottom 5 only' : `Show all ${sorted.length} categories`}
-            </button>
-          )}
-        </>)
+        : visible.map(group => {
+            const isExp = expanded === group.form
+            return (
+              <ExpandableRow
+                key={group.form}
+                isExpanded={isExp}
+                onToggle={() => {
+                  setExpanded(isExp ? null : group.form)
+                  setExpandedCat(null)
+                }}
+                summary={
+                  <div className="flex items-center flex-1 min-w-0">
+                    <span className="text-[13px] font-medium text-slate-800 flex-1 truncate">{group.form}</span>
+                    <span className="text-xs text-slate-700 shrink-0">{group.categories.length} Categories</span>
+                    <span className={`text-sm font-bold shrink-0 ml-4 ${scoreColor(group.avgScore, qaGoal, qaWarn)}`}>{fmtN(group.avgScore, '%')} Average</span>
+                  </div>
+                }
+                detail={
+                  <div className="pt-1 space-y-1">
+                    {[...group.categories].sort((a, b) => (a.avgScore ?? 0) - (b.avgScore ?? 0)).map((c, i) => {
+                      const catKey = `${c.formId}::${c.categoryId}`
+                      const delta  = c.avgScore != null ? c.avgScore - qaGoal : null
+                      const isCatExp = expandedCat === catKey
+                      return (
+                        <div key={c.categoryId ?? `${c.category}-${i}`} className="border border-slate-200 rounded-md bg-white">
+                          <button
+                            onClick={() => setExpandedCat(isCatExp ? null : catKey)}
+                            className={`w-full flex items-center text-xs px-2.5 py-1.5 text-left transition-colors ${isCatExp ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
+                          >
+                            <span className="shrink-0 text-slate-400 mr-2">{isCatExp ? '▾' : '▸'}</span>
+                            <span className="flex-1 min-w-0 truncate text-slate-800 font-medium">{c.category}</span>
+                            <span className="w-16 shrink-0 text-right text-slate-500">{c.audits}</span>
+                            <span className={`w-20 shrink-0 text-right font-semibold ${scoreColor(c.avgScore, qaGoal, qaWarn)}`}>{fmtN(c.avgScore, '%')}</span>
+                            <span className={`w-16 shrink-0 text-right font-medium ${delta == null ? 'text-slate-400' : delta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {delta == null ? '—' : delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)}
+                            </span>
+                          </button>
+                          {isCatExp && (
+                            <div className="border-t border-slate-200 bg-slate-50 p-2.5">
+                              {isFetching ? (
+                                <p className="text-xs text-slate-400">Loading agent breakdown…</p>
+                              ) : agentRows.length === 0 ? (
+                                <p className="text-xs text-slate-400">No agent data for this category in the selected period.</p>
+                              ) : (
+                                <div>
+                                  <div className="flex items-center text-[11px] text-slate-400 font-medium border-b border-slate-200 pb-1.5 mb-0.5">
+                                    <span className="flex-1 min-w-0">Agent</span>
+                                    <span className="w-32 shrink-0">Department</span>
+                                    <span className="w-16 shrink-0 text-right">Reviews</span>
+                                    <span className="w-20 shrink-0 text-right">Score</span>
+                                  </div>
+                                  {agentRows.map(a => (
+                                    <div
+                                      key={a.userId}
+                                      onClick={() => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
+                                      className="flex items-center text-xs py-1.5 border-b border-slate-100 last:border-0 hover:bg-slate-100 cursor-pointer"
+                                    >
+                                      <span className="flex-1 min-w-0 truncate text-primary hover:underline">{a.name}</span>
+                                      <span className="w-32 shrink-0 truncate text-slate-500">{a.dept}</span>
+                                      <span className="w-16 shrink-0 text-right text-slate-600">{a.audits}</span>
+                                      <span className={`w-20 shrink-0 text-right font-semibold ${scoreColor(a.avgScore, qaGoal, qaWarn)}`}>{fmtN(a.avgScore, '%')}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                }
+              />
+            )
+          })
       }
+      {formsWithCats.length > 5 && (
+        <button
+          onClick={() => setShowAll(!showAll)}
+          className="mt-3 text-xs text-primary hover:underline"
+        >
+          {showAll ? 'Show bottom 5 only' : `Show all ${formsWithCats.length} forms`}
+        </button>
+      )}
     </InsightsSection>
   )
 }
@@ -231,62 +396,16 @@ export default function QCQualityPage() {
           </InsightsSection>
         </div>
 
-        {/* Average Score by Form */}
-        <InsightsSection
-          title="Average Score by Form"
-          infoKpiCodes={['avg_score_by_form']}
-        >
-          {formScores.length === 0
-            ? <p className="text-sm text-slate-400 text-center py-4">No form data for this period.</p>
-            : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-slate-400 border-b border-slate-200">
-                    {['Form','Submissions','Avg Score','vs Goal','Status'].map(h => (
-                      <th key={h} className="text-left pb-2 font-medium pr-4 last:pr-0">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {formScores.map(row => {
-                    const delta = row.avgScore != null ? row.avgScore - auditGoal : null
-                    const st    = scoreStatus(row.avgScore, auditGoal, auditWarn)
-                    const isSelected = forms.includes(row.form)
-                    return (
-                      <tr
-                        key={row.id}
-                        className={`border-b border-slate-100 last:border-0 cursor-pointer transition-colors ${isSelected ? 'bg-primary/5 border-l-2 border-l-primary' : 'hover:bg-slate-50'}`}
-                        onClick={() => {
-                          if (isSelected) setForms(forms.filter(f => f !== row.form))
-                          else setForms([...forms, row.form])
-                        }}
-                      >
-                        <td className="py-2.5 pr-4 font-medium text-slate-800">{row.form}</td>
-                        <td className="py-2.5 pr-4 text-slate-500">{row.submissions}</td>
-                        <td className="py-2.5 pr-4">
-                          <span className="flex items-center gap-1.5">
-                            <StatusDot value={row.avgScore ?? 0} thresholds={qaThresh} />
-                            <span className="font-semibold">{fmt(row.avgScore, '%')}</span>
-                          </span>
-                        </td>
-                        <td className={`py-2.5 pr-4 font-medium ${delta != null && delta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                          {delta != null ? (delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)) : '—'}
-                        </td>
-                        <td className="py-2.5">
-                          <StatusBadge label={st === 'good' ? 'On Track' : st === 'warning' ? 'Near Goal' : 'Below Goal'} variant={st === 'bad' ? 'bad' : st === 'warning' ? 'warning' : 'good'} />
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )
-          }
-        </InsightsSection>
+        {/* Average Score by Form — expandable per-agent drill-down */}
+        <FormScoresSection
+          formScores={formScores} params={params}
+          qaGoal={auditGoal} qaWarn={auditWarn ?? auditGoal - 10}
+        />
 
-        {/* Category Performance — bottom 5 by default */}
-        <CategoryPerformance
-          catData={catData} auditGoal={auditGoal} auditWarn={auditWarn} qaThresh={qaThresh}
+        {/* Category Performance — expandable per-form, then per-category, then per-agent */}
+        <CategoryPerformanceSection
+          catData={catData} params={params}
+          qaGoal={auditGoal} qaWarn={auditWarn ?? auditGoal - 10}
         />
 
         {/* Top Missed Questions */}

@@ -57,6 +57,8 @@ const DashboardPage         = React.lazy(() => import('./pages/insights/Dashboar
 const TeamDashboardPage     = React.lazy(() => import('./pages/insights/TeamDashboardPage'))
 const ReportBuilderPage     = React.lazy(() => import('./pages/insights/ReportBuilderPage'))
 const SavedReportsPage      = React.lazy(() => import('./pages/insights/SavedReportsPage'))
+const OnDemandReportsPage   = React.lazy(() => import('./pages/insights/OnDemandReportsPage'))
+const OnDemandReportViewPage = React.lazy(() => import('./pages/insights/OnDemandReportViewPage'))
 const DataExplorerPage      = React.lazy(() => import('./pages/insights/DataExplorerPage'))
 const ExportPage            = React.lazy(() => import('./pages/insights/ExportPage'))
 const ImportCenterPage      = React.lazy(() => import('./pages/insights/ImportCenterPage'))
@@ -358,6 +360,22 @@ export default function App() {
                   <Route path="team"      element={<PageLoader><TeamDashboardPage /></PageLoader>} />
                   <Route path="builder"   element={<PageLoader><ReportBuilderPage /></PageLoader>} />
                   <Route path="reports"   element={<PageLoader><SavedReportsPage /></PageLoader>} />
+                  <Route
+                    path="on-demand-reports"
+                    element={
+                      <RequireRole allowed={[ROLE_IDS.ADMIN, ROLE_IDS.MANAGER]} fallback="/app/insights">
+                        <PageLoader><OnDemandReportsPage /></PageLoader>
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="on-demand-reports/:reportId"
+                    element={
+                      <RequireRole allowed={[ROLE_IDS.ADMIN, ROLE_IDS.MANAGER]} fallback="/app/insights">
+                        <PageLoader><OnDemandReportViewPage /></PageLoader>
+                      </RequireRole>
+                    }
+                  />
                   <Route path="explorer"  element={<PageLoader><DataExplorerPage /></PageLoader>} />
                   <Route path="export"    element={<PageLoader><ExportPage /></PageLoader>} />
                   <Route path="import"    element={<PageLoader><ImportCenterPage /></PageLoader>} />

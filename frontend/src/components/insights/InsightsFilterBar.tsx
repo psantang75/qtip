@@ -28,6 +28,8 @@ interface InsightsFilterBarProps {
   selectedDepts: string[]
   onDeptsChange: (v: string[]) => void
   availableDepts?: string[]
+  /** Hide the Department selector entirely (e.g. agent screens). */
+  hideDeptFilter?: boolean
   period: string
   onPeriodChange: (v: string) => void
   customStart?: string
@@ -50,6 +52,7 @@ export default function InsightsFilterBar({
   selectedDepts,
   onDeptsChange,
   availableDepts = [],
+  hideDeptFilter = false,
   period,
   onPeriodChange,
   customStart,
@@ -77,16 +80,18 @@ export default function InsightsFilterBar({
       <div className="flex gap-3 items-center flex-wrap">
 
         {/* Department filter */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-500 shrink-0">Department</span>
-          <StagedMultiSelect
-            options={availableDepts}
-            selected={selectedDepts}
-            onApply={onDeptsChange}
-            placeholder="All Departments"
-            width="w-[200px]"
-          />
-        </div>
+        {!hideDeptFilter && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 shrink-0">Department</span>
+            <StagedMultiSelect
+              options={availableDepts}
+              selected={selectedDepts}
+              onApply={onDeptsChange}
+              placeholder="All Departments"
+              width="w-[200px]"
+            />
+          </div>
+        )}
 
         {/* Form filter */}
         {showFormFilter && (

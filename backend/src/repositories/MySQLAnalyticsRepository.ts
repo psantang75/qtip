@@ -1152,6 +1152,7 @@ export class MySQLAnalyticsRepository implements IAnalyticsRepository {
               category_name: row.category_name,
               category_id: row.category_id,
               category_score: categoryScore,
+              question_id: row.question_id,
               question_text: row.question_text,
               question: row.question_text,
               question_answer: row.question_answer || 'N/A',

@@ -5,7 +5,11 @@ import { serviceLogger } from '../config/logger';
 import { promises as fs } from 'fs';
 import { createReadStream } from 'fs';
 import path from 'path';
-import ExcelJS from 'exceljs';
+import {
+  fetchCoachingSessionsPage,
+  fetchAllCoachingSessions,
+  generateCoachingSessionsXlsx,
+} from '../services/coachingSessionsReport';
 
 /**
  * Properly escape filename for Content-Disposition header
@@ -784,69 +788,12 @@ export const getAdminCoachingSessions = async (req: AuthenticatedRequest, res: R
       return;
     }
 
-    const conditions: Prisma.Sql[] = [
-      Prisma.sql`u.role_id = ${csrRoleId}`,
-      Prisma.sql`u.is_active = 1`,
-      Prisma.sql`d.is_active = 1`
-    ];
+    const { sessions, totalCount } = await fetchCoachingSessionsPage(
+      { csrRoleId, searchTerm, csr_id, status, coaching_purpose, start_date, end_date },
+      { limit, offset },
+    );
 
-    if (searchTerm) {
-      conditions.push(Prisma.sql`(
-        u.username LIKE ${`%${searchTerm}%`}
-        OR EXISTS (
-          SELECT 1 FROM coaching_session_topics cst
-          JOIN list_items li_t ON cst.topic_id = li_t.id
-          WHERE cst.coaching_session_id = cs.id
-          AND li_t.label LIKE ${`%${searchTerm}%`}
-        )
-      )`);
-    }
-
-    if (csr_id) conditions.push(Prisma.sql`cs.csr_id = ${parseInt(csr_id)}`);
-    if (status) conditions.push(Prisma.sql`cs.status = ${status}`);
-    if (coaching_purpose) conditions.push(Prisma.sql`cs.coaching_purpose = ${coaching_purpose}`);
-    if (start_date) conditions.push(Prisma.sql`DATE(cs.session_date) >= ${start_date}`);
-    if (end_date) conditions.push(Prisma.sql`DATE(cs.session_date) <= ${end_date}`);
-
-    const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
-
-    const [countResult, sessions] = await Promise.all([
-      prisma.$queryRaw<{ total: bigint }[]>`
-        SELECT COUNT(*) as total
-        FROM coaching_sessions cs
-        JOIN users u ON cs.csr_id = u.id
-        JOIN departments d ON u.department_id = d.id
-        ${whereClause}
-      `,
-      prisma.$queryRaw<any[]>`
-        SELECT
-          cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_purpose, cs.notes, cs.status,
-          cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
-          cs.created_at, creator.username as created_by_name,
-          GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
-          GROUP_CONCAT(DISTINCT li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
-        FROM coaching_sessions cs
-        JOIN users u ON cs.csr_id = u.id
-        JOIN departments d ON u.department_id = d.id
-        LEFT JOIN users creator ON cs.created_by = creator.id
-        LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-        LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
-        ${whereClause}
-        GROUP BY cs.id
-        ORDER BY cs.session_date DESC
-        LIMIT ${Number(limit)} OFFSET ${Number(offset)}
-      `
-    ]);
-
-    const totalCount = Number(countResult[0]?.total || 0);
-
-    const transformedSessions = (sessions || []).map((session: any) => ({
-      ...session,
-      topics: session.topics ? session.topics.split(', ') : [],
-      topic_ids: session.topic_ids ? session.topic_ids.split(',').map((id: string) => parseInt(id)) : []
-    }));
-
-    res.json({ success: true, data: { sessions: transformedSessions, totalCount, page, limit } });
+    res.json({ success: true, data: { sessions, totalCount, page, limit } });
   } catch (error) {
     console.error('Error fetching coaching sessions:', error);
     serviceLogger.error('admin', 'getAdminCoachingSessions', error as Error, req.user?.user_id);
@@ -879,92 +826,17 @@ export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res
       return;
     }
 
-    const conditions: Prisma.Sql[] = [
-      Prisma.sql`u.role_id = ${csrRoleId}`,
-      Prisma.sql`u.is_active = 1`,
-      Prisma.sql`d.is_active = 1`
-    ];
-
-    if (searchTerm) {
-      conditions.push(Prisma.sql`(
-        u.username LIKE ${`%${searchTerm}%`}
-        OR EXISTS (
-          SELECT 1 FROM coaching_session_topics cst
-          JOIN list_items li_t ON cst.topic_id = li_t.id
-          WHERE cst.coaching_session_id = cs.id
-          AND li_t.label LIKE ${`%${searchTerm}%`}
-        )
-      )`);
-    }
-
-    if (csr_id) conditions.push(Prisma.sql`cs.csr_id = ${parseInt(csr_id)}`);
-    if (status) conditions.push(Prisma.sql`cs.status = ${status}`);
-    if (coaching_purpose) conditions.push(Prisma.sql`cs.coaching_purpose = ${coaching_purpose}`);
-    if (start_date) conditions.push(Prisma.sql`DATE(cs.session_date) >= ${start_date}`);
-    if (end_date) conditions.push(Prisma.sql`DATE(cs.session_date) <= ${end_date}`);
-
-    const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
-
-    const sessions = await prisma.$queryRaw<any[]>`
-      SELECT
-        cs.id, cs.session_date, cs.coaching_purpose, cs.notes, cs.status, cs.attachment_filename,
-        cs.created_at, u.username as csr_name, creator.username as created_by_name,
-        GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics
-      FROM coaching_sessions cs
-      JOIN users u ON cs.csr_id = u.id
-      JOIN departments d ON u.department_id = d.id
-      LEFT JOIN users creator ON cs.created_by = creator.id
-      LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
-      LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
-      ${whereClause}
-      GROUP BY cs.id
-      ORDER BY cs.session_date DESC
-    `;
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Coaching Sessions');
-
-    worksheet.columns = [
-      { header: 'Session ID', key: 'id', width: 14 },
-      { header: 'Status', key: 'status', width: 14 },
-      { header: 'Coaching Purpose', key: 'coaching_purpose', width: 20 },
-      { header: 'CSR Name', key: 'csr_name', width: 24 },
-      { header: 'Topics', key: 'topics', width: 36 },
-      { header: 'Manager/Trainer', key: 'created_by_name', width: 24 },
-      { header: 'Session Date', key: 'session_date', width: 16 },
-      { header: 'Created At', key: 'created_at', width: 16 },
-      { header: 'Notes', key: 'notes', width: 48 },
-      { header: 'Attachment', key: 'attachment_filename', width: 28 }
-    ];
-
-    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00AEEF' } };
-    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-    worksheet.getRow(1).height = 22;
-
-    (sessions || []).forEach((session: any) => {
-      worksheet.addRow({
-        id: `#${session.id}`,
-        status: session.status ? session.status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c: string) => c.toUpperCase()) : '',
-        coaching_purpose: session.coaching_purpose || '',
-        csr_name: session.csr_name || '',
-        topics: session.topics || '',
-        created_by_name: session.created_by_name || 'Unknown',
-        session_date: session.session_date ? new Date(session.session_date).toLocaleDateString('en-US') : '',
-        created_at: session.created_at ? new Date(session.created_at).toLocaleDateString('en-US') : '',
-        notes: session.notes || '',
-        attachment_filename: session.attachment_filename || ''
-      });
+    const sessions = await fetchAllCoachingSessions({
+      csrRoleId,
+      searchTerm,
+      csr_id,
+      status,
+      coaching_purpose,
+      start_date,
+      end_date,
     });
 
-    worksheet.eachRow((row, rowNumber) => {
-      row.alignment = { vertical: 'top', horizontal: rowNumber === 1 ? 'center' : 'left', wrapText: true };
-    });
-
-    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
-    worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: worksheet.columns.length } };
-
-    const buffer = await workbook.xlsx.writeBuffer();
+    const buffer = await generateCoachingSessionsXlsx(sessions);
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
@@ -972,7 +844,7 @@ export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; ${escapeFilename(fileName)}`);
-    res.send(Buffer.from(buffer));
+    res.send(buffer);
   } catch (error) {
     console.error('Error exporting coaching sessions:', error);
     serviceLogger.error('admin', 'exportAdminCoachingSessions', error as Error, req.user?.user_id);

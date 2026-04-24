@@ -2,10 +2,9 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { InsightsFilterBar, InsightsSection, KpiTile, StatusBadge } from '@/components/insights'
 import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
-import { getQCAgentProfile, getQCTrends, getCategoryScores, getFormScores } from '@/services/insightsQCService'
+import { getQCAgentFull } from '@/services/insightsQCService'
 import type { AgentSummary, QCParams } from '@/services/insightsQCService'
 import { scoreColor } from '@/components/insights/agentProfileHelpers'
-import type { FormSummaryItem } from '@/components/insights/agentProfileHelpers'
 import AgentQualitySection from '@/components/insights/AgentQualitySection'
 import AgentCoachingSection from '@/components/insights/AgentCoachingSection'
 import AgentWarningsSection from '@/components/insights/AgentWarningsSection'
@@ -13,17 +12,16 @@ import AgentWarningsSection from '@/components/insights/AgentWarningsSection'
 interface Props {
   agent: AgentSummary; apiParams: QCParams; onBack: () => void
   selectedForms: string[]; onFormsChange: (v: string[]) => void
-  deptOptions: string[]; departments: string[]; setDepartments: (v: string[]) => void
   period: string; setPeriod: (v: string) => void
   customStart: string; setCustomStart: (v: string) => void
   customEnd: string; setCustomEnd: (v: string) => void
+  showBackButton?: boolean
 }
 
 export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms, onFormsChange,
-  deptOptions, departments, setDepartments, period, setPeriod, customStart, setCustomStart, customEnd, setCustomEnd }: Props) {
+  period, setPeriod, customStart, setCustomStart, customEnd, setCustomEnd, showBackButton = true }: Props) {
 
-  const [expandedForm, setExpandedForm] = useState<string | null>(null)
-  const [showAllCats,  setShowAllCats]  = useState(false)
+  const [showAllCats, setShowAllCats]  = useState(false)
   const { data: kpiConfig } = useKpiConfig()
   const qaThresh = resolveThresholds('avg_qa_score', kpiConfig)
   const qaGoal = qaThresh.goal ?? 90
@@ -32,35 +30,30 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
   const quizGoal = quizThresh.goal ?? 80
   const quizWarn = quizThresh.warn ?? 70
 
-  const { data: profile }       = useQuery({ queryKey: ['qc-agent-profile', agent.userId, apiParams], queryFn: () => getQCAgentProfile(agent.userId, apiParams) })
-  const { data: trendData }    = useQuery({ queryKey: ['qc-trends-qa', agent.userId, apiParams], queryFn: () => getQCTrends({ ...apiParams, kpis: 'avg_qa_score', userId: String(agent.userId) }) })
-  const { data: formScoresData = [] } = useQuery({ queryKey: ['qc-forms', apiParams], queryFn: () => getFormScores(apiParams) })
+  // Single bundled fetch — collapses the 5 endpoints (profile, KPIs, trends,
+  // form scores, category scores) that this page used to call individually
+  // into one HTTP round trip. The per-section endpoints stay alive in the
+  // codebase because the Quality / Coaching / Warnings pages still use them
+  // directly. See backend/src/controllers/insightsQC.controller.ts → getQCAgentFull.
+  const bundleParams = useMemo(() => ({ ...apiParams, kpis: 'avg_qa_score' }), [apiParams])
+  const { data: bundle } = useQuery({
+    queryKey: ['qc-agent-full', agent.userId, bundleParams],
+    queryFn: () => getQCAgentFull(agent.userId, bundleParams),
+  })
 
-  const selectedFormId = useMemo(() => {
-    if (selectedForms.length === 0) return null
-    return formScoresData.find(f => f.form === selectedForms[0])?.id ?? null
-  }, [selectedForms, formScoresData])
+  const cur             = bundle?.kpis.current ?? {}
+  const prv             = bundle?.kpis.prior   ?? {}
+  const profile         = bundle?.profile
+  const trendData       = bundle?.trends
+  const formScoresData  = bundle?.formScores ?? []
+  const catScores       = bundle?.categoryScores ?? []
 
-  const catParams = useMemo(() => ({
-    ...apiParams,
-    userId: String(agent.userId),
-    ...(selectedFormId ? { form: selectedFormId } : {}),
-  }), [apiParams, agent.userId, selectedFormId])
-  const { data: catScores = [] } = useQuery({ queryKey: ['qc-cats', catParams], queryFn: () => getCategoryScores(catParams), enabled: !!profile })
-
+  // Note: the form-id-driven category drill-down (changing the Form filter
+  // narrows the Category Performance table) is intentionally not wired into
+  // the bundle endpoint — selecting a form changes selectedForms which
+  // re-keys the bundle (apiParams.forms), so the backend re-runs both form
+  // and category queries with the new form filter in a single request.
   const qaTrend = trendData?.map(r => ({ label: String(r.label ?? ''), value: r['avg_qa_score'] != null ? Number(r['avg_qa_score']) : null })) ?? []
-
-  const formSummary: FormSummaryItem[] = useMemo(() => {
-    if (!profile) return []
-    const map = new Map<string, { form: string; scores: number[]; reviews: typeof profile.recentAudits }>()
-    for (const a of profile.recentAudits) {
-      if (!map.has(a.form)) map.set(a.form, { form: a.form, scores: [], reviews: [] })
-      const e = map.get(a.form)!
-      if (a.score != null) e.scores.push(a.score)
-      e.reviews.push(a)
-    }
-    return [...map.values()].map(f => ({ form: f.form, avg: f.scores.length ? f.scores.reduce((a, b) => a + b, 0) / f.scores.length : null, count: f.reviews.length, reviews: f.reviews }))
-  }, [profile])
 
   const topicCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -68,20 +61,20 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
     return m
   }, [profile?.coachingSessions])
 
-  const ds = profile?.disputeStats
   const wus = profile?.writeUps ?? []
-  const availableForms = formSummary.map(f => f.form)
+  const availableForms = formScoresData.map(f => f.form)
 
   return (
     <div>
       <InsightsFilterBar
-        selectedDepts={departments} onDeptsChange={setDepartments} availableDepts={deptOptions}
+        hideDeptFilter
+        selectedDepts={[]} onDeptsChange={() => {}}
         period={period} onPeriodChange={setPeriod}
         customStart={customStart} customEnd={customEnd}
         onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
         showFormFilter selectedForms={selectedForms} onFormsChange={onFormsChange}
         availableForms={availableForms}
-        showBackButton onBack={onBack}
+        showBackButton={showBackButton} onBack={onBack}
       />
 
       <div className="space-y-5">
@@ -89,25 +82,29 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
         <div>
           <div className="flex items-center gap-3 mb-0.5">
             <h1 className="text-2xl font-bold text-slate-900">{agent.name}</h1>
-            {agent.risk && <StatusBadge label="At Risk" variant="bad" />}
           </div>
           <p className="text-sm text-slate-500">{agent.dept} · {period}</p>
         </div>
 
-        {/* KPI Tiles */}
+        {/* KPI Tiles — all bound to the unified KPI service for this agent */}
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-          <KpiTile kpiCode="avg_qa_score" value={agent.qa} thresholds={resolveThresholds('avg_qa_score', kpiConfig)} />
-          <KpiTile kpiCode="audits_completed" value={profile?.recentAudits.length ?? null} thresholds={resolveThresholds('audits_completed', kpiConfig)} />
-          <KpiTile kpiCode="coaching_sessions_completed" value={profile?.coachingSessions.length ?? null} thresholds={resolveThresholds('coaching_sessions_completed', kpiConfig)} />
-          <KpiTile kpiCode="quiz_pass_rate" value={profile?.quizzes.length ? Math.round(profile.quizzes.filter(q => q.passed).length / profile.quizzes.length * 100) : null} thresholds={resolveThresholds('quiz_pass_rate', kpiConfig)} />
-          <KpiTile kpiCode="dispute_rate" value={ds?.total != null && profile?.recentAudits.length ? Math.round(ds.total / profile.recentAudits.length * 1000) / 10 : null} thresholds={resolveThresholds('dispute_rate', kpiConfig)} />
-          <KpiTile kpiCode="total_writeups_issued" value={wus.length ?? null} thresholds={resolveThresholds('total_writeups_issued', kpiConfig)} />
+          {['avg_qa_score','audits_completed','critical_fail_rate','dispute_rate','coaching_sessions_completed','total_writeups_issued'].map(code => (
+            <KpiTile
+              key={code}
+              kpiCode={code}
+              value={cur[code] ?? null}
+              priorValue={prv[code] ?? undefined}
+              thresholds={resolveThresholds(code, kpiConfig)}
+            />
+          ))}
         </div>
 
         <AgentQualitySection
-          qaTrend={qaTrend} qaGoal={qaGoal} qaWarn={qaWarn} ds={ds}
-          formSummary={formSummary} expandedForm={expandedForm} setExpandedForm={setExpandedForm}
+          qaTrend={qaTrend} qaGoal={qaGoal} qaWarn={qaWarn}
+          cur={cur} prv={prv} kpiConfig={kpiConfig}
+          formScores={formScoresData}
           catScores={catScores} showAllCats={showAllCats} setShowAllCats={setShowAllCats}
+          recentAudits={profile?.recentAudits ?? []}
         />
 
         <AgentCoachingSection
@@ -117,9 +114,16 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
 
         <InsightsSection title="Quiz Performance">
           <div className="grid grid-cols-3 gap-3 mb-4">
-            <KpiTile kpiCode="quiz_pass_rate" small value={profile?.quizzes.length ? Math.round(profile.quizzes.filter(q => q.passed).length / profile.quizzes.length * 100) : null} thresholds={resolveThresholds('quiz_pass_rate', kpiConfig)} />
-            <KpiTile kpiCode="avg_quiz_score" small value={profile?.quizzes.length ? Math.round(profile.quizzes.reduce((s, q) => s + q.score, 0) / profile.quizzes.length * 10) / 10 : null} thresholds={resolveThresholds('avg_quiz_score', kpiConfig)} />
-            <KpiTile kpiCode="avg_attempts_to_pass" small value={profile?.quizzes.length ? Math.round(profile.quizzes.reduce((s, q) => s + q.attempts, 0) / profile.quizzes.length * 10) / 10 : null} thresholds={resolveThresholds('avg_attempts_to_pass', kpiConfig)} />
+            {['quiz_pass_rate','avg_quiz_score','avg_attempts_to_pass'].map(code => (
+              <KpiTile
+                key={code}
+                small
+                kpiCode={code}
+                value={cur[code] ?? null}
+                priorValue={prv[code] ?? undefined}
+                thresholds={resolveThresholds(code, kpiConfig)}
+              />
+            ))}
           </div>
           {(!profile?.quizzes.length)
             ? <p className="text-sm text-slate-400 py-3 text-center">No quiz attempts this period.</p>

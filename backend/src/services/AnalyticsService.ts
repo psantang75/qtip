@@ -281,6 +281,22 @@ export class AnalyticsService {
   }
 
   /**
+   * Build the comprehensive xlsx workbook from a pre-fetched row set.
+   *
+   * Used by callers (e.g. on-demand reports) that need to apply post-fetch
+   * filters before generating the workbook so the download stays in sync with
+   * what the user is seeing on screen.
+   */
+  async buildComprehensiveExportFromRows(
+    rows: any[],
+    filters?: any,
+    user_id?: number,
+    userRole?: string,
+  ): Promise<Buffer> {
+    return this.generateExcelExport(rows, filters, user_id, userRole);
+  }
+
+  /**
    * Invalidate cache for specific patterns
    */
   async invalidateCache(pattern?: string): Promise<void> {
@@ -811,12 +827,18 @@ export class AnalyticsService {
     const hasCategoryScore = allHeaders.includes('category_score') && sortedData.some(row => row.category_score !== undefined && row.category_score !== null);
     const hasQuestion = allHeaders.includes('question') || allHeaders.includes('question_text');
     const hasAnswer = allHeaders.includes('question_answer');
+    const hasAnswerValue = allHeaders.includes('question_value')
+      && sortedData.some(row => row.question_value !== undefined && row.question_value !== null && row.question_value !== '');
+    const hasTotalValue = allHeaders.includes('question_total_value')
+      && sortedData.some(row => row.question_total_value !== undefined && row.question_total_value !== null);
     
     let numColumns = baseColumns.length;
     if (hasCategory) numColumns++;
     if (hasCategoryScore) numColumns++;
     if (hasQuestion) numColumns++;
     if (hasAnswer) numColumns++;
+    if (hasAnswerValue) numColumns++;
+    if (hasTotalValue) numColumns++;
 
     // Add main header
     let currentRow = 1;
@@ -886,6 +908,10 @@ export class AnalyticsService {
     const hasCategoryScore = allHeaders.includes('category_score') && data.some(row => row.category_score !== undefined && row.category_score !== null);
     const hasQuestion = allHeaders.includes('question') || allHeaders.includes('question_text');
     const hasAnswer = allHeaders.includes('question_answer');
+    const hasAnswerValue = allHeaders.includes('question_value')
+      && data.some(row => row.question_value !== undefined && row.question_value !== null && row.question_value !== '');
+    const hasTotalValue = allHeaders.includes('question_total_value')
+      && data.some(row => row.question_total_value !== undefined && row.question_total_value !== null);
     
     // Build the list of columns to export (matching UI table columns only)
     let headers = [...baseColumns];
@@ -901,6 +927,12 @@ export class AnalyticsService {
     }
     if (hasAnswer) {
       headers.push('question_answer');
+    }
+    if (hasAnswerValue) {
+      headers.push('question_value');
+    }
+    if (hasTotalValue) {
+      headers.push('question_total_value');
     }
     
     // Filter to only include headers that actually exist in the data
@@ -920,6 +952,8 @@ export class AnalyticsService {
       question_text: 'Question',
       question_answer: 'Answer',
       question_answer_value: 'Answer Value',
+      question_value: 'Value',
+      question_total_value: 'Total Value',
       responses: 'Responses',
       average_score: 'Average Score',
       question_average_score: 'Question Score',
@@ -941,10 +975,10 @@ export class AnalyticsService {
     }
 
     // Columns that should be left-aligned
-    const leftAlignColumns = ['submission_date', 'csr_name', 'form_name', 'category_name', 'question', 'question_text', 'question_answer'];
+    const leftAlignColumns = ['submission_date', 'csr_name', 'form_name', 'category_name', 'question', 'question_text', 'question_answer', 'question_value'];
     
     // Columns that should be right-aligned (scores and numeric data)
-    const rightAlignColumns = ['total_score', 'category_score', 'question_average_score', 'average_score'];
+    const rightAlignColumns = ['total_score', 'category_score', 'question_average_score', 'average_score', 'question_total_value'];
 
     // Add headers
     const headerRow = worksheet.getRow(currentRow);

@@ -51,13 +51,29 @@ function KpiSection({
 function AgentTable({ agents, highlight, qaGoal, qaWarn }: { agents: AgentSummary[]; highlight: 'red' | 'green'; qaGoal: number; qaWarn: number }) {
   const navigate = useNavigate()
   const hoverCls = highlight === 'red' ? 'hover:bg-red-50' : 'hover:bg-emerald-50'
+  // Fixed widths for the four metric columns keep QA / Trend / Coaching /
+  // Warnings visually aligned across the top-5 and bottom-5 tables.
+  const metricCellCls = 'py-2 pr-2 w-20 text-right tabular-nums'
   return (
-    <table className="w-full text-xs">
+    <table className="w-full text-xs table-fixed">
+      <colgroup>
+        <col className="w-8" />
+        <col />
+        <col />
+        <col className="w-20" />
+        <col className="w-20" />
+        <col className="w-20" />
+        <col className="w-20" />
+      </colgroup>
       <thead>
         <tr className="text-slate-400 border-b border-slate-200">
-          {['#', 'Agent', 'Department', 'QA', 'Trend', 'Cadence', 'Disputes', 'Warnings'].map(h => (
-            <th key={h} className="text-left py-1.5 font-medium pr-2 last:pr-0">{h}</th>
-          ))}
+          <th className="text-left py-1.5 font-medium pr-2">#</th>
+          <th className="text-left py-1.5 font-medium pr-2">Agent</th>
+          <th className="text-left py-1.5 font-medium pr-2">Department</th>
+          <th className="text-right py-1.5 font-medium pr-2">QA</th>
+          <th className="text-right py-1.5 font-medium pr-2">Trend</th>
+          <th className="text-right py-1.5 font-medium pr-2">Coaching</th>
+          <th className="text-right py-1.5 font-medium">Warnings</th>
         </tr>
       </thead>
       <tbody>
@@ -68,17 +84,16 @@ function AgentTable({ agents, highlight, qaGoal, qaWarn }: { agents: AgentSummar
             onClick={() => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
           >
             <td className="py-2 pr-2 text-slate-400">{i + 1}</td>
-            <td className="py-2 pr-2 font-medium text-slate-800">{a.name}</td>
-            <td className="py-2 pr-2 text-slate-500">{a.dept}</td>
-            <td className={`py-2 pr-2 font-semibold ${(a.qa ?? 0) >= qaGoal ? 'text-emerald-600' : (a.qa ?? 0) >= qaWarn ? 'text-slate-700' : 'text-red-600'}`}>
+            <td className="py-2 pr-2 font-medium text-slate-800 truncate">{a.name}</td>
+            <td className="py-2 pr-2 text-slate-500 truncate">{a.dept}</td>
+            <td className={`${metricCellCls} font-semibold ${(a.qa ?? 0) >= qaGoal ? 'text-emerald-600' : (a.qa ?? 0) >= qaWarn ? 'text-slate-700' : 'text-red-600'}`}>
               {a.qa != null ? `${a.qa.toFixed(1)}%` : '—'}
             </td>
-            <td className={`py-2 pr-2 font-medium ${a.trend.startsWith('+') ? 'text-emerald-600' : a.trend.startsWith('-') ? 'text-red-500' : 'text-slate-400'}`}>
+            <td className={`${metricCellCls} font-medium ${a.trend.startsWith('+') ? 'text-emerald-600' : a.trend.startsWith('-') ? 'text-red-500' : 'text-slate-400'}`}>
               {a.trend}
             </td>
-            <td className="py-2 pr-2 text-slate-600">{a.cadence}/{a.expected}</td>
-            <td className="py-2 pr-2 text-slate-600">{a.disputes}</td>
-            <td className={`py-2 font-medium ${a.writeups > 0 ? 'text-red-600' : 'text-slate-500'}`}>{a.writeups}</td>
+            <td className={`${metricCellCls} text-slate-600`}>{a.coaching}</td>
+            <td className={`py-2 w-20 text-right tabular-nums font-medium ${a.writeups > 0 ? 'text-red-600' : 'text-slate-500'}`}>{a.writeups}</td>
           </tr>
         ))}
       </tbody>

@@ -42,6 +42,7 @@ import reportRoutes from './routes/report.routes';
 import rawDataRoutes from './routes/rawData.routes';
 import insightsRoutes from './routes/insights.routes';
 import insightsAdminRoutes from './routes/insightsAdmin.routes';
+import onDemandReportsRoutes from './routes/onDemandReports.routes';
 
 
 function normalizePort(val: string | number): string | number | false {
@@ -177,6 +178,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/raw-data', rawDataRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/insights/admin', insightsAdminRoutes);
+app.use('/api/on-demand-reports', onDemandReportsRoutes);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);

@@ -93,6 +93,7 @@ export const NAV_CONFIG: SectionConfig[] = [
       // ── Data Management ──
       { label: 'Report Builder', path: '/app/insights/builder',  icon: 'PenSquare',    roles: [1],     group: 'Data Management' },
       { label: 'Saved Reports',  path: '/app/insights/reports',  icon: 'FileBarChart', roles: [1,5],   group: 'Data Management' },
+      { label: 'On Demand Reports', path: '/app/insights/on-demand-reports', icon: 'FileSpreadsheet', roles: [1,5], group: 'Data Management' },
       { label: 'Data Explorer',  path: '/app/insights/explorer', icon: 'Search',       roles: [1,5],   group: 'Data Management' },
       { label: 'Raw Export',     path: '/app/insights/export',   icon: 'Download',     roles: [1,3,5], group: 'Data Management' },
       { label: 'Import Center',  path: '/app/insights/import',   icon: 'Upload',       roles: [1],     group: 'Data Management' },
