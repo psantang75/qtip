@@ -1,4 +1,5 @@
 import { executeQuery } from '../utils/databaseUtils';
+import logger from '../config/logger';
 
 /**
  * Interface for tempRecording table structure
@@ -44,12 +45,12 @@ class PhoneSystemService {
    */
   async getAudioUrlByConversationId(conversationId: string): Promise<CallRecordingResponse | null> {
     // TEMPORARILY COMMENTED OUT - tempRecording data retrieval
-    console.log(`[PHONE SYSTEM SERVICE] Audio URL retrieval temporarily disabled for conversation ID: ${conversationId}`);
+    logger.info(`[PHONE SYSTEM SERVICE] Audio URL retrieval temporarily disabled for conversation ID: ${conversationId}`);
     return null;
     
     /* COMMENTED OUT - tempRecording data retrieval
     try {
-      console.log(`[PHONE SYSTEM SERVICE] Fetching audio URL for conversation ID: ${conversationId}`);
+      logger.info(`[PHONE SYSTEM SERVICE] Fetching audio URL for conversation ID: ${conversationId}`);
       
       const query = `
         SELECT 
@@ -63,12 +64,12 @@ class PhoneSystemService {
       const results = await executeQuery<TempRecording>(query, [conversationId], 'secondary');
       
       if (results.length === 0) {
-        console.log(`[PHONE SYSTEM SERVICE] No recording found for conversation ID: ${conversationId}`);
+        logger.info(`[PHONE SYSTEM SERVICE] No recording found for conversation ID: ${conversationId}`);
         return null;
       }
       
       const recording = results[0];
-      console.log(`[PHONE SYSTEM SERVICE] Found recording:`, {
+      logger.info(`[PHONE SYSTEM SERVICE] Found recording:`, {
         conversation_id: recording.ConversationID,
         audio_url: recording.Recordings
       });
@@ -78,7 +79,7 @@ class PhoneSystemService {
         audio_url: recording.Recordings
       };
     } catch (error) {
-      console.error(`[PHONE SYSTEM SERVICE] Error fetching audio URL for conversation ID ${conversationId}:`, error);
+      logger.error(`[PHONE SYSTEM SERVICE] Error fetching audio URL for conversation ID ${conversationId}:`, error);
       throw new Error(`Failed to retrieve audio URL for conversation ID: ${conversationId}`);
     }
     */
@@ -91,7 +92,7 @@ class PhoneSystemService {
    */
   async getAudioUrlsByConversationIds(conversationIds: string[]): Promise<CallRecordingResponse[]> {
     // TEMPORARILY COMMENTED OUT - tempRecording data retrieval
-    console.log(`[PHONE SYSTEM SERVICE] Audio URLs retrieval temporarily disabled for ${conversationIds.length} conversation IDs`);
+    logger.info(`[PHONE SYSTEM SERVICE] Audio URLs retrieval temporarily disabled for ${conversationIds.length} conversation IDs`);
     return [];
     
     /* COMMENTED OUT - tempRecording data retrieval
@@ -100,7 +101,7 @@ class PhoneSystemService {
         return [];
       }
       
-      console.log(`[PHONE SYSTEM SERVICE] Fetching audio URLs for ${conversationIds.length} conversation IDs`);
+      logger.info(`[PHONE SYSTEM SERVICE] Fetching audio URLs for ${conversationIds.length} conversation IDs`);
       
       const placeholders = conversationIds.map(() => '?').join(',');
       const query = `
@@ -113,14 +114,14 @@ class PhoneSystemService {
       
       const results = await executeQuery<TempRecording>(query, conversationIds, 'secondary');
       
-      console.log(`[PHONE SYSTEM SERVICE] Found ${results.length} recordings`);
+      logger.info(`[PHONE SYSTEM SERVICE] Found ${results.length} recordings`);
       
       return results.map(recording => ({
         conversation_id: recording.ConversationID,
         audio_url: recording.Recordings
       }));
     } catch (error) {
-      console.error(`[PHONE SYSTEM SERVICE] Error fetching audio URLs for conversation IDs:`, error);
+      logger.error(`[PHONE SYSTEM SERVICE] Error fetching audio URLs for conversation IDs:`, error);
       throw new Error('Failed to retrieve audio URLs for conversation IDs');
     }
     */
@@ -133,12 +134,12 @@ class PhoneSystemService {
    */
   async getAllRecordings(limit: number = 100): Promise<CallRecordingResponse[]> {
     // TEMPORARILY COMMENTED OUT - tempRecording data retrieval
-    console.log(`[PHONE SYSTEM SERVICE] All recordings retrieval temporarily disabled (limit: ${limit})`);
+    logger.info(`[PHONE SYSTEM SERVICE] All recordings retrieval temporarily disabled (limit: ${limit})`);
     return [];
     
     /* COMMENTED OUT - tempRecording data retrieval
     try {
-      console.log(`[PHONE SYSTEM SERVICE] Getting all recordings (limit: ${limit})`);
+      logger.info(`[PHONE SYSTEM SERVICE] Getting all recordings (limit: ${limit})`);
       
       const query = `
         SELECT 
@@ -150,14 +151,14 @@ class PhoneSystemService {
       
       const results = await executeQuery<TempRecording>(query, [limit], 'secondary');
       
-      console.log(`[PHONE SYSTEM SERVICE] Found ${results.length} recordings`);
+      logger.info(`[PHONE SYSTEM SERVICE] Found ${results.length} recordings`);
       
       return results.map(recording => ({
         conversation_id: recording.ConversationID,
         audio_url: recording.Recordings
       }));
     } catch (error) {
-      console.error(`[PHONE SYSTEM SERVICE] Error getting all recordings:`, error);
+      logger.error(`[PHONE SYSTEM SERVICE] Error getting all recordings:`, error);
       throw new Error('Failed to get recordings');
     }
     */
@@ -169,15 +170,15 @@ class PhoneSystemService {
    */
   async testConnection(): Promise<boolean> {
     try {
-      console.log('[PHONE SYSTEM SERVICE] Testing PhoneSystem database connection');
+      logger.info('[PHONE SYSTEM SERVICE] Testing PhoneSystem database connection');
       
       const query = 'SELECT 1 as test';
       await executeQuery(query, [], 'secondary');
       
-      console.log('[PHONE SYSTEM SERVICE] PhoneSystem database connection successful');
+      logger.info('[PHONE SYSTEM SERVICE] PhoneSystem database connection successful');
       return true;
     } catch (error) {
-      console.error('[PHONE SYSTEM SERVICE] PhoneSystem database connection failed:', error);
+      logger.error('[PHONE SYSTEM SERVICE] PhoneSystem database connection failed:', error);
       return false;
     }
   }
@@ -192,7 +193,7 @@ class PhoneSystemService {
     oldestRecording: string | null;
   }> {
     try {
-      console.log('[PHONE SYSTEM SERVICE] Getting database statistics');
+      logger.info('[PHONE SYSTEM SERVICE] Getting database statistics');
       
       const statsQuery = `
         SELECT 
@@ -220,7 +221,7 @@ class PhoneSystemService {
         oldestRecording: null  // Not available since call_date column doesn't exist
       };
     } catch (error) {
-      console.error('[PHONE SYSTEM SERVICE] Error getting database statistics:', error);
+      logger.error('[PHONE SYSTEM SERVICE] Error getting database statistics:', error);
       throw new Error('Failed to get PhoneSystem database statistics');
     }
   }
@@ -232,7 +233,7 @@ class PhoneSystemService {
    */
   async getTranscriptByConversationId(conversationId: string): Promise<ConversationDetailResponse[]> {
     try {
-      console.log(`[PHONE SYSTEM SERVICE] Fetching transcript for conversation ID: ${conversationId}`);
+      logger.info(`[PHONE SYSTEM SERVICE] Fetching transcript for conversation ID: ${conversationId}`);
       
       const query = `
         SELECT 
@@ -247,18 +248,18 @@ class PhoneSystemService {
       const results = await executeQuery<tblConversationTranscript>(query, [conversationId], 'secondary');
       
       if (results.length === 0) {
-        console.log(`[PHONE SYSTEM SERVICE] No transcript found for conversation ID: ${conversationId}`);
+        logger.info(`[PHONE SYSTEM SERVICE] No transcript found for conversation ID: ${conversationId}`);
         return [];
       }
       
-      console.log(`[PHONE SYSTEM SERVICE] Found ${results.length} transcripts for conversation ID: ${conversationId}`);
+      logger.info(`[PHONE SYSTEM SERVICE] Found ${results.length} transcripts for conversation ID: ${conversationId}`);
       
       return results.map(conversationDetail => ({
         conversation_id: conversationDetail.ConversationID,
         transcript: conversationDetail.Transcript || ''
       }));
     } catch (error) {
-      console.error(`[PHONE SYSTEM SERVICE] Error fetching transcript for conversation ID ${conversationId}:`, error);
+      logger.error(`[PHONE SYSTEM SERVICE] Error fetching transcript for conversation ID ${conversationId}:`, error);
       throw new Error(`Failed to retrieve transcript for conversation ID: ${conversationId}`);
     }
   }
@@ -274,7 +275,7 @@ class PhoneSystemService {
         return [];
       }
       
-      console.log(`[PHONE SYSTEM SERVICE] Fetching transcripts for ${conversationIds.length} conversation IDs`);
+      logger.info(`[PHONE SYSTEM SERVICE] Fetching transcripts for ${conversationIds.length} conversation IDs`);
       
       const placeholders = conversationIds.map(() => '?').join(',');
       const query = `
@@ -287,14 +288,14 @@ class PhoneSystemService {
       
       const results = await executeQuery<tblConversationTranscript>(query, conversationIds, 'secondary');
       
-      console.log(`[PHONE SYSTEM SERVICE] Found ${results.length} transcripts`);
+      logger.info(`[PHONE SYSTEM SERVICE] Found ${results.length} transcripts`);
       
       return results.map(conversationDetail => ({
         conversation_id: conversationDetail.ConversationID,
         transcript: conversationDetail.Transcript || ''
       }));
     } catch (error) {
-      console.error(`[PHONE SYSTEM SERVICE] Error fetching transcripts for conversation IDs:`, error);
+      logger.error(`[PHONE SYSTEM SERVICE] Error fetching transcripts for conversation IDs:`, error);
       throw new Error('Failed to retrieve transcripts for conversation IDs');
     }
   }
@@ -309,7 +310,7 @@ class PhoneSystemService {
     transcript: ConversationDetailResponse[] | null;
   }> {
     try {
-      console.log(`[PHONE SYSTEM SERVICE] Fetching audio and transcript for conversation ID: ${conversationId}`);
+      logger.info(`[PHONE SYSTEM SERVICE] Fetching audio and transcript for conversation ID: ${conversationId}`);
       
       // Fetch both audio and transcript in parallel
       const [audioResult, transcriptResult] = await Promise.allSettled([
@@ -320,14 +321,14 @@ class PhoneSystemService {
       const audio = audioResult.status === 'fulfilled' ? audioResult.value : null;
       const transcript = transcriptResult.status === 'fulfilled' ? transcriptResult.value : null;
       
-      console.log(`[PHONE SYSTEM SERVICE] Results for conversation ID ${conversationId}:`, {
+      logger.info(`[PHONE SYSTEM SERVICE] Results for conversation ID ${conversationId}:`, {
         audioFound: !!audio,
         transcriptFound: transcript ? transcript.length : 0
       });
       
       return { audio, transcript };
     } catch (error) {
-      console.error(`[PHONE SYSTEM SERVICE] Error fetching audio and transcript for conversation ID ${conversationId}:`, error);
+      logger.error(`[PHONE SYSTEM SERVICE] Error fetching audio and transcript for conversation ID ${conversationId}:`, error);
       throw new Error(`Failed to retrieve audio and transcript for conversation ID: ${conversationId}`);
     }
   }

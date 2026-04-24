@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt, { type SignOptions } from 'jsonwebtoken';
+import logger from '../config/logger';
 
 interface JwtTokenPayload {
   user_id?: number
@@ -97,7 +98,7 @@ export class AuthenticationService {
    * Enhanced login with comprehensive security checks
    */
   async login(loginData: LoginRequest, req?: Request): Promise<AuthResponse> {
-    console.log(`[NEW AUTH] AuthenticationService: Login attempt for email: ${loginData.email}`);
+    logger.info(`[NEW AUTH] AuthenticationService: Login attempt for email: ${loginData.email}`);
     
     try {
       const { email, password } = loginData;
@@ -105,7 +106,7 @@ export class AuthenticationService {
 
       // Input validation
       if (!email || !password) {
-        console.log(`[NEW AUTH] AuthenticationService: Missing email or password`);
+        logger.info(`[NEW AUTH] AuthenticationService: Missing email or password`);
         await this.repository.logAuthAttempt(email || 'unknown', false, clientIp);
         throw new AuthenticationError('Email and password are required', 'MISSING_CREDENTIALS', 400);
       }
@@ -113,7 +114,7 @@ export class AuthenticationService {
       // Check if account is locked
       const isLocked = await this.repository.isAccountLocked(email);
       if (isLocked) {
-        console.log(`[NEW AUTH] AuthenticationService: Account locked for email: ${email}`);
+        logger.info(`[NEW AUTH] AuthenticationService: Account locked for email: ${email}`);
         await this.repository.logAuthAttempt(email, false, clientIp);
         throw new AuthenticationError('Account temporarily locked due to failed login attempts', 'ACCOUNT_LOCKED', 423);
       }
@@ -121,7 +122,7 @@ export class AuthenticationService {
       // Find user
       const user = await this.repository.findByEmail(email);
       if (!user) {
-        console.log(`[NEW AUTH] AuthenticationService: User not found for email: ${email}`);
+        logger.info(`[NEW AUTH] AuthenticationService: User not found for email: ${email}`);
         await this.repository.logAuthAttempt(email, false, clientIp);
         throw new AuthenticationError('Invalid credentials', 'INVALID_CREDENTIALS');
       }
@@ -129,14 +130,14 @@ export class AuthenticationService {
       // Verify password
       const isPasswordValid = await bcrypt.compare(password, user.password_hash);
       if (!isPasswordValid) {
-        console.log(`[NEW AUTH] AuthenticationService: Invalid password for email: ${email}`);
+        logger.info(`[NEW AUTH] AuthenticationService: Invalid password for email: ${email}`);
         await this.repository.logAuthAttempt(email, false, clientIp);
         throw new AuthenticationError('Invalid credentials', 'INVALID_CREDENTIALS');
       }
 
       // Check if user is active (if the field exists)
       if ('is_active' in user && !user.is_active) {
-        console.log(`[NEW AUTH] AuthenticationService: Inactive user attempted login: ${email}`);
+        logger.info(`[NEW AUTH] AuthenticationService: Inactive user attempted login: ${email}`);
         await this.repository.logAuthAttempt(email, false, clientIp);
         throw new AuthenticationError('Account is deactivated', 'ACCOUNT_INACTIVE', 403);
       }
@@ -157,7 +158,7 @@ export class AuthenticationService {
       // Remove sensitive data from user object
       const { password_hash, ...userWithoutPassword } = user;
 
-      console.log(`[NEW AUTH] AuthenticationService: Successful login for user ID: ${user.id}`);
+      logger.info(`[NEW AUTH] AuthenticationService: Successful login for user ID: ${user.id}`);
 
       return {
         success: true,
@@ -173,7 +174,7 @@ export class AuthenticationService {
         throw error;
       }
 
-      console.error('[NEW AUTH] AuthenticationService: Unexpected error during login:', error);
+      logger.error('[NEW AUTH] AuthenticationService: Unexpected error during login:', error);
       throw new AuthenticationError('Authentication service unavailable', 'SERVICE_ERROR', 500);
     }
   }
@@ -182,7 +183,7 @@ export class AuthenticationService {
    * Logout user and invalidate tokens
    */
   async logout(token: string, req?: Request): Promise<{ success: boolean; message: string }> {
-    console.log(`[NEW AUTH] AuthenticationService: Logout attempt`);
+    logger.info(`[NEW AUTH] AuthenticationService: Logout attempt`);
     
     try {
       if (!token) {
@@ -196,7 +197,7 @@ export class AuthenticationService {
       const decoded = jwt.decode(token) as JwtTokenPayload | null;
       const logoutUserId = decoded?.user_id ?? decoded?.userId;
       if (logoutUserId) {
-        console.log(`[NEW AUTH] AuthenticationService: User ${logoutUserId} logging out`);
+        logger.info(`[NEW AUTH] AuthenticationService: User ${logoutUserId} logging out`);
         
         // Add token to blacklist with its expiration time
         const expirationTime = decoded!.exp;
@@ -204,13 +205,13 @@ export class AuthenticationService {
         
         // Log the logout in audit log
         const clientIp = req?.ip || req?.connection?.remoteAddress || 'unknown';
-        console.log(`[NEW AUTH] AuthenticationService: User ${logoutUserId} logged out from IP: ${clientIp}`);
+        logger.info(`[NEW AUTH] AuthenticationService: User ${logoutUserId} logged out from IP: ${clientIp}`);
         
         // You could add an audit log entry here if needed
         // await this.repository.logUserActivity(decoded.user_id, 'LOGOUT', { ip: clientIp });
       } else {
         // Even if we can't decode the token, still try to blacklist it
-        console.log(`[NEW AUTH] AuthenticationService: Blacklisting potentially invalid token`);
+        logger.info(`[NEW AUTH] AuthenticationService: Blacklisting potentially invalid token`);
         tokenBlacklistService.blacklistToken(token);
       }
 
@@ -219,7 +220,7 @@ export class AuthenticationService {
         message: 'Logout successful'
       };
     } catch (error) {
-      console.error('[NEW AUTH] AuthenticationService: Error during logout:', error);
+      logger.error('[NEW AUTH] AuthenticationService: Error during logout:', error);
       
       // Even if there's an error, still try to blacklist the token
       if (token) {
@@ -237,7 +238,7 @@ export class AuthenticationService {
    * Validate JWT token and return user information
    */
   async validateToken(token: string): Promise<TokenValidationResult> {
-    console.log(`[NEW AUTH] AuthenticationService: Validating token`);
+    logger.info(`[NEW AUTH] AuthenticationService: Validating token`);
     
     try {
       if (!token) {
@@ -249,7 +250,7 @@ export class AuthenticationService {
 
       // Check if token is blacklisted (logged out)
       if (tokenBlacklistService.isTokenBlacklisted(token)) {
-        console.log(`[NEW AUTH] AuthenticationService: Token is blacklisted (user logged out)`);
+        logger.info(`[NEW AUTH] AuthenticationService: Token is blacklisted (user logged out)`);
         return {
           valid: false,
           message: 'Token has been invalidated'
@@ -262,7 +263,7 @@ export class AuthenticationService {
       const tokenRoleId = decoded.role_id ?? decoded.roleId;
 
       if (!tokenUserId || !tokenRoleId) {
-        console.log(`[NEW AUTH] AuthenticationService: Invalid token structure`);
+        logger.info(`[NEW AUTH] AuthenticationService: Invalid token structure`);
         return {
           valid: false,
           message: 'Invalid token structure'
@@ -272,7 +273,7 @@ export class AuthenticationService {
       // Get current user data
       const user = await this.repository.findById(tokenUserId);
       if (!user) {
-        console.log(`[NEW AUTH] AuthenticationService: User not found for token validation`);
+        logger.info(`[NEW AUTH] AuthenticationService: User not found for token validation`);
         return {
           valid: false,
           message: 'User not found'
@@ -281,7 +282,7 @@ export class AuthenticationService {
 
       // Check if user is still active (if the field exists)
       if ('is_active' in user && !user.is_active) {
-        console.log(`[NEW AUTH] AuthenticationService: Inactive user attempted token validation`);
+        logger.info(`[NEW AUTH] AuthenticationService: Inactive user attempted token validation`);
         return {
           valid: false,
           message: 'Account is deactivated'
@@ -291,7 +292,7 @@ export class AuthenticationService {
       // Get current permissions
       const permissions = await this.repository.getUserPermissions(user.id);
 
-      console.log(`[NEW AUTH] AuthenticationService: Token validation successful for user ID: ${user.id}`);
+      logger.info(`[NEW AUTH] AuthenticationService: Token validation successful for user ID: ${user.id}`);
 
       return {
         valid: true,
@@ -302,20 +303,20 @@ export class AuthenticationService {
 
     } catch (error: any) {
       if (error.name === 'TokenExpiredError') {
-        console.log(`[NEW AUTH] AuthenticationService: Token expired`);
+        logger.info(`[NEW AUTH] AuthenticationService: Token expired`);
         return {
           valid: false,
           message: 'Token expired'
         };
       } else if (error.name === 'JsonWebTokenError') {
-        console.log(`[NEW AUTH] AuthenticationService: Invalid token`);
+        logger.info(`[NEW AUTH] AuthenticationService: Invalid token`);
         return {
           valid: false,
           message: 'Invalid token'
         };
       }
 
-      console.error('[NEW AUTH] AuthenticationService: Error validating token:', error);
+      logger.error('[NEW AUTH] AuthenticationService: Error validating token:', error);
       return {
         valid: false,
         message: 'Token validation failed'
@@ -327,7 +328,7 @@ export class AuthenticationService {
    * Refresh access token using refresh token
    */
   async refreshToken(refreshToken: string): Promise<RefreshTokenResult> {
-    console.log(`[NEW AUTH] AuthenticationService: Refreshing token`);
+    logger.info(`[NEW AUTH] AuthenticationService: Refreshing token`);
     
     try {
       if (!refreshToken) {
@@ -342,7 +343,7 @@ export class AuthenticationService {
       const refreshUserId = decoded.user_id ?? decoded.userId;
 
       if (!refreshUserId || !decoded.type || decoded.type !== 'refresh') {
-        console.log(`[NEW AUTH] AuthenticationService: Invalid refresh token structure`);
+        logger.info(`[NEW AUTH] AuthenticationService: Invalid refresh token structure`);
         return {
           success: false,
           message: 'Invalid refresh token'
@@ -352,7 +353,7 @@ export class AuthenticationService {
       // Get current user data
       const user = await this.repository.findById(refreshUserId);
       if (!user) {
-        console.log(`[NEW AUTH] AuthenticationService: User not found for refresh token`);
+        logger.info(`[NEW AUTH] AuthenticationService: User not found for refresh token`);
         return {
           success: false,
           message: 'User not found'
@@ -361,7 +362,7 @@ export class AuthenticationService {
 
       // Check if user is still active (if the field exists)
       if ('is_active' in user && !user.is_active) {
-        console.log(`[NEW AUTH] AuthenticationService: Inactive user attempted token refresh`);
+        logger.info(`[NEW AUTH] AuthenticationService: Inactive user attempted token refresh`);
         return {
           success: false,
           message: 'Account is deactivated'
@@ -372,7 +373,7 @@ export class AuthenticationService {
       const newAccessToken = this.generateAccessToken(user);
       const newRefreshToken = this.generateRefreshToken(user);
 
-      console.log(`[NEW AUTH] AuthenticationService: Token refresh successful for user ID: ${user.id}`);
+      logger.info(`[NEW AUTH] AuthenticationService: Token refresh successful for user ID: ${user.id}`);
 
       return {
         success: true,
@@ -383,20 +384,20 @@ export class AuthenticationService {
 
     } catch (error: any) {
       if (error.name === 'TokenExpiredError') {
-        console.log(`[NEW AUTH] AuthenticationService: Refresh token expired`);
+        logger.info(`[NEW AUTH] AuthenticationService: Refresh token expired`);
         return {
           success: false,
           message: 'Refresh token expired'
         };
       } else if (error.name === 'JsonWebTokenError') {
-        console.log(`[NEW AUTH] AuthenticationService: Invalid refresh token`);
+        logger.info(`[NEW AUTH] AuthenticationService: Invalid refresh token`);
         return {
           success: false,
           message: 'Invalid refresh token'
         };
       }
 
-      console.error('[NEW AUTH] AuthenticationService: Error refreshing token:', error);
+      logger.error('[NEW AUTH] AuthenticationService: Error refreshing token:', error);
       return {
         success: false,
         message: 'Token refresh failed'

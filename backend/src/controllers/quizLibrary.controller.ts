@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
+import logger from '../config/logger';
 
 interface AuthReq extends Request {
   user?: { user_id: number; role: string };
@@ -77,7 +78,7 @@ export const getQuizLibrary = async (req: AuthReq, res: Response) => {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
-    console.error('[QUIZ_LIB] getQuizLibrary error:', error);
+    logger.error('[QUIZ_LIB] getQuizLibrary error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -118,7 +119,7 @@ export const getLibraryQuizDetail = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, data: quiz });
   } catch (error) {
-    console.error('[QUIZ_LIB] getLibraryQuizDetail error:', error);
+    logger.error('[QUIZ_LIB] getLibraryQuizDetail error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -160,7 +161,7 @@ export const createLibraryQuiz = async (req: AuthReq, res: Response) => {
 
     res.status(201).json({ success: true, data: { id: newId }, message: 'Quiz created' });
   } catch (error) {
-    console.error('[QUIZ_LIB] createLibraryQuiz error:', error);
+    logger.error('[QUIZ_LIB] createLibraryQuiz error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -207,7 +208,7 @@ export const updateLibraryQuiz = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, message: 'Quiz updated' });
   } catch (error) {
-    console.error('[QUIZ_LIB] updateLibraryQuiz error:', error);
+    logger.error('[QUIZ_LIB] updateLibraryQuiz error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -221,7 +222,7 @@ export const toggleQuizStatus = async (req: AuthReq, res: Response) => {
     await prisma.$executeRaw(Prisma.sql`UPDATE quizzes SET is_active = ${newStatus} WHERE id = ${quizId}`);
     res.json({ success: true, is_active: Boolean(newStatus) });
   } catch (error) {
-    console.error('[QUIZ_LIB] toggleQuizStatus error:', error);
+    logger.error('[QUIZ_LIB] toggleQuizStatus error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -241,7 +242,7 @@ export const deleteLibraryQuiz = async (req: AuthReq, res: Response) => {
     });
     res.json({ success: true, message: 'Quiz deleted' });
   } catch (error) {
-    console.error('[QUIZ_LIB] deleteLibraryQuiz error:', error);
+    logger.error('[QUIZ_LIB] deleteLibraryQuiz error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

@@ -7,6 +7,7 @@ import type {
   CSROption,
   PaginatedCoachingSessions
 } from '../types/manager.types';
+import { logError } from '../utils/errorHandling';
 
 // Types for dashboard
 export interface WeeklyMonthlyStats {
@@ -88,7 +89,7 @@ const adminService = {
       const response = await apiClient.get('/admin/stats');
       return response.data;
     } catch (error) {
-      console.error('Error fetching admin dashboard stats:', error);
+      logError('adminService', 'Error fetching admin dashboard stats:', error);
       throw error;
     }
   },
@@ -99,7 +100,7 @@ const adminService = {
       const response = await apiClient.get('/admin/csr-activity');
       return response.data;
     } catch (error) {
-      console.error('Error fetching CSR activity data:', error);
+      logError('adminService', 'Error fetching CSR activity data:', error);
       throw error;
     }
   },

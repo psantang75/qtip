@@ -13,6 +13,7 @@
 import { EnhancedPerformanceGoalRepository } from '../repositories/EnhancedPerformanceGoalRepository';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
+import logger from '../config/logger';
 
 /**
  * Enhanced Performance Goal Service
@@ -33,7 +34,7 @@ export class EnhancedPerformanceGoalService {
     created_by: number
   ): Promise<EnhancedPerformanceGoal> {
 
-    console.log('[ENHANCED PERF GOAL SERVICE] Creating goal with data:', {
+    logger.info('[ENHANCED PERF GOAL SERVICE] Creating goal with data:', {
       ...goalData,
       user_ids: goalData.user_ids || [],
       department_ids: goalData.department_ids || [],
@@ -48,12 +49,12 @@ export class EnhancedPerformanceGoalService {
     // Business logic validation
     this.validateScopeRequirements(goalData);
 
-    console.log('[ENHANCED PERF GOAL SERVICE] Validation passed, proceeding with creation');
+    logger.info('[ENHANCED PERF GOAL SERVICE] Validation passed, proceeding with creation');
 
     try {
       const createdGoal = await this.repository.create(goalData, created_by);
 
-      console.log('[ENHANCED PERF GOAL SERVICE] Goal created successfully:', {
+      logger.info('[ENHANCED PERF GOAL SERVICE] Goal created successfully:', {
         id: createdGoal.id,
         scope: createdGoal.scope,
         assigned_users: createdGoal.assigned_users?.length || 0,
@@ -79,7 +80,7 @@ export class EnhancedPerformanceGoalService {
 
       return createdGoal;
     } catch (error) {
-      console.error('[ENHANCED PERF GOAL SERVICE] Error creating goal:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error creating goal:', error);
       throw new PerformanceGoalServiceError('Failed to create performance goal', 'CREATE_ERROR', 500);
     }
   }
@@ -105,7 +106,7 @@ export class EnhancedPerformanceGoalService {
     try {
       return await this.repository.findAll(page, pageSize, filters);
     } catch (error) {
-      console.error('[ENHANCED PERF GOAL SERVICE] Error getting goals:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error getting goals:', error);
       throw new PerformanceGoalServiceError('Failed to retrieve performance goals', 'GET_GOALS_ERROR', 500);
     }
   }
@@ -127,7 +128,7 @@ export class EnhancedPerformanceGoalService {
         throw error;
       }
 
-      console.error('[ENHANCED PERF GOAL SERVICE] Error getting goal by ID:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error getting goal by ID:', error);
       throw new PerformanceGoalServiceError('Failed to retrieve performance goal', 'GET_GOAL_ERROR', 500);
     }
   }
@@ -173,7 +174,7 @@ export class EnhancedPerformanceGoalService {
         throw error;
       }
 
-      console.error('[ENHANCED PERF GOAL SERVICE] Error updating goal:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error updating goal:', error);
       throw new PerformanceGoalServiceError('Failed to update performance goal', 'UPDATE_ERROR', 500);
     }
   }
@@ -206,7 +207,7 @@ export class EnhancedPerformanceGoalService {
         throw error;
       }
 
-      console.error('[ENHANCED PERF GOAL SERVICE] Error deleting goal:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error deleting goal:', error);
       throw new PerformanceGoalServiceError('Failed to delete performance goal', 'DELETE_ERROR', 500);
     }
   }
@@ -239,7 +240,7 @@ export class EnhancedPerformanceGoalService {
         throw error;
       }
 
-      console.error('[ENHANCED PERF GOAL SERVICE] Error activating goal:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error activating goal:', error);
       throw new PerformanceGoalServiceError('Failed to activate performance goal', 'ACTIVATE_ERROR', 500);
     }
   }
@@ -255,7 +256,7 @@ export class EnhancedPerformanceGoalService {
     try {
       return await this.repository.getActiveGoalsForUser(user_id, asOfDate);
     } catch (error) {
-      console.error('[ENHANCED PERF GOAL SERVICE] Error getting user goals:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error getting user goals:', error);
       throw new PerformanceGoalServiceError('Failed to retrieve user goals', 'GET_USER_GOALS_ERROR', 500);
     }
   }
@@ -267,7 +268,7 @@ export class EnhancedPerformanceGoalService {
     try {
       return await this.repository.getFormOptions();
     } catch (error) {
-      console.error('[ENHANCED PERF GOAL SERVICE] Error getting form options:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error getting form options:', error);
       throw new PerformanceGoalServiceError('Failed to retrieve form options', 'GET_FORM_OPTIONS_ERROR', 500);
     }
   }
@@ -323,7 +324,7 @@ export class EnhancedPerformanceGoalService {
 
       return reports;
     } catch (error) {
-      console.error('[ENHANCED PERF GOAL SERVICE] Error calculating performance report:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error calculating performance report:', error);
       throw new PerformanceGoalServiceError('Failed to calculate performance report', 'CALCULATE_REPORT_ERROR', 500);
     }
   }
@@ -456,7 +457,7 @@ export class EnhancedPerformanceGoalService {
         VALUES (${event.user_id}, ${event.action}, ${event.target_id}, ${event.target_type}, ${JSON.stringify(event.details)}, NOW())
       `);
     } catch (error) {
-      console.error('[ENHANCED PERF GOAL SERVICE] Error logging audit event:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error logging audit event:', error);
       // Don't throw error for audit logging failures
     }
   }
@@ -481,7 +482,7 @@ export class EnhancedPerformanceGoalService {
 
       return rows;
     } catch (error) {
-      console.error('[ENHANCED PERF GOAL SERVICE] Error getting users for assignment:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error getting users for assignment:', error);
       throw new PerformanceGoalServiceError('Failed to retrieve users', 'GET_USERS_ERROR', 500);
     }
   }
@@ -500,7 +501,7 @@ export class EnhancedPerformanceGoalService {
 
       return rows;
     } catch (error) {
-      console.error('[ENHANCED PERF GOAL SERVICE] Error getting departments for assignment:', error);
+      logger.error('[ENHANCED PERF GOAL SERVICE] Error getting departments for assignment:', error);
       throw new PerformanceGoalServiceError('Failed to retrieve departments', 'GET_DEPARTMENTS_ERROR', 500);
     }
   }

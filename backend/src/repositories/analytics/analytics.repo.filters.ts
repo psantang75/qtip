@@ -167,7 +167,9 @@ export async function getAnalyticsFilterOptionsRepo(
 
     return { departments, forms, csrs, categories, questions }
   } catch (error) {
-    console.error('Error fetching filter options:', error)
+    logger.error('Error fetching filter options:', error)
     throw new Error('Failed to fetch filter options')
   }
 }
+
+import logger from '../../config/logger';

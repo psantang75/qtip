@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
 import { databaseConfig, secondaryDatabaseConfig } from './environment';
 import { DB_SESSION_TIMEOUT_SECONDS } from '../utils/queryTimeout';
+import logger from './logger';
 
 /**
  * Primary database pool — used by controllers that have not yet been migrated to Prisma.
@@ -47,7 +48,7 @@ class DatabasePoolFactory {
         conn.query(`SET SESSION max_statement_time = ${DB_SESSION_TIMEOUT_SECONDS}`, (err) => {
           if (err) {
             // MariaDB-only — MySQL uses a different syntax. Log once and move on.
-            console.warn('[db] SET SESSION max_statement_time failed:', (err as Error).message);
+            logger.warn('[db] SET SESSION max_statement_time failed:', (err as Error).message);
           }
         });
       });
@@ -73,7 +74,7 @@ export async function testDatabaseConnection(connectionName: string = 'primary')
     connection.release();
     return true;
   } catch (error) {
-    console.error(`Database connectivity test failed for ${connectionName}:`, error);
+    logger.error(`Database connectivity test failed for ${connectionName}:`, error);
     return false;
   }
 }
@@ -108,7 +109,7 @@ export async function closeDatabaseConnections(): Promise<void> {
   try {
     await DatabasePoolFactory.closeAllPools();
   } catch (error) {
-    console.error('Error closing database connection pools:', error);
+    logger.error('Error closing database connection pools:', error);
   }
 }
 

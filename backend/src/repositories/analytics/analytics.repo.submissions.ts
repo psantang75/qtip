@@ -254,7 +254,9 @@ export async function getDetailedSubmissionDataRepo(
     if (shape.isFormLevelOnly) return shapeFormLevelRows(rows)
     return shapeDefaultRows(rows)
   } catch (error) {
-    console.error('Error fetching detailed submission data:', error)
+    logger.error('Error fetching detailed submission data:', error)
     throw new Error('Failed to fetch detailed submission data')
   }
 }
+
+import logger from '../../config/logger';

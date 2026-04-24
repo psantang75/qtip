@@ -1,3 +1,4 @@
+import logger from './logger';
 ﻿/**
  * Production Environment Validation Module
  * 
@@ -8,7 +9,6 @@
  * @author QTIP Development Team
  */
 
-import logger from './logger';
 
 interface ValidationResult {
   isValid: boolean;

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { getJwtSecret } from '../config/environment';
+import logger from '../config/logger';
 const fs     = require('fs').promises;
 const path   = require('path');
 const { createReadStream } = require('fs');
@@ -138,7 +139,7 @@ export const getResources = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, data: { resources, totalCount: Number(countRows[0]?.total ?? 0), page, limit } });
   } catch (error) {
-    console.error('[RESOURCE] getResources error:', error);
+    logger.error('[RESOURCE] getResources error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -189,7 +190,7 @@ export const createResource = async (req: AuthReq, res: Response) => {
 
     res.status(201).json({ success: true, data: { id: newId }, message: 'Resource created' });
   } catch (error) {
-    console.error('[RESOURCE] createResource error:', error);
+    logger.error('[RESOURCE] createResource error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -240,7 +241,7 @@ export const updateResource = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, message: 'Resource updated' });
   } catch (error) {
-    console.error('[RESOURCE] updateResource error:', error);
+    logger.error('[RESOURCE] updateResource error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -257,7 +258,7 @@ export const toggleResourceStatus = async (req: AuthReq, res: Response) => {
     await prisma.$executeRaw(Prisma.sql`UPDATE training_resources SET is_active = ${is_active === true || is_active === 'true' ? 1 : 0}, updated_at = NOW() WHERE id = ${resourceId}`);
     res.json({ success: true, message: 'Resource status updated' });
   } catch (error) {
-    console.error('[RESOURCE] toggleResourceStatus error:', error);
+    logger.error('[RESOURCE] toggleResourceStatus error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -284,7 +285,7 @@ export const generateViewToken = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, data: { viewUrl } });
   } catch (error) {
-    console.error('[RESOURCE] generateViewToken error:', error);
+    logger.error('[RESOURCE] generateViewToken error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -330,7 +331,7 @@ export const serveFileWithToken = async (req: Request, res: Response) => {
     stream.on('error', () => { if (!res.headersSent) res.status(500).end(); });
     stream.pipe(res);
   } catch (error) {
-    console.error('[RESOURCE] serveFileWithToken error:', error);
+    logger.error('[RESOURCE] serveFileWithToken error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -357,7 +358,7 @@ export const downloadResourceFile = async (req: AuthReq, res: Response) => {
     stream.on('error', () => { if (!res.headersSent) res.status(500).end(); });
     stream.pipe(res);
   } catch (error) {
-    console.error('[RESOURCE] downloadResourceFile error:', error);
+    logger.error('[RESOURCE] downloadResourceFile error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
+import logger from '../config/logger';
 
 /**
  * GET /api/insights/admin/ingestion-log
@@ -35,7 +36,7 @@ export const getIngestionLog = async (req: Request, res: Response): Promise<void
     );
     res.json(rows);
   } catch (error) {
-    console.error('getIngestionLog error:', error);
+    logger.error('getIngestionLog error:', error);
     res.status(500).json({ error: 'Failed to load ingestion log' });
   }
 };

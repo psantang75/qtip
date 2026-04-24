@@ -3,6 +3,7 @@ import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { applyAutoAdvance } from '../utils/coachingAutoAdvance';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
+import logger from '../config/logger';
 
 /**
  * CSR controller — handlers for the authenticated CSR experience.
@@ -74,7 +75,7 @@ export const submitQuizAnswers = async (req: Request, res: Response) => {
       correctAnswers: correctAnswerArray
     });
   } catch (error) {
-    console.error('Error submitting quiz:', error);
+    logger.error('Error submitting quiz:', error);
     res.status(500).json({ message: 'Failed to submit quiz' });
   }
 };
@@ -265,7 +266,7 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching CSR coaching sessions:', error);
+    logger.error('Error fetching CSR coaching sessions:', error);
 
     const errorResponse = {
       success: false,
@@ -379,7 +380,7 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
 
     res.json({ success: true, data: responseData });
   } catch (error) {
-    console.error('Error fetching CSR coaching session details:', error);
+    logger.error('Error fetching CSR coaching session details:', error);
 
     const errorResponse = {
       success: false,
@@ -435,7 +436,7 @@ export const getCSRResourceFile = async (req: Request, res: Response) => {
     stream.on('error', () => { if (!res.headersSent) res.status(500).json({ success: false, message: 'Error reading file' }); });
     stream.pipe(res);
   } catch (error) {
-    console.error('[CSR] getCSRResourceFile error:', error);
+    logger.error('[CSR] getCSRResourceFile error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -537,7 +538,7 @@ export const downloadCSRCoachingAttachment = async (req: Request, res: Response)
       const fileBuffer = await fs.readFile(filePath);
       res.send(fileBuffer);
     } catch (fileError) {
-      console.error('File access error:', fileError);
+      logger.error('File access error:', fileError);
       res.status(404).json({
         success: false,
         error: 'FILE_NOT_FOUND',
@@ -545,7 +546,7 @@ export const downloadCSRCoachingAttachment = async (req: Request, res: Response)
       });
     }
   } catch (error) {
-    console.error('Error downloading coaching attachment:', error);
+    logger.error('Error downloading coaching attachment:', error);
 
     const errorResponse = {
       success: false,
@@ -609,7 +610,7 @@ export const submitCSRResponse = async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Response submitted', data: { new_status: advancedTo ?? session.status } });
   } catch (error) {
-    console.error('[CSR] submitCSRResponse error:', error);
+    logger.error('[CSR] submitCSRResponse error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

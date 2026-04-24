@@ -6,6 +6,7 @@ import {
   CreateAuditAssignmentDTO, 
   UpdateAuditAssignmentDTO
 } from '../models';
+import logger from '../config/logger';
 
 class HttpError extends Error {
   constructor(public statusCode: number, message: string, public responseData?: Record<string, any>) {
@@ -46,7 +47,7 @@ export const getAuditAssignments = async (req: Request, res: Response): Promise<
         return;
       }
     } catch (error) {
-      console.error('Error checking if audit_assignments exists:', error);
+      logger.error('Error checking if audit_assignments exists:', error);
     }
 
     const conditions: Prisma.Sql[] = [Prisma.sql`1=1`];
@@ -114,7 +115,7 @@ export const getAuditAssignments = async (req: Request, res: Response): Promise<
       currentPage: page
     });
   } catch (error) {
-    console.error('Error retrieving audit assignments:', error);
+    logger.error('Error retrieving audit assignments:', error);
     res.status(500).json({ message: 'Failed to retrieve audit assignments' });
   }
 };
@@ -154,7 +155,7 @@ export const getAuditAssignmentById = async (req: Request, res: Response): Promi
 
     res.status(200).json(rows[0] as AuditAssignmentWithDetails);
   } catch (error) {
-    console.error('Error retrieving audit assignment:', error);
+    logger.error('Error retrieving audit assignment:', error);
     res.status(500).json({ message: 'Failed to retrieve audit assignment' });
   }
 };
@@ -230,7 +231,7 @@ export const createAuditAssignment = async (req: Request, res: Response): Promis
       assignment_id: created.id
     });
   } catch (error) {
-    console.error('Error creating audit assignment:', error);
+    logger.error('Error creating audit assignment:', error);
     res.status(500).json({ message: 'Failed to create audit assignment' });
   }
 };
@@ -347,7 +348,7 @@ export const createBatchAuditAssignments = async (req: Request, res: Response): 
       res.status(error.statusCode).json({ message: error.message, ...error.responseData });
       return;
     }
-    console.error('Error creating audit assignments:', error);
+    logger.error('Error creating audit assignments:', error);
     res.status(500).json({ message: 'Failed to create audit assignments' });
   }
 };
@@ -468,7 +469,7 @@ export const updateAuditAssignment = async (req: Request, res: Response): Promis
       assignment_id: assignmentId
     });
   } catch (error) {
-    console.error('Error updating audit assignment:', error);
+    logger.error('Error updating audit assignment:', error);
     res.status(500).json({ message: 'Failed to update audit assignment' });
   }
 };
@@ -511,7 +512,7 @@ export const deactivateAuditAssignment = async (req: Request, res: Response): Pr
       assignment_id: assignmentId
     });
   } catch (error) {
-    console.error('Error deactivating audit assignment:', error);
+    logger.error('Error deactivating audit assignment:', error);
     res.status(500).json({ message: 'Failed to deactivate audit assignment' });
   }
 };

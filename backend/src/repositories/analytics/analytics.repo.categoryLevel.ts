@@ -273,7 +273,9 @@ export async function getCategoryLevelAnalyticsRepo(filters: any): Promise<any> 
       },
     }
   } catch (error) {
-    console.error('Error fetching category-level analytics:', error)
+    logger.error('Error fetching category-level analytics:', error)
     throw new Error('Failed to fetch category-level analytics')
   }
 }
+
+import logger from '../../config/logger';

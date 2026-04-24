@@ -14,6 +14,7 @@ import {
 } from '../models';
 import { MySQLSubmissionRepository } from '../repositories/MySQLSubmissionRepository';
 import { calculateFormScoreBySubmissionId, recalculateScores, getScoreBreakdown } from '../utils/scoringUtil';
+import logger from '../config/logger';
 
 /**
  * Custom error class for submission service business logic errors
@@ -186,7 +187,7 @@ export class SubmissionService implements ISubmissionService {
    */
   async submitAudit(submissionData: CreateSubmissionDTO, qa_id: number): Promise<{ submission_id: number; total_score: number; message: string }> {
     try {
-      console.log('[SUBMISSION SERVICE] Starting submitAudit with data:', {
+      logger.info('[SUBMISSION SERVICE] Starting submitAudit with data:', {
         form_id: submissionData.form_id,
         call_id: submissionData.call_id,
         call_ids: submissionData.call_ids,
@@ -206,7 +207,7 @@ export class SubmissionService implements ISubmissionService {
         submitted_at: new Date()
       };
 
-      console.log('[SUBMISSION SERVICE] Normalized submission data:', {
+      logger.info('[SUBMISSION SERVICE] Normalized submission data:', {
         form_id: normalizedSubmissionData.form_id,
         call_id: normalizedSubmissionData.call_id,
         call_ids: normalizedSubmissionData.call_ids,
@@ -216,14 +217,14 @@ export class SubmissionService implements ISubmissionService {
 
       // Create submission in database
       const submission_id = await this.submissionRepository.createSubmission(normalizedSubmissionData);
-      console.log('[SUBMISSION SERVICE] Created submission with ID:', submission_id);
+      logger.info('[SUBMISSION SERVICE] Created submission with ID:', submission_id);
 
       // Calculate scores using the existing scoring utility
       const scoreResult = await calculateFormScoreBySubmissionId(
         this.submissionRepository.getConnection(),
         submission_id
       );
-      console.log('[SUBMISSION SERVICE] Calculated score:', scoreResult.total_score);
+      logger.info('[SUBMISSION SERVICE] Calculated score:', scoreResult.total_score);
 
       // Update submission with calculated score
       await this.submissionRepository.updateSubmissionScore(submission_id, scoreResult.total_score);
@@ -234,7 +235,7 @@ export class SubmissionService implements ISubmissionService {
         message: 'Audit submitted successfully'
       };
     } catch (error) {
-      console.error('[SUBMISSION SERVICE] Error in submitAudit:', error);
+      logger.error('[SUBMISSION SERVICE] Error in submitAudit:', error);
       if (error instanceof SubmissionServiceError) {
         throw error;
       }

@@ -3,6 +3,7 @@ import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import { InsightsPermissionService } from '../services/InsightsPermissionService';
 import { getInsightsRoleId } from '../utils/insightsRoleMap';
+import logger from '../config/logger';
 
 const permissionService = new InsightsPermissionService();
 
@@ -59,7 +60,7 @@ export const getInsightsNavigation = async (req: Request, res: Response): Promis
 
     res.json(categories);
   } catch (error) {
-    console.error('getInsightsNavigation error:', error);
+    logger.error('getInsightsNavigation error:', error);
     res.status(500).json({ error: 'Failed to load insights navigation' });
   }
 };
@@ -79,7 +80,7 @@ export const getInsightsAccess = async (req: Request, res: Response): Promise<vo
 
     res.json({ canAccess: access.canAccess, dataScope: access.dataScope });
   } catch (error) {
-    console.error('getInsightsAccess error:', error);
+    logger.error('getInsightsAccess error:', error);
     res.status(500).json({ error: 'Failed to check insights access' });
   }
 };
@@ -139,7 +140,7 @@ export const getKpiConfig = async (_req: Request, res: Response): Promise<void> 
 
     res.json(config)
   } catch (error) {
-    console.error('getKpiConfig error:', error)
+    logger.error('getKpiConfig error:', error)
     res.status(500).json({ error: 'Failed to load KPI config' })
   }
 }
@@ -172,7 +173,7 @@ export const getDataFreshness = async (req: Request, res: Response): Promise<voi
 
     res.json(result);
   } catch (error) {
-    console.error('getDataFreshness error:', error);
+    logger.error('getDataFreshness error:', error);
     res.status(500).json({ error: 'Failed to load data freshness' });
   }
 };

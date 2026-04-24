@@ -6,6 +6,7 @@
   DepartmentCreateRequest, 
   DepartmentUpdateRequest 
 } from '../types/department.types';
+import logger from '../config/logger';
 
 // Department repository interface for dependency injection
 interface IDepartmentRepository {
@@ -55,7 +56,7 @@ export class DepartmentService {
     limit: number = 20, 
     filters?: DepartmentFilters
   ): Promise<PaginatedDepartmentResponse> {
-    console.log(`[NEW DEPT] DepartmentService: Getting departments - Page: ${page}, Limit: ${limit}`);
+    logger.info(`[NEW DEPT] DepartmentService: Getting departments - Page: ${page}, Limit: ${limit}`);
     
     try {
       // Validate pagination parameters
@@ -69,14 +70,14 @@ export class DepartmentService {
 
       const result = await this.repository.findAll(page, limit, filters);
       
-      console.log(`[NEW DEPT] DepartmentService: Found ${result.items.length} departments`);
+      logger.info(`[NEW DEPT] DepartmentService: Found ${result.items.length} departments`);
       return result;
     } catch (error) {
       if (error instanceof DepartmentServiceError) {
         throw error;
       }
       
-      console.error('[NEW DEPT] DepartmentService: Error getting departments:', error);
+      logger.error('[NEW DEPT] DepartmentService: Error getting departments:', error);
       throw new DepartmentServiceError('Failed to retrieve departments', 'GET_DEPARTMENTS_ERROR', 500);
     }
   }
@@ -85,7 +86,7 @@ export class DepartmentService {
    * Get department by ID with detailed information
    */
   async getDepartmentById(id: number): Promise<DepartmentWithDetails> {
-    console.log(`[NEW DEPT] DepartmentService: Getting department by ID: ${id}`);
+    logger.info(`[NEW DEPT] DepartmentService: Getting department by ID: ${id}`);
     
     try {
       if (!id || id <= 0) {
@@ -98,14 +99,14 @@ export class DepartmentService {
         throw new DepartmentServiceError('Department not found', 'DEPARTMENT_NOT_FOUND', 404);
       }
 
-      console.log(`[NEW DEPT] DepartmentService: Found department: ${department.department_name}`);
+      logger.info(`[NEW DEPT] DepartmentService: Found department: ${department.department_name}`);
       return department;
     } catch (error) {
       if (error instanceof DepartmentServiceError) {
         throw error;
       }
       
-      console.error('[NEW DEPT] DepartmentService: Error getting department by ID:', error);
+      logger.error('[NEW DEPT] DepartmentService: Error getting department by ID:', error);
       throw new DepartmentServiceError('Failed to retrieve department', 'GET_DEPARTMENT_ERROR', 500);
     }
   }
@@ -114,7 +115,7 @@ export class DepartmentService {
    * Create a new department with business logic validation
    */
   async createDepartment(departmentData: DepartmentCreateRequest, created_by: number): Promise<DepartmentWithDetails> {
-    console.log(`[NEW DEPT] DepartmentService: Creating department: ${departmentData.department_name}`);
+    logger.info(`[NEW DEPT] DepartmentService: Creating department: ${departmentData.department_name}`);
     
     try {
       // Validate required fields
@@ -125,14 +126,14 @@ export class DepartmentService {
 
       const newDepartment = await this.repository.create(departmentData, created_by);
       
-      console.log(`[NEW DEPT] DepartmentService: Department created successfully with ID: ${newDepartment.id}`);
+      logger.info(`[NEW DEPT] DepartmentService: Department created successfully with ID: ${newDepartment.id}`);
       return newDepartment;
     } catch (error) {
       if (error instanceof DepartmentServiceError) {
         throw error;
       }
       
-      console.error('[NEW DEPT] DepartmentService: Error creating department:', error);
+      logger.error('[NEW DEPT] DepartmentService: Error creating department:', error);
       throw new DepartmentServiceError('Failed to create department', 'CREATE_DEPARTMENT_ERROR', 500);
     }
   }
@@ -145,7 +146,7 @@ export class DepartmentService {
     departmentData: DepartmentUpdateRequest, 
     updatedBy: number
   ): Promise<DepartmentWithDetails> {
-    console.log(`[NEW DEPT] DepartmentService: Updating department ID: ${id}`);
+    logger.info(`[NEW DEPT] DepartmentService: Updating department ID: ${id}`);
     
     try {
       // Validate department ID
@@ -169,14 +170,14 @@ export class DepartmentService {
 
       const updatedDepartment = await this.repository.update(id, departmentData, updatedBy);
       
-      console.log(`[NEW DEPT] DepartmentService: Department updated successfully: ${updatedDepartment.department_name}`);
+      logger.info(`[NEW DEPT] DepartmentService: Department updated successfully: ${updatedDepartment.department_name}`);
       return updatedDepartment;
     } catch (error) {
       if (error instanceof DepartmentServiceError) {
         throw error;
       }
       
-      console.error('[NEW DEPT] DepartmentService: Error updating department:', error);
+      logger.error('[NEW DEPT] DepartmentService: Error updating department:', error);
       throw new DepartmentServiceError('Failed to update department', 'UPDATE_DEPARTMENT_ERROR', 500);
     }
   }
@@ -185,7 +186,7 @@ export class DepartmentService {
    * Delete a department with business logic validation
    */
   async deleteDepartment(id: number, deletedBy: number): Promise<void> {
-    console.log(`[NEW DEPT] DepartmentService: Deleting department ID: ${id}`);
+    logger.info(`[NEW DEPT] DepartmentService: Deleting department ID: ${id}`);
     
     try {
       if (!id || id <= 0) {
@@ -210,13 +211,13 @@ export class DepartmentService {
 
       await this.repository.delete(id, deletedBy);
       
-      console.log(`[NEW DEPT] DepartmentService: Department deleted successfully: ${existingDepartment.department_name}`);
+      logger.info(`[NEW DEPT] DepartmentService: Department deleted successfully: ${existingDepartment.department_name}`);
     } catch (error) {
       if (error instanceof DepartmentServiceError) {
         throw error;
       }
       
-      console.error('[NEW DEPT] DepartmentService: Error deleting department:', error);
+      logger.error('[NEW DEPT] DepartmentService: Error deleting department:', error);
       throw new DepartmentServiceError('Failed to delete department', 'DELETE_DEPARTMENT_ERROR', 500);
     }
   }
@@ -229,7 +230,7 @@ export class DepartmentService {
     is_active: boolean, 
     updatedBy: number
   ): Promise<DepartmentWithDetails> {
-    console.log(`[NEW DEPT] DepartmentService: Toggling department status ID: ${id} to ${is_active}`);
+    logger.info(`[NEW DEPT] DepartmentService: Toggling department status ID: ${id} to ${is_active}`);
     
     try {
       if (!id || id <= 0) {
@@ -248,14 +249,14 @@ export class DepartmentService {
 
       const updatedDepartment = await this.repository.toggleStatus(id, is_active, updatedBy);
       
-      console.log(`[NEW DEPT] DepartmentService: Department status updated successfully: ${updatedDepartment.department_name}`);
+      logger.info(`[NEW DEPT] DepartmentService: Department status updated successfully: ${updatedDepartment.department_name}`);
       return updatedDepartment;
     } catch (error) {
       if (error instanceof DepartmentServiceError) {
         throw error;
       }
       
-      console.error('[NEW DEPT] DepartmentService: Error toggling department status:', error);
+      logger.error('[NEW DEPT] DepartmentService: Error toggling department status:', error);
       throw new DepartmentServiceError('Failed to toggle department status', 'TOGGLE_STATUS_ERROR', 500);
     }
   }
@@ -268,7 +269,7 @@ export class DepartmentService {
     userIds: number[], 
     assigned_by: number
   ): Promise<void> {
-    console.log(`[NEW DEPT] DepartmentService: Assigning users to department ID: ${department_id}`);
+    logger.info(`[NEW DEPT] DepartmentService: Assigning users to department ID: ${department_id}`);
     
     try {
       if (!department_id || department_id <= 0) {
@@ -297,13 +298,13 @@ export class DepartmentService {
 
       await this.repository.assignUsers(department_id, userIds, assigned_by);
       
-      console.log(`[NEW DEPT] DepartmentService: ${userIds.length} users assigned to department: ${existingDepartment.department_name}`);
+      logger.info(`[NEW DEPT] DepartmentService: ${userIds.length} users assigned to department: ${existingDepartment.department_name}`);
     } catch (error) {
       if (error instanceof DepartmentServiceError) {
         throw error;
       }
       
-      console.error('[NEW DEPT] DepartmentService: Error assigning users:', error);
+      logger.error('[NEW DEPT] DepartmentService: Error assigning users:', error);
       throw new DepartmentServiceError('Failed to assign users to department', 'ASSIGN_USERS_ERROR', 500);
     }
   }
@@ -312,14 +313,14 @@ export class DepartmentService {
    * Get users eligible for assignment to departments
    */
   async getAssignableUsers(): Promise<any[]> {
-    console.log('[NEW DEPT] DepartmentService: Getting assignable users');
+    logger.info('[NEW DEPT] DepartmentService: Getting assignable users');
     
     try {
       const users = await this.repository.getAssignableUsers();
-      console.log(`[NEW DEPT] DepartmentService: Found ${users.length} assignable users`);
+      logger.info(`[NEW DEPT] DepartmentService: Found ${users.length} assignable users`);
       return users;
     } catch (error) {
-      console.error('[NEW DEPT] DepartmentService: Error getting assignable users:', error);
+      logger.error('[NEW DEPT] DepartmentService: Error getting assignable users:', error);
       throw new DepartmentServiceError('Failed to retrieve assignable users', 'GET_ASSIGNABLE_USERS_ERROR', 500);
     }
   }
@@ -332,7 +333,7 @@ export class DepartmentService {
     managerIds: number[], 
     assigned_by: number
   ): Promise<void> {
-    console.log(`[NEW DEPT] DepartmentService: Assigning managers to department ID: ${department_id}`);
+    logger.info(`[NEW DEPT] DepartmentService: Assigning managers to department ID: ${department_id}`);
     
     try {
       if (!department_id || department_id <= 0) {
@@ -359,13 +360,13 @@ export class DepartmentService {
 
       await this.repository.assignManagers(department_id, managerIds, assigned_by);
       
-      console.log(`[NEW DEPT] DepartmentService: ${managerIds.length} managers assigned to department: ${existingDepartment.department_name}`);
+      logger.info(`[NEW DEPT] DepartmentService: ${managerIds.length} managers assigned to department: ${existingDepartment.department_name}`);
     } catch (error) {
       if (error instanceof DepartmentServiceError) {
         throw error;
       }
       
-      console.error('[NEW DEPT] DepartmentService: Error assigning managers:', error);
+      logger.error('[NEW DEPT] DepartmentService: Error assigning managers:', error);
       throw new DepartmentServiceError('Failed to assign managers to department', 'ASSIGN_MANAGERS_ERROR', 500);
     }
   }

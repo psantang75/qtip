@@ -1,5 +1,6 @@
 import apiClient from './apiClient';
 import type { Form, FormListItem } from '../types/form.types';
+import { logError } from '../utils/errorHandling';
 
 // Get all forms with optional active filter
 export const getAllForms = async (isActive?: boolean): Promise<FormListItem[]> => {
@@ -13,7 +14,7 @@ export const getAllForms = async (isActive?: boolean): Promise<FormListItem[]> =
     if (Array.isArray(d?.items)) return d.items;
     return [];
   } catch (error) {
-    console.error('Error fetching forms:', error);
+    logError('formService', 'Error fetching forms:', error);
     throw error;
   }
 };
@@ -61,7 +62,7 @@ export const createForm = async (formData: Form): Promise<{ message: string; for
     } else if (error.code === 'ECONNABORTED') {
       throw new Error('Request timed out. The form might be too complex. Please try again or contact support.');
     }
-    console.error('Error creating form:', error);
+    logError('formService', 'Error creating form:', error);
     throw error;
   }
 };
@@ -86,7 +87,7 @@ export const updateForm = async (formId: number, formData: Form): Promise<{ mess
     } else if (error.code === 'ECONNABORTED') {
       throw new Error('Request timed out. The form might be too complex. Please try again or contact support.');
     }
-    console.error(`Error updating form ${formId}:`, error);
+    logError('formService', `Error updating form ${formId}:`, error);
     throw error;
   }
 };
@@ -109,7 +110,7 @@ export const deactivateForm = async (formId: number): Promise<{ message: string 
     } else if (error.code === 'ECONNABORTED') {
       throw new Error('Request timed out. Please try again.');
     }
-    console.error(`Error deactivating form ${formId}:`, error);
+    logError('formService', `Error deactivating form ${formId}:`, error);
     throw error;
   }
 };

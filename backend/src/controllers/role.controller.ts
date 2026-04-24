@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
+import logger from '../config/logger';
 
 /**
  * Get all roles
@@ -12,7 +13,7 @@ export const getRoles = async (req: Request, res: Response) => {
     });
     res.status(200).json(roles);
   } catch (error) {
-    console.error('Error fetching roles:', error);
+    logger.error('Error fetching roles:', error);
     res.status(500).json({ message: 'Failed to fetch roles' });
   }
 };

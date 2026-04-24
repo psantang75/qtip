@@ -8,6 +8,7 @@ import {
   DepartmentCreateRequest,
   DepartmentUpdateRequest,
 } from '../types/department.types';
+import logger from '../config/logger';
 
 /**
  * MySQL implementation of DepartmentRepository using Prisma
@@ -78,7 +79,7 @@ export class MySQLDepartmentRepository {
         })
       );
 
-      console.log(`[NEW DEPT REPO] Found ${departmentsWithManagers.length} departments, total: ${totalItems}`);
+      logger.info(`[NEW DEPT REPO] Found ${departmentsWithManagers.length} departments, total: ${totalItems}`);
 
       return {
         items: departmentsWithManagers,
@@ -87,7 +88,7 @@ export class MySQLDepartmentRepository {
         totalItems,
       };
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in findAll:', error);
+      logger.error('[NEW DEPT REPO] Error in findAll:', error);
       throw new Error(`Failed to fetch departments: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -103,13 +104,13 @@ export class MySQLDepartmentRepository {
       });
 
       if (!dept) {
-        console.log(`[NEW DEPT REPO] Department not found with ID: ${id}`);
+        logger.info(`[NEW DEPT REPO] Department not found with ID: ${id}`);
         return null;
       }
 
       const managers = await this.getDepartmentManagers(id);
 
-      console.log(`[NEW DEPT REPO] Found department: ${dept.department_name}`);
+      logger.info(`[NEW DEPT REPO] Found department: ${dept.department_name}`);
       return {
         id: dept.id,
         department_name: dept.department_name,
@@ -120,7 +121,7 @@ export class MySQLDepartmentRepository {
         managers,
       } as DepartmentWithDetails;
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in findById:', error);
+      logger.error('[NEW DEPT REPO] Error in findById:', error);
       throw new Error(`Failed to fetch department: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -130,7 +131,7 @@ export class MySQLDepartmentRepository {
       const dept = await prisma.department.findFirst({ where: { department_name: name } });
       return dept as unknown as Department | null;
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in findByName:', error);
+      logger.error('[NEW DEPT REPO] Error in findByName:', error);
       throw new Error(`Failed to find department by name: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -173,10 +174,10 @@ export class MySQLDepartmentRepository {
       const createdDepartment = await this.findById(lastDept!.id);
       if (!createdDepartment) throw new Error('Failed to retrieve created department');
 
-      console.log(`[NEW DEPT REPO] Department created`);
+      logger.info(`[NEW DEPT REPO] Department created`);
       return createdDepartment;
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in create:', error);
+      logger.error('[NEW DEPT REPO] Error in create:', error);
       throw new Error(`Failed to create department: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -226,12 +227,12 @@ export class MySQLDepartmentRepository {
         });
       });
 
-      console.log(`[NEW DEPT REPO] Department updated with ID: ${id}`);
+      logger.info(`[NEW DEPT REPO] Department updated with ID: ${id}`);
       const updatedDepartment = await this.findById(id);
       if (!updatedDepartment) throw new Error('Failed to retrieve updated department');
       return updatedDepartment;
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in update:', error);
+      logger.error('[NEW DEPT REPO] Error in update:', error);
       throw new Error(`Failed to update department: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -255,9 +256,9 @@ export class MySQLDepartmentRepository {
         });
       });
 
-      console.log(`[NEW DEPT REPO] Department deleted with ID: ${id}`);
+      logger.info(`[NEW DEPT REPO] Department deleted with ID: ${id}`);
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in delete:', error);
+      logger.error('[NEW DEPT REPO] Error in delete:', error);
       throw new Error(`Failed to delete department: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -281,12 +282,12 @@ export class MySQLDepartmentRepository {
         });
       });
 
-      console.log(`[NEW DEPT REPO] Department status toggled for ID: ${id} to ${is_active}`);
+      logger.info(`[NEW DEPT REPO] Department status toggled for ID: ${id} to ${is_active}`);
       const updatedDepartment = await this.findById(id);
       if (!updatedDepartment) throw new Error('Failed to retrieve updated department');
       return updatedDepartment;
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in toggleStatus:', error);
+      logger.error('[NEW DEPT REPO] Error in toggleStatus:', error);
       throw new Error(`Failed to toggle department status: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -312,9 +313,9 @@ export class MySQLDepartmentRepository {
         }
       });
 
-      console.log(`[NEW DEPT REPO] ${userIds.length} users assigned to department ID: ${department_id}`);
+      logger.info(`[NEW DEPT REPO] ${userIds.length} users assigned to department ID: ${department_id}`);
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in assignUsers:', error);
+      logger.error('[NEW DEPT REPO] Error in assignUsers:', error);
       throw new Error(`Failed to assign users to department: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -333,7 +334,7 @@ export class MySQLDepartmentRepository {
         orderBy: { username: 'asc' },
       });
 
-      console.log(`[NEW DEPT REPO] Found ${users.length} assignable users`);
+      logger.info(`[NEW DEPT REPO] Found ${users.length} assignable users`);
       return users.map((u) => ({
         id: u.id,
         username: u.username,
@@ -346,7 +347,7 @@ export class MySQLDepartmentRepository {
         created_at: u.created_at,
       }));
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in getAssignableUsers:', error);
+      logger.error('[NEW DEPT REPO] Error in getAssignableUsers:', error);
       throw new Error(`Failed to get assignable users: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -354,10 +355,10 @@ export class MySQLDepartmentRepository {
   async getUserCount(department_id: number): Promise<number> {
     try {
       const count = await prisma.user.count({ where: { department_id: department_id, is_active: true } });
-      console.log(`[NEW DEPT REPO] Department ${department_id} has ${count} users`);
+      logger.info(`[NEW DEPT REPO] Department ${department_id} has ${count} users`);
       return count;
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in getUserCount:', error);
+      logger.error('[NEW DEPT REPO] Error in getUserCount:', error);
       throw new Error(`Failed to get user count: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -379,9 +380,9 @@ export class MySQLDepartmentRepository {
         }
       });
 
-      console.log(`[NEW DEPT REPO] Assigned ${managerIds.length} managers to department ${department_id}`);
+      logger.info(`[NEW DEPT REPO] Assigned ${managerIds.length} managers to department ${department_id}`);
     } catch (error) {
-      console.error('[NEW DEPT REPO] Error in assignManagers:', error);
+      logger.error('[NEW DEPT REPO] Error in assignManagers:', error);
       throw new Error(`Failed to assign managers: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

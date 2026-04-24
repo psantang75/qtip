@@ -10,6 +10,7 @@ import {
 import { getDisputeScoreHistory, recordDisputeScore } from '../utils/disputeScoreHistory';
 import prisma from '../config/prisma';
 import { Prisma, DisputeStatus as PrismaDisputeStatus, DisputeScoreHistoryType } from '../generated/prisma/client';
+import logger from '../config/logger';
 
 // NOTE: getCSRAudits used to live here (mounted at GET /api/disputes/audits)
 // but it was a parallel implementation of the same product feature served by
@@ -98,7 +99,7 @@ export const getAuditDetails = async (req: Request, res: Response): Promise<void
       answers
     });
   } catch (error) {
-    console.error('Error fetching audit details:', error);
+    logger.error('Error fetching audit details:', error);
     res.status(500).json({ message: 'Failed to retrieve audit details' });
   }
 };
@@ -205,7 +206,7 @@ export const submitDispute = async (req: Request, res: Response): Promise<void> 
       dispute_id: dispute.id
     });
   } catch (error) {
-    console.error('Error submitting dispute:', error);
+    logger.error('Error submitting dispute:', error);
     res.status(500).json({ message: 'Failed to submit dispute' });
   }
 };
@@ -300,7 +301,7 @@ export const getDisputeHistory = async (req: Request, res: Response): Promise<vo
     const response: PaginatedResponse<DisputeListItem> = { data: disputes, total, page, perPage, totalPages };
     res.status(200).json(response);
   } catch (error) {
-    console.error('Error fetching dispute history:', error);
+    logger.error('Error fetching dispute history:', error);
     res.status(500).json({ message: 'Failed to retrieve dispute history' });
   }
 };
@@ -344,12 +345,6 @@ export const getDisputeDetails = async (req: Request, res: Response): Promise<vo
     const adjustedScore =
       [...scoreHistory].reverse().find((entry) => entry.score_type === 'ADJUSTED')?.score ?? null;
 
-    console.log('Dispute details for ID', disputeId, ':', {
-      id: dispute.id,
-      attachment_url: dispute.attachment_url,
-      has_attachment_url: !!dispute.attachment_url
-    });
-
     res.status(200).json({
       id: dispute.id,
       submission_id: dispute.submission_id,
@@ -370,7 +365,7 @@ export const getDisputeDetails = async (req: Request, res: Response): Promise<vo
       score_history: scoreHistory
     });
   } catch (error) {
-    console.error('Error fetching dispute details:', error);
+    logger.error('Error fetching dispute details:', error);
     res.status(500).json({ message: 'Failed to retrieve dispute details' });
   }
 };
@@ -388,7 +383,7 @@ export const updateDispute = async (req: Request, res: Response): Promise<void> 
       try {
         fs.unlinkSync(newAttachmentPath);
       } catch (error) {
-        console.error('Error cleaning up uploaded file:', error);
+        logger.error('Error cleaning up uploaded file:', error);
       }
     }
   };
@@ -500,14 +495,14 @@ export const updateDispute = async (req: Request, res: Response): Promise<void> 
       try {
         fs.unlinkSync(oldAttachmentPath);
       } catch (error) {
-        console.error('Error deleting old attachment after commit:', error);
+        logger.error('Error deleting old attachment after commit:', error);
       }
     }
 
     res.status(200).json({ message: 'Dispute updated successfully' });
   } catch (error) {
     cleanupNewFile();
-    console.error('Error updating dispute:', error);
+    logger.error('Error updating dispute:', error);
     res.status(500).json({ message: 'Failed to update dispute' });
   }
 };
@@ -585,7 +580,7 @@ export const downloadDisputeAttachment = async (req: Request, res: Response): Pr
 
     fileStream.pipe(res);
   } catch (error) {
-    console.error('Error downloading dispute attachment:', error);
+    logger.error('Error downloading dispute attachment:', error);
     if (!res.headersSent) {
       res.status(500).json({ message: 'Failed to download attachment' });
     }

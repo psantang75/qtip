@@ -12,6 +12,7 @@ import {
   Submission,
   SubmissionStatus,
 } from '../models';
+import logger from '../config/logger';
 
 export interface AssignedAudit {
   assignment_id: number;
@@ -85,7 +86,7 @@ export class MySQLSubmissionRepository {
 
       return { audits, total };
     } catch (error) {
-      console.error('Error fetching assigned audits:', error);
+      logger.error('Error fetching assigned audits:', error);
       throw new Error('Failed to fetch assigned audits');
     }
   }
@@ -160,7 +161,7 @@ export class MySQLSubmissionRepository {
 
       return { call: callResult, form: formWithCategories, existingSubmission };
     } catch (error) {
-      console.error('Error fetching call with form:', error);
+      logger.error('Error fetching call with form:', error);
       throw new Error('Failed to fetch call with form data');
     }
   }
@@ -258,7 +259,7 @@ export class MySQLSubmissionRepository {
         data: { total_score: total_score },
       });
     } catch (error) {
-      console.error('Error updating submission score:', error);
+      logger.error('Error updating submission score:', error);
       throw new Error('Failed to update submission score');
     }
   }
@@ -275,7 +276,7 @@ export class MySQLSubmissionRepository {
       });
       return sub as unknown as Submission | null;
     } catch (error) {
-      console.error('Error fetching existing draft:', error);
+      logger.error('Error fetching existing draft:', error);
       throw new Error('Failed to fetch existing draft');
     }
   }
@@ -329,7 +330,7 @@ export class MySQLSubmissionRepository {
       const sub = await prisma.submission.findUnique({ where: { id: submission_id } });
       return sub as unknown as Submission | null;
     } catch (error) {
-      console.error('Error fetching submission by ID:', error);
+      logger.error('Error fetching submission by ID:', error);
       throw new Error('Failed to fetch submission');
     }
   }
@@ -352,7 +353,7 @@ export class MySQLSubmissionRepository {
         });
       });
     } catch (error) {
-      console.error('Error flagging submission:', error);
+      logger.error('Error flagging submission:', error);
       throw new Error('Failed to flag submission');
     }
   }

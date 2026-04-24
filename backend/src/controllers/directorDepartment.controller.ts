@@ -1,6 +1,7 @@
 ﻿import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
+import logger from '../config/logger';
 
 // Types
 interface DirectorDepartment {
@@ -67,7 +68,7 @@ export const getDirectorDepartments = async (req: Request, res: Response) => {
       currentPage: page
     });
   } catch (error) {
-    console.error('Error fetching director department assignments:', error);
+    logger.error('Error fetching director department assignments:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -87,7 +88,7 @@ export const getDirectorDepartmentsById = async (req: Request, res: Response) =>
 
     res.status(200).json(rows);
   } catch (error) {
-    console.error(`Error fetching assignments for director ID ${req.params.directorId}:`, error);
+    logger.error(`Error fetching assignments for director ID ${req.params.directorId}:`, error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -154,7 +155,7 @@ export const createDirectorDepartment = async (req: Request, res: Response) => {
 
     res.status(201).json(createdAssignment[0]);
   } catch (error) {
-    console.error('Error creating director department assignment:', error);
+    logger.error('Error creating director department assignment:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -215,7 +216,7 @@ export const createBulkDirectorDepartments = async (req: Request, res: Response)
 
     res.status(201).json(createdAssignments);
   } catch (error) {
-    console.error('Error creating bulk director department assignments:', error);
+    logger.error('Error creating bulk director department assignments:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -254,7 +255,7 @@ export const deleteDirectorDepartment = async (req: Request, res: Response) => {
 
     res.status(200).json({ success: true });
   } catch (error) {
-    console.error(`Error deleting director department assignment with ID ${req.params.id}:`, error);
+    logger.error(`Error deleting director department assignment with ID ${req.params.id}:`, error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

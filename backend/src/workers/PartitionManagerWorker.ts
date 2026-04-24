@@ -1,6 +1,9 @@
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import { BaseInsightsWorker, WorkerResult } from './BaseInsightsWorker';
+import logger from '../config/logger';
+
+const SERVICE = 'PartitionManagerWorker';
 
 export class PartitionManagerWorker extends BaseInsightsWorker {
   constructor() {
@@ -12,7 +15,7 @@ export class PartitionManagerWorker extends BaseInsightsWorker {
     const tables = await this.findPartitionedTables();
 
     if (tables.length === 0) {
-      console.log('[partition-manager] No ie_fact_* or ie_stg_* tables found. Nothing to do.');
+      logger.info('No ie_fact_* / ie_stg_* tables found; nothing to do', { service: SERVICE });
       return { rowsExtracted: 0, rowsLoaded: 0, rowsSkipped: 0, rowsErrored: 0, batchIdentifier: 'no-tables' };
     }
 
@@ -97,11 +100,16 @@ export class PartitionManagerWorker extends BaseInsightsWorker {
             PARTITION p_future VALUES LESS THAN MAXVALUE
           )`
         );
-        console.log(`[partition-manager] Created partition ${partName} on ${table}`);
+        logger.info('Created partition', { service: SERVICE, partition: partName, table });
         created++;
       } catch (err: any) {
         if (!err.message?.includes('already exists')) {
-          console.error(`[partition-manager] Failed to create ${partName} on ${table}:`, err.message);
+          logger.error('Failed to create partition', {
+            service: SERVICE,
+            partition: partName,
+            table,
+            error: err?.message,
+          });
         }
       }
     }
@@ -123,10 +131,15 @@ export class PartitionManagerWorker extends BaseInsightsWorker {
 
       try {
         await pool.execute(`ALTER TABLE \`${table}\` DROP PARTITION ${partName}`);
-        console.log(`[partition-manager] Dropped partition ${partName} from ${table}`);
+        logger.info('Dropped partition', { service: SERVICE, partition: partName, table });
         dropped++;
       } catch (err: any) {
-        console.error(`[partition-manager] Failed to drop ${partName} from ${table}:`, err.message);
+        logger.error('Failed to drop partition', {
+          service: SERVICE,
+          partition: partName,
+          table,
+          error: err?.message,
+        });
       }
     }
     return dropped;

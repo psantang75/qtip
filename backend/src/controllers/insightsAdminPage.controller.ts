@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import pool from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import logger from '../config/logger';
 
 const VALID_DATA_SCOPES = ['ALL', 'DIVISION', 'DEPARTMENT', 'SELF'] as const;
 
@@ -49,7 +50,7 @@ export const listPages = async (_req: Request, res: Response): Promise<void> => 
 
     res.json(result);
   } catch (error) {
-    console.error('listPages error:', error);
+    logger.error('listPages error:', error);
     res.status(500).json({ error: 'Failed to list pages' });
   }
 };
@@ -92,7 +93,7 @@ export const updatePageAccess = async (req: Request, res: Response): Promise<voi
 
     res.json({ success: true });
   } catch (error) {
-    console.error('updatePageAccess error:', error);
+    logger.error('updatePageAccess error:', error);
     res.status(500).json({ error: 'Failed to update page access' });
   }
 };
@@ -116,7 +117,7 @@ export const listOverrides = async (req: Request, res: Response): Promise<void> 
     );
     res.json(rows);
   } catch (error) {
-    console.error('listOverrides error:', error);
+    logger.error('listOverrides error:', error);
     res.status(500).json({ error: 'Failed to list overrides' });
   }
 };
@@ -146,7 +147,7 @@ export const createOverride = async (req: Request, res: Response): Promise<void>
 
     res.status(201).json({ id: result.insertId, page_id: pageId, user_id: d.user_id, can_access: d.can_access, data_scope: d.data_scope });
   } catch (error) {
-    console.error('createOverride error:', error);
+    logger.error('createOverride error:', error);
     res.status(500).json({ error: 'Failed to create override' });
   }
 };
@@ -166,7 +167,7 @@ export const deleteOverride = async (req: Request, res: Response): Promise<void>
     if (result.affectedRows === 0) { res.status(404).json({ error: 'Override not found' }); return; }
     res.json({ success: true });
   } catch (error) {
-    console.error('deleteOverride error:', error);
+    logger.error('deleteOverride error:', error);
     res.status(500).json({ error: 'Failed to delete override' });
   }
 };

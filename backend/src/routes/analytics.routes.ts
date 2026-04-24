@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/auth';
 import { AnalyticsService, AnalyticsServiceError } from '../services/AnalyticsService';
 import { MySQLAnalyticsRepository } from '../repositories/MySQLAnalyticsRepository';
 import cacheService from '../services/CacheService';
+import logger from '../config/logger';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // /api/analytics is served exclusively by AnalyticsService (Prisma-based,
@@ -32,7 +33,12 @@ function sendServiceError(res: Response, error: unknown, fallback: string): void
     res.status(err.statusCode).json({ message: err.message ?? fallback, code: err.code });
     return;
   }
-  console.error('[ANALYTICS ROUTES]', fallback, error);
+  logger.error('Analytics route fallback', {
+    service: 'AnalyticsRoutes',
+    fallback,
+    error: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
   res.status(500).json({ message: fallback });
 }
 

@@ -194,7 +194,7 @@ async function loadScoreBreakdown(submissionId: number): Promise<any | null> {
     const { getScoreBreakdown } = await import('../../utils/scoringUtil')
     return await getScoreBreakdown(null, submissionId)
   } catch (error) {
-    console.error('Error getting score breakdown:', error)
+    logger.error('Error getting score breakdown:', error)
     return null
   }
 }
@@ -223,3 +223,5 @@ async function loadFormStructure(formId: number): Promise<any[]> {
     questions: questions.filter(q => q.category_id === category.id),
   }))
 }
+
+import logger from '../../config/logger';

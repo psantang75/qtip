@@ -244,7 +244,9 @@ export async function getQuestionLevelAnalyticsRepo(filters: any): Promise<any> 
       },
     }
   } catch (error) {
-    console.error('Error fetching question-level analytics:', error)
+    logger.error('Error fetching question-level analytics:', error)
     throw new Error('Failed to fetch question-level analytics')
   }
 }
+
+import logger from '../../config/logger';

@@ -9,6 +9,7 @@ import {
   previewImport,
 } from '../services/importService';
 import prisma from '../config/prisma';
+import logger from '../config/logger';
 
 const VALID_DATA_TYPES = [
   'call_activity',
@@ -69,7 +70,7 @@ export const uploadImport = async (req: Request, res: Response): Promise<void> =
       ...result,
     });
   } catch (error: any) {
-    console.error('[IMPORT CONTROLLER] uploadImport error:', error);
+    logger.error('[IMPORT CONTROLLER] uploadImport error:', error);
     res.status(500).json({
       message: error?.message || 'Import failed',
     });
@@ -101,7 +102,7 @@ export const previewImportHandler = async (req: Request, res: Response): Promise
 
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('[IMPORT CONTROLLER] previewImport error:', error);
+    logger.error('[IMPORT CONTROLLER] previewImport error:', error);
     res.status(500).json({
       message: error?.message || 'Preview failed',
     });
@@ -144,7 +145,7 @@ export const getImportHistory = async (req: Request, res: Response): Promise<voi
       },
     });
   } catch (error: any) {
-    console.error('[IMPORT CONTROLLER] getImportHistory error:', error);
+    logger.error('[IMPORT CONTROLLER] getImportHistory error:', error);
     res.status(500).json({ message: 'Failed to load import history' });
   }
 };
@@ -175,7 +176,7 @@ export const getImportById = async (req: Request, res: Response): Promise<void> 
 
     res.status(200).json(log);
   } catch (error: any) {
-    console.error('[IMPORT CONTROLLER] getImportById error:', error);
+    logger.error('[IMPORT CONTROLLER] getImportById error:', error);
     res.status(500).json({ message: 'Failed to load import log' });
   }
 };

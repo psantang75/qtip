@@ -65,12 +65,8 @@ router.get('/audits',
   validateSchema(CSRAuditFiltersSchema), 
   getCSRAudits as unknown as RequestHandler
 );
-router.get('/audits/:id', 
-  (req, res, next) => {
-    console.log(`\n🔥 CSR ROUTE HIT: GET /audits/${req.params.id}`);
-    next();
-  },
-  validateSchema(AuditIdSchema), 
+router.get('/audits/:id',
+  validateSchema(AuditIdSchema),
   getCSRAuditDetails as unknown as RequestHandler
 );
 router.get('/audits/:id/disputable', 

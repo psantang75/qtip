@@ -1,5 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { getCookie } from '../utils/apiHelpers';
+import { logWarn } from '../utils/errorHandling';
 
 interface DedupConfig extends InternalAxiosRequestConfig {
   skipDedup?: boolean;
@@ -46,7 +47,7 @@ apiClient.request = function <T = unknown>(config: DedupConfig) {
 
     if (existing) {
       if (import.meta.env.DEV) {
-        console.warn(`[DEDUP] Blocked duplicate GET: ${config.url}`);
+        logWarn('apiClient', `[DEDUP] Blocked duplicate GET: ${config.url}`);
       }
       return existing as ReturnType<typeof originalRequest<T>>;
     }

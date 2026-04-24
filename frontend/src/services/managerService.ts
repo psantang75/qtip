@@ -20,6 +20,7 @@ import type {
   CoachingSessionFilters,
   PaginatedCoachingSessions
 } from '../types/manager.types';
+import { logError } from '../utils/errorHandling';
 
 // Additional types for new dashboard functionality
 export interface WeeklyMonthlyStats {
@@ -459,7 +460,7 @@ class ManagerService {
       const response = await apiClient.get('/manager/dashboard-stats');
       return response.data;
     } catch (error) {
-      console.error('Error fetching manager dashboard stats:', error);
+      logError('managerService', 'Error fetching manager dashboard stats:', error);
       throw error;
     }
   }
@@ -473,7 +474,7 @@ class ManagerService {
       const response = await apiClient.get('/manager/csr-activity');
       return response.data;
     } catch (error) {
-      console.error('Error fetching manager CSR activity data:', error);
+      logError('managerService', 'Error fetching manager CSR activity data:', error);
       throw error;
     }
   }

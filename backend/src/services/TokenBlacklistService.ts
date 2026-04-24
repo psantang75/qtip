@@ -35,6 +35,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import logger from '../config/logger';
 
 /** How often each worker re-reads the file to pick up sibling workers' writes. */
 const RELOAD_INTERVAL_MS = 30_000;
@@ -70,7 +71,7 @@ export class TokenBlacklistService {
       try {
         fs.mkdirSync(path.dirname(this.storePath), { recursive: true });
       } catch (err) {
-        console.error('[TOKEN_BLACKLIST] Failed to create store directory:', err);
+        logger.error('[TOKEN_BLACKLIST] Failed to create store directory:', err);
       }
       this.loadFromDisk();
 
@@ -94,7 +95,7 @@ export class TokenBlacklistService {
       this.tokenExpirations.set(token, expirationTime);
     }
     this.appendToDisk({ token, exp: expirationTime ?? 0 });
-    console.log(`[TOKEN_BLACKLIST] Token blacklisted. Total in-memory: ${this.blacklistedTokens.size}`);
+    logger.info(`[TOKEN_BLACKLIST] Token blacklisted. Total in-memory: ${this.blacklistedTokens.size}`);
   }
 
   /** Synchronous hot-path check used by every authenticated request. */
@@ -125,7 +126,7 @@ export class TokenBlacklistService {
     } catch {
       // best-effort
     }
-    console.log('[TOKEN_BLACKLIST] All tokens cleared from blacklist');
+    logger.info('[TOKEN_BLACKLIST] All tokens cleared from blacklist');
   }
 
   /** Stop background timers — used by graceful-shutdown paths and tests. */
@@ -145,7 +146,7 @@ export class TokenBlacklistService {
     try {
       fs.appendFileSync(this.storePath, JSON.stringify(entry) + '\n', 'utf8');
     } catch (err) {
-      console.error('[TOKEN_BLACKLIST] Failed to persist blacklist entry:', err);
+      logger.error('[TOKEN_BLACKLIST] Failed to persist blacklist entry:', err);
     }
   }
 
@@ -169,7 +170,7 @@ export class TokenBlacklistService {
         }
       }
     } catch (err) {
-      console.error('[TOKEN_BLACKLIST] Failed to load blacklist from disk:', err);
+      logger.error('[TOKEN_BLACKLIST] Failed to load blacklist from disk:', err);
     }
   }
 
@@ -190,7 +191,7 @@ export class TokenBlacklistService {
     }
     if (cleaned > 0) {
       this.rewriteStore();
-      console.log(`[TOKEN_BLACKLIST] Cleaned up ${cleaned} expired tokens. Remaining: ${this.blacklistedTokens.size}`);
+      logger.info(`[TOKEN_BLACKLIST] Cleaned up ${cleaned} expired tokens. Remaining: ${this.blacklistedTokens.size}`);
     }
   }
 
@@ -205,7 +206,7 @@ export class TokenBlacklistService {
       fs.writeFileSync(tmp, lines.length ? lines.join('\n') + '\n' : '', 'utf8');
       fs.renameSync(tmp, this.storePath);
     } catch (err) {
-      console.error('[TOKEN_BLACKLIST] Failed to rewrite blacklist store:', err);
+      logger.error('[TOKEN_BLACKLIST] Failed to rewrite blacklist store:', err);
     }
   }
 }

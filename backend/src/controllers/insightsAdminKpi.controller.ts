@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import pool from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import logger from '../config/logger';
 
 const VALID_DIRECTIONS = ['UP_IS_GOOD', 'DOWN_IS_GOOD', 'NEUTRAL'] as const;
 const VALID_FORMAT_TYPES = ['PERCENT', 'NUMBER'] as const;
@@ -34,7 +35,7 @@ export const listKpis = async (_req: Request, res: Response): Promise<void> => {
     );
     res.json(rows);
   } catch (error) {
-    console.error('listKpis error:', error);
+    logger.error('listKpis error:', error);
     res.status(500).json({ error: 'Failed to list KPIs' });
   }
 };
@@ -70,7 +71,7 @@ export const createKpi = async (req: Request, res: Response): Promise<void> => {
       res.status(409).json({ error: 'A KPI with this code already exists' });
       return;
     }
-    console.error('createKpi error:', error);
+    logger.error('createKpi error:', error);
     res.status(500).json({ error: 'Failed to create KPI' });
   }
 };
@@ -108,7 +109,7 @@ export const updateKpi = async (req: Request, res: Response): Promise<void> => {
     if (updated.length === 0) { res.status(404).json({ error: 'KPI not found' }); return; }
     res.json(updated[0]);
   } catch (error) {
-    console.error('updateKpi error:', error);
+    logger.error('updateKpi error:', error);
     res.status(500).json({ error: 'Failed to update KPI' });
   }
 };
@@ -134,7 +135,7 @@ export const getThresholds = async (req: Request, res: Response): Promise<void> 
     );
     res.json(rows);
   } catch (error) {
-    console.error('getThresholds error:', error);
+    logger.error('getThresholds error:', error);
     res.status(500).json({ error: 'Failed to get thresholds' });
   }
 };
@@ -171,7 +172,7 @@ export const setThreshold = async (req: Request, res: Response): Promise<void> =
     if (newRow.length === 0) { res.status(404).json({ error: 'Threshold not found after upsert' }); return; }
     res.status(201).json(newRow[0]);
   } catch (error) {
-    console.error('setThreshold error:', error);
+    logger.error('setThreshold error:', error);
     res.status(500).json({ error: 'Failed to set threshold' });
   }
 };
@@ -211,7 +212,7 @@ export const updateThreshold = async (req: Request, res: Response): Promise<void
     if (rows.length === 0) { res.status(404).json({ error: 'Threshold not found' }); return; }
     res.json(rows[0]);
   } catch (error) {
-    console.error('updateThreshold error:', error);
+    logger.error('updateThreshold error:', error);
     res.status(500).json({ error: 'Failed to update threshold' });
   }
 };
@@ -236,7 +237,7 @@ export const deleteThreshold = async (req: Request, res: Response): Promise<void
     }
     res.json({ success: true });
   } catch (error) {
-    console.error('deleteThreshold error:', error);
+    logger.error('deleteThreshold error:', error);
     res.status(500).json({ error: 'Failed to delete threshold' });
   }
 };

@@ -170,7 +170,7 @@ export async function calculateCategoryScore(
     if (maxPossibleScore === 0) return 0
     return Math.round((totalScore / maxPossibleScore) * 100 * 100) / 100
   } catch (error) {
-    console.error(
+    logger.error(
       `[ANALYTICS REPOSITORY] Error calculating category score for submission ${submission_id}, category ${category_id}:`,
       error,
     )
@@ -205,3 +205,5 @@ export async function loadRadioOptionsByQuestion(
 
   return map
 }
+
+import logger from '../../config/logger';

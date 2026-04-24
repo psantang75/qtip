@@ -358,12 +358,7 @@ export class CSRService {
       });
       
       const audit = auditDetails[0];
-      
-      console.log(`\n=== CSR SERVICE DEBUG FOR AUDIT ${auditId} ===`);
-      console.log(`[CSR SERVICE] Dispute rows found:`, disputes.length);
-      console.log(`[CSR SERVICE] Dispute data:`, JSON.stringify(disputes, null, 2));
-      console.log(`=== END CSR SERVICE DEBUG ===\n`);
-      
+
       const result = {
         id: audit.id,
         form_id: audit.form_id,
@@ -494,41 +489,20 @@ export class CSRService {
     const startTime = Date.now();
     
     try {
-      console.log('[CSR SERVICE] Debug finalizeSubmission:', {
-        submissionId,
-        csrId,
-        timestamp: new Date().toISOString()
-      });
-      
-      const metadataDebug = await prisma.$queryRaw<{field_name: string, value: string}[]>(
-        Prisma.sql`
-          SELECT fmf.field_name, sm.value
-          FROM submissions s
-          LEFT JOIN submission_metadata sm ON sm.submission_id = s.id
-          LEFT JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
-          WHERE s.id = ${submissionId}
-        `
-      );
-      
-      console.log('[CSR SERVICE] Submission metadata:', metadataDebug);
-      
       const submission = await prisma.submission.findFirst({
         where: {
           id: submissionId,
           submission_metadata: {
             some: {
               field: { field_name: 'CSR' },
-              value: csrId.toString()
-            }
-          }
+              value: csrId.toString(),
+            },
+          },
         },
-        select: { status: true }
+        select: { status: true },
       });
-      
-      console.log('[CSR SERVICE] Submission query result:', submission ? [submission] : []);
-      
+
       if (!submission) {
-        console.log('[CSR SERVICE] No submission found with CSR metadata');
         throw createNotFoundError('Submission not found', { submissionId, csrId });
       }
       

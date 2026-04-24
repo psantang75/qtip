@@ -2,6 +2,7 @@
 import { authenticate } from '../middleware/auth';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
+import logger from '../config/logger';
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ const MAX_AUDIT_LOG_LIMIT = 1000;
 
 const getAuditLogsHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('[AUDIT LOG SERVICE] Getting audit logs');
+    logger.info('[AUDIT LOG SERVICE] Getting audit logs');
 
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const requested = parseInt(req.query.limit as string) || 20;
@@ -73,7 +74,7 @@ const getAuditLogsHandler = async (req: Request, res: Response): Promise<void> =
       created_at: row.created_at
     }));
 
-    console.log(`[AUDIT LOG SERVICE] Found ${auditLogs.length} audit logs`);
+    logger.info(`[AUDIT LOG SERVICE] Found ${auditLogs.length} audit logs`);
     
     res.status(200).json({
       data: auditLogs,
@@ -85,7 +86,7 @@ const getAuditLogsHandler = async (req: Request, res: Response): Promise<void> =
       }
     });
   } catch (error) {
-    console.error('[AUDIT LOG SERVICE] Error fetching audit logs:', error);
+    logger.error('[AUDIT LOG SERVICE] Error fetching audit logs:', error);
     res.status(500).json({ 
       message: 'Failed to fetch audit logs',
       error: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error'
@@ -106,7 +107,7 @@ const getAuditLogByIdHandler = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    console.log(`[AUDIT LOG SERVICE] Getting audit log by ID: ${id}`);
+    logger.info(`[AUDIT LOG SERVICE] Getting audit log by ID: ${id}`);
 
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT 
@@ -139,10 +140,10 @@ const getAuditLogByIdHandler = async (req: Request, res: Response): Promise<void
       created_at: row.created_at
     };
 
-    console.log(`[AUDIT LOG SERVICE] Found audit log: ${auditLog.action}`);
+    logger.info(`[AUDIT LOG SERVICE] Found audit log: ${auditLog.action}`);
     res.status(200).json(auditLog);
   } catch (error) {
-    console.error('[AUDIT LOG SERVICE] Error fetching audit log by ID:', error);
+    logger.error('[AUDIT LOG SERVICE] Error fetching audit log by ID:', error);
     res.status(500).json({ 
       message: 'Failed to fetch audit log',
       error: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error'

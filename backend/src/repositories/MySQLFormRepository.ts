@@ -9,6 +9,7 @@ import type {
   FormMetadataInteractionType, FormQuestionConditionType, FormQuestionLogicalOperator,
   Prisma,
 } from '@prisma/client';
+import logger from '../config/logger';
 
 const safeParam = <T>(value: T | undefined): T | null => (value === undefined ? null : value);
 
@@ -23,7 +24,7 @@ export class MySQLFormRepository {
   }
 
   async createForm(formData: CreateFormDTO): Promise<number> {
-    console.log('🚨 REPOSITORY createForm called - this is the actual code being executed!');
+    logger.info('🚨 REPOSITORY createForm called - this is the actual code being executed!');
 
     const form_id = await prisma.$transaction(async (tx) => {
       await tx.form.updateMany({
@@ -145,7 +146,7 @@ export class MySQLFormRepository {
       return form.id;
     });
 
-    console.log(`✅ Form created with ID: ${form_id}`);
+    logger.info(`✅ Form created with ID: ${form_id}`);
     return form_id;
   }
 
@@ -323,7 +324,7 @@ export class MySQLFormRepository {
   }
 
   async updateForm(form_id: number, formData: CreateFormDTO): Promise<number> {
-    console.log('🚨 REPOSITORY updateForm called - creating new version!');
+    logger.info('🚨 REPOSITORY updateForm called - creating new version!');
 
     const currentForm = await prisma.form.findUnique({
       where: { id: form_id },
@@ -454,7 +455,7 @@ export class MySQLFormRepository {
       return form.id;
     });
 
-    console.log(`✅ New form created with ID: ${newFormId}, version: ${newVersion}`);
+    logger.info(`✅ New form created with ID: ${newFormId}, version: ${newVersion}`);
     return newFormId;
   }
 
@@ -469,9 +470,9 @@ export class MySQLFormRepository {
         throw new Error(`No form found with ID ${form_id} to deactivate`);
       }
 
-      console.log('[FORM REPOSITORY] Form deactivated successfully');
+      logger.info('[FORM REPOSITORY] Form deactivated successfully');
     } catch (error) {
-      console.error('[FORM REPOSITORY] Error in deactivateForm:', error);
+      logger.error('[FORM REPOSITORY] Error in deactivateForm:', error);
       throw error;
     }
   }

@@ -1,5 +1,6 @@
 import apiClient from './apiClient';
 import authService from './authService';
+import { logError, logWarn } from '../utils/errorHandling';
 
 // Types for Call Management
 export interface Call {
@@ -43,11 +44,11 @@ const callService = {
       } else if (response.data && Array.isArray(response.data.items)) {
         return response.data.items;
       } else {
-        console.warn('[CALL SERVICE] Unexpected search response format:', response.data);
+        logWarn('callService', '[CALL SERVICE] Unexpected search response format:', response.data);
         return [];
       }
     } catch (error) {
-      console.error('[CALL SERVICE] Error searching calls:', error);
+      logError('callService', '[CALL SERVICE] Error searching calls:', error);
       throw new Error('Failed to search calls. Please try again.');
     }
   },
@@ -58,7 +59,7 @@ const callService = {
       const response = await apiClient.get(`/calls/${callId}`);
       return response.data;
     } catch (error) {
-      console.error(`[CALL SERVICE] Error fetching call ${callId}:`, error);
+      logError('callService', `[CALL SERVICE] Error fetching call ${callId}:`, error);
       throw new Error('Call not found or invalid Call ID.');
     }
   },
@@ -88,7 +89,7 @@ const callService = {
         };
       }
       
-      console.warn('[CALL SERVICE] Unexpected CSR calls response format:', response.data);
+      logWarn('callService', '[CALL SERVICE] Unexpected CSR calls response format:', response.data);
       return {
         items: [],
         totalItems: 0,
@@ -96,7 +97,7 @@ const callService = {
         currentPage: page
       };
     } catch (error) {
-      console.error(`[CALL SERVICE] Error fetching calls for CSR ${csrId}:`, error);
+      logError('callService', `[CALL SERVICE] Error fetching calls for CSR ${csrId}:`, error);
       throw new Error('Failed to load calls for CSR. Please try again.');
     }
   },
@@ -132,7 +133,7 @@ const callService = {
         };
       }
       
-      console.warn('[CALL SERVICE] Unexpected date range calls response format:', response.data);
+      logWarn('callService', '[CALL SERVICE] Unexpected date range calls response format:', response.data);
       return {
         items: [],
         totalItems: 0,
@@ -140,7 +141,7 @@ const callService = {
         currentPage: page
       };
     } catch (error) {
-      console.error(`[CALL SERVICE] Error fetching calls by date range:`, error);
+      logError('callService', `[CALL SERVICE] Error fetching calls by date range:`, error);
       throw new Error('Failed to load calls for the specified date range. Please try again.');
     }
   },
@@ -157,14 +158,14 @@ const callService = {
       } else if (response.data && Array.isArray(response.data.items)) {
         return response.data.items;
       } else {
-        console.warn('[CALL SERVICE] Unexpected recent calls response format:', response.data);
+        logWarn('callService', '[CALL SERVICE] Unexpected recent calls response format:', response.data);
         return [];
       }
     } catch (error) {
-      console.error('[CALL SERVICE] Error fetching recent calls:', error);
+      logError('callService', '[CALL SERVICE] Error fetching recent calls:', error);
       
       // Return empty array instead of throwing for non-critical operations
-      console.warn('[CALL SERVICE] Returning empty array due to API error');
+      logWarn('callService', '[CALL SERVICE] Returning empty array due to API error');
       return [];
     }
   },
@@ -183,10 +184,10 @@ const callService = {
       const response = await apiClient.get('/calls/stats', { params });
       return response.data;
     } catch (error) {
-      console.error(`[CALL SERVICE] Error fetching call stats for CSR ${csrId}:`, error);
+      logError('callService', `[CALL SERVICE] Error fetching call stats for CSR ${csrId}:`, error);
       
       // Return default stats instead of throwing
-      console.warn('[CALL SERVICE] Returning default stats due to API error');
+      logWarn('callService', '[CALL SERVICE] Returning default stats due to API error');
       return {
         totalCalls: 0,
         avgDuration: 0,
@@ -256,7 +257,7 @@ const callService = {
       const exists = calls.length > 0;
       return exists;
     } catch (error) {
-      console.error('[CALL SERVICE] Error checking if call exists:', error);
+      logError('callService', '[CALL SERVICE] Error checking if call exists:', error);
       throw new Error('Failed to check if call exists. Please try again.');
     }
   },
@@ -267,7 +268,7 @@ const callService = {
       const response = await apiClient.get(`/calls/check-submission/${conversationId}`);
       return response.data;
     } catch (error) {
-      console.error('[CALL SERVICE] Error checking conversation ID in submissions:', error);
+      logError('callService', '[CALL SERVICE] Error checking conversation ID in submissions:', error);
       throw new Error('Failed to check if conversation ID is used in submissions. Please try again.');
     }
   }

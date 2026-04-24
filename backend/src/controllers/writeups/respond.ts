@@ -18,6 +18,8 @@ export function respondWithError(res: Response, label: string, error: unknown): 
   if (error instanceof WriteUpServiceError) {
     return res.status(error.statusCode).json({ success: false, message: error.message })
   }
-  console.error(`[WRITEUP] ${label} error:`, error)
+  logger.error(`[WRITEUP] ${label} error:`, error)
   return res.status(500).json({ success: false, message: 'Internal server error' })
 }
+
+import logger from '../../config/logger';

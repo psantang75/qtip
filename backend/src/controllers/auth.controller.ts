@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthenticationService } from '../services/AuthenticationService';
 import { AuthRepository } from '../repositories/AuthRepository';
+import logger from '../config/logger';
 
 // Initialize authentication service
 const authRepository = new AuthRepository();
@@ -11,7 +12,7 @@ const authService = new AuthenticationService(authRepository);
  * @route POST /api/auth/login
  */
 export const login = async (req: Request, res: Response) => {
-  console.log('[AUTH CONTROLLER] Login request received');
+  logger.info('[AUTH CONTROLLER] Login request received');
   
   try {
     const authResponse = await authService.login(req.body, req);
@@ -23,7 +24,7 @@ export const login = async (req: Request, res: Response) => {
       message: authResponse.message
     });
   } catch (error: any) {
-    console.error('[AUTH CONTROLLER] Authentication error:', error);
+    logger.error('[AUTH CONTROLLER] Authentication error:', error);
     
     const statusCode = error.statusCode || 500;
     return res.status(statusCode).json({ 
@@ -38,7 +39,7 @@ export const login = async (req: Request, res: Response) => {
  * @route POST /api/auth/validate-token
  */
 export const validateToken = async (req: Request, res: Response) => {
-  console.log('[AUTH CONTROLLER] Token validation request received');
+  logger.info('[AUTH CONTROLLER] Token validation request received');
   
   try {
     const authHeader = req.headers.authorization;
@@ -66,7 +67,7 @@ export const validateToken = async (req: Request, res: Response) => {
       });
     }
   } catch (error: any) {
-    console.error('[AUTH CONTROLLER] Token validation error:', error);
+    logger.error('[AUTH CONTROLLER] Token validation error:', error);
     return res.status(500).json({ 
       valid: false,
       message: 'Token validation failed' 
@@ -79,7 +80,7 @@ export const validateToken = async (req: Request, res: Response) => {
  * @route POST /api/auth/refresh-token
  */
 export const refreshToken = async (req: Request, res: Response) => {
-  console.log('[AUTH CONTROLLER] Token refresh request received');
+  logger.info('[AUTH CONTROLLER] Token refresh request received');
   
   try {
     const { refreshToken } = req.body;
@@ -107,7 +108,7 @@ export const refreshToken = async (req: Request, res: Response) => {
       });
     }
   } catch (error: any) {
-    console.error('[AUTH CONTROLLER] Token refresh error:', error);
+    logger.error('[AUTH CONTROLLER] Token refresh error:', error);
     return res.status(500).json({ 
       success: false,
       message: 'Token refresh failed' 
@@ -120,7 +121,7 @@ export const refreshToken = async (req: Request, res: Response) => {
  * @route POST /api/auth/logout
  */
 export const logout = async (req: Request, res: Response) => {
-  console.log('[AUTH CONTROLLER] Logout request received');
+  logger.info('[AUTH CONTROLLER] Logout request received');
   
   try {
     const authHeader = req.headers.authorization;
@@ -133,7 +134,7 @@ export const logout = async (req: Request, res: Response) => {
       message: logoutResult.message
     });
   } catch (error: any) {
-    console.error('[AUTH CONTROLLER] Logout error:', error);
+    logger.error('[AUTH CONTROLLER] Logout error:', error);
     return res.status(500).json({ 
       success: false,
       message: 'Logout failed' 
@@ -146,7 +147,7 @@ export const logout = async (req: Request, res: Response) => {
  * @route GET /api/auth/session-status
  */
 export const getSessionStatus = async (req: Request, res: Response) => {
-  console.log('[AUTH CONTROLLER] Session status request received');
+  logger.info('[AUTH CONTROLLER] Session status request received');
   
   try {
     const authHeader = req.headers.authorization;
@@ -168,7 +169,7 @@ export const getSessionStatus = async (req: Request, res: Response) => {
       timestamp: new Date().toISOString()
     });
   } catch (error: any) {
-    console.error('[AUTH CONTROLLER] Session status error:', error);
+    logger.error('[AUTH CONTROLLER] Session status error:', error);
     return res.status(200).json({
       authenticated: false,
       message: 'Session check failed',

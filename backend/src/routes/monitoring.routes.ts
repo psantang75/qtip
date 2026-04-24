@@ -2,12 +2,12 @@ import express, { Request, Response } from 'express';
 import { register, collectDefaultMetrics, Counter, Histogram, Gauge } from 'prom-client';
 import prisma from '../config/prisma';
 import { config } from '../config/environment';
-import logger from '../config/logger';
 import { getPerformanceMetrics, healthCheckMiddleware } from '../middleware/performance';
 import { dbPerformanceTracker } from '../middleware/performance';
 import cacheService from '../services/CacheService';
 import { CSRRepository } from '../repositories/CSRRepository';
 import { healthCheckErrors } from '../utils/errorHandler';
+import logger from '../config/logger';
 
 const router = express.Router();
 

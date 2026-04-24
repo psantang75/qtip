@@ -5,6 +5,7 @@ import { Prisma } from '../generated/prisma/client';
 import { hasCsrRequirements, applyAutoAdvance } from '../utils/coachingAutoAdvance';
 import { buildCoachingSessionScope } from '../services/coachingSessionsReport';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
+import logger from '../config/logger';
 const fs = require('fs').promises;
 const path = require('path');
 const { createReadStream } = require('fs');
@@ -150,7 +151,7 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, data: { sessions: data, totalCount: Number(countRows[0]?.total ?? 0), page, limit } });
   } catch (error) {
-    console.error('[COACHING] getCoachingSessions error:', error);
+    logger.error('[COACHING] getCoachingSessions error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -281,7 +282,7 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('[COACHING] getCoachingSessionDetail error:', error);
+    logger.error('[COACHING] getCoachingSessionDetail error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -409,7 +410,7 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
       res.status(201).json({ success: true, data: { ids: createdIds, batch_id: batchId, count: createdIds.length }, message: `${createdIds.length} coaching sessions created` });
     }
   } catch (error) {
-    console.error('[COACHING] createCoachingSession error:', error);
+    logger.error('[COACHING] createCoachingSession error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -576,7 +577,7 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, message: 'Session updated successfully' });
   } catch (error) {
-    console.error('[COACHING] updateCoachingSession error:', error);
+    logger.error('[COACHING] updateCoachingSession error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -601,7 +602,7 @@ export const deliverCoachingSession = async (req: AuthReq, res: Response) => {
     await prisma.auditLog.create({ data: { user_id: userId, action: 'DELIVERED', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ status: deliveredStatus }) } });
     res.json({ success: true, message: `Session scheduled — status: ${deliveredStatus}` });
   } catch (error) {
-    console.error('[COACHING] deliverCoachingSession error:', error);
+    logger.error('[COACHING] deliverCoachingSession error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -623,7 +624,7 @@ export const completeCoachingSession = async (req: AuthReq, res: Response) => {
     await prisma.auditLog.create({ data: { user_id: userId, action: 'COMPLETE', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
     res.json({ success: true, message: 'Session marked as completed' });
   } catch (error) {
-    console.error('[COACHING] completeCoachingSession error:', error);
+    logger.error('[COACHING] completeCoachingSession error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -647,7 +648,7 @@ export const flagFollowUp = async (req: AuthReq, res: Response) => {
     await prisma.auditLog.create({ data: { user_id: userId, action: 'FLAG_FOLLOWUP', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ follow_up_date }) } });
     res.json({ success: true, message: 'Follow-up flagged' });
   } catch (error) {
-    console.error('[COACHING] flagFollowUp error:', error);
+    logger.error('[COACHING] flagFollowUp error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -669,7 +670,7 @@ export const closeCoachingSession = async (req: AuthReq, res: Response) => {
     await prisma.auditLog.create({ data: { user_id: userId, action: 'CLOSE', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
     res.json({ success: true, message: 'Session closed' });
   } catch (error) {
-    console.error('[COACHING] closeCoachingSession error:', error);
+    logger.error('[COACHING] closeCoachingSession error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -700,7 +701,7 @@ export const downloadAttachment = async (req: AuthReq, res: Response) => {
     stream.on('error', (err: Error) => { if (!res.headersSent) res.status(500).json({ success: false, message: 'Error reading file' }); else res.destroy(); });
     stream.pipe(res);
   } catch (error) {
-    console.error('[COACHING] downloadAttachment error:', error);
+    logger.error('[COACHING] downloadAttachment error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -751,7 +752,7 @@ export const setSessionStatus = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, message: `Status changed to ${status}` });
   } catch (error) {
-    console.error('[COACHING] setSessionStatus error:', error);
+    logger.error('[COACHING] setSessionStatus error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -764,7 +765,7 @@ export const getEligibleCoaches = async (_req: AuthReq, res: Response) => {
     );
     res.json({ success: true, data: coaches });
   } catch (error) {
-    console.error('[COACHING] getEligibleCoaches error:', error);
+    logger.error('[COACHING] getEligibleCoaches error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -825,7 +826,7 @@ export const getCSRCoachingHistory = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, data: { sessions: recentSessions, prior_year_sessions: allWithTopics, repeat_topics: repeatTopics } });
   } catch (error) {
-    console.error('[COACHING] getCSRCoachingHistory error:', error);
+    logger.error('[COACHING] getCSRCoachingHistory error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

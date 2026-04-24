@@ -1,6 +1,7 @@
 import pool from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import os from 'os';
+import logger from '../config/logger';
 
 export interface WorkerResult {
   rowsExtracted: number;
@@ -25,22 +26,38 @@ export abstract class BaseInsightsWorker {
     try {
       const acquired = await this.acquireLock();
       if (!acquired) {
-        console.log(`[${this.workerName}] Another instance is running. Skipping.`);
+        logger.info('Insights worker skipped (lock held)', {
+          service: 'InsightsWorker',
+          worker: this.workerName,
+        });
         return;
       }
 
       logId = await this.createLogEntry();
-      console.log(`[${this.workerName}] Started (log id: ${logId})`);
+      logger.info('Insights worker started', {
+        service: 'InsightsWorker',
+        worker: this.workerName,
+        logId,
+      });
 
       const result = await this.execute();
 
       await this.updateLogEntry(logId, 'SUCCESS', result);
-      console.log(
-        `[${this.workerName}] Completed — extracted: ${result.rowsExtracted}, ` +
-        `loaded: ${result.rowsLoaded}, skipped: ${result.rowsSkipped}, errored: ${result.rowsErrored}`
-      );
+      logger.info('Insights worker completed', {
+        service: 'InsightsWorker',
+        worker: this.workerName,
+        rowsExtracted: result.rowsExtracted,
+        rowsLoaded: result.rowsLoaded,
+        rowsSkipped: result.rowsSkipped,
+        rowsErrored: result.rowsErrored,
+      });
     } catch (error: any) {
-      console.error(`[${this.workerName}] Failed:`, error.message);
+      logger.error('Insights worker failed', {
+        service: 'InsightsWorker',
+        worker: this.workerName,
+        error: error?.message,
+        stack: error?.stack,
+      });
       if (logId) {
         await this.updateLogEntry(logId, 'FAILED', undefined, error.message).catch(() => {});
       }

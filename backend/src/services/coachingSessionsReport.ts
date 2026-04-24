@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
+import logger from '../config/logger';
 
 /**
  * Shared helpers for the Coaching Sessions report.
@@ -100,7 +101,7 @@ export async function getCsrRoleId(): Promise<number | null> {
       return role.id;
     }
   } catch (error) {
-    console.error('Error fetching CSR role ID:', error);
+    logger.error('Error fetching CSR role ID:', error);
   }
   return null;
 }

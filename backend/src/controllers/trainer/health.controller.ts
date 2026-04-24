@@ -15,7 +15,7 @@ export const getTrainerHealthCheck = async (_req: Request, res: Response): Promi
     const statusCode = report.status === 'healthy' ? 200 : 503
     res.status(statusCode).json(report)
   } catch (error) {
-    console.error('[TRAINER HEALTH] Health check failed:', error)
+    logger.error('[TRAINER HEALTH] Health check failed:', error)
     res.status(503).json({
       status:    'unhealthy',
       timestamp: new Date().toISOString(),
@@ -24,3 +24,5 @@ export const getTrainerHealthCheck = async (_req: Request, res: Response): Promi
     })
   }
 }
+
+import logger from '../../config/logger';

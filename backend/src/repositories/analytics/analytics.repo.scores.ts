@@ -108,7 +108,7 @@ export async function getQAScoreDataRepo(
       form_id: row.form_id,
     }))
   } catch (error) {
-    console.error('Error fetching QA score data:', error)
+    logger.error('Error fetching QA score data:', error)
     throw new Error('Failed to fetch QA score data')
   }
 }
@@ -234,7 +234,9 @@ export async function getDetailedQAScoreDataRepo(
 
     return rows
   } catch (error) {
-    console.error('Error fetching detailed QA score data:', error)
+    logger.error('Error fetching detailed QA score data:', error)
     throw new Error('Failed to fetch detailed QA score data')
   }
 }
+
+import logger from '../../config/logger';

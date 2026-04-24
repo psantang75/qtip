@@ -9,6 +9,7 @@ import {
   UserUpdateRequest,
   UserServiceError,
 } from '../services/UserService';
+import logger from '../config/logger';
 
 /**
  * MySQL implementation of UserRepository using Prisma
@@ -135,7 +136,7 @@ export class MySQLUserRepository {
 
   async create(userData: UserCreateRequest, created_by: number): Promise<UserWithDetails> {
     try {
-      console.log(`[NEW USER] UserRepository: Creating user: ${userData.username}`);
+      logger.info(`[NEW USER] UserRepository: Creating user: ${userData.username}`);
 
       const result = await prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
@@ -165,10 +166,10 @@ export class MySQLUserRepository {
       const createdUser = await this.findById(result.id);
       if (!createdUser) throw new UserServiceError('Failed to retrieve created user', 'CREATE_ERROR', 500);
 
-      console.log(`[NEW USER] UserRepository: User created successfully with ID: ${result.id}`);
+      logger.info(`[NEW USER] UserRepository: User created successfully with ID: ${result.id}`);
       return createdUser;
     } catch (error) {
-      console.error('[NEW USER] UserRepository: Error creating user:', error);
+      logger.error('[NEW USER] UserRepository: Error creating user:', error);
       if (error instanceof UserServiceError) throw error;
       throw new UserServiceError('Database error while creating user', 'DATABASE_ERROR', 500);
     }
@@ -176,7 +177,7 @@ export class MySQLUserRepository {
 
   async update(id: number, userData: UserUpdateRequest, updatedBy: number): Promise<UserWithDetails> {
     try {
-      console.log(`[NEW USER] UserRepository: Updating user ID: ${id}`);
+      logger.info(`[NEW USER] UserRepository: Updating user ID: ${id}`);
 
       const updateData: any = {};
       if (userData.username !== undefined) updateData.username = userData.username;
@@ -206,10 +207,10 @@ export class MySQLUserRepository {
       const updatedUser = await this.findById(id);
       if (!updatedUser) throw new UserServiceError('Failed to retrieve updated user', 'UPDATE_ERROR', 500);
 
-      console.log(`[NEW USER] UserRepository: User updated successfully: ${updatedUser.username}`);
+      logger.info(`[NEW USER] UserRepository: User updated successfully: ${updatedUser.username}`);
       return updatedUser;
     } catch (error) {
-      console.error('[NEW USER] UserRepository: Error updating user:', error);
+      logger.error('[NEW USER] UserRepository: Error updating user:', error);
       if (error instanceof UserServiceError) throw error;
       throw new UserServiceError('Database error while updating user', 'DATABASE_ERROR', 500);
     }
@@ -217,7 +218,7 @@ export class MySQLUserRepository {
 
   async delete(id: number, deletedBy: number): Promise<void> {
     try {
-      console.log(`[NEW USER] UserRepository: Deleting user ID: ${id}`);
+      logger.info(`[NEW USER] UserRepository: Deleting user ID: ${id}`);
 
       await prisma.$transaction(async (tx) => {
         await tx.user.update({ where: { id }, data: { is_active: false } });
@@ -233,16 +234,16 @@ export class MySQLUserRepository {
         });
       });
 
-      console.log(`[NEW USER] UserRepository: User deleted successfully with ID: ${id}`);
+      logger.info(`[NEW USER] UserRepository: User deleted successfully with ID: ${id}`);
     } catch (error) {
-      console.error('[NEW USER] UserRepository: Error deleting user:', error);
+      logger.error('[NEW USER] UserRepository: Error deleting user:', error);
       throw new UserServiceError('Database error while deleting user', 'DATABASE_ERROR', 500);
     }
   }
 
   async toggleStatus(id: number, is_active: boolean, updatedBy: number): Promise<UserWithDetails> {
     try {
-      console.log(`[NEW USER] UserRepository: Toggling user status ID: ${id} to ${is_active}`);
+      logger.info(`[NEW USER] UserRepository: Toggling user status ID: ${id} to ${is_active}`);
 
       await prisma.$transaction(async (tx) => {
         await tx.user.update({ where: { id }, data: { is_active: is_active } });
@@ -261,10 +262,10 @@ export class MySQLUserRepository {
       const updatedUser = await this.findById(id);
       if (!updatedUser) throw new UserServiceError('Failed to retrieve user after status change', 'STATUS_ERROR', 500);
 
-      console.log(`[NEW USER] UserRepository: User status updated successfully: ${updatedUser.username}`);
+      logger.info(`[NEW USER] UserRepository: User status updated successfully: ${updatedUser.username}`);
       return updatedUser;
     } catch (error) {
-      console.error('[NEW USER] UserRepository: Error toggling user status:', error);
+      logger.error('[NEW USER] UserRepository: Error toggling user status:', error);
       if (error instanceof UserServiceError) throw error;
       throw new UserServiceError('Database error while changing user status', 'DATABASE_ERROR', 500);
     }
@@ -272,7 +273,7 @@ export class MySQLUserRepository {
 
   async findManagers(): Promise<User[]> {
     try {
-      console.log('[NEW USER] UserRepository: Finding managers');
+      logger.info('[NEW USER] UserRepository: Finding managers');
 
       const users = await prisma.user.findMany({
         where: {
@@ -282,17 +283,17 @@ export class MySQLUserRepository {
         orderBy: { username: 'asc' },
       });
 
-      console.log(`[NEW USER] UserRepository: Found ${users.length} managers`);
+      logger.info(`[NEW USER] UserRepository: Found ${users.length} managers`);
       return users as unknown as User[];
     } catch (error) {
-      console.error('[NEW USER] UserRepository: Error finding managers:', error);
+      logger.error('[NEW USER] UserRepository: Error finding managers:', error);
       throw new UserServiceError('Database error while fetching managers', 'DATABASE_ERROR', 500);
     }
   }
 
   async findDirectors(): Promise<User[]> {
     try {
-      console.log('[NEW USER] UserRepository: Finding directors');
+      logger.info('[NEW USER] UserRepository: Finding directors');
 
       const users = await prisma.user.findMany({
         where: {
@@ -302,17 +303,17 @@ export class MySQLUserRepository {
         orderBy: { username: 'asc' },
       });
 
-      console.log(`[NEW USER] UserRepository: Found ${users.length} directors`);
+      logger.info(`[NEW USER] UserRepository: Found ${users.length} directors`);
       return users as unknown as User[];
     } catch (error) {
-      console.error('[NEW USER] UserRepository: Error finding directors:', error);
+      logger.error('[NEW USER] UserRepository: Error finding directors:', error);
       throw new UserServiceError('Database error while fetching directors', 'DATABASE_ERROR', 500);
     }
   }
 
   async search(query: string): Promise<User[]> {
     try {
-      console.log(`[NEW USER] UserRepository: Searching users with query: ${query}`);
+      logger.info(`[NEW USER] UserRepository: Searching users with query: ${query}`);
 
       const users = await prisma.user.findMany({
         where: {
@@ -326,10 +327,10 @@ export class MySQLUserRepository {
         take: 50,
       });
 
-      console.log(`[NEW USER] UserRepository: Found ${users.length} users matching search`);
+      logger.info(`[NEW USER] UserRepository: Found ${users.length} users matching search`);
       return users as unknown as User[];
     } catch (error) {
-      console.error('[NEW USER] UserRepository: Error searching users:', error);
+      logger.error('[NEW USER] UserRepository: Error searching users:', error);
       throw new UserServiceError('Database error while searching users', 'DATABASE_ERROR', 500);
     }
   }

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import phoneSystemService from '../services/PhoneSystemService';
+import logger from '../config/logger';
 
 /**
  * Get audio URL by conversation ID
@@ -17,7 +18,7 @@ export const getAudioUrlByConversationId = async (req: Request, res: Response): 
       return;
     }
     
-    console.log(`[PHONE SYSTEM CONTROLLER] Getting audio URL for conversation ID: ${conversationId}`);
+    logger.info(`[PHONE SYSTEM CONTROLLER] Getting audio URL for conversation ID: ${conversationId}`);
     
     const recording = await phoneSystemService.getAudioUrlByConversationId(conversationId);
     
@@ -34,7 +35,7 @@ export const getAudioUrlByConversationId = async (req: Request, res: Response): 
       data: recording
     });
   } catch (error) {
-    console.error('[PHONE SYSTEM CONTROLLER] Error getting audio URL:', error);
+    logger.error('[PHONE SYSTEM CONTROLLER] Error getting audio URL:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to retrieve audio URL',
@@ -59,7 +60,7 @@ export const getAudioUrlsByConversationIds = async (req: Request, res: Response)
       return;
     }
     
-    console.log(`[PHONE SYSTEM CONTROLLER] Getting audio URLs for ${conversationIds.length} conversation IDs`);
+    logger.info(`[PHONE SYSTEM CONTROLLER] Getting audio URLs for ${conversationIds.length} conversation IDs`);
     
     const recordings = await phoneSystemService.getAudioUrlsByConversationIds(conversationIds);
     
@@ -69,7 +70,7 @@ export const getAudioUrlsByConversationIds = async (req: Request, res: Response)
       count: recordings.length
     });
   } catch (error) {
-    console.error('[PHONE SYSTEM CONTROLLER] Error getting audio URLs:', error);
+    logger.error('[PHONE SYSTEM CONTROLLER] Error getting audio URLs:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to retrieve audio URLs',
@@ -95,7 +96,7 @@ export const getAllRecordings = async (req: Request, res: Response): Promise<voi
       return;
     }
     
-    console.log(`[PHONE SYSTEM CONTROLLER] Getting all recordings (limit: ${limitNum})`);
+    logger.info(`[PHONE SYSTEM CONTROLLER] Getting all recordings (limit: ${limitNum})`);
     
     const recordings = await phoneSystemService.getAllRecordings(limitNum);
     
@@ -108,7 +109,7 @@ export const getAllRecordings = async (req: Request, res: Response): Promise<voi
       }
     });
   } catch (error) {
-    console.error('[PHONE SYSTEM CONTROLLER] Error getting recordings:', error);
+    logger.error('[PHONE SYSTEM CONTROLLER] Error getting recordings:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to get recordings',
@@ -123,7 +124,7 @@ export const getAllRecordings = async (req: Request, res: Response): Promise<voi
  */
 export const testPhoneSystemConnection = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('[PHONE SYSTEM CONTROLLER] Testing PhoneSystem database connection');
+    logger.info('[PHONE SYSTEM CONTROLLER] Testing PhoneSystem database connection');
     
     const isConnected = await phoneSystemService.testConnection();
     
@@ -141,7 +142,7 @@ export const testPhoneSystemConnection = async (req: Request, res: Response): Pr
       });
     }
   } catch (error) {
-    console.error('[PHONE SYSTEM CONTROLLER] Error testing connection:', error);
+    logger.error('[PHONE SYSTEM CONTROLLER] Error testing connection:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to test PhoneSystem database connection',
@@ -156,7 +157,7 @@ export const testPhoneSystemConnection = async (req: Request, res: Response): Pr
  */
 export const getPhoneSystemStats = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('[PHONE SYSTEM CONTROLLER] Getting PhoneSystem database statistics');
+    logger.info('[PHONE SYSTEM CONTROLLER] Getting PhoneSystem database statistics');
     
     const stats = await phoneSystemService.getDatabaseStats();
     
@@ -165,7 +166,7 @@ export const getPhoneSystemStats = async (req: Request, res: Response): Promise<
       data: stats
     });
   } catch (error) {
-    console.error('[PHONE SYSTEM CONTROLLER] Error getting statistics:', error);
+    logger.error('[PHONE SYSTEM CONTROLLER] Error getting statistics:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to get PhoneSystem database statistics',
@@ -190,7 +191,7 @@ export const getTranscriptByConversationId = async (req: Request, res: Response)
       return;
     }
     
-    console.log(`[PHONE SYSTEM CONTROLLER] Getting transcript for conversation ID: ${conversationId}`);
+    logger.info(`[PHONE SYSTEM CONTROLLER] Getting transcript for conversation ID: ${conversationId}`);
     
     const transcript = await phoneSystemService.getTranscriptByConversationId(conversationId);
     
@@ -207,7 +208,7 @@ export const getTranscriptByConversationId = async (req: Request, res: Response)
       data: transcript
     });
   } catch (error) {
-    console.error('[PHONE SYSTEM CONTROLLER] Error getting transcript:', error);
+    logger.error('[PHONE SYSTEM CONTROLLER] Error getting transcript:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to retrieve transcript',
@@ -232,7 +233,7 @@ export const getAudioAndTranscriptByConversationId = async (req: Request, res: R
       return;
     }
     
-    console.log(`[PHONE SYSTEM CONTROLLER] Getting audio and transcript for conversation ID: ${conversationId}`);
+    logger.info(`[PHONE SYSTEM CONTROLLER] Getting audio and transcript for conversation ID: ${conversationId}`);
     
     const result = await phoneSystemService.getAudioAndTranscriptByConversationId(conversationId);
     
@@ -246,7 +247,7 @@ export const getAudioAndTranscriptByConversationId = async (req: Request, res: R
       }
     });
   } catch (error) {
-    console.error('[PHONE SYSTEM CONTROLLER] Error getting audio and transcript:', error);
+    logger.error('[PHONE SYSTEM CONTROLLER] Error getting audio and transcript:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to retrieve audio and transcript',

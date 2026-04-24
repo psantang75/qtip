@@ -11,6 +11,7 @@ import {
   generateCoachingSessionsXlsx,
 } from '../services/coachingSessionsReport';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
+import logger from '../config/logger';
 // Local `escapeFilename` removed during pre-production review (item #26).
 // `utils/contentDisposition.formatFilename` is the canonical implementation.
 
@@ -44,7 +45,7 @@ const getRoleId = async (role_name: string): Promise<number | null> => {
       return role.id;
     }
   } catch (error) {
-    console.error(`Error fetching role ID for ${role_name}:`, error);
+    logger.error(`Error fetching role ID for ${role_name}:`, error);
   }
 
   return null;
@@ -641,7 +642,7 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
       try {
         await fs.mkdir(uploadsDir, { recursive: true });
       } catch (err) {
-        console.error('Error creating uploads directory:', err);
+        logger.error('Error creating uploads directory:', err);
       }
 
       const timestamp = Date.now();
@@ -658,7 +659,7 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
           mime_type: attachment.mimetype
         };
       } catch (err) {
-        console.error('Error saving file:', err);
+        logger.error('Error saving file:', err);
         res.status(500).json({ success: false, message: 'Failed to save attachment' });
         return;
       }
@@ -726,7 +727,7 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
 
     res.status(201).json({ success: true, data: responseData, message: 'Coaching session created successfully' });
   } catch (error) {
-    console.error('Error creating coaching session:', error);
+    logger.error('Error creating coaching session:', error);
     serviceLogger.error('admin', 'createAdminCoachingSession', error as Error, req.user?.user_id);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
@@ -773,7 +774,7 @@ export const getAdminCoachingSessions = async (req: AuthenticatedRequest, res: R
 
     res.json({ success: true, data: { sessions, totalCount, page, limit } });
   } catch (error) {
-    console.error('Error fetching coaching sessions:', error);
+    logger.error('Error fetching coaching sessions:', error);
     serviceLogger.error('admin', 'getAdminCoachingSessions', error as Error, req.user?.user_id);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
@@ -824,7 +825,7 @@ export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res
     res.setHeader('Content-Disposition', `attachment; ${escapeFilename(fileName)}`);
     res.send(buffer);
   } catch (error) {
-    console.error('Error exporting coaching sessions:', error);
+    logger.error('Error exporting coaching sessions:', error);
     serviceLogger.error('admin', 'exportAdminCoachingSessions', error as Error, req.user?.user_id);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
@@ -890,7 +891,7 @@ export const getAdminCoachingSessionDetails = async (req: AuthenticatedRequest, 
 
     res.json({ success: true, data: responseData });
   } catch (error) {
-    console.error('Error fetching coaching session details:', error);
+    logger.error('Error fetching coaching session details:', error);
     serviceLogger.error('admin', 'getAdminCoachingSessionDetails', error as Error, req.user?.user_id);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
@@ -1043,7 +1044,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
       try {
         await fs.mkdir(uploadsDir, { recursive: true });
       } catch (err) {
-        console.error('Error creating uploads directory:', err);
+        logger.error('Error creating uploads directory:', err);
       }
 
       const timestamp = Date.now();
@@ -1060,7 +1061,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
           attachment_mime_type: attachment.mimetype
         };
       } catch (err) {
-        console.error('Error saving file:', err);
+        logger.error('Error saving file:', err);
         res.status(500).json({ success: false, message: 'Failed to save attachment' });
         return;
       }
@@ -1137,7 +1138,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
 
     res.json({ success: true, data: responseData, message: 'Coaching session updated successfully' });
   } catch (error) {
-    console.error('Error updating coaching session:', error);
+    logger.error('Error updating coaching session:', error);
     serviceLogger.error('admin', 'updateAdminCoachingSession', error as Error, req.user?.user_id);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
@@ -1228,7 +1229,7 @@ export const completeAdminCoachingSession = async (req: AuthenticatedRequest, re
 
     res.json({ success: true, data: responseData, message: 'Coaching session marked as completed successfully' });
   } catch (error) {
-    console.error('Error completing coaching session:', error);
+    logger.error('Error completing coaching session:', error);
     serviceLogger.error('admin', 'completeAdminCoachingSession', error as Error, req.user?.user_id);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
@@ -1319,7 +1320,7 @@ export const reopenAdminCoachingSession = async (req: AuthenticatedRequest, res:
 
     res.json({ success: true, data: responseData, message: 'Coaching session reopened successfully' });
   } catch (error) {
-    console.error('Error reopening coaching session:', error);
+    logger.error('Error reopening coaching session:', error);
     serviceLogger.error('admin', 'reopenAdminCoachingSession', error as Error, req.user?.user_id);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
@@ -1389,19 +1390,19 @@ export const downloadAdminCoachingSessionAttachment = async (req: AuthenticatedR
       if (!res.headersSent) {
         res.status(500).json({ success: false, message: 'Error reading file' });
       } else {
-        console.error('File stream error after headers sent:', streamError);
+        logger.error('File stream error after headers sent:', streamError);
         res.destroy();
       }
     });
 
     res.on('error', (responseError) => {
-      console.error('Response error during file stream:', responseError);
+      logger.error('Response error during file stream:', responseError);
       fileStream.destroy();
     });
 
     fileStream.pipe(res);
   } catch (error) {
-    console.error('Error downloading coaching session attachment:', error);
+    logger.error('Error downloading coaching session attachment:', error);
     serviceLogger.error('admin', 'downloadAdminCoachingSessionAttachment', error as Error, req.user?.user_id);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
@@ -1438,7 +1439,7 @@ export const getAdminCSRs = async (req: AuthenticatedRequest, res: Response): Pr
 
     res.json({ success: true, data: csrs || [], total: csrs?.length || 0 });
   } catch (error) {
-    console.error('Error fetching CSRs:', error);
+    logger.error('Error fetching CSRs:', error);
     serviceLogger.error('admin', 'getAdminCSRs', error as Error, req.user?.user_id);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }

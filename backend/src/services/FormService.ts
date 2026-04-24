@@ -16,6 +16,7 @@ import {
   FormQuestionCondition 
 } from '../models';
 import { MySQLFormRepository } from '../repositories/MySQLFormRepository';
+import logger from '../config/logger';
 
 /**
  * Custom error class for form service business logic errors
@@ -190,17 +191,17 @@ export class FormService implements IFormService {
    */
   async deactivateForm(form_id: number, updatedBy: number): Promise<{ message: string }> {
     try {
-      console.log('[FORM SERVICE] Starting form deactivation:', {
+      logger.info('[FORM SERVICE] Starting form deactivation:', {
         form_id,
         updatedBy,
         timestamp: new Date().toISOString()
       });
 
       // Validate form exists
-      console.log('[FORM SERVICE] Checking if form exists...');
+      logger.info('[FORM SERVICE] Checking if form exists...');
       const existingForm = await this.getFormById(form_id, true);
       
-      console.log('[FORM SERVICE] Form found:', {
+      logger.info('[FORM SERVICE] Form found:', {
         id: existingForm.id,
         name: existingForm.form_name,
         is_active: existingForm.is_active,
@@ -208,7 +209,7 @@ export class FormService implements IFormService {
       });
       
       if (!existingForm.is_active) {
-        console.log('[FORM SERVICE] Form is already inactive');
+        logger.info('[FORM SERVICE] Form is already inactive');
         throw new FormServiceError(
           'Form is already inactive',
           'FORM_ALREADY_INACTIVE',
@@ -216,16 +217,16 @@ export class FormService implements IFormService {
         );
       }
 
-      console.log('[FORM SERVICE] Calling repository to deactivate form...');
+      logger.info('[FORM SERVICE] Calling repository to deactivate form...');
       await this.formRepository.deactivateForm(form_id, updatedBy);
       
-      console.log('[FORM SERVICE] Form deactivated successfully');
+      logger.info('[FORM SERVICE] Form deactivated successfully');
 
       return {
         message: 'Form deactivated successfully'
       };
     } catch (error) {
-      console.error('[FORM SERVICE] Error in deactivateForm:', {
+      logger.error('[FORM SERVICE] Error in deactivateForm:', {
         error: error,
         message: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,

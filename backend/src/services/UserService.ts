@@ -1,5 +1,6 @@
 ﻿import bcrypt from 'bcrypt';
 import { User, CreateUserDTO, UpdateUserDTO } from '../models/User';
+import logger from '../config/logger';
 
 // User service specific interfaces
 export interface UserFilters {
@@ -82,7 +83,7 @@ export class UserService {
     limit: number = 20, 
     filters?: UserFilters
   ): Promise<PaginatedUserResponse> {
-    console.log(`[NEW USER] UserService: Getting users - Page: ${page}, Limit: ${limit}`);
+    logger.info(`[NEW USER] UserService: Getting users - Page: ${page}, Limit: ${limit}`);
     
     try {
       // Validate pagination parameters
@@ -96,14 +97,14 @@ export class UserService {
 
       const result = await this.repository.findAll(page, limit, filters);
       
-      console.log(`[NEW USER] UserService: Found ${result.users.length} users`);
+      logger.info(`[NEW USER] UserService: Found ${result.users.length} users`);
       return result;
     } catch (error) {
       if (error instanceof UserServiceError) {
         throw error;
       }
       
-      console.error('[NEW USER] UserService: Error getting users:', error);
+      logger.error('[NEW USER] UserService: Error getting users:', error);
       throw new UserServiceError('Failed to retrieve users', 'GET_USERS_ERROR', 500);
     }
   }
@@ -112,7 +113,7 @@ export class UserService {
    * Get user by ID with detailed information
    */
   async getUserById(id: number): Promise<UserWithDetails> {
-    console.log(`[NEW USER] UserService: Getting user by ID: ${id}`);
+    logger.info(`[NEW USER] UserService: Getting user by ID: ${id}`);
     
     try {
       if (!id || id <= 0) {
@@ -125,14 +126,14 @@ export class UserService {
         throw new UserServiceError('User not found', 'USER_NOT_FOUND', 404);
       }
 
-      console.log(`[NEW USER] UserService: Found user: ${user.username}`);
+      logger.info(`[NEW USER] UserService: Found user: ${user.username}`);
       return user;
     } catch (error) {
       if (error instanceof UserServiceError) {
         throw error;
       }
       
-      console.error('[NEW USER] UserService: Error getting user by ID:', error);
+      logger.error('[NEW USER] UserService: Error getting user by ID:', error);
       throw new UserServiceError('Failed to retrieve user', 'GET_USER_ERROR', 500);
     }
   }
@@ -141,7 +142,7 @@ export class UserService {
    * Create a new user with business logic validation
    */
   async createUser(userData: UserCreateRequest, created_by: number): Promise<UserWithDetails> {
-    console.log(`[NEW USER] UserService: Creating user: ${userData.username}`);
+    logger.info(`[NEW USER] UserService: Creating user: ${userData.username}`);
     
     try {
       // Validate required fields
@@ -160,14 +161,14 @@ export class UserService {
 
       const newUser = await this.repository.create(userToCreate, created_by);
       
-      console.log(`[NEW USER] UserService: User created successfully with ID: ${newUser.id}`);
+      logger.info(`[NEW USER] UserService: User created successfully with ID: ${newUser.id}`);
       return newUser;
     } catch (error) {
       if (error instanceof UserServiceError) {
         throw error;
       }
       
-      console.error('[NEW USER] UserService: Error creating user:', error);
+      logger.error('[NEW USER] UserService: Error creating user:', error);
       throw new UserServiceError('Failed to create user', 'CREATE_USER_ERROR', 500);
     }
   }
@@ -180,7 +181,7 @@ export class UserService {
     userData: UserUpdateRequest, 
     updatedBy: number
   ): Promise<UserWithDetails> {
-    console.log(`[NEW USER] UserService: Updating user ID: ${id}`);
+    logger.info(`[NEW USER] UserService: Updating user ID: ${id}`);
     
     try {
       // Validate user ID
@@ -210,14 +211,14 @@ export class UserService {
 
       const updatedUser = await this.repository.update(id, updateData, updatedBy);
       
-      console.log(`[NEW USER] UserService: User updated successfully: ${updatedUser.username}`);
+      logger.info(`[NEW USER] UserService: User updated successfully: ${updatedUser.username}`);
       return updatedUser;
     } catch (error) {
       if (error instanceof UserServiceError) {
         throw error;
       }
       
-      console.error('[NEW USER] UserService: Error updating user:', error);
+      logger.error('[NEW USER] UserService: Error updating user:', error);
       throw new UserServiceError('Failed to update user', 'UPDATE_USER_ERROR', 500);
     }
   }
@@ -226,7 +227,7 @@ export class UserService {
    * Soft delete a user (mark as inactive)
    */
   async deleteUser(id: number, deletedBy: number): Promise<void> {
-    console.log(`[NEW USER] UserService: Deleting user ID: ${id}`);
+    logger.info(`[NEW USER] UserService: Deleting user ID: ${id}`);
     
     try {
       if (!id || id <= 0) {
@@ -246,13 +247,13 @@ export class UserService {
 
       await this.repository.delete(id, deletedBy);
       
-      console.log(`[NEW USER] UserService: User deleted successfully: ${existingUser.username}`);
+      logger.info(`[NEW USER] UserService: User deleted successfully: ${existingUser.username}`);
     } catch (error) {
       if (error instanceof UserServiceError) {
         throw error;
       }
       
-      console.error('[NEW USER] UserService: Error deleting user:', error);
+      logger.error('[NEW USER] UserService: Error deleting user:', error);
       throw new UserServiceError('Failed to delete user', 'DELETE_USER_ERROR', 500);
     }
   }
@@ -265,7 +266,7 @@ export class UserService {
     is_active: boolean, 
     updatedBy: number
   ): Promise<UserWithDetails> {
-    console.log(`[NEW USER] UserService: Toggling user status ID: ${id} to ${is_active}`);
+    logger.info(`[NEW USER] UserService: Toggling user status ID: ${id} to ${is_active}`);
     
     try {
       if (!id || id <= 0) {
@@ -285,14 +286,14 @@ export class UserService {
 
       const updatedUser = await this.repository.toggleStatus(id, is_active, updatedBy);
       
-      console.log(`[NEW USER] UserService: User status updated successfully: ${updatedUser.username}`);
+      logger.info(`[NEW USER] UserService: User status updated successfully: ${updatedUser.username}`);
       return updatedUser;
     } catch (error) {
       if (error instanceof UserServiceError) {
         throw error;
       }
       
-      console.error('[NEW USER] UserService: Error toggling user status:', error);
+      logger.error('[NEW USER] UserService: Error toggling user status:', error);
       throw new UserServiceError('Failed to toggle user status', 'TOGGLE_STATUS_ERROR', 500);
     }
   }
@@ -305,7 +306,7 @@ export class UserService {
     currentPassword: string,
     newPassword: string
   ): Promise<void> {
-    console.log(`[USER SERVICE] Changing password for user ID: ${user_id}`);
+    logger.info(`[USER SERVICE] Changing password for user ID: ${user_id}`);
     
     try {
       // Validate inputs
@@ -366,13 +367,13 @@ export class UserService {
       // Update password in database
       await this.repository.update(user_id, { password: hashedPassword }, user_id);
 
-      console.log(`[USER SERVICE] Password changed successfully for user ID: ${user_id}`);
+      logger.info(`[USER SERVICE] Password changed successfully for user ID: ${user_id}`);
     } catch (error) {
       if (error instanceof UserServiceError) {
         throw error;
       }
       
-      console.error('[USER SERVICE] Error changing password:', error);
+      logger.error('[USER SERVICE] Error changing password:', error);
       throw new UserServiceError('Failed to change password', 'CHANGE_PASSWORD_ERROR', 500);
     }
   }
@@ -381,14 +382,14 @@ export class UserService {
    * Get users with manager role
    */
   async getManagers(): Promise<User[]> {
-    console.log('[NEW USER] UserService: Getting managers');
+    logger.info('[NEW USER] UserService: Getting managers');
     
     try {
       const managers = await this.repository.findManagers();
-      console.log(`[NEW USER] UserService: Found ${managers.length} managers`);
+      logger.info(`[NEW USER] UserService: Found ${managers.length} managers`);
       return managers;
     } catch (error) {
-      console.error('[NEW USER] UserService: Error getting managers:', error);
+      logger.error('[NEW USER] UserService: Error getting managers:', error);
       throw new UserServiceError('Failed to retrieve managers', 'GET_MANAGERS_ERROR', 500);
     }
   }
@@ -397,14 +398,14 @@ export class UserService {
    * Get users with director role
    */
   async getDirectors(): Promise<User[]> {
-    console.log('[NEW USER] UserService: Getting directors');
+    logger.info('[NEW USER] UserService: Getting directors');
     
     try {
       const directors = await this.repository.findDirectors();
-      console.log(`[NEW USER] UserService: Found ${directors.length} directors`);
+      logger.info(`[NEW USER] UserService: Found ${directors.length} directors`);
       return directors;
     } catch (error) {
-      console.error('[NEW USER] UserService: Error getting directors:', error);
+      logger.error('[NEW USER] UserService: Error getting directors:', error);
       throw new UserServiceError('Failed to retrieve directors', 'GET_DIRECTORS_ERROR', 500);
     }
   }
@@ -413,7 +414,7 @@ export class UserService {
    * Search users by query
    */
   async searchUsers(query: string): Promise<User[]> {
-    console.log(`[NEW USER] UserService: Searching users with query: ${query}`);
+    logger.info(`[NEW USER] UserService: Searching users with query: ${query}`);
     
     try {
       if (!query || query.trim().length < 2) {
@@ -421,14 +422,14 @@ export class UserService {
       }
 
       const users = await this.repository.search(query.trim());
-      console.log(`[NEW USER] UserService: Found ${users.length} users matching search`);
+      logger.info(`[NEW USER] UserService: Found ${users.length} users matching search`);
       return users;
     } catch (error) {
       if (error instanceof UserServiceError) {
         throw error;
       }
       
-      console.error('[NEW USER] UserService: Error searching users:', error);
+      logger.error('[NEW USER] UserService: Error searching users:', error);
       throw new UserServiceError('Failed to search users', 'SEARCH_USERS_ERROR', 500);
     }
   }
@@ -531,7 +532,7 @@ export class UserService {
     try {
       return await bcrypt.hash(password, this.saltRounds);
     } catch (error) {
-      console.error('[NEW USER] UserService: Error hashing password:', error);
+      logger.error('[NEW USER] UserService: Error hashing password:', error);
       throw new UserServiceError('Failed to process password', 'PASSWORD_HASH_ERROR', 500);
     }
   }

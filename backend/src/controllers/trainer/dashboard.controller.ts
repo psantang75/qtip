@@ -52,7 +52,7 @@ export const getTrainerDashboardStats = async (_req: Request, res: Response): Pr
     const stats = await svcGetTrainerDashboardStats()
     res.status(200).json(stats)
   } catch (error) {
-    console.error('[TRAINER CONTROLLER] Error fetching dashboard stats:', error)
+    logger.error('[TRAINER CONTROLLER] Error fetching dashboard stats:', error)
     res.status(500).json({ message: 'Failed to fetch trainer dashboard statistics' })
   }
 }
@@ -63,7 +63,7 @@ export const getTrainerCSRActivity = async (_req: Request, res: Response): Promi
     const activity = await svcGetTrainerCSRActivity()
     res.status(200).json(activity)
   } catch (error) {
-    console.error('[TRAINER CONTROLLER] Error fetching CSR activity:', error)
+    logger.error('[TRAINER CONTROLLER] Error fetching CSR activity:', error)
     res.status(500).json({ message: 'Failed to fetch CSR activity data' })
   }
 }
@@ -78,7 +78,9 @@ export const getTrainerTeamCSRs = async (req: AuthenticatedRequest, res: Respons
     const csrs = await svcGetTrainerTeamCSRs()
     res.json({ success: true, data: csrs || [] })
   } catch (error) {
-    console.error('Error fetching team CSRs:', error)
+    logger.error('Error fetching team CSRs:', error)
     res.status(500).json({ success: false, message: 'Internal server error' })
   }
 }
+
+import logger from '../../config/logger';

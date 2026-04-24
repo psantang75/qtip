@@ -1,5 +1,6 @@
 import apiClient from './apiClient';
 import type { CSRDashboardData, CSRAudit, CSRAuditDetail, CSRDispute } from '../types/csr.types';
+import { logError } from '../utils/errorHandling';
 
 // Base URL for all CSR endpoints - apiClient already adds /api prefix
 const BASE_URL = '';
@@ -44,7 +45,7 @@ export const fetchCSRDashboardData = async (): Promise<CSRDashboardData> => {
     const response = await apiClient.get(`${BASE_URL}/csr/stats`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching CSR dashboard data:', error);
+    logError('csrService', 'Error fetching CSR dashboard data:', error);
     throw error;
   }
 };
@@ -55,7 +56,7 @@ export const fetchCSRDashboardStats = async (): Promise<CSRDashboardStats> => {
     const response = await apiClient.get(`${BASE_URL}/csr/dashboard-stats`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching CSR dashboard stats:', error);
+    logError('csrService', 'Error fetching CSR dashboard stats:', error);
     throw error;
   }
 };
@@ -66,7 +67,7 @@ export const fetchCSRActivity = async (): Promise<CSRActivityData[]> => {
     const response = await apiClient.get(`${BASE_URL}/csr/csr-activity`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching CSR activity data:', error);
+    logError('csrService', 'Error fetching CSR activity data:', error);
     throw error;
   }
 };
@@ -98,7 +99,7 @@ export const fetchCSRAudits = async (
     const response = await apiClient.get(`${BASE_URL}/csr/audits`, { params });
     return response.data;
   } catch (error) {
-    console.error('Error fetching CSR audits:', error);
+    logError('csrService', 'Error fetching CSR audits:', error);
     throw error;
   }
 };
@@ -109,7 +110,7 @@ export const fetchAuditDetails = async (id: number): Promise<CSRAuditDetail> => 
     const response = await apiClient.get(`${BASE_URL}/csr/audits/${id}`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching audit details:', error);
+    logError('csrService', 'Error fetching audit details:', error);
     throw error;
   }
 };
@@ -120,7 +121,7 @@ export const submitDispute = async (submissionId: number, disputeData: FormData)
     const response = await apiClient.post(`${BASE_URL}/csr/disputes`, disputeData);
     return response.data;
   } catch (error) {
-    console.error('Error submitting dispute:', error);
+    logError('csrService', 'Error submitting dispute:', error);
     throw error;
   }
 };
@@ -131,7 +132,7 @@ export const finalizeAudit = async (submissionId: number, finalData: any): Promi
     const response = await apiClient.put(`${BASE_URL}/csr/audits/${submissionId}/finalize`, finalData);
     return response.data;
   } catch (error) {
-    console.error('Error finalizing audit:', error);
+    logError('csrService', 'Error finalizing audit:', error);
     throw error;
   }
 };
@@ -143,7 +144,7 @@ export const finalizeSubmission = async (submissionId: number, finalData: any): 
     const response = await apiClient.put(url, finalData);
     return response.data;
   } catch (error) {
-    console.error('Error finalizing submission:', error);
+    logError('csrService', 'Error finalizing submission:', error);
     throw error;
   }
 };
@@ -154,7 +155,7 @@ export const isAuditDisputable = async (submissionId: number): Promise<boolean> 
     const response = await apiClient.get(`${BASE_URL}/csr/audits/${submissionId}/disputable`);
     return response.data.disputable;
   } catch (error) {
-    console.error('Error checking if audit is disputable:', error);
+    logError('csrService', 'Error checking if audit is disputable:', error);
     throw error;
   }
 };
@@ -189,7 +190,7 @@ export const fetchDisputeHistory = async (
     const response = await apiClient.get(`${BASE_URL}/disputes/history`, { params });
     return response.data;
   } catch (error) {
-    console.error('Error fetching dispute history:', error);
+    logError('csrService', 'Error fetching dispute history:', error);
     throw error;
   }
 };
@@ -202,7 +203,7 @@ export const getDisputeDetails = async (disputeId: number): Promise<CSRDispute> 
     const response = await apiClient.get(`${BASE_URL}/disputes/${disputeId}`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching dispute details:', error);
+    logError('csrService', 'Error fetching dispute details:', error);
     throw error;
   }
 };
@@ -214,7 +215,7 @@ export const updateDispute = async (disputeId: number, disputeData: FormData): P
     const response = await apiClient.put(`${BASE_URL}/disputes/${disputeId}`, disputeData);
     return response.data;
   } catch (error) {
-    console.error('Error updating dispute:', error);
+    logError('csrService', 'Error updating dispute:', error);
     throw error;
   }
 }; 

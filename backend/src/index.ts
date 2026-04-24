@@ -41,6 +41,7 @@ import rawDataRoutes from './routes/rawData.routes';
 import insightsRoutes from './routes/insights.routes';
 import insightsAdminRoutes from './routes/insightsAdmin.routes';
 import onDemandReportsRoutes from './routes/onDemandReports.routes';
+import logger from './config/logger';
 
 
 function normalizePort(val: string | number): string | number | false {
@@ -193,25 +194,25 @@ app.use(errorHandler);
 const port = normalizePort(process.env.PORT || '3000');
 const server = app.listen(port, () => {
   //appLogger.startup(port);
-  console.log(`🚀 QTIP API v${config.APP_VERSION} running on port ${port}`);
-  console.log(`📖 API Documentation: http://localhost:${port}/api-docs`);
-  console.log(`💚 Health Check: http://localhost:${port}/health`);
-  console.log(`📊 Metrics: http://localhost:${port}/metrics`);
+  logger.info(`🚀 QTIP API v${config.APP_VERSION} running on port ${port}`);
+  logger.info(`📖 API Documentation: http://localhost:${port}/api-docs`);
+  logger.info(`💚 Health Check: http://localhost:${port}/health`);
+  logger.info(`📊 Metrics: http://localhost:${port}/metrics`);
 });
 
 // Graceful shutdown handling
 const gracefulShutdown = (signal: string) => {
   appLogger.shutdown(`Received ${signal}`);
-  console.log(`\n🔄 Received ${signal}. Graceful shutdown...`);
+  logger.info(`\n🔄 Received ${signal}. Graceful shutdown...`);
   
   server.close(() => {
-    console.log('✅ HTTP server closed.');
+    logger.info('✅ HTTP server closed.');
     process.exit(0);
   });
 
   // Force close after 30 seconds
   setTimeout(() => {
-    console.error('❌ Could not close connections in time, forcefully shutting down');
+    logger.error('❌ Could not close connections in time, forcefully shutting down');
     process.exit(1);
   }, 30000);
 };
@@ -223,7 +224,7 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err: Error) => {
   appLogger.error(err, 'Unhandled Promise Rejection');
-  console.error('💥 Unhandled Promise Rejection:', err);
+  logger.error('💥 Unhandled Promise Rejection:', err);
   
   if (config.NODE_ENV === 'production') {
     // In production, don't crash on unhandled rejections, just log them
@@ -237,7 +238,7 @@ process.on('unhandledRejection', (err: Error) => {
 // Handle uncaught exceptions
 process.on('uncaughtException', (err: Error) => {
   appLogger.error(err, 'Uncaught Exception');
-  console.error('💥 Uncaught Exception:', err);
+  logger.error('💥 Uncaught Exception:', err);
   
   // Always exit on uncaught exceptions
   process.exit(1);

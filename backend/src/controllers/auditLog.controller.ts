@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { AuditLogFilters, AuditLogWithDetails } from '../types/auditLog.types';
+import logger from '../config/logger';
 
 /**
  * Get audit logs with pagination and optional filtering
@@ -92,7 +93,7 @@ export const getAuditLogs = async (req: Request, res: Response): Promise<void> =
       pagination: { total, page, limit, totalPages }
     });
   } catch (error) {
-    console.error('Error retrieving audit logs:', error);
+    logger.error('Error retrieving audit logs:', error);
     res.status(500).json({ message: 'Failed to retrieve audit logs' });
   }
 };
@@ -153,7 +154,7 @@ export const getAuditLogById = async (req: Request, res: Response): Promise<void
 
     res.status(200).json({ log: rows[0] as AuditLogWithDetails });
   } catch (error) {
-    console.error('Error retrieving audit log:', error);
+    logger.error('Error retrieving audit log:', error);
     res.status(500).json({ message: 'Failed to retrieve audit log' });
   }
 };

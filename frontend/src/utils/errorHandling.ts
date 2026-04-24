@@ -28,7 +28,10 @@ export function isAuthenticationStatus(status: number): boolean {
  * Use this for fetch() API calls that bypass axios interceptors
  */
 export function handleAuthenticationFailure(): void {
-  console.log('Session expired - redirecting to login');
+  if (!import.meta.env.PROD) {
+    // eslint-disable-next-line no-console
+    console.info('[auth] Session expired - redirecting to login');
+  }
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   localStorage.removeItem('refreshToken');
@@ -43,11 +46,14 @@ export function handleAuthenticationFailure(): void {
  */
 export function handleErrorIfAuthentication(error: any): boolean {
   if (isAuthenticationError(error)) {
-    console.log('Session expired - axios interceptor will handle redirect to login');
+    if (!import.meta.env.PROD) {
+      // eslint-disable-next-line no-console
+      console.info('[auth] Session expired - axios interceptor will handle redirect to login');
+    }
     // Don't set error messages, let the axios interceptor handle cleanup and redirect
-    return true; // Indicate that the error was handled
+    return true;
   }
-  return false; // Caller should handle this error
+  return false;
 }
 
 /**
@@ -91,5 +97,38 @@ export function getErrorMessage(error: any, defaultMessage: string = 'An error o
  */
 export function hasErrorResponse(error: any): error is { response: { status: number; data: any } } {
   return error && typeof error === 'object' && 'response' in error;
+}
+
+/**
+ * Centralized client-side error logger.
+ *
+ * In development: writes to the browser console (preserves stack traces and
+ * lets devs inspect error objects).
+ *
+ * In production: silently no-ops. Bare `console.error` calls in services were
+ * leaking stack traces and request payloads to end users' browser consoles
+ * (pre-production review item #67). Route everything through this helper so
+ * we have a single point to wire up an external logger (Sentry, Datadog RUM)
+ * later if desired.
+ *
+ * @param scope - Short identifier for the call site (e.g. "csrService").
+ * @param args  - Anything you would have passed to console.error.
+ */
+export function logError(scope: string, ...args: unknown[]): void {
+  if (import.meta.env.PROD) return;
+  // eslint-disable-next-line no-console
+  console.error(`[${scope}]`, ...args);
+}
+
+/**
+ * Centralized client-side warning logger. Same prod-no-op behavior as logError.
+ *
+ * @param scope - Short identifier for the call site.
+ * @param args  - Anything you would have passed to console.warn.
+ */
+export function logWarn(scope: string, ...args: unknown[]): void {
+  if (import.meta.env.PROD) return;
+  // eslint-disable-next-line no-console
+  console.warn(`[${scope}]`, ...args);
 }
 

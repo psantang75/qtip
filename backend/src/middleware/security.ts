@@ -2,6 +2,7 @@
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { config } from '../config/environment';
+import logger from '../config/logger';
 
 /**
  * Security headers middleware using helmet
@@ -191,7 +192,7 @@ export const corsConfig = {
     if (config.ALLOWED_ORIGINS.includes(origin)) {
       callback(null, true);
     } else {
-      console.warn(`[SECURITY] CORS blocked request from origin: ${origin}`);
+      logger.warn(`[SECURITY] CORS blocked request from origin: ${origin}`);
       callback(new Error('Not allowed by CORS'), false);
     }
   },

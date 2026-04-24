@@ -106,7 +106,7 @@ function qcHandler(
         res.status(400).json({ error: err.message })
         return
       }
-      console.error(`insightsQC [${label}] error:`, err)
+      logger.error(`insightsQC [${label}] error:`, err)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -213,7 +213,7 @@ export const getFilterOptions = async (req: Request, res: Response): Promise<voi
     const data = await qcData.getFilterOptions(deptFilter, formNames, ranges)
     res.json(data)
   } catch (err) {
-    console.error('insightsQC [filter-options] error:', err)
+    logger.error('insightsQC [filter-options] error:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 }
@@ -352,3 +352,5 @@ export const getPolicyViolations = qcHandler('qc_warnings', (deptFilter, ranges)
 export const getWarningsDeptComparison = qcHandler('qc_warnings', (_deptFilter, ranges) =>
   qcData.getWarningsDeptComparison(ranges),
 )
+
+import logger from '../config/logger';

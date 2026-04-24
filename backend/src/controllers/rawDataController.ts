@@ -6,6 +6,7 @@ import {
   exportRawData,
   VALID_TABLES,
 } from '../services/rawDataService';
+import logger from '../config/logger';
 
 function getRequestingUser(req: Request) {
   const user = req.user;
@@ -28,7 +29,7 @@ export const getTablesHandler = async (req: Request, res: Response): Promise<voi
     const tables = await getAvailableTables(userRole);
     res.status(200).json({ data: tables });
   } catch (error: any) {
-    console.error('[RAW DATA CONTROLLER] getTables error:', error);
+    logger.error('[RAW DATA CONTROLLER] getTables error:', error);
     res.status(500).json({ message: error?.message || 'Failed to fetch tables' });
   }
 };
@@ -44,7 +45,7 @@ export const getSchemaHandler = async (req: Request, res: Response): Promise<voi
     const schema = getTableSchema(tableName);
     res.status(200).json({ data: { table: tableName, columns: schema } });
   } catch (error: any) {
-    console.error('[RAW DATA CONTROLLER] getSchema error:', error);
+    logger.error('[RAW DATA CONTROLLER] getSchema error:', error);
     res.status(500).json({ message: error?.message || 'Failed to fetch schema' });
   }
 };
@@ -94,7 +95,7 @@ export const queryDataHandler = async (req: Request, res: Response): Promise<voi
       total_pages: Math.ceil(result.total / safeLimit),
     });
   } catch (error: any) {
-    console.error('[RAW DATA CONTROLLER] queryData error:', error);
+    logger.error('[RAW DATA CONTROLLER] queryData error:', error);
     res.status(500).json({ message: error?.message || 'Query failed' });
   }
 };
@@ -128,7 +129,7 @@ export const exportDataHandler = async (req: Request, res: Response): Promise<vo
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.send(buffer);
   } catch (error: any) {
-    console.error('[RAW DATA CONTROLLER] exportData error:', error);
+    logger.error('[RAW DATA CONTROLLER] exportData error:', error);
     res.status(500).json({ message: error?.message || 'Export failed' });
   }
 };

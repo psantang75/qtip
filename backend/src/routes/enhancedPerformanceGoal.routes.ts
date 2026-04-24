@@ -10,6 +10,7 @@ import {
   type GoalScope,
   type target_scope,
 } from '../types/performanceGoal.types';
+import logger from '../config/logger';
 
 const router = express.Router();
 const performanceGoalService = new EnhancedPerformanceGoalService();
@@ -55,7 +56,7 @@ router.get('/', auth, async (req: Request, res: Response): Promise<void> => {
     const result = await performanceGoalService.getPerformanceGoals(page, pageSize, filters);
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error getting goals:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error getting goals:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
@@ -75,7 +76,7 @@ router.post('/', auth, adminOnly, async (req: Request, res: Response): Promise<v
     const result = await performanceGoalService.createPerformanceGoal(goalData, req.user!.user_id);
     res.status(201).json(result);
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error creating goal:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error creating goal:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
@@ -98,7 +99,7 @@ router.get('/user/:user_id/active', auth, async (req: Request, res: Response): P
     const result = await performanceGoalService.getActiveGoalsForUser(user_id, asOfDate);
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error getting user goals:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error getting user goals:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
@@ -117,7 +118,7 @@ router.get('/options/forms', auth, adminOnly, async (_req: Request, res: Respons
     const result = await performanceGoalService.getFormOptions();
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error getting form options:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error getting form options:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
@@ -137,7 +138,7 @@ router.get('/options/users', auth, adminOnly, async (req: Request, res: Response
     const result = await performanceGoalService.getUsersForAssignment(department_id);
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error getting users for assignment:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error getting users for assignment:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
@@ -156,7 +157,7 @@ router.get('/options/departments', auth, adminOnly, async (_req: Request, res: R
     const result = await performanceGoalService.getDepartmentsForAssignment();
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error getting departments for assignment:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error getting departments for assignment:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
@@ -176,7 +177,7 @@ router.post('/reports/performance', auth, async (req: Request, res: Response): P
     const result = await performanceGoalService.calculatePerformanceReport(filters);
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error calculating performance report:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error calculating performance report:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
@@ -198,7 +199,7 @@ router.get('/:id', auth, async (req: Request, res: Response): Promise<void> => {
     const result = await performanceGoalService.getPerformanceGoalById(id);
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error getting goal by ID:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error getting goal by ID:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
@@ -219,7 +220,7 @@ router.put('/:id', auth, adminOnly, async (req: Request, res: Response): Promise
     const result = await performanceGoalService.updatePerformanceGoal(id, updates, req.user!.user_id);
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error updating goal:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error updating goal:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
@@ -239,7 +240,7 @@ router.delete('/:id', auth, adminOnly, async (req: Request, res: Response): Prom
     await performanceGoalService.deletePerformanceGoal(id, req.user!.user_id);
     res.status(200).json({ message: 'Performance goal deleted successfully' });
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error deleting goal:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error deleting goal:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
@@ -259,7 +260,7 @@ router.post('/:id/activate', auth, adminOnly, async (req: Request, res: Response
     await performanceGoalService.activatePerformanceGoal(id, req.user!.user_id);
     res.status(200).json({ message: 'Performance goal activated successfully' });
   } catch (error: any) {
-    console.error('[ENHANCED PERF GOAL ROUTES] Error activating goal:', error);
+    logger.error('[ENHANCED PERF GOAL ROUTES] Error activating goal:', error);
     if (error instanceof PerformanceGoalServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {

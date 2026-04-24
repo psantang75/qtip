@@ -13,6 +13,7 @@ import {
   CategoryOption,
   QuestionOption
 } from '../types/performanceGoal.types';
+import logger from '../config/logger';
 
 /**
  * Enhanced MySQL Performance Goal Repository
@@ -25,7 +26,7 @@ export class EnhancedPerformanceGoalRepository {
    */
   async create(goalData: CreatePerformanceGoalData, created_by: number): Promise<EnhancedPerformanceGoal> {
     try {
-      console.log('[ENHANCED PERF GOAL REPO] Creating goal with data:', {
+      logger.info('[ENHANCED PERF GOAL REPO] Creating goal with data:', {
         ...goalData,
         user_ids: goalData.user_ids || [],
         department_ids: goalData.department_ids || []
@@ -50,10 +51,10 @@ export class EnhancedPerformanceGoalRepository {
           select: { id: true }
         });
 
-        console.log('[ENHANCED PERF GOAL REPO] Created goal with ID:', goal.id);
+        logger.info('[ENHANCED PERF GOAL REPO] Created goal with ID:', goal.id);
 
         if (goalData.user_ids && goalData.user_ids.length > 0) {
-          console.log('[ENHANCED PERF GOAL REPO] Creating user assignments for:', goalData.user_ids);
+          logger.info('[ENHANCED PERF GOAL REPO] Creating user assignments for:', goalData.user_ids);
           await tx.performanceGoalUser.createMany({
             data: goalData.user_ids.map(user_id => ({
               goal_id: goal.id,
@@ -61,11 +62,11 @@ export class EnhancedPerformanceGoalRepository {
               assigned_by: created_by
             }))
           });
-          console.log('[ENHANCED PERF GOAL REPO] User assignments created');
+          logger.info('[ENHANCED PERF GOAL REPO] User assignments created');
         }
 
         if (goalData.department_ids && goalData.department_ids.length > 0) {
-          console.log('[ENHANCED PERF GOAL REPO] Creating department assignments for:', goalData.department_ids);
+          logger.info('[ENHANCED PERF GOAL REPO] Creating department assignments for:', goalData.department_ids);
           await tx.performanceGoalDepartment.createMany({
             data: goalData.department_ids.map(deptId => ({
               goal_id: goal.id,
@@ -73,20 +74,20 @@ export class EnhancedPerformanceGoalRepository {
               assigned_by: created_by
             }))
           });
-          console.log('[ENHANCED PERF GOAL REPO] Department assignments created');
+          logger.info('[ENHANCED PERF GOAL REPO] Department assignments created');
         }
 
         return goal.id;
       });
 
-      console.log('[ENHANCED PERF GOAL REPO] Transaction committed successfully');
+      logger.info('[ENHANCED PERF GOAL REPO] Transaction committed successfully');
 
       const createdGoal = await this.findById(goal_id);
       if (!createdGoal) {
         throw new PerformanceGoalServiceError('Failed to retrieve created goal', 'CREATE_ERROR', 500);
       }
 
-      console.log('[ENHANCED PERF GOAL REPO] Retrieved created goal:', {
+      logger.info('[ENHANCED PERF GOAL REPO] Retrieved created goal:', {
         id: createdGoal.id,
         assigned_users: createdGoal.assigned_users?.length || 0,
         assigned_departments: createdGoal.assigned_departments?.length || 0
@@ -102,7 +103,7 @@ export class EnhancedPerformanceGoalRepository {
    * Find goal by ID with all related data
    */
   async findById(id: number): Promise<EnhancedPerformanceGoal | null> {
-    console.log('[ENHANCED PERF GOAL REPO] Finding goal by ID:', id);
+    logger.info('[ENHANCED PERF GOAL REPO] Finding goal by ID:', id);
 
     const goalRows = await prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT 
@@ -118,12 +119,12 @@ export class EnhancedPerformanceGoalRepository {
     `);
 
     if (goalRows.length === 0) {
-      console.log('[ENHANCED PERF GOAL REPO] Goal not found:', id);
+      logger.info('[ENHANCED PERF GOAL REPO] Goal not found:', id);
       return null;
     }
 
     const goal = goalRows[0] as EnhancedPerformanceGoal;
-    console.log('[ENHANCED PERF GOAL REPO] Found goal:', { id: goal.id, scope: goal.scope });
+    logger.info('[ENHANCED PERF GOAL REPO] Found goal:', { id: goal.id, scope: goal.scope });
 
     const userRows = await prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT pgu.*, u.username as user_name, u.email as user_email
@@ -132,7 +133,7 @@ export class EnhancedPerformanceGoalRepository {
       WHERE pgu.goal_id = ${id} AND pgu.is_active = 1
     `);
     goal.assigned_users = userRows as PerformanceGoalUser[];
-    console.log('[ENHANCED PERF GOAL REPO] Found assigned users:', userRows.length);
+    logger.info('[ENHANCED PERF GOAL REPO] Found assigned users:', userRows.length);
 
     const deptRows = await prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT pgd.*, d.department_name
@@ -141,7 +142,7 @@ export class EnhancedPerformanceGoalRepository {
       WHERE pgd.goal_id = ${id} AND pgd.is_active = 1
     `);
     goal.assigned_departments = deptRows as PerformanceGoalDepartment[];
-    console.log('[ENHANCED PERF GOAL REPO] Found assigned departments:', deptRows.length);
+    logger.info('[ENHANCED PERF GOAL REPO] Found assigned departments:', deptRows.length);
 
     return goal;
   }
@@ -156,7 +157,7 @@ export class EnhancedPerformanceGoalRepository {
     filters?: PerformanceGoalFilters
   ): Promise<PaginatedPerformanceGoalResponse> {
     try {
-      console.log('[ENHANCED PERF GOAL REPO] Finding goals with filters:', filters);
+      logger.info('[ENHANCED PERF GOAL REPO] Finding goals with filters:', filters);
 
       const offset = (page - 1) * pageSize;
       const conditions: Prisma.Sql[] = [];
@@ -188,7 +189,7 @@ export class EnhancedPerformanceGoalRepository {
         ? Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`
         : Prisma.sql``;
 
-      console.log('[ENHANCED PERF GOAL REPO] Built WHERE conditions:', conditions.length);
+      logger.info('[ENHANCED PERF GOAL REPO] Built WHERE conditions:', conditions.length);
 
       const countResult = await prisma.$queryRaw<[{ total: bigint }]>(Prisma.sql`
         SELECT COUNT(*) as total
@@ -231,7 +232,7 @@ export class EnhancedPerformanceGoalRepository {
         LIMIT ${pageSize} OFFSET ${offset}
       `);
 
-      console.log(`[ENHANCED PERF GOAL REPO] Found ${goalRows.length} goals out of ${total} total`);
+      logger.info(`[ENHANCED PERF GOAL REPO] Found ${goalRows.length} goals out of ${total} total`);
 
       const enhancedGoals: EnhancedPerformanceGoal[] = goalRows.map((row: any) => ({
         id: row.id,
@@ -266,7 +267,7 @@ export class EnhancedPerformanceGoalRepository {
         pageSize
       };
     } catch (error) {
-      console.error('[ENHANCED PERF GOAL REPO] Error in findAll:', error);
+      logger.error('[ENHANCED PERF GOAL REPO] Error in findAll:', error);
       throw new PerformanceGoalServiceError('Database error while fetching performance goals', 'DATABASE_ERROR', 500);
     }
   }

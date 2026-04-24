@@ -9,6 +9,7 @@ import { config, isDevelopment, isProduction } from './environment';
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.errors({ stack: true }),
+  winston.format.splat(),
   winston.format.json(),
   winston.format.printf(({ timestamp, level, message, service, user_id, ip, method, url, statusCode, duration, stack, ...meta }) => {
     const logObject: any = {
@@ -39,6 +40,7 @@ const logFormat = winston.format.combine(
 const devFormat = winston.format.combine(
   winston.format.colorize(),
   winston.format.timestamp({ format: 'HH:mm:ss' }),
+  winston.format.splat(),
   winston.format.printf(({ timestamp, level, message, service, user_id, method, url, statusCode, duration, ...meta }) => {
     let logMessage = `${timestamp} [${level}] ${service || 'QTIP'}: ${message}`;
     

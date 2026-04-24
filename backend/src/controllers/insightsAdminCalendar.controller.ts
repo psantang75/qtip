@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { getCalendarMonth, upsertCalendarDay, saveMonthDefaults, type BusinessDayType } from '../services/calendarAdminService';
 import { getBusinessDaySummary } from '../utils/businessCalendar';
+import logger from '../config/logger';
 
 const VALID_DAY_TYPES = new Set(['WORKDAY', 'WEEKEND', 'HOLIDAY', 'CLOSURE', 'ADJUSTMENT']);
 
@@ -21,7 +22,7 @@ export const getCalendar = async (req: Request, res: Response): Promise<void> =>
     ]);
     res.json({ days, summary });
   } catch (error) {
-    console.error('getCalendar error:', error);
+    logger.error('getCalendar error:', error);
     res.status(500).json({ error: 'Failed to load calendar' });
   }
 };
@@ -45,7 +46,7 @@ export const updateCalendarDay = async (req: Request, res: Response): Promise<vo
     await upsertCalendarDay(date, day_type as BusinessDayType, note ?? null);
     res.json({ date, day_type, note: note ?? null });
   } catch (error) {
-    console.error('updateCalendarDay error:', error);
+    logger.error('updateCalendarDay error:', error);
     res.status(500).json({ error: 'Failed to update calendar day' });
   }
 };
@@ -66,7 +67,7 @@ export const saveCalendarMonth = async (req: Request, res: Response): Promise<vo
     const summary = await getBusinessDaySummary(year, month);
     res.json({ year, month, daysCreated: created, summary });
   } catch (error) {
-    console.error('saveCalendarMonth error:', error);
+    logger.error('saveCalendarMonth error:', error);
     res.status(500).json({ error: 'Failed to save month defaults' });
   }
 };

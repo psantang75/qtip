@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
+import logger from '../config/logger';
 
 interface AuthReq extends Request { user?: { user_id: number; role: string } }
 
@@ -21,7 +22,7 @@ export const getListItems = async (req: Request, res: Response) => {
 
     res.json({ success: true, data: items.map(i => ({ ...i, is_active: Boolean(i.is_active) })) });
   } catch (error) {
-    console.error('[LIST] getListItems error:', error);
+    logger.error('[LIST] getListItems error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -60,7 +61,7 @@ export const createListItem = async (req: AuthReq, res: Response) => {
 
     res.status(201).json({ success: true, data: { ...newItem, is_active: true } });
   } catch (error) {
-    console.error('[LIST] createListItem error:', error);
+    logger.error('[LIST] createListItem error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -85,7 +86,7 @@ export const updateListItem = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, data: { ...updated, is_active: Boolean(updated?.is_active) } });
   } catch (error) {
-    console.error('[LIST] updateListItem error:', error);
+    logger.error('[LIST] updateListItem error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -103,7 +104,7 @@ export const toggleListItemStatus = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, data: { ...item, is_active: Boolean(item?.is_active) } });
   } catch (error) {
-    console.error('[LIST] toggleListItemStatus error:', error);
+    logger.error('[LIST] toggleListItemStatus error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -116,7 +117,7 @@ export const deleteListItem = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('[LIST] deleteListItem error:', error);
+    logger.error('[LIST] deleteListItem error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -136,7 +137,7 @@ export const reorderListItems = async (req: AuthReq, res: Response) => {
     });
     res.json({ success: true });
   } catch (error) {
-    console.error('[LIST] reorderListItems error:', error);
+    logger.error('[LIST] reorderListItems error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

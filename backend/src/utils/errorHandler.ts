@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
-import logger from '../config/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { UserServiceError } from '../services/UserService';
 import { QueryTimeoutError } from './queryTimeout';
+import logger from '../config/logger';
 
 /**
  * Canonical error-handling module for the API.

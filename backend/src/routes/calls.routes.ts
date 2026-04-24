@@ -4,6 +4,7 @@ import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { Call } from '../models/Call';
 import phoneSystemService from '../services/PhoneSystemService';
+import logger from '../config/logger';
 
 const router = express.Router();
 
@@ -26,16 +27,16 @@ router.get('/search', async (req: Request, res: Response) => {
 
     // If searching by external_id (conversation ID), first verify it exists in PhoneSystem
     if (external_id) {
-      console.log(`[CALLS ROUTE] Searching for conversation ID: ${external_id}`);
+      logger.info(`[CALLS ROUTE] Searching for conversation ID: ${external_id}`);
       
       const phoneSystemData = await phoneSystemService.getAudioAndTranscriptByConversationId(external_id as string);
       
       if (!phoneSystemData.audio && (!phoneSystemData.transcript || phoneSystemData.transcript.length === 0)) {
-        console.log(`[CALLS ROUTE] Conversation ID ${external_id} not found in PhoneSystem`);
+        logger.info(`[CALLS ROUTE] Conversation ID ${external_id} not found in PhoneSystem`);
         return res.json([]);
       }
       
-      console.log(`[CALLS ROUTE] Conversation ID ${external_id} found in PhoneSystem`);
+      logger.info(`[CALLS ROUTE] Conversation ID ${external_id} found in PhoneSystem`);
     }
 
     const conditions: Prisma.Sql[] = [];
@@ -96,7 +97,7 @@ router.get('/search', async (req: Request, res: Response) => {
       `
     );
 
-    console.log('[CALLS ROUTE] Search results from main DB:', rows);
+    logger.info('[CALLS ROUTE] Search results from main DB:', rows);
 
     const calls = rows.map(row => ({
       id: row.id,
@@ -113,7 +114,7 @@ router.get('/search', async (req: Request, res: Response) => {
 
     // If searching by external_id and no results in main DB, create a virtual call record
     if (external_id && calls.length === 0) {
-      console.log(`[CALLS ROUTE] Creating virtual call record for conversation ID: ${external_id}`);
+      logger.info(`[CALLS ROUTE] Creating virtual call record for conversation ID: ${external_id}`);
       
       const phoneSystemData = await phoneSystemService.getAudioAndTranscriptByConversationId(external_id as string);
       
@@ -139,7 +140,7 @@ router.get('/search', async (req: Request, res: Response) => {
                 }
                 return t.transcript;
               } catch (error) {
-                console.warn('[CALLS ROUTE] Failed to parse transcript JSON:', error);
+                logger.warn('[CALLS ROUTE] Failed to parse transcript JSON:', error);
                 return t.transcript;
               }
             }).join('\n\n---\n\n')
@@ -154,7 +155,7 @@ router.get('/search', async (req: Request, res: Response) => {
     res.json(calls);
 
   } catch (error) {
-    console.error('[CALLS ROUTE] Error searching calls:', error);
+    logger.error('[CALLS ROUTE] Error searching calls:', error);
     res.status(500).json({ 
       error: 'Failed to search calls',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -170,7 +171,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     // If it's a virtual call (negative ID), get from PhoneSystem
     if (parseInt(id) < 0) {
       const conversationId = id.substring(1);
-      console.log(`[CALLS ROUTE] Getting virtual call for conversation ID: ${conversationId}`);
+      logger.info(`[CALLS ROUTE] Getting virtual call for conversation ID: ${conversationId}`);
       
       const phoneSystemData = await phoneSystemService.getAudioAndTranscriptByConversationId(conversationId);
       
@@ -200,7 +201,7 @@ router.get('/:id', async (req: Request, res: Response) => {
                 }
                 return t.transcript;
               } catch (error) {
-                console.warn('[CALLS ROUTE] Failed to parse transcript JSON:', error);
+                logger.warn('[CALLS ROUTE] Failed to parse transcript JSON:', error);
                 return t.transcript;
               }
             }).join('\n\n---\n\n')
@@ -258,7 +259,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     res.json(transformedCall);
 
   } catch (error) {
-    console.error('[CALLS ROUTE] Error fetching call:', error);
+    logger.error('[CALLS ROUTE] Error fetching call:', error);
     res.status(500).json({ 
       error: 'Failed to fetch call',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -288,8 +289,8 @@ router.get('/debug/list', async (req: Request, res: Response) => {
 
     const phoneSystemRecordings = await phoneSystemService.getAllRecordings(10);
 
-    console.log('[CALLS ROUTE] Available calls from main DB:', rows);
-    console.log('[CALLS ROUTE] Available conversation IDs from PhoneSystem:', phoneSystemRecordings);
+    logger.info('[CALLS ROUTE] Available calls from main DB:', rows);
+    logger.info('[CALLS ROUTE] Available conversation IDs from PhoneSystem:', phoneSystemRecordings);
 
     res.json({
       message: 'Available calls in both databases',
@@ -304,7 +305,7 @@ router.get('/debug/list', async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error('[CALLS ROUTE] Error listing calls:', error);
+    logger.error('[CALLS ROUTE] Error listing calls:', error);
     res.status(500).json({ 
       error: 'Failed to list calls',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -317,7 +318,7 @@ router.get('/check-submission/:conversationId', async (req: Request, res: Respon
   try {
     const { conversationId } = req.params;
     
-    console.log(`[CALLS ROUTE] Checking if conversation ID ${conversationId} is used in any submission`);
+    logger.info(`[CALLS ROUTE] Checking if conversation ID ${conversationId} is used in any submission`);
     
     const rows = await prisma.$queryRaw<any[]>(
       Prisma.sql`
@@ -335,7 +336,7 @@ router.get('/check-submission/:conversationId', async (req: Request, res: Respon
       `
     );
     
-    console.log(`[CALLS ROUTE] Found ${rows.length} submissions using conversation ID ${conversationId}`);
+    logger.info(`[CALLS ROUTE] Found ${rows.length} submissions using conversation ID ${conversationId}`);
     
     if (rows.length > 0) {
       res.json({
@@ -355,7 +356,7 @@ router.get('/check-submission/:conversationId', async (req: Request, res: Respon
     }
     
   } catch (error) {
-    console.error('[CALLS ROUTE] Error checking conversation ID usage:', error);
+    logger.error('[CALLS ROUTE] Error checking conversation ID usage:', error);
     res.status(500).json({ 
       error: 'Failed to check conversation ID usage',
       message: error instanceof Error ? error.message : 'Unknown error'

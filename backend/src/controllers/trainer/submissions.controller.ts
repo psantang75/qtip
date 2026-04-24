@@ -41,7 +41,7 @@ export const getTrainerCompletedSubmissions = async (req: Request, res: Response
 
     res.status(200).json(result)
   } catch (error) {
-    console.error('[TRAINER] Error fetching completed submissions:', error)
+    logger.error('[TRAINER] Error fetching completed submissions:', error)
     trainerLogger.operationError('getCompletedSubmissions', error as Error, userId)
     res.status(500).json({
       message: 'Failed to fetch completed submissions',
@@ -87,3 +87,5 @@ export const getTrainerSubmissionDetails = async (req: Request, res: Response): 
     })
   }
 }
+
+import logger from '../../config/logger';

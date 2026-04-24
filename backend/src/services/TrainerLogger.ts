@@ -1,18 +1,16 @@
 /**
- * TrainerLogger - Comprehensive logging service for trainer operations
- * Provides structured logging, performance monitoring, and audit trails
+ * TrainerLogger - structured logging facade for trainer-domain operations.
+ *
+ * Delegates all output to the shared Winston logger (see config/logger.ts) so
+ * trainer logs land in the same daily-rotated transports as the rest of the
+ * app. Keeps an in-memory ring buffer of recent timing metrics for the
+ * monitoring dashboard.
+ *
+ * Pre-production review item #62b: previously emitted directly via
+ * console.log/warn/error.
  */
 
-interface LogEntry {
-  timestamp: string;
-  level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
-  operation: string;
-  trainerId?: number;
-  data?: any;
-  duration?: number;
-  error?: string;
-  stack?: string;
-}
+import logger from '../config/logger';
 
 interface PerformanceMetrics {
   operation: string;
@@ -22,10 +20,13 @@ interface PerformanceMetrics {
   success: boolean;
 }
 
+const SERVICE = 'TrainerService';
+const SLOW_OPERATION_MS = 2000;
+
 export class TrainerLogger {
   private static instance: TrainerLogger;
   private performanceMetrics: PerformanceMetrics[] = [];
-  private maxMetricsHistory = 1000;
+  private readonly maxMetricsHistory = 1000;
 
   static getInstance(): TrainerLogger {
     if (!TrainerLogger.instance) {
@@ -34,41 +35,21 @@ export class TrainerLogger {
     return TrainerLogger.instance;
   }
 
-  /**
-   * Log trainer operation with structured data
-   */
-  operation(operation: string, trainerId?: number, data?: any): void {
-    const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level: 'INFO',
-      operation,
-      trainerId,
-      data
-    };
-
-    console.log(`[TRAINER SERVICE] ${operation}:`, entry);
+  operation(operation: string, trainerId?: number, data?: unknown): void {
+    logger.info('Trainer operation', { service: SERVICE, operation, trainerId, data });
   }
 
-  /**
-   * Log trainer operation error with detailed context
-   */
-  operationError(operation: string, error: Error, trainerId?: number, data?: any): void {
-    const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level: 'ERROR',
+  operationError(operation: string, error: Error, trainerId?: number, data?: unknown): void {
+    logger.error('Trainer operation error', {
+      service: SERVICE,
       operation,
       trainerId,
       data,
       error: error.message,
-      stack: error.stack
-    };
-
-    console.error(`[TRAINER SERVICE ERROR] ${operation}:`, entry);
+      stack: error.stack,
+    });
   }
 
-  /**
-   * Log performance metrics for monitoring
-   */
   performance(operation: string, startTime: number, trainerId?: number, success: boolean = true): void {
     const duration = Date.now() - startTime;
     const metrics: PerformanceMetrics = {
@@ -76,62 +57,57 @@ export class TrainerLogger {
       duration,
       timestamp: new Date().toISOString(),
       trainerId,
-      success
+      success,
     };
 
-    // Add to metrics history
     this.performanceMetrics.push(metrics);
-    
-    // Keep only recent metrics
     if (this.performanceMetrics.length > this.maxMetricsHistory) {
       this.performanceMetrics = this.performanceMetrics.slice(-this.maxMetricsHistory);
     }
 
-    // Log slow operations (> 2 seconds)
-    if (duration > 2000) {
-      console.warn(`[TRAINER PERFORMANCE WARNING] Slow operation detected:`, metrics);
+    if (duration > SLOW_OPERATION_MS) {
+      logger.warn('Slow trainer operation', { service: SERVICE, ...metrics });
     } else {
-      console.log(`[TRAINER PERFORMANCE] ${operation}: ${duration}ms`);
+      logger.debug('Trainer operation timing', { service: SERVICE, operation, duration, trainerId });
     }
   }
 
-  /**
-   * Log security-related events
-   */
-  security(event: string, trainerId: number, details?: any): void {
-    const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level: 'WARN',
+  security(event: string, trainerId: number, details?: unknown): void {
+    logger.warn('Trainer security event', {
+      service: SERVICE,
       operation: `SECURITY_${event}`,
       trainerId,
-      data: details
-    };
-
-    console.warn(`[TRAINER SECURITY] ${event}:`, entry);
+      data: details,
+    });
   }
 
-  /**
-   * Log authentication events
-   */
-  auth(event: string, trainerId: number, success: boolean, details?: any): void {
-    const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level: success ? 'INFO' : 'WARN',
+  auth(event: string, trainerId: number, success: boolean, details?: unknown): void {
+    logger.log(success ? 'info' : 'warn', 'Trainer auth event', {
+      service: SERVICE,
       operation: `AUTH_${event}`,
       trainerId,
-      data: { success, ...details }
-    };
-
-    if (success) {
-      console.log(`[TRAINER AUTH] ${event}:`, entry);
-    } else {
-      console.warn(`[TRAINER AUTH FAILED] ${event}:`, entry);
-    }
+      data: { success, ...(details && typeof details === 'object' ? details : {}) },
+    });
   }
 
-  /**
-   * Get performance statistics for monitoring dashboard
-   */
+  coachingSession(event: string, sessionId: number, trainerId: number, data?: unknown): void {
+    logger.info('Trainer coaching event', {
+      service: SERVICE,
+      operation: `COACHING_${event}`,
+      trainerId,
+      data: { sessionId, ...(data && typeof data === 'object' ? data : {}) },
+    });
+  }
+
+  trainingAssignment(event: string, trainerId: number, data?: unknown): void {
+    logger.info('Trainer training assignment', {
+      service: SERVICE,
+      operation: `TRAINING_${event}`,
+      trainerId,
+      data,
+    });
+  }
+
   getPerformanceStats(): {
     totalOperations: number;
     avgDuration: number;
@@ -140,11 +116,10 @@ export class TrainerLogger {
     recentMetrics: PerformanceMetrics[];
   } {
     const total = this.performanceMetrics.length;
-    const avgDuration = total > 0 
+    const avgDuration = total > 0
       ? this.performanceMetrics.reduce((sum, m) => sum + m.duration, 0) / total
       : 0;
-    
-    const slowOperations = this.performanceMetrics.filter(m => m.duration > 2000).length;
+    const slowOperations = this.performanceMetrics.filter(m => m.duration > SLOW_OPERATION_MS).length;
     const failedOperations = this.performanceMetrics.filter(m => !m.success).length;
     const errorRate = total > 0 ? (failedOperations / total) * 100 : 0;
 
@@ -153,40 +128,9 @@ export class TrainerLogger {
       avgDuration: Math.round(avgDuration),
       slowOperations,
       errorRate: Math.round(errorRate * 100) / 100,
-      recentMetrics: this.performanceMetrics.slice(-10)
+      recentMetrics: this.performanceMetrics.slice(-10),
     };
-  }
-
-  /**
-   * Log coaching session specific events
-   */
-  coachingSession(event: string, sessionId: number, trainerId: number, data?: any): void {
-    const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level: 'INFO',
-      operation: `COACHING_${event}`,
-      trainerId,
-      data: { sessionId, ...data }
-    };
-
-    console.log(`[TRAINER COACHING] ${event}:`, entry);
-  }
-
-  /**
-   * Log training assignment events
-   */
-  trainingAssignment(event: string, trainerId: number, data?: any): void {
-    const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level: 'INFO',
-      operation: `TRAINING_${event}`,
-      trainerId,
-      data
-    };
-
-    console.log(`[TRAINER ASSIGNMENT] ${event}:`, entry);
   }
 }
 
-// Export singleton instance
-export const trainerLogger = TrainerLogger.getInstance(); 
+export const trainerLogger = TrainerLogger.getInstance();

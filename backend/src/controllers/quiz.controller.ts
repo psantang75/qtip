@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { applyAutoAdvance } from '../utils/coachingAutoAdvance';
+import logger from '../config/logger';
 
 interface AuthReq extends Request {
   user?: { user_id: number; role: string };
@@ -82,7 +83,7 @@ export const submitQuizAttempt = async (req: AuthReq, res: Response) => {
       data: { score, passed, pass_score: parseFloat(quiz.pass_score), attempt_number: attemptNumber, correct_answers: correctAnswers },
     });
   } catch (error) {
-    console.error('[QUIZ] submitQuizAttempt error:', error);
+    logger.error('[QUIZ] submitQuizAttempt error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -105,7 +106,7 @@ export const getMyAttempts = async (req: AuthReq, res: Response) => {
 
     res.json({ success: true, data: attempts });
   } catch (error) {
-    console.error('[QUIZ] getMyAttempts error:', error);
+    logger.error('[QUIZ] getMyAttempts error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

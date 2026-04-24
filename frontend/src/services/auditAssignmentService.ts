@@ -1,4 +1,5 @@
 import apiClient from './apiClient';
+import { logError } from '../utils/errorHandling';
 
 // Types for Audit Assignment Management
 export interface AuditAssignment {
@@ -60,7 +61,7 @@ const auditAssignmentService = {
       const response = await apiClient.get(url);
       return response.data;
     } catch (error) {
-      console.error('Error fetching audit assignments:', error);
+      logError('auditAssignmentService', 'Error fetching audit assignments:', error);
       throw error;
     }
   },
@@ -74,7 +75,7 @@ const auditAssignmentService = {
       const response = await apiClient.post('/audit-assignments', { assignments });
       return response.data;
     } catch (error) {
-      console.error('Error creating audit assignments:', error);
+      logError('auditAssignmentService', 'Error creating audit assignments:', error);
       throw error;
     }
   },
@@ -88,7 +89,7 @@ const auditAssignmentService = {
       const response = await apiClient.put(`/audit-assignments/${id}`, assignment);
       return response.data;
     } catch (error) {
-      console.error(`Error updating audit assignment ${id}:`, error);
+      logError('auditAssignmentService', `Error updating audit assignment ${id}:`, error);
       throw error;
     }
   },
@@ -101,7 +102,7 @@ const auditAssignmentService = {
       const response = await apiClient.delete(`/audit-assignments/${id}`);
       return response.data;
     } catch (error) {
-      console.error(`Error deactivating audit assignment ${id}:`, error);
+      logError('auditAssignmentService', `Error deactivating audit assignment ${id}:`, error);
       throw error;
     }
   }

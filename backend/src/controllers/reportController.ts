@@ -9,6 +9,7 @@ import {
   duplicateReport,
 } from '../services/reportService';
 import prisma from '../config/prisma';
+import logger from '../config/logger';
 
 function getUserContext(req: Request): { userId: number; userRole: string; departmentId: number | null } {
   const user = req.user;
@@ -36,7 +37,7 @@ export const getReportsHandler = async (req: Request, res: Response): Promise<vo
     const result = await getReports(userId, userRole, departmentId, { page, limit, search });
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('[REPORT CONTROLLER] getReports error:', error);
+    logger.error('[REPORT CONTROLLER] getReports error:', error);
     res.status(500).json({ message: error?.message || 'Failed to fetch reports' });
   }
 };
@@ -54,7 +55,7 @@ export const getNavReportsHandler = async (req: Request, res: Response): Promise
     const reports = await getNavReports(userId, userRole, departmentId);
     res.status(200).json({ data: reports });
   } catch (error: any) {
-    console.error('[REPORT CONTROLLER] getNavReports error:', error);
+    logger.error('[REPORT CONTROLLER] getNavReports error:', error);
     res.status(500).json({ message: error?.message || 'Failed to fetch nav reports' });
   }
 };
@@ -69,7 +70,7 @@ export const getReportByIdHandler = async (req: Request, res: Response): Promise
 
     res.status(200).json({ data: report });
   } catch (error: any) {
-    console.error('[REPORT CONTROLLER] getReportById error:', error);
+    logger.error('[REPORT CONTROLLER] getReportById error:', error);
     res.status(500).json({ message: error?.message || 'Failed to fetch report' });
   }
 };
@@ -87,7 +88,7 @@ export const createReportHandler = async (req: Request, res: Response): Promise<
     const report = await createReport(req.body, userId);
     res.status(201).json({ data: report });
   } catch (error: any) {
-    console.error('[REPORT CONTROLLER] createReport error:', error);
+    logger.error('[REPORT CONTROLLER] createReport error:', error);
     res.status(500).json({ message: error?.message || 'Failed to create report' });
   }
 };
@@ -100,7 +101,7 @@ export const updateReportHandler = async (req: Request, res: Response): Promise<
     const report = await updateReport(id, req.body);
     res.status(200).json({ data: report });
   } catch (error: any) {
-    console.error('[REPORT CONTROLLER] updateReport error:', error);
+    logger.error('[REPORT CONTROLLER] updateReport error:', error);
     if (error?.code === 'P2025') { res.status(404).json({ message: 'Report not found' }); return; }
     res.status(500).json({ message: error?.message || 'Failed to update report' });
   }
@@ -114,7 +115,7 @@ export const deleteReportHandler = async (req: Request, res: Response): Promise<
     await deleteReport(id);
     res.status(200).json({ message: 'Report deactivated', id });
   } catch (error: any) {
-    console.error('[REPORT CONTROLLER] deleteReport error:', error);
+    logger.error('[REPORT CONTROLLER] deleteReport error:', error);
     if (error?.code === 'P2025') { res.status(404).json({ message: 'Report not found' }); return; }
     res.status(500).json({ message: error?.message || 'Failed to delete report' });
   }
@@ -129,7 +130,7 @@ export const duplicateReportHandler = async (req: Request, res: Response): Promi
     const copy = await duplicateReport(id, userId);
     res.status(201).json({ data: copy });
   } catch (error: any) {
-    console.error('[REPORT CONTROLLER] duplicateReport error:', error);
+    logger.error('[REPORT CONTROLLER] duplicateReport error:', error);
     res.status(500).json({ message: error?.message || 'Failed to duplicate report' });
   }
 };

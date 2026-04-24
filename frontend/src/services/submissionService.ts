@@ -1,4 +1,5 @@
 import { api } from './authService';
+import { logError } from '../utils/errorHandling';
 
 // ── Submission payload + response types ──────────────────────────────────────
 // Mirrors backend `CreateSubmissionDTO` / `CreateSubmissionAnswerDTO` /
@@ -143,7 +144,7 @@ const submissionService = {
       const response = await api.get(`/submissions/assigned?page=${page}&limit=${limit}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching assigned audits:', error);
+      logError('submissionService', 'Error fetching assigned audits:', error);
       throw error;
     }
   },
@@ -155,7 +156,7 @@ const submissionService = {
       const response = await api.get(`/submissions/review/${callId}?formId=${formId}`);
       return response.data;
     } catch (error) {
-      console.error(`Error fetching call details for callId ${callId}:`, error);
+      logError('submissionService', `Error fetching call details for callId ${callId}:`, error);
       throw error;
     }
   },
@@ -167,20 +168,20 @@ const submissionService = {
       const response = await api.post<SubmissionResult>('/submissions', submissionData);
       return response.data;
     } catch (error: any) {
-      console.error('Error submitting audit:', error);
+      logError('submissionService', 'Error submitting audit:', error);
       
       // Pass through the full error response for better error handling
       if (error.response) {
         // The server responded with a status code outside the 2xx range
-        console.error('Server response:', error.response.data);
+        logError('submissionService', 'Server response:', error.response.data);
         throw error;
       } else if (error.request) {
         // The request was made but no response was received
-        console.error('No response received');
+        logError('submissionService', 'No response received');
         throw error;
       } else {
         // Something happened in setting up the request
-        console.error('Request setup error:', error.message);
+        logError('submissionService', 'Request setup error:', error.message);
         throw error;
       }
     }
@@ -193,7 +194,7 @@ const submissionService = {
       const response = await api.post<SubmissionResult>('/submissions/draft', submissionData);
       return response.data;
     } catch (error) {
-      console.error('Error saving draft:', error);
+      logError('submissionService', 'Error saving draft:', error);
       throw error;
     }
   },
@@ -208,7 +209,7 @@ const submissionService = {
       const response = await api.put<SubmissionResult>(`/submissions/${submissionId}`, updateData);
       return response.data;
     } catch (error) {
-      console.error('Error updating submission:', error);
+      logError('submissionService', 'Error updating submission:', error);
       throw error;
     }
   },
@@ -223,7 +224,7 @@ const submissionService = {
       const response = await api.post<SubmissionResult>(`/submissions/${submissionId}/snapshots`, snapshotData);
       return response.data;
     } catch (error) {
-      console.error('Error creating score snapshot:', error);
+      logError('submissionService', 'Error creating score snapshot:', error);
       throw error;
     }
   },
@@ -238,7 +239,7 @@ const submissionService = {
       const response = await api.put<SubmissionResult>(`/submissions/${submissionId}/finalize`, finalData);
       return response.data;
     } catch (error) {
-      console.error('Error finalizing submission:', error);
+      logError('submissionService', 'Error finalizing submission:', error);
       throw error;
     }
   },
@@ -250,7 +251,7 @@ const submissionService = {
       const response = await api.post<{ message?: string }>(`/submissions/${submissionId}/flag`, { reason });
       return response.data;
     } catch (error) {
-      console.error('Error flagging submission:', error);
+      logError('submissionService', 'Error flagging submission:', error);
       throw error;
     }
   },

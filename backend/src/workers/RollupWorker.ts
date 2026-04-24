@@ -1,6 +1,9 @@
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import { BaseInsightsWorker, WorkerResult } from './BaseInsightsWorker';
+import logger from '../config/logger';
+
+const SERVICE = 'RollupWorker';
 
 export class RollupWorker extends BaseInsightsWorker {
   constructor() {
@@ -15,7 +18,7 @@ export class RollupWorker extends BaseInsightsWorker {
     );
 
     if (kpiRows.length === 0) {
-      console.log('[aggregation-rollup] No active KPIs to aggregate.');
+      logger.info('No active KPIs to aggregate', { service: SERVICE });
       return { rowsExtracted: 0, rowsLoaded: 0, rowsSkipped: 0, rowsErrored: 0, batchIdentifier: 'no-kpis' };
     }
 
@@ -30,7 +33,7 @@ export class RollupWorker extends BaseInsightsWorker {
     }
 
     if (tablesFound === 0) {
-      console.log('[aggregation-rollup] KPIs reference tables that do not exist yet. Skipping.');
+      logger.info('KPIs reference tables that do not exist yet; skipping', { service: SERVICE });
       return {
         rowsExtracted: kpiRows.length,
         rowsLoaded: 0,
@@ -40,7 +43,7 @@ export class RollupWorker extends BaseInsightsWorker {
       };
     }
 
-    console.log(`[aggregation-rollup] Found ${tablesFound} source tables. Rollup logic will be added per section blueprint.`);
+    logger.info('KPI source tables ready', { service: SERVICE, tablesFound });
     return {
       rowsExtracted: kpiRows.length,
       rowsLoaded: 0,

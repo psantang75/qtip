@@ -68,7 +68,7 @@ export async function getActiveGoalsRepo(
       ${whereClause}
     `)
   } catch (error) {
-    console.error('Error fetching active goals:', error)
+    logger.error('Error fetching active goals:', error)
     throw new Error('Failed to fetch active goals')
   }
 }
@@ -95,7 +95,7 @@ export async function getAverageQAScoreRepo(
 
     return { averageScore: Number(rows[0]?.avg_score) || 0 }
   } catch (error) {
-    console.error('Error calculating average QA score:', error)
+    logger.error('Error calculating average QA score:', error)
     throw new Error('Failed to calculate average QA score')
   }
 }
@@ -125,7 +125,7 @@ export async function getAuditRateRepo(
     const qaCount = Number(rows[0]?.qa_count) || 1
     return { auditRate: auditCount / qaCount }
   } catch (error) {
-    console.error('Error calculating audit rate:', error)
+    logger.error('Error calculating audit rate:', error)
     throw new Error('Failed to calculate audit rate')
   }
 }
@@ -157,7 +157,9 @@ export async function getDisputeRateRepo(
     const disputeRate = auditCount > 0 ? (disputeCount / auditCount) * 100 : 0
     return { disputeRate }
   } catch (error) {
-    console.error('Error calculating dispute rate:', error)
+    logger.error('Error calculating dispute rate:', error)
     throw new Error('Failed to calculate dispute rate')
   }
 }
+
+import logger from '../../config/logger';

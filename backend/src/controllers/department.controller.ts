@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { DepartmentService, DepartmentServiceError } from '../services/DepartmentService';
 import { MySQLDepartmentRepository } from '../repositories/MySQLDepartmentRepository';
 import { getDescendantDepartmentIds } from '../utils/departmentHierarchy';
+import logger from '../config/logger';
 
 const departmentRepository = new MySQLDepartmentRepository();
 const departmentService = new DepartmentService(departmentRepository);
@@ -11,7 +12,7 @@ const departmentService = new DepartmentService(departmentRepository);
  * @route POST /api/departments
  */
 export const createDepartment = async (req: Request, res: Response) => {
-  console.log('[DEPT CONTROLLER] Creating new department');
+  logger.info('[DEPT CONTROLLER] Creating new department');
   
   try {
     const user_id = req.user?.user_id;
@@ -32,7 +33,7 @@ export const createDepartment = async (req: Request, res: Response) => {
       return res.status(error.statusCode).json({ message: error.message });
     }
     
-    console.error('[DEPT CONTROLLER] Error in department service:', error);
+    logger.error('[DEPT CONTROLLER] Error in department service:', error);
     res.status(500).json({ message: 'Failed to create department' });
   }
 };
@@ -42,7 +43,7 @@ export const createDepartment = async (req: Request, res: Response) => {
  * @route GET /api/departments
  */
 export const getDepartments = async (req: Request, res: Response) => {
-  console.log('[DEPT CONTROLLER] Getting departments');
+  logger.info('[DEPT CONTROLLER] Getting departments');
   
   try {
     const page = parseInt(req.query.page as string) || 1;
@@ -61,7 +62,7 @@ export const getDepartments = async (req: Request, res: Response) => {
       return res.status(error.statusCode).json({ message: error.message });
     }
     
-    console.error('[DEPT CONTROLLER] Error in department service:', error);
+    logger.error('[DEPT CONTROLLER] Error in department service:', error);
     res.status(500).json({ message: 'Failed to fetch departments' });
   }
 };
@@ -71,7 +72,7 @@ export const getDepartments = async (req: Request, res: Response) => {
  * @route GET /api/departments/:id
  */
 export const getDepartmentById = async (req: Request, res: Response) => {
-  console.log('[DEPT CONTROLLER] Getting department by ID');
+  logger.info('[DEPT CONTROLLER] Getting department by ID');
   
   try {
     const id = parseInt(req.params.id);
@@ -82,7 +83,7 @@ export const getDepartmentById = async (req: Request, res: Response) => {
       return res.status(error.statusCode).json({ message: error.message });
     }
     
-    console.error('[DEPT CONTROLLER] Error in department service:', error);
+    logger.error('[DEPT CONTROLLER] Error in department service:', error);
     res.status(500).json({ message: 'Failed to fetch department' });
   }
 };
@@ -92,7 +93,7 @@ export const getDepartmentById = async (req: Request, res: Response) => {
  * @route PUT /api/departments/:id
  */
 export const updateDepartment = async (req: Request, res: Response) => {
-  console.log('[DEPT CONTROLLER] Updating department');
+  logger.info('[DEPT CONTROLLER] Updating department');
   
   try {
     const user_id = req.user?.user_id;
@@ -126,7 +127,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
       return res.status(error.statusCode).json({ message: error.message });
     }
     
-    console.error('[DEPT CONTROLLER] Error in department service:', error);
+    logger.error('[DEPT CONTROLLER] Error in department service:', error);
     res.status(500).json({ message: 'Failed to update department' });
   }
 };
@@ -136,7 +137,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
  * @route PUT /api/departments/:id/status
  */
 export const toggleDepartmentStatus = async (req: Request, res: Response) => {
-  console.log('[DEPT CONTROLLER] Toggling department status');
+  logger.info('[DEPT CONTROLLER] Toggling department status');
   
   try {
     const user_id = req.user?.user_id;
@@ -154,7 +155,7 @@ export const toggleDepartmentStatus = async (req: Request, res: Response) => {
       return res.status(error.statusCode).json({ message: error.message });
     }
     
-    console.error('[DEPT CONTROLLER] Error in department service:', error);
+    logger.error('[DEPT CONTROLLER] Error in department service:', error);
     res.status(500).json({ message: 'Failed to toggle department status' });
   }
 };
@@ -164,7 +165,7 @@ export const toggleDepartmentStatus = async (req: Request, res: Response) => {
  * @route DELETE /api/departments/:id
  */
 export const deleteDepartment = async (req: Request, res: Response) => {
-  console.log('[DEPT CONTROLLER] Deleting department');
+  logger.info('[DEPT CONTROLLER] Deleting department');
   
   try {
     const user_id = req.user?.user_id;
@@ -180,7 +181,7 @@ export const deleteDepartment = async (req: Request, res: Response) => {
       return res.status(error.statusCode).json({ message: error.message });
     }
     
-    console.error('[DEPT CONTROLLER] Error in department service:', error);
+    logger.error('[DEPT CONTROLLER] Error in department service:', error);
     res.status(500).json({ message: 'Failed to delete department' });
   }
 };
@@ -190,7 +191,7 @@ export const deleteDepartment = async (req: Request, res: Response) => {
  * @route POST /api/departments/:id/users
  */
 export const assignUsers = async (req: Request, res: Response) => {
-  console.log('[DEPT CONTROLLER] Assigning users to department');
+  logger.info('[DEPT CONTROLLER] Assigning users to department');
   
   try {
     const user_id = req.user?.user_id;
@@ -208,7 +209,7 @@ export const assignUsers = async (req: Request, res: Response) => {
       return res.status(error.statusCode).json({ message: error.message });
     }
     
-    console.error('[DEPT CONTROLLER] Error in department service:', error);
+    logger.error('[DEPT CONTROLLER] Error in department service:', error);
     res.status(500).json({ message: 'Failed to assign users to department' });
   }
 };
@@ -218,7 +219,7 @@ export const assignUsers = async (req: Request, res: Response) => {
  * @route GET /api/departments/users/assignable
  */
 export const getAssignableUsers = async (req: Request, res: Response) => {
-  console.log('[DEPT CONTROLLER] Getting assignable users');
+  logger.info('[DEPT CONTROLLER] Getting assignable users');
   
   try {
     const users = await departmentService.getAssignableUsers();
@@ -228,7 +229,7 @@ export const getAssignableUsers = async (req: Request, res: Response) => {
       return res.status(error.statusCode).json({ message: error.message });
     }
     
-    console.error('[DEPT CONTROLLER] Error in department service:', error);
+    logger.error('[DEPT CONTROLLER] Error in department service:', error);
     res.status(500).json({ message: 'Failed to fetch assignable users' });
   }
 };
@@ -245,7 +246,7 @@ export const getDepartmentDescendants = async (req: Request, res: Response) => {
     const descendants = await getDescendantDepartmentIds(id);
     res.status(200).json(descendants);
   } catch (error) {
-    console.error('[DEPT CONTROLLER] Error getting descendants:', error);
+    logger.error('[DEPT CONTROLLER] Error getting descendants:', error);
     res.status(500).json({ message: 'Failed to get department descendants' });
   }
 }; 

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CSRService, CSRAuditFilters } from '../services/CSRService';
+import logger from '../config/logger';
 
 /**
  * CSR Audit Controller
@@ -45,7 +46,7 @@ export const getCSRAudits = async (req: Request, res: Response): Promise<void> =
 
     res.status(200).json(result);
   } catch (error) {
-    console.error('Error fetching CSR audits:', error);
+    logger.error('Error fetching CSR audits:', error);
     res.status(500).json({ message: 'Failed to fetch audits' });
   }
 };
@@ -59,7 +60,7 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
     const csr_id = req.user?.user_id;
     const auditId = parseInt(req.params.id);
     
-    console.log(`\n🚀 CSR AUDIT CONTROLLER: getCSRAuditDetails called for audit ${auditId} by CSR ${csr_id}`);
+    logger.info(`\n🚀 CSR AUDIT CONTROLLER: getCSRAuditDetails called for audit ${auditId} by CSR ${csr_id}`);
     
     if (!csr_id) {
       res.status(401).json({ message: 'Unauthorized' });
@@ -80,7 +81,7 @@ export const getCSRAuditDetails = async (req: Request, res: Response): Promise<v
 
     res.status(200).json(auditDetails);
   } catch (error) {
-    console.error('Error fetching audit details:', error);
+    logger.error('Error fetching audit details:', error);
     res.status(500).json({ message: 'Failed to fetch audit details' });
   }
 };
@@ -108,7 +109,7 @@ export const isAuditDisputable = async (req: Request, res: Response): Promise<vo
 
     res.status(200).json({ disputable });
   } catch (error) {
-    console.error('Error checking if audit is disputable:', error);
+    logger.error('Error checking if audit is disputable:', error);
     res.status(500).json({ message: 'Failed to check audit disputability' });
   }
 };
@@ -119,47 +120,47 @@ export const isAuditDisputable = async (req: Request, res: Response): Promise<vo
  */
 export const finalizeSubmission = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('[CSR AUDIT CONTROLLER] finalizeSubmission called');
-    console.log('[CSR AUDIT CONTROLLER] Request params:', req.params);
-    console.log('[CSR AUDIT CONTROLLER] Request body:', req.body);
-    console.log('[CSR AUDIT CONTROLLER] User:', req.user);
+    logger.info('[CSR AUDIT CONTROLLER] finalizeSubmission called');
+    logger.info('[CSR AUDIT CONTROLLER] Request params:', req.params);
+    logger.info('[CSR AUDIT CONTROLLER] Request body:', req.body);
+    logger.info('[CSR AUDIT CONTROLLER] User:', req.user);
     
     const csr_id = req.user?.user_id;
     const submission_id = parseInt(req.params.id);
     
-    console.log('[CSR AUDIT CONTROLLER] Parsed values:', { csr_id, submission_id });
+    logger.info('[CSR AUDIT CONTROLLER] Parsed values:', { csr_id, submission_id });
     
     if (!csr_id) {
-      console.log('[CSR AUDIT CONTROLLER] No CSR ID found');
+      logger.info('[CSR AUDIT CONTROLLER] No CSR ID found');
       res.status(401).json({ message: 'Unauthorized' });
       return;
     }
 
     if (isNaN(submission_id)) {
-      console.log('[CSR AUDIT CONTROLLER] Invalid submission ID:', req.params.id);
+      logger.info('[CSR AUDIT CONTROLLER] Invalid submission ID:', req.params.id);
       res.status(400).json({ message: 'Invalid submission ID' });
       return;
     }
 
-    console.log('[CSR AUDIT CONTROLLER] Calling CSRService.finalizeSubmission');
+    logger.info('[CSR AUDIT CONTROLLER] Calling CSRService.finalizeSubmission');
     const success = await CSRService.finalizeSubmission(submission_id, csr_id);
-    console.log('[CSR AUDIT CONTROLLER] CSRService.finalizeSubmission result:', success);
+    logger.info('[CSR AUDIT CONTROLLER] CSRService.finalizeSubmission result:', success);
 
     if (!success) {
-      console.log('[CSR AUDIT CONTROLLER] Finalization failed, returning 400');
+      logger.info('[CSR AUDIT CONTROLLER] Finalization failed, returning 400');
       res.status(400).json({ 
         message: 'Cannot finalize submission. It may not exist, not belong to you, or not be in the correct status.' 
       });
       return;
     }
 
-    console.log('[CSR AUDIT CONTROLLER] Finalization successful, returning 200');
+    logger.info('[CSR AUDIT CONTROLLER] Finalization successful, returning 200');
     res.status(200).json({ 
       message: 'Submission finalized successfully',
       success: true 
     });
   } catch (error) {
-    console.error('Error finalizing submission:', error);
+    logger.error('Error finalizing submission:', error);
     res.status(500).json({ message: 'Failed to finalize submission' });
   }
 }; 

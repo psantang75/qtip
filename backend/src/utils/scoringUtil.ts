@@ -22,6 +22,7 @@
  */
 
 import prisma from '../config/prisma';
+import logger from '../config/logger';
 
 interface Category {
   id: number;
@@ -403,7 +404,7 @@ export async function calculateFormScoreBySubmissionId(
       score_capped: result.score_capped,
     };
   } catch (error) {
-    console.error('Error calculating form score by submission ID:', error);
+    logger.error('Error calculating form score by submission ID:', error);
     throw error;
   }
 }
@@ -455,7 +456,7 @@ async function saveScoreData(
       }
     });
   } catch (error) {
-    console.error('Error saving score data:', error);
+    logger.error('Error saving score data:', error);
     throw error;
   }
 }
@@ -470,7 +471,7 @@ export const recalculateScores = async (
       const { total_score } = await calculateFormScoreBySubmissionId(null, submission_id);
       results[submission_id] = total_score;
     } catch (error) {
-      console.error(`Error recalculating score for submission ${submission_id}:`, error);
+      logger.error(`Error recalculating score for submission ${submission_id}:`, error);
       results[submission_id] = -1;
     }
   }
@@ -523,7 +524,7 @@ export const getScoreBreakdown = async (
 
     return { total_score: Number(snapshot.score), categoryBreakdown };
   } catch (error) {
-    console.error('Error getting score breakdown:', error);
+    logger.error('Error getting score breakdown:', error);
     throw error;
   }
 };

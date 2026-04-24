@@ -20,7 +20,7 @@ export const getFilterOptions = async (_req: Request, res: Response): Promise<vo
     const options = await svcGetFilterOptions()
     res.json(options)
   } catch (error) {
-    console.error('Error fetching filter options:', error)
+    logger.error('Error fetching filter options:', error)
     res.status(500).json({ error: 'Failed to fetch filter options' })
   }
 }
@@ -31,7 +31,9 @@ export const generateReport = async (req: Request, res: Response): Promise<void>
     const report  = await svcGenerateReport(filters)
     res.json(report)
   } catch (error) {
-    console.error('Error generating report:', error)
+    logger.error('Error generating report:', error)
     res.status(500).json({ error: 'Failed to generate report' })
   }
 }
+
+import logger from '../../config/logger';

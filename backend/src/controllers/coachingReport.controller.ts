@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { buildCoachingSessionScope } from '../services/coachingSessionsReport';
+import logger from '../config/logger';
 
 interface AuthReq extends Request {
   user?: { user_id: number; role: string };
@@ -116,7 +117,7 @@ export const getReportsSummary = async (req: AuthReq, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('[REPORT] getReportsSummary error:', error);
+    logger.error('[REPORT] getReportsSummary error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
@@ -211,7 +212,7 @@ export const getCSRCoachingList = async (req: AuthReq, res: Response) => {
 
     return res.json({ success: true, data: { csrs: data, totalCount: Number(countRows[0]?.total ?? 0), page, limit } });
   } catch (error) {
-    console.error('[REPORT] getCSRCoachingList error:', error);
+    logger.error('[REPORT] getCSRCoachingList error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

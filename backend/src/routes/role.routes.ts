@@ -1,6 +1,7 @@
 import express, { Request, Response, RequestHandler } from 'express';
 import prisma from '../config/prisma';
 import { authenticate } from '../middleware/auth';
+import logger from '../config/logger';
 
 const router = express.Router();
 
@@ -13,7 +14,7 @@ router.use(authenticate as unknown as RequestHandler);
  */
 const getRolesHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('[ROLE SERVICE] Getting all roles');
+    logger.info('[ROLE SERVICE] Getting all roles');
 
     const rows = await prisma.role.findMany({
       orderBy: { role_name: 'asc' },
@@ -29,10 +30,10 @@ const getRolesHandler = async (req: Request, res: Response): Promise<void> => {
       updated_at: null
     }));
 
-    console.log(`[ROLE SERVICE] Found ${roles.length} roles`);
+    logger.info(`[ROLE SERVICE] Found ${roles.length} roles`);
     res.status(200).json({ data: roles, total: roles.length });
   } catch (error) {
-    console.error('[ROLE SERVICE] Error fetching roles:', error);
+    logger.error('[ROLE SERVICE] Error fetching roles:', error);
     res.status(500).json({ 
       message: 'Failed to fetch roles',
       error: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error'
