@@ -94,7 +94,7 @@ export default function LibraryResourcesPage() {
   const [page,          setPage]          = useState(1)
   const [pageSize,     setPageSize]     = useState(20)
 
-  const { data: resData,   isLoading, isError, refetch } = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 5000 }) })
+  const { data: resData,   isLoading, isError, refetch } = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 1000 }) })
   const { data: topicsData }           = useQuery({ queryKey: ['list-items', 'training_topic'], queryFn: () => listService.getItems('training_topic') })
 
   const allResources = resData?.items ?? []

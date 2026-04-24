@@ -16,6 +16,13 @@ function mapQuiz(q: any) {
   };
 }
 
+// Hard server-side cap on a single quiz-library response. Keeps the
+// "fetch all then filter client-side" pattern the LibraryQuizzesPage uses
+// from being asked to materialize an unbounded set, while still leaving
+// plenty of room for the realistic catalog size.
+const QUIZ_LIBRARY_MAX_PAGE_SIZE = 1000;
+const QUIZ_LIBRARY_DEFAULT_PAGE_SIZE = 200;
+
 export const getQuizLibrary = async (req: AuthReq, res: Response) => {
   try {
     const { search, is_active } = req.query;
@@ -27,27 +34,48 @@ export const getQuizLibrary = async (req: AuthReq, res: Response) => {
 
     const whereClause = conditions.length ? Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}` : Prisma.sql``;
 
-    const quizzes = await prisma.$queryRaw<any[]>(
-      Prisma.sql`
-        SELECT q.id, q.quiz_title, q.pass_score, q.course_id, q.is_active,
-          (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id = q.id) as question_count,
-          (SELECT COUNT(*) FROM coaching_sessions cs WHERE cs.quiz_id = q.id) as times_used,
-          GROUP_CONCAT(DISTINCT qt.topic_id ORDER BY qt.topic_id) as topic_id_list,
-          GROUP_CONCAT(DISTINCT li.label ORDER BY li.label SEPARATOR '||') as topic_name_list
-        FROM quizzes q
-        LEFT JOIN quiz_topics qt ON q.id = qt.quiz_id
-        LEFT JOIN list_items li ON qt.topic_id = li.id
-        ${whereClause}
-        GROUP BY q.id
-        ORDER BY q.quiz_title ASC
-      `
-    );
+    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
+    const requested = parseInt(String(req.query.limit ?? req.query.pageSize ?? QUIZ_LIBRARY_DEFAULT_PAGE_SIZE), 10);
+    const limit = Math.min(QUIZ_LIBRARY_MAX_PAGE_SIZE, Math.max(1, isFinite(requested) ? requested : QUIZ_LIBRARY_DEFAULT_PAGE_SIZE));
+    const offset = (page - 1) * limit;
 
-    res.json({ success: true, data: quizzes.map(q => ({
+    // Count and page-fetch in parallel. The count query reuses the same
+    // WHERE clause so callers can drive a paginated UI without inventing
+    // a separate `total` endpoint.
+    const [totalRows, quizzes] = await Promise.all([
+      prisma.$queryRaw<Array<{ total: bigint | number }>>(
+        Prisma.sql`SELECT COUNT(DISTINCT q.id) as total FROM quizzes q ${whereClause}`,
+      ),
+      prisma.$queryRaw<any[]>(
+        Prisma.sql`
+          SELECT q.id, q.quiz_title, q.pass_score, q.course_id, q.is_active,
+            (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id = q.id) as question_count,
+            (SELECT COUNT(*) FROM coaching_sessions cs WHERE cs.quiz_id = q.id) as times_used,
+            GROUP_CONCAT(DISTINCT qt.topic_id ORDER BY qt.topic_id) as topic_id_list,
+            GROUP_CONCAT(DISTINCT li.label ORDER BY li.label SEPARATOR '||') as topic_name_list
+          FROM quizzes q
+          LEFT JOIN quiz_topics qt ON q.id = qt.quiz_id
+          LEFT JOIN list_items li ON qt.topic_id = li.id
+          ${whereClause}
+          GROUP BY q.id
+          ORDER BY q.quiz_title ASC
+          LIMIT ${limit} OFFSET ${offset}
+        `,
+      ),
+    ]);
+
+    const total = Number(totalRows[0]?.total ?? 0);
+    const data = quizzes.map(q => ({
       ...mapQuiz(q),
       topic_ids:   q.topic_id_list ? String(q.topic_id_list).split(',').map(Number) : [],
       topic_names: q.topic_name_list ? String(q.topic_name_list).split('||') : [],
-    }))});
+    }));
+
+    res.json({
+      success: true,
+      data,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     console.error('[QUIZ_LIB] getQuizLibrary error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });

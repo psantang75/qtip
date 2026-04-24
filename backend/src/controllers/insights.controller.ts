@@ -18,18 +18,26 @@ export const getInsightsNavigation = async (req: Request, res: Response): Promis
     const roleId = getInsightsRoleId(req.user.role);
     if (roleId === null) { res.status(403).json({ error: 'Unknown role' }); return; }
 
-    const [pages] = await pool.execute<RowDataPacket[]>(
-      'SELECT id, page_key, page_name, category, route_path, icon, sort_order FROM ie_page WHERE is_active = 1 ORDER BY category, sort_order'
-    );
+    // Resolve access for every active page in a single batched call (4
+    // queries total) instead of the N+1 loop the route used to run. See
+    // `InsightsPermissionService.resolveAccessForAllPages` for the
+    // batched query plan.
+    const [pages, accessMap] = await Promise.all([
+      pool.execute<RowDataPacket[]>(
+        'SELECT id, page_key, page_name, category, route_path, icon, sort_order FROM ie_page WHERE is_active = 1 ORDER BY category, sort_order',
+      ),
+      permissionService.resolveAccessForAllPages(userId, roleId),
+    ]);
+    const [pageRows] = pages;
 
     const accessible: Array<{
       page_key: string; page_name: string; category: string;
       route_path: string; icon: string | null; sort_order: number;
     }> = [];
 
-    for (const page of pages) {
-      const access = await permissionService.resolveAccess(userId, roleId, page.page_key);
-      if (access.canAccess) {
+    for (const page of pageRows) {
+      const access = accessMap.get(page.page_key as string);
+      if (access?.canAccess) {
         accessible.push({
           page_key: page.page_key,
           page_name: page.page_name,

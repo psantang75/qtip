@@ -1,9 +1,16 @@
 import mysql from 'mysql2/promise';
 import { databaseConfig, secondaryDatabaseConfig } from './environment';
+import { DB_SESSION_TIMEOUT_SECONDS } from '../utils/queryTimeout';
 
 /**
  * Primary database pool — used by controllers that have not yet been migrated to Prisma.
  * Repositories and new code should use Prisma (see ./prisma.ts) instead.
+ *
+ * Every new connection has a per-session statement timeout applied via
+ * `SET SESSION max_statement_time`. MariaDB takes the value as seconds
+ * (double), and any single SELECT that exceeds it gets killed by the
+ * engine (returning ER_STATEMENT_TIMEOUT). This is the engine-side
+ * counterpart to `withQueryTimeout()` in `utils/queryTimeout.ts`.
  */
 class DatabasePoolFactory {
   private static pools: Map<string, mysql.Pool> = new Map();
@@ -26,6 +33,23 @@ class DatabasePoolFactory {
         queueLimit: config.queueLimit ?? 0,
         charset: 'utf8mb4',
         typeCast: true,
+      });
+
+      // Apply the session statement timeout once per physical connection. The
+      // mysql2 pool emits 'connection' the first time a given socket is
+      // borrowed; subsequent re-uses reuse the existing session settings.
+      // We swallow the error here because (a) the pool will just hand out a
+      // working connection without the cap if SET fails on one node, and
+      // (b) the application-level `withQueryTimeout` wrapper still protects
+      // the request from hanging indefinitely.
+      const corePool = (pool as unknown as { pool: { on: (e: string, cb: (c: { query: (sql: string, cb: (err: unknown) => void) => void }) => void) => void } }).pool;
+      corePool.on('connection', (conn) => {
+        conn.query(`SET SESSION max_statement_time = ${DB_SESSION_TIMEOUT_SECONDS}`, (err) => {
+          if (err) {
+            // MariaDB-only — MySQL uses a different syntax. Log once and move on.
+            console.warn('[db] SET SESSION max_statement_time failed:', (err as Error).message);
+          }
+        });
       });
 
       this.pools.set(connectionName, pool);

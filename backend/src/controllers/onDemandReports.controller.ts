@@ -9,6 +9,7 @@ import {
   type OnDemandReportUser,
 } from '../services/onDemandReportsRegistry';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
+import { withQueryTimeout } from '../utils/queryTimeout';
 // Local `escapeFilename` removed during pre-production review (item #26).
 // `utils/contentDisposition.formatFilename` is the canonical implementation.
 
@@ -170,7 +171,10 @@ export const getReportData = async (req: Request, res: Response): Promise<void> 
     const pageSizeRaw = parseInt(req.body?.pageSize) || 50;
     const pageSize = Math.min(500, Math.max(10, pageSizeRaw));
 
-    const result = await report.getRows(resolved.filters, user, { page, pageSize });
+    const result = await withQueryTimeout(
+      report.getRows(resolved.filters, user, { page, pageSize }),
+      `on-demand-report.${report.id}.data`,
+    );
 
     res.json({
       success: true,
@@ -208,7 +212,13 @@ export const downloadReport = async (req: Request, res: Response): Promise<void>
     const resolved = resolveFilters(req.body);
     if (!resolved.ok) { res.status(400).json({ success: false, message: resolved.message }); return; }
 
-    const { buffer, filename } = await report.getXlsx(resolved.filters, user);
+    const { buffer, filename } = await withQueryTimeout(
+      report.getXlsx(resolved.filters, user),
+      `on-demand-report.${report.id}.xlsx`,
+      // Downloads can legitimately scan more rows than a screen view, so
+      // double the default deadline before failing the request.
+      60_000,
+    );
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; ${escapeFilename(filename)}`);

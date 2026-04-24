@@ -6,15 +6,23 @@ import { Prisma } from '../generated/prisma/client';
 const router = express.Router();
 
 /**
- * Get audit logs with pagination and filtering
- * Service-based implementation replacing controller
+ * Get audit logs with pagination and filtering.
+ *
+ * Built with `Prisma.sql` tagged templates so every dynamic value flows
+ * through a real placeholder rather than string concatenation — see
+ * pre-production review item #42 for why we moved this off
+ * `$queryRawUnsafe`. The page-size cap mirrors `MAX_PAGE_SIZE` in
+ * `validation/common.ts` (item #40).
  */
+const MAX_AUDIT_LOG_LIMIT = 1000;
+
 const getAuditLogsHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('[AUDIT LOG SERVICE] Getting audit logs');
 
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const requested = parseInt(req.query.limit as string) || 20;
+    const limit = Math.min(MAX_AUDIT_LOG_LIMIT, Math.max(1, isFinite(requested) ? requested : 20));
     const action = req.query.action as string;
     const user_id = req.query.user_id as string;
     const start_date = req.query.start_date as string;
@@ -22,49 +30,33 @@ const getAuditLogsHandler = async (req: Request, res: Response): Promise<void> =
 
     const offset = (page - 1) * limit;
 
-    // Build WHERE clause
-    let whereClause = 'WHERE 1=1';
-    const params: any[] = [];
-
-    if (action) {
-      whereClause += ' AND al.action = ?';
-      params.push(action);
-    }
-
-    if (user_id) {
-      whereClause += ' AND al.user_id = ?';
-      params.push(parseInt(user_id));
-    }
-
+    // Compose individual SQL fragments — Prisma.join glues them with AND
+    // and keeps every dynamic value bound through a placeholder.
+    const conditions: Prisma.Sql[] = [];
+    if (action) conditions.push(Prisma.sql`al.action = ${action}`);
+    if (user_id) conditions.push(Prisma.sql`al.user_id = ${parseInt(user_id)}`);
     if (start_date && end_date) {
-      whereClause += ' AND DATE(al.created_at) BETWEEN ? AND ?';
-      params.push(start_date, end_date);
+      conditions.push(Prisma.sql`DATE(al.created_at) BETWEEN ${start_date} AND ${end_date}`);
     }
+    const whereClause = conditions.length
+      ? Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`
+      : Prisma.empty;
 
-    // Count total records
-    const countQuery = `
-      SELECT COUNT(*) as total 
-      FROM audit_logs al
-      ${whereClause}
-    `;
-
-    const countResult = await prisma.$queryRawUnsafe<{ total: bigint }[]>(countQuery, ...params);
+    const countResult = await prisma.$queryRaw<{ total: bigint }[]>(
+      Prisma.sql`SELECT COUNT(*) as total FROM audit_logs al ${whereClause}`,
+    );
     const total = Number(countResult[0]?.total || 0);
 
-    // Get paginated data
-    const dataQuery = `
-      SELECT 
-        al.*,
-        u.username,
-        u.email
-      FROM audit_logs al
-      LEFT JOIN users u ON al.user_id = u.id
-      ${whereClause}
-      ORDER BY al.created_at DESC
-      LIMIT ? OFFSET ?
-    `;
-
-    const rows = await prisma.$queryRawUnsafe<any[]>(dataQuery, ...params, limit, offset);
+    const rows = await prisma.$queryRaw<any[]>(
+      Prisma.sql`
+        SELECT al.*, u.username, u.email
+        FROM audit_logs al
+        LEFT JOIN users u ON al.user_id = u.id
+        ${whereClause}
+        ORDER BY al.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+    );
 
     const auditLogs = rows.map(row => ({
       id: row.id,

@@ -120,7 +120,7 @@ export default function CoachingSessionsPage() {
     queryKey: ['coaching-sessions', dateFrom, dateTo, overdue, dueToday],
     queryFn: () => trainingService.getCoachingSessions({
       page: 1,
-      limit: 5000,
+      limit: 1000,
       date_from:    dateFrom || undefined,
       date_to:      dateTo   || undefined,
       overdue_only: overdue   === 'true' ? true : undefined,

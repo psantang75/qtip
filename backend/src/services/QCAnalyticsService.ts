@@ -50,11 +50,16 @@ export class QCAnalyticsService {
       [writeupRows],
     ] = await Promise.all([
       pool.execute<RowDataPacket[]>(
+        // Defensive cap: the QC Agents grid is a dashboard, not an export
+        // surface. 1000 covers any realistic CSR roster while preventing a
+        // request without a dept filter from streaming the entire org.
         `SELECT u.id AS userId, u.username AS name,
            COALESCE(d.department_name, 'Unknown') AS dept
          FROM users u
          LEFT JOIN departments d ON u.department_id = d.id
-         WHERE u.role_id = 3 AND u.is_active = 1 ${dc.sql} ${userClause}`,
+         WHERE u.role_id = 3 AND u.is_active = 1 ${dc.sql} ${userClause}
+         ORDER BY u.username
+         LIMIT 1000`,
         [...dc.params, ...userParams],
       ),
       pool.execute<RowDataPacket[]>(

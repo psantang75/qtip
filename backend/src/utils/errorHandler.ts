@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import logger from '../config/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { UserServiceError } from '../services/UserService';
+import { QueryTimeoutError } from './queryTimeout';
 
 /**
  * Canonical error-handling module for the API.
@@ -126,6 +127,28 @@ export const errorHandler = (
       error: {
         type: error.code || 'USER_SERVICE_ERROR',
         message: error.message,
+        correlationId,
+        timestamp: new Date().toISOString(),
+        path: req.path,
+        method: req.method,
+      },
+    });
+    return;
+  }
+
+  // QueryTimeoutError from `withQueryTimeout()` — surface as 504 so the
+  // client knows to retry / narrow filters rather than treating it as a
+  // generic 500. The underlying query is also killed engine-side by
+  // MariaDB's `max_statement_time`.
+  if (error instanceof QueryTimeoutError) {
+    logger.warn('Query timeout', {
+      error: { operation: error.operation, timeoutMs: error.timeoutMs, message: error.message },
+      context: errorContext,
+    });
+    res.status(504).json({
+      error: {
+        type: 'QUERY_TIMEOUT',
+        message: 'The request took too long to complete. Please narrow your filters and try again.',
         correlationId,
         timestamp: new Date().toISOString(),
         path: req.path,

@@ -117,7 +117,7 @@ export default function TrainingReportsPage() {
 
   const { data: agentListPage, isLoading: agentLoading, isError: agentError, refetch: agentRefetch } = useQuery({
     queryKey: ['coaching-agent-list', dateFrom, dateTo],
-    queryFn:  () => trainingService.getCSRCoachingList({ page: 1, limit: 5000, ...summaryParams }),
+    queryFn:  () => trainingService.getCSRCoachingList({ page: 1, limit: CLIENT_FETCH_LIMIT, ...summaryParams }),
     placeholderData: (p: unknown) => p as typeof agentListPage,
   })
 

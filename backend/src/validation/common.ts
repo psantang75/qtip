@@ -23,8 +23,22 @@ import { z } from 'zod'
 
 // ── Pagination ───────────────────────────────────────────────────────────────
 
+/**
+ * Hard server-side cap for any list endpoint that accepts `limit` /
+ * `pageSize` / `perPage`. Lowered from 5,000 during the pre-production
+ * review (item #40) — the old cap let any authenticated client request
+ * effectively unbounded result sets, which combined with our N×JOIN
+ * dispute / audit queries was a foot-gun. 1,000 still covers the
+ * frontend's "fetch all" pattern (CLIENT_FETCH_LIMIT) for every
+ * realistic deployment of this product while bounding the worst case.
+ *
+ * Endpoints that need a different cap should declare their own schema
+ * rather than raising this number — see `quizLibrary.controller.ts` for
+ * an in-controller cap example.
+ */
+export const MAX_PAGE_SIZE  = 1_000
 export const PageSchema     = z.coerce.number().int().min(1).max(10_000).optional()
-export const PageSizeSchema = z.coerce.number().int().min(1).max(5_000).optional()
+export const PageSizeSchema = z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).optional()
 
 // ── ISO date strings ─────────────────────────────────────────────────────────
 

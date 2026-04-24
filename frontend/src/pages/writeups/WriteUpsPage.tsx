@@ -63,7 +63,7 @@ export default function WriteUpsPage() {
     queryKey: ['writeups', dateFrom, dateTo],
     queryFn: () => writeupService.getWriteUps({
       page:      1,
-      limit:     5000,
+      limit:     CLIENT_FETCH_LIMIT,
       date_from: dateFrom || undefined,
       date_to:   dateTo   || undefined,
     }),

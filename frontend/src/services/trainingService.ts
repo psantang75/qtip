@@ -347,12 +347,16 @@ export const trainingService = {
   async getQuizLibrary(params?: Record<string, any>): Promise<PaginatedResult<LibraryQuiz>> {
     const { data } = await api.get('/trainer/quiz-library', { params })
     const items: LibraryQuiz[] = Array.isArray(data?.data) ? data.data : (data?.items ?? [])
+    // Backend now returns `{ data, pagination }`. Surface the real
+    // pagination envelope so callers (and the truncation indicator) reflect
+    // server-side totals instead of a synthetic single-page wrapper.
+    const p = data?.pagination
     return {
       items,
-      total:      items.length,
-      page:       1,
-      limit:      items.length,
-      totalPages: 1,
+      total:      typeof p?.total      === 'number' ? p.total      : items.length,
+      page:       typeof p?.page       === 'number' ? p.page       : 1,
+      limit:      typeof p?.limit      === 'number' ? p.limit      : items.length,
+      totalPages: typeof p?.totalPages === 'number' ? p.totalPages : 1,
     }
   },
 

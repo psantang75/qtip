@@ -60,7 +60,7 @@ export default function MyCoachingPage() {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['my-coaching', dateFrom, dateTo, overdue, dueToday],
-    queryFn:  () => trainingService.getMyCoachingSessions({ limit: 5000 }),
+    queryFn:  () => trainingService.getMyCoachingSessions({ limit: 1000 }),
   })
 
   const allSessions = data?.items ?? []

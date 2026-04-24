@@ -5,7 +5,13 @@
  * Organized by domain: Quality, Coaching, Write-ups.
  */
 
-export const CLIENT_FETCH_LIMIT = 5000
+// Page-size to request when a screen wants the full list and intends to
+// filter / search client-side. Aligned with the backend hard cap
+// `MAX_PAGE_SIZE` in `backend/src/validation/common.ts` — keep these
+// numbers in lock-step. The screens that use this value already render
+// a "results truncated" indicator at `allItems.length >= CLIENT_FETCH_LIMIT`
+// so users know to narrow filters when they hit it.
+export const CLIENT_FETCH_LIMIT = 1000
 
 import type { WriteUpType, WriteUpStatus } from '@/services/writeupService'
 import type { CoachingPurpose, CoachingFormat, CoachingSourceType, CoachingStatus } from '@/services/trainingService'

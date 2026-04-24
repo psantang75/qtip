@@ -39,7 +39,7 @@ export default function LibraryQuizzesPage() {
 
   const { data: quizData, isLoading, isError, refetch } = useQuery({
     queryKey: ['quiz-library-all'],
-    queryFn:  () => trainingService.getQuizLibrary({ limit: 5000 }),
+    queryFn:  () => trainingService.getQuizLibrary({ limit: 1000 }),
   })
 
   const allQuizzes = quizData?.items ?? []

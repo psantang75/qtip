@@ -9,6 +9,7 @@
 import prisma from '../../config/prisma'
 import { getManagedDepartmentIds, getVisibleDepartmentIds } from './manager.access'
 import type { ManagerDashboardStats, ManagerCSRActivityRow } from './manager.types'
+import { withQueryTimeout } from '../../utils/queryTimeout'
 
 const ZERO_STATS: ManagerDashboardStats = {
   reviewsCompleted: { thisWeek: 0, thisMonth: 0 },
@@ -23,7 +24,7 @@ export async function getManagerDashboardStats(userId: number): Promise<ManagerD
 
   const placeholders = departmentIds.map(() => '?').join(',')
 
-  const [reviews, disputes, coaching] = await Promise.all([
+  const [reviews, disputes, coaching] = await withQueryTimeout(Promise.all([
     prisma.$queryRawUnsafe<Array<{ thisWeek: bigint | number; thisMonth: bigint | number }>>(`
       SELECT
         COUNT(CASE WHEN s.submitted_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK) THEN 1 END) as thisWeek,
@@ -66,7 +67,7 @@ export async function getManagerDashboardStats(userId: number): Promise<ManagerD
         AND u.is_active = 1
         AND u.department_id IN (${placeholders})
     `, ...departmentIds),
-  ])
+  ]), 'manager.dashboardStats')
 
   return {
     reviewsCompleted: {
@@ -97,7 +98,7 @@ export async function getManagerCSRActivity(
   // Audit/dispute counters key off the CSR id stored in submission_metadata.
   // Coaching counters key directly off coaching_sessions.csr_id since that
   // table already stores the numeric user id.
-  const rows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(`
+  const rows = await withQueryTimeout(prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(`
     SELECT
       u.id,
       u.username as name,
@@ -247,7 +248,7 @@ export async function getManagerCSRActivity(
       AND u.is_active = 1
       AND u.department_id IN (${placeholders})
     ORDER BY u.username
-  `, ...Array<number[]>(13).fill(departmentIds).flat())
+  `, ...Array<number[]>(13).fill(departmentIds).flat()), 'manager.csrActivity')
 
   return rows.map((row) => ({
     id: Number(row.id),

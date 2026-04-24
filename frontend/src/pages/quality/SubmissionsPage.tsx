@@ -61,9 +61,9 @@ export default function SubmissionsPage() {
     queryFn: () => {
       const ds = dateFrom || undefined
       const de = dateTo   || undefined
-      if (isAgent)   return qaService.getCSRAudits({ page: 1, limit: 5000, start_date: ds, end_date: de })
-      if (isManager) return qaService.getTeamAudits({ page: 1, limit: 5000, start_date: ds, end_date: de })
-      return qaService.getSubmissions({ page: 1, limit: 5000, date_start: ds, date_end: de })
+      if (isAgent)   return qaService.getCSRAudits({ page: 1, limit: CLIENT_FETCH_LIMIT, start_date: ds, end_date: de })
+      if (isManager) return qaService.getTeamAudits({ page: 1, limit: CLIENT_FETCH_LIMIT, start_date: ds, end_date: de })
+      return qaService.getSubmissions({ page: 1, limit: CLIENT_FETCH_LIMIT, date_start: ds, date_end: de })
     },
     enabled: roleId > 0,
     placeholderData: (prev) => prev,

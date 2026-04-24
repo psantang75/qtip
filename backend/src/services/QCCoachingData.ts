@@ -22,7 +22,8 @@ export async function getCoachingTopicAgents(
      JOIN users u ON cs.csr_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
      WHERE li_t.label = ? AND cs.created_at BETWEEN ? AND ? ${dc.sql}
-     GROUP BY u.id ORDER BY sessions DESC`,
+     GROUP BY u.id ORDER BY sessions DESC
+     LIMIT 500`,
     [topic, s, e, ...dc.params],
   )
   return rows.map(r => ({
@@ -108,7 +109,8 @@ export async function getSessionsByStatus(deptFilter: number[], ranges: PeriodRa
      LEFT JOIN departments d ON u.department_id = d.id
      WHERE cs.session_date BETWEEN ? AND ? ${dc.sql}
      GROUP BY cs.status, u.id, cs.coaching_purpose, cs.coaching_format
-     ORDER BY cs.status, sessions DESC`,
+     ORDER BY cs.status, sessions DESC
+     LIMIT 1000`,
     [s, e, ...dc.params],
   )
 
@@ -170,7 +172,8 @@ export async function getQuizBreakdownWithAgents(deptFilter: number[], ranges: P
      JOIN quizzes qz ON qa.quiz_id = qz.id
      JOIN users u ON qa.user_id = u.id
      WHERE qa.submitted_at BETWEEN ? AND ? ${dc.sql}
-     GROUP BY qz.id, qz.quiz_title ORDER BY attempts DESC`,
+     GROUP BY qz.id, qz.quiz_title ORDER BY attempts DESC
+     LIMIT 200`,
     [s, e, ...dc.params],
   )
 

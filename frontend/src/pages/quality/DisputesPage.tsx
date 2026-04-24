@@ -63,11 +63,11 @@ function DisputeListView() {
     queryKey: ['disputes', isAgent, dateRange.start, dateRange.end],
     queryFn: async () => {
       if (isAgent) {
-        const res = await qaService.getCSRDisputeHistory({ page: 1, limit: 5000 })
+        const res = await qaService.getCSRDisputeHistory({ page: 1, limit: CLIENT_FETCH_LIMIT })
         return { ...res, items: res.items.map(normalizeAgentItem) }
       }
       return qaService.getManagerDisputes({
-        page: 1, limit: 5000,
+        page: 1, limit: CLIENT_FETCH_LIMIT,
         startDate: dateRange.start || undefined,
         endDate:   dateRange.end   || undefined,
       })

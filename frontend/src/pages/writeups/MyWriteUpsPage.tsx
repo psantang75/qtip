@@ -52,7 +52,7 @@ export default function MyWriteUpsPage() {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['my-writeups'],
-    queryFn:  () => writeupService.getWriteUps({ limit: 5000 }),
+    queryFn:  () => writeupService.getWriteUps({ limit: 1000 }),
   })
 
   const allItems = useMemo(
