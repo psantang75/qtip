@@ -8,11 +8,42 @@ import { Prisma } from '../generated/prisma/client';
  * Used by:
  *   - admin.controller (`getAdminCoachingSessions`, `exportAdminCoachingSessions`)
  *   - on-demand reports registry
+ *   - coaching.controller (live list/detail) and coachingReport.controller
+ *     (aggregates) — both import {@link buildCoachingSessionScope} so the
+ *     visibility predicate is defined once instead of twice.
  *
  * Keeping the SQL + xlsx layout in one place avoids drift between the
  * paginated list endpoint, the existing xlsx export, and the new On Demand
  * Reports view.
+ *
+ * The live `getCoachingSessions` SELECT in `coaching.controller.ts` returns
+ * additional columns the report does not (`is_overdue`, `quiz_count`,
+ * `quiz_passed_count`, `attachment_filename`) — those stay in the live
+ * controller because they are UI-only. If you need to add a filter that both
+ * the live list and the report respect, add it to {@link buildCoachingSessionsWhere}
+ * here (or to {@link buildCoachingSessionScope} for visibility) so it can't
+ * land on only one side.
  */
+
+/**
+ * Visibility predicate applied to every coaching-session query.
+ *
+ *   Admin   → org-wide
+ *   Manager → CSRs they manage (`u.manager_id = userId`)
+ *   QA / Trainer / others past the route guard → sessions they personally
+ *     created (`cs.created_by = userId`)
+ *
+ * Callers MUST `JOIN users u ON cs.csr_id = u.id` so the manager predicate
+ * can resolve. This is the single source of truth — `coaching.controller.ts`
+ * and `coachingReport.controller.ts` both consume it. Any change here applies
+ * to the live list, the live detail view, every coaching-report aggregate,
+ * and the on-demand exports.
+ */
+export const buildCoachingSessionScope = (role: string, userId: number): Prisma.Sql => {
+  if (role === 'Admin') return Prisma.sql`1=1`;
+  if (role === 'Manager') return Prisma.sql`u.manager_id = ${userId}`;
+  return Prisma.sql`cs.created_by = ${userId}`;
+};
 
 export interface CoachingSessionsFilters {
   csrRoleId: number;

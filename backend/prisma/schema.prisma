@@ -81,9 +81,6 @@ model User {
   agent_activity                        AgentActivity[]
   report_definitions_created            ReportDefinition[]
   import_logs                           ImportLog[]
-  alert_rules_created                   AlertRule[]
-  user_alert_preferences                UserAlertPreferences?
-  alert_notifications                   AlertNotificationQueue[]
   call_activity_raw                     CallActivityRaw[]
   sales_margin_raw                      SalesMarginRaw[]
   lead_sales_margin_raw                 LeadSalesMarginRaw[]
@@ -107,12 +104,13 @@ model User {
 
 /// Managed via raw SQL — Prisma must never modify this table
 model ListItem {
-  id        Int      @id @default(autoincrement())
-  list_type String   @db.VarChar(100)
-  label     String   @db.VarChar(255)
-  item_key  String?  @db.VarChar(100)
-  sort_order Int     @default(0)
-  is_active  Boolean @default(true)
+  id         Int      @id @default(autoincrement())
+  list_type  String   @db.VarChar(100)
+  category   String?  @db.VarChar(100)
+  label      String   @db.VarChar(255)
+  item_key   String?  @db.VarChar(100)
+  sort_order Int      @default(0)
+  is_active  Boolean  @default(true)
   created_at DateTime @default(now()) @db.DateTime(0)
 
   @@ignore
@@ -446,6 +444,7 @@ model TrainingResource {
 
 model CoachingSession {
   id                   Int                   @id @default(autoincrement())
+  batch_id             String?               @db.VarChar(36)
   csr_id               Int
   session_date         DateTime              @db.DateTime(0)
   coaching_purpose     CoachingPurpose       @default(WEEKLY)
@@ -470,8 +469,13 @@ model CoachingSession {
   require_action_plan    Boolean              @default(true)  @db.TinyInt
   follow_up_required     Boolean              @default(false) @db.TinyInt
   follow_up_date         DateTime?            @db.DateTime(0)
+  follow_up_notes        String?              @db.Text
   delivered_at           DateTime?            @db.DateTime(0)
   completed_at           DateTime?            @db.DateTime(0)
+  closed_at              DateTime?            @db.DateTime(0)
+  due_date               DateTime?            @db.DateTime(0)
+  behavior_flags         String?              @db.VarChar(1000)
+  internal_notes         String?              @db.Text
   csr_action_plan        String?              @db.Text
   csr_root_cause         String?              @db.VarChar(255)
   csr_support_needed     String?              @db.VarChar(255)
@@ -493,6 +497,7 @@ model CoachingSession {
   @@index([coaching_format])
   @@index([session_date, status], map: "idx_coaching_date_status")
   @@index([csr_id, session_date], map: "idx_coaching_csr_date")
+  @@index([batch_id], map: "idx_cs_batch_id")
   @@map("coaching_sessions")
 }
 
@@ -831,7 +836,6 @@ model MetricDefinition {
 
   metric_departments MetricDepartment[]
   metric_thresholds  MetricThreshold[]
-  alert_rules        AlertRule[]
 
   @@map("metric_definitions")
 }
@@ -1065,54 +1069,14 @@ model EntityRaw {
 }
 
 // ── Alert System ─────────────────────────────────────────────────────────────
-
-model AlertRule {
-  id                 Int           @id @default(autoincrement())
-  name               String        @db.VarChar(150)
-  metric_id          Int
-  condition_operator String        @db.VarChar(20)
-  threshold_value    Decimal       @db.Decimal(10, 2)
-  scope              AudienceScope
-  is_active          Boolean       @default(true)
-  created_by         Int
-  created_at         DateTime      @default(now()) @db.DateTime(0)
-
-  metric              MetricDefinition         @relation(fields: [metric_id], references: [id], onDelete: Cascade)
-  creator             User                     @relation(fields: [created_by], references: [id], onDelete: Cascade)
-  alert_notifications AlertNotificationQueue[]
-
-  @@map("alert_rules")
-}
-
-model UserAlertPreferences {
-  id           Int      @id @default(autoincrement())
-  user_id      Int      @unique
-  frequency    String   @db.VarChar(50)
-  batch_alerts Boolean  @default(true)
-  timezone     String   @db.VarChar(100)
-  updated_at   DateTime @default(now()) @updatedAt @db.DateTime(0)
-
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@map("user_alert_preferences")
-}
-
-model AlertNotificationQueue {
-  id         Int           @id @default(autoincrement())
-  rule_id    Int
-  user_id    Int
-  message    String        @db.Text
-  priority   AlertPriority @default(NORMAL)
-  is_sent    Boolean       @default(false)
-  created_at DateTime      @default(now()) @db.DateTime(0)
-  sent_at    DateTime?     @db.DateTime(0)
-
-  rule AlertRule @relation(fields: [rule_id], references: [id], onDelete: Cascade)
-  user User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([is_sent, created_at])
-  @@map("alert_notification_queue")
-}
+// The MySQL tables `alert_rules`, `user_alert_preferences`, and
+// `alert_notification_queue` exist (see prisma/migrations/0_init/migration.sql)
+// but no application code reads or writes them. The Prisma models that used to
+// project them were removed during the pre-production review (item #18) so the
+// generated client only exposes surfaces the app actually uses. The tables
+// themselves are intentionally left in place — re-add the models here when (and
+// if) the alert system is wired up. The `AlertPriority` enum was removed at the
+// same time since it had no other consumer.
 
 // ── Business Calendar ────────────────────────────────────────────────────────
 
@@ -1475,12 +1439,6 @@ enum AudienceScope {
   TEAM
   DEPARTMENT
   ORG
-}
-
-enum AlertPriority {
-  CRITICAL
-  HIGH
-  NORMAL
 }
 
 enum BusinessDayType {

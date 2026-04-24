@@ -3,9 +3,24 @@ import { randomUUID } from 'crypto';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { hasCsrRequirements, applyAutoAdvance } from '../utils/coachingAutoAdvance';
+import { buildCoachingSessionScope } from '../services/coachingSessionsReport';
+import { formatFilename as escapeFilename } from '../utils/contentDisposition';
 const fs = require('fs').promises;
 const path = require('path');
 const { createReadStream } = require('fs');
+
+/**
+ * Live coaching session controller — list, detail, lifecycle (create / deliver
+ * / complete / close / follow-up / status), and attachment download.
+ *
+ * Visibility rules: every query goes through {@link buildCoachingSessionScope}
+ * (re-exported here as `roleCondition`) which is shared with
+ * `controllers/coachingReport.controller.ts` and
+ * `services/coachingSessionsReport.ts`. The shared filter+scope+xlsx layout
+ * lives in `services/coachingSessionsReport.ts`; bug-fixes / new filter knobs
+ * land there so the live UI, the aggregates report, and the on-demand exports
+ * stay aligned (see pre-production review item #21).
+ */
 
 interface AuthReq extends Request {
   user?: { user_id: number; role: string };
@@ -42,18 +57,18 @@ interface RecentSessionRow {
   topics?: string | null;
 }
 
-const escapeFilename = (filename: string | null | undefined): string => {
-  if (!filename) return 'filename="attachment"';
-  const clean = filename.replace(/[\x00-\x1F\x7F]/g, '').trim();
-  return clean ? `filename="${clean}"` : 'filename="attachment"';
-};
+// Local `escapeFilename` removed during pre-production review (item #26).
+// The previous copy here was actually the *unsafe* variant — it skipped the
+// RFC 5987 fallback so any filename containing a space or non-ASCII character
+// produced an invalid Content-Disposition header. The canonical implementation
+// in `utils/contentDisposition.formatFilename` handles RFC 5987 correctly.
 
-const roleCondition = (role: string, userId: number): Prisma.Sql => {
-  if (role === 'Admin') return Prisma.sql`1=1`;
-  if (role === 'Manager') return Prisma.sql`u.manager_id = ${userId}`;
-  if (role === 'QA') return Prisma.sql`cs.created_by = ${userId}`;
-  return Prisma.sql`cs.created_by = ${userId}`;
-};
+/**
+ * @deprecated Local alias kept only so the dozens of call sites below don't
+ * have to change. The implementation now lives in
+ * `services/coachingSessionsReport.ts` as `buildCoachingSessionScope`.
+ */
+const roleCondition = buildCoachingSessionScope;
 
 export const getCoachingSessions = async (req: AuthReq, res: Response) => {
   try {

@@ -6,9 +6,8 @@ import cookieParser from 'cookie-parser';
 import csurf from 'csurf';
 
 // Production middleware imports
-// Rate limiting disabled - apiLimiter and authLimiter imports commented out
-import { securityHeaders, /* apiLimiter, authLimiter, */ validateRequest, corsConfig } from './middleware/security';
-import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { securityHeaders, apiLimiter, authLimiter, validateRequest, corsConfig } from './middleware/security';
+import { errorHandler, notFoundHandler } from './utils/errorHandler';
 import { requestLogger, appLogger } from './config/logger';
 import { swaggerSpec } from './config/swagger';
 import monitoringRoutes, { metricsMiddleware } from './routes/monitoring.routes';
@@ -25,7 +24,6 @@ import userRoutes from './routes/user.routes';
 import roleRoutes from './routes/role.routes';
 import departmentRoutes from './routes/department.routes';
 import directorDepartmentRoutes from './routes/directorDepartment.routes';
-import performanceGoalRoutes from './routes/performanceGoal.routes';
 import enhancedPerformanceGoalRoutes from './routes/enhancedPerformanceGoal.routes';
 import qaRoutes from './routes/qa.routes';
 import csrRoutes from './routes/csr.routes';
@@ -90,9 +88,6 @@ app.use(metricsMiddleware);
 // CORS middleware with production configuration
 app.use(cors(corsConfig));
 
-// Rate limiting middleware - DISABLED
-// app.use(apiLimiter);
-
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -148,8 +143,14 @@ app.get('/test', (req, res) => {
   });
 });
 
-// Routes with specific rate limiting - DISABLED
-app.use('/api/auth', authRoutes);
+// Rate limiting:
+//   - authLimiter is mounted directly on /api/auth so credential-stuffing attempts
+//     against /api/auth/login (and friends) are throttled per-IP.
+//   - apiLimiter applies to every other /api route. Both limiters self-skip
+//     localhost in development and read-only/monitoring endpoints (see security.ts).
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api', apiLimiter);
+
 app.use('/api/forms', formRoutes);
 app.use('/api/audit-assignments', auditAssignmentRoutes);
 app.use('/api/submissions', submissionRoutes);
@@ -161,7 +162,11 @@ app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/director-departments', directorDepartmentRoutes);
 app.use('/api/departments', departmentRoutes);
-app.use('/api/performance-goals', performanceGoalRoutes);
+// Performance goals: only the Enhanced* stack is mounted. The classic
+// /api/performance-goals stack (legacy controller + feature-flagged service +
+// MySQLPerformanceGoalRepository) was removed during the pre-production review
+// (item #15) — it had no frontend caller and was a third parallel
+// implementation of the same table.
 app.use('/api/enhanced-performance-goals', enhancedPerformanceGoalRoutes);
 app.use('/api/qa', qaRoutes);
 app.use('/api/csr', csrRoutes);

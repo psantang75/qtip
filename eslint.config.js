@@ -1,3 +1,15 @@
+/**
+ * Root ESLint configuration (flat-config format, ESLint 9+).
+ *
+ * Pre-production review (item #28) removed the parallel legacy `.eslintrc.js`
+ * at the repo root. The two configs had byte-identical rule sets; keeping
+ * both was an integration hazard because old `.eslintrc.*` resolution and
+ * new flat-config resolution can pick different files depending on the
+ * tooling (CLI, editor extension, VS Code language server). This file is
+ * now the single source of truth for root-level lint rules. The frontend
+ * package keeps its own `frontend/eslint.config.js` for React-specific
+ * tightening.
+ */
 import js from '@eslint/js';
 import typescript from '@typescript-eslint/eslint-plugin';
 import typescriptParser from '@typescript-eslint/parser';

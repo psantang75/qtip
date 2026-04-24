@@ -1,171 +1,107 @@
 ﻿import logger from '../config/logger';
 import { CSRDashboardStats, CSRActivityData } from '../repositories/CSRRepository';
+import { MemoryTTLCache } from './MemoryTTLCache';
 
-// Simple in-memory cache implementation
-interface CacheItem<T> {
-  data: T;
-  expiry: number;
-}
+/**
+ * EnhancedCacheService — domain wrapper around the shared `MemoryTTLCache`
+ * that adds CSR/analytics-specific keying (e.g. `csr:dashboard:{id}`),
+ * per-bucket invalidation, and cache warming. The underlying TTL store is
+ * the same primitive used by `QACacheService` and `TrainerCache` so all
+ * three behave consistently.
+ */
 
-// Cache TTL by data type (in seconds)
-const CACHE_TTL = {
-  CSR_DASHBOARD_STATS: 300, // 5 minutes
-  CSR_ACTIVITY: 180, // 3 minutes
-  CSR_AUDITS: 120, // 2 minutes
-  CSR_QA_STATS: 600, // 10 minutes
-  CSR_TRAINING_STATS: 300, // 5 minutes
-  FORM_METADATA: 1800, // 30 minutes
-  DEPARTMENT_LIST: 3600 // 1 hour
-};
+const CACHE_TTL_MS = {
+  CSR_DASHBOARD_STATS: 5 * 60 * 1000,
+  CSR_ACTIVITY: 3 * 60 * 1000,
+  CSR_AUDITS: 2 * 60 * 1000,
+  CSR_QA_STATS: 10 * 60 * 1000,
+  CSR_TRAINING_STATS: 5 * 60 * 1000,
+} as const;
 
 class EnhancedCacheService {
-  private cache: Map<string, CacheItem<any>> = new Map();
-  private hitCount: number = 0;
-  private missCount: number = 0;
-  private totalRequests: number = 0;
-  private cleanupInterval: NodeJS.Timeout;
+  private readonly store = new MemoryTTLCache({
+    name: 'EnhancedCacheService',
+    defaultTTLMs: 5 * 60 * 1000,
+    cleanupIntervalMs: 60 * 1000,
+  });
 
-  constructor() {
-    // Clean up expired items every minute
-    this.cleanupInterval = setInterval(() => {
-      this.cleanup();
-    }, 60 * 1000);
-  }
-
-  private cleanup(): void {
-    const now = Date.now();
-    for (const [key, item] of this.cache.entries()) {
-      if (now > item.expiry) {
-        this.cache.delete(key);
-        logger.debug('Cache EXPIRED', { key });
-      }
-    }
-  }
-
-    // Generic cache methods
-  set<T>(key: string, value: T, ttl: number = 300): boolean {
-    try {
-      const expiry = Date.now() + (ttl * 1000);
-      this.cache.set(key, { data: value, expiry });
-      logger.debug('Cache set successful', { key, ttl });
-      return true;
-    } catch (error: any) {
-      logger.error('Cache set failed', { key, error: error.message });
-      return false;
-    }
+  /** Generic API — TTL is in **seconds** for backward compatibility with prior callers. */
+  set<T>(key: string, value: T, ttlSeconds: number = 300): boolean {
+    return this.store.set(key, value, ttlSeconds * 1000);
   }
 
   get<T>(key: string): T | undefined {
-    this.totalRequests++;
-    try {
-      const item = this.cache.get(key);
-      if (item && Date.now() <= item.expiry) {
-        this.hitCount++;
-        logger.debug('Cache HIT', { key });
-        return item.data as T;
-      } else {
-        if (item && Date.now() > item.expiry) {
-          this.cache.delete(key);
-        }
-        this.missCount++;
-        logger.debug('Cache MISS', { key });
-        return undefined;
-      }
-    } catch (error: any) {
-      this.missCount++;
-      logger.error('Cache get failed', { key, error: error.message });
-      return undefined;
-    }
+    return this.store.get<T>(key);
   }
 
   del(key: string): number {
-    try {
-      const deleted = this.cache.delete(key);
-      return deleted ? 1 : 0;
-    } catch (error: any) {
-      logger.error('Cache delete failed', { key, error: error.message });
-      return 0;
-    }
+    return this.store.delete(key) ? 1 : 0;
   }
 
   // CSR-specific cache methods
   getCSRDashboardStats(csr_id: number): CSRDashboardStats | undefined {
-    return this.get<CSRDashboardStats>(`csr:dashboard:${csr_id}`);
+    return this.store.get<CSRDashboardStats>(`csr:dashboard:${csr_id}`);
   }
 
   setCSRDashboardStats(csr_id: number, stats: CSRDashboardStats): boolean {
-    return this.set(`csr:dashboard:${csr_id}`, stats, CACHE_TTL.CSR_DASHBOARD_STATS);
+    return this.store.set(`csr:dashboard:${csr_id}`, stats, CACHE_TTL_MS.CSR_DASHBOARD_STATS);
   }
 
   getCSRActivity(csr_id: number): CSRActivityData[] | undefined {
-    return this.get<CSRActivityData[]>(`csr:activity:${csr_id}`);
+    return this.store.get<CSRActivityData[]>(`csr:activity:${csr_id}`);
   }
 
   setCSRActivity(csr_id: number, activity: CSRActivityData[]): boolean {
-    return this.set(`csr:activity:${csr_id}`, activity, CACHE_TTL.CSR_ACTIVITY);
+    return this.store.set(`csr:activity:${csr_id}`, activity, CACHE_TTL_MS.CSR_ACTIVITY);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getCSRAudits(csr_id: number, page: number, limit: number, filtersHash: string): any {
-    const key = `csr:audits:${csr_id}:${page}:${limit}:${filtersHash}`;
-    return this.get(key);
+    return this.store.get(`csr:audits:${csr_id}:${page}:${limit}:${filtersHash}`);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setCSRAudits(csr_id: number, page: number, limit: number, filtersHash: string, data: any): boolean {
-    const key = `csr:audits:${csr_id}:${page}:${limit}:${filtersHash}`;
-    return this.set(key, data, CACHE_TTL.CSR_AUDITS);
+    return this.store.set(`csr:audits:${csr_id}:${page}:${limit}:${filtersHash}`, data, CACHE_TTL_MS.CSR_AUDITS);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getCSRQAStats(csr_id: number): any {
-    return this.get(`csr:qa_stats:${csr_id}`);
+    return this.store.get(`csr:qa_stats:${csr_id}`);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setCSRQAStats(csr_id: number, stats: any): boolean {
-    return this.set(`csr:qa_stats:${csr_id}`, stats, CACHE_TTL.CSR_QA_STATS);
+    return this.store.set(`csr:qa_stats:${csr_id}`, stats, CACHE_TTL_MS.CSR_QA_STATS);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getCSRTrainingStats(csr_id: number): any {
-    return this.get(`csr:training_stats:${csr_id}`);
+    return this.store.get(`csr:training_stats:${csr_id}`);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setCSRTrainingStats(csr_id: number, stats: any): boolean {
-    return this.set(`csr:training_stats:${csr_id}`, stats, CACHE_TTL.CSR_TRAINING_STATS);
+    return this.store.set(`csr:training_stats:${csr_id}`, stats, CACHE_TTL_MS.CSR_TRAINING_STATS);
   }
 
   // Cache invalidation methods
   invalidateCSRCache(csr_id: number): void {
-    const patterns = [
-      `csr:dashboard:${csr_id}`,
-      `csr:activity:${csr_id}`,
-      `csr:qa_stats:${csr_id}`,
-      `csr:training_stats:${csr_id}`
-    ];
-    
-    patterns.forEach(pattern => {
-      this.del(pattern);
-    });
-
-         // Invalidate audit cache for this CSR
-     const keys = Array.from(this.cache.keys());
-     keys.forEach((key: string) => {
-       if (key.startsWith(`csr:audits:${csr_id}:`)) {
-         this.del(key);
-       }
-     });
-
+    this.store.delete(`csr:dashboard:${csr_id}`);
+    this.store.delete(`csr:activity:${csr_id}`);
+    this.store.delete(`csr:qa_stats:${csr_id}`);
+    this.store.delete(`csr:training_stats:${csr_id}`);
+    this.store.deleteByPrefix(`csr:audits:${csr_id}:`);
     logger.info('CSR cache invalidated', { csr_id });
   }
 
-     invalidateAllCSRCaches(): void {
-     const keys = Array.from(this.cache.keys());
-     keys.forEach((key: string) => {
-       if (key.startsWith('csr:')) {
-         this.del(key);
-       }
-     });
-     logger.info('All CSR caches invalidated');
-   }
+  invalidateAllCSRCaches(): void {
+    const removed = this.store.deleteByPrefix('csr:');
+    logger.info('All CSR caches invalidated', { removed });
+  }
 
   // Utility methods
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   generateFiltersHash(filters: Record<string, any>): string {
     const sortedFilters = Object.keys(filters)
       .sort()
@@ -174,85 +110,55 @@ class EnhancedCacheService {
           result[key] = filters[key];
         }
         return result;
-      }, {} as Record<string, any>);
-    
+      }, {} as Record<string, unknown>);
+
     return Buffer.from(JSON.stringify(sortedFilters)).toString('base64');
   }
 
-     // Performance monitoring
-   getStats() {
-     const hitRate = this.totalRequests > 0 ? (this.hitCount / this.totalRequests) * 100 : 0;
-     
-     return {
-       hits: this.hitCount,
-       misses: this.missCount,
-       hitRate: Math.round(hitRate * 100) / 100,
-       keys: this.cache.size,
-       totalRequests: this.totalRequests
-     };
-   }
+  getStats() {
+    return this.store.getStats();
+  }
 
   // Cache warming
   async warmCSRCache(csr_id: number, warmingData: {
     dashboardStats?: CSRDashboardStats;
     activity?: CSRActivityData[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     qaStats?: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     trainingStats?: any;
   }): Promise<void> {
-    const promises = [];
-
-    if (warmingData.dashboardStats) {
-      promises.push(this.setCSRDashboardStats(csr_id, warmingData.dashboardStats));
-    }
-
-    if (warmingData.activity) {
-      promises.push(this.setCSRActivity(csr_id, warmingData.activity));
-    }
-
-    if (warmingData.qaStats) {
-      promises.push(this.setCSRQAStats(csr_id, warmingData.qaStats));
-    }
-
-    if (warmingData.trainingStats) {
-      promises.push(this.setCSRTrainingStats(csr_id, warmingData.trainingStats));
-    }
-
-    await Promise.all(promises);
+    if (warmingData.dashboardStats) this.setCSRDashboardStats(csr_id, warmingData.dashboardStats);
+    if (warmingData.activity) this.setCSRActivity(csr_id, warmingData.activity);
+    if (warmingData.qaStats) this.setCSRQAStats(csr_id, warmingData.qaStats);
+    if (warmingData.trainingStats) this.setCSRTrainingStats(csr_id, warmingData.trainingStats);
     logger.info('CSR cache warmed', { csr_id, dataTypes: Object.keys(warmingData) });
   }
 
-  // Health check
   isHealthy(): boolean {
     try {
-      const testKey = 'health-check';
+      const testKey = '__health-check__';
       const testValue = Date.now();
-      this.set(testKey, testValue, 1);
-      const retrieved = this.get(testKey);
-      this.del(testKey);
+      this.store.set(testKey, testValue, 1000);
+      const retrieved = this.store.get<number>(testKey);
+      this.store.delete(testKey);
       return retrieved === testValue;
-         } catch (error: any) {
-       logger.error('Cache health check failed', { error: error.message });
-       return false;
-     }
+    } catch (error) {
+      logger.error('Cache health check failed', { error: (error as Error).message });
+      return false;
+    }
   }
 
-     // Memory management
-   flushAll(): void {
-     this.cache.clear();
-     this.hitCount = 0;
-     this.missCount = 0;
-     this.totalRequests = 0;
-     logger.info('Cache flushed');
-   }
+  flushAll(): void {
+    this.store.clear();
+    logger.info('Cache flushed');
+  }
 
-   close(): void {
-     if (this.cleanupInterval) {
-       clearInterval(this.cleanupInterval);
-     }
-   }
+  close(): void {
+    this.store.close();
+  }
 }
 
-// Singleton instance
 const cacheService = new EnhancedCacheService();
 
-export default cacheService; 
+export default cacheService;

@@ -33,62 +33,13 @@ export interface PerformanceGoalFormData {
   description: string | null;
 }
 
-// Manager Performance Report types based on manager_performance_reports.md
-
-// Manager Performance Report types
-export interface ManagerReportFilters {
-  dateRange: {
-    startDate: string;
-    endDate: string;
-  };
-  departmentIds: number[];
-  managerIds: number[];
-  metrics: ('QA_SCORES' | 'TRAINING_COMPLETION' | 'DISPUTE_TRENDS')[];
-}
-
-export interface QAScoreData {
-  id: number;
-  name: string;
-  averageScore: number;
-  totalSubmissions: number;
-  type: 'department' | 'manager';
-}
-
-export interface TrainingCompletionData {
-  id: number;
-  name: string;
-  completionRate: number;
-  completedCourses: number;
-  totalCourses: number;
-  type: 'department' | 'manager';
-}
-
-export interface DisputeTrendData {
-  id: number;
-  name: string;
-  date: string;
-  disputeCount: number;
-  type: 'department' | 'manager';
-}
-
-export interface ManagerReportData {
-  qaScores: QAScoreData[];
-  trainingCompletion: TrainingCompletionData[];
-  disputeTrends: DisputeTrendData[];
-  summaryTable: {
-    id: number;
-    name: string;
-    type: 'department' | 'manager';
-    qaScore: number;
-    completionRate: number;
-    disputeCount: number;
-  }[];
-}
-
-export interface FilterOptions {
-  departments: { id: number; name: string }[];
-  managers: { id: number; name: string; department?: string }[];
-}
+// NOTE: ManagerReportFilters/ManagerReportData/QAScoreData/TrainingCompletionData/
+// DisputeTrendData/FilterOptions used to live here for managerReportsService.ts +
+// teamReportsService.ts + mocks/managerReportsMock.ts. All three were unused
+// orphans (mock-only services with zero call sites), so they were removed during
+// the pre-production review (item #20). The On Demand Reports stack uses its own
+// `OnDemandFilterOptions` type defined in `services/onDemandReportsService.ts`,
+// and the QC dashboards have their own `FilterOptions` in `insightsQCService.ts`.
 
 export interface PaginatedResponse<T> {
   items: T[];

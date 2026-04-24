@@ -2,10 +2,18 @@
  * Raw Data Service
  * Powers the data explorer and report builder live preview.
  * All queries are Prisma-based with role-based data scoping.
+ *
+ * Excel generation: uses ExcelJS (same library as `AnalyticsService`,
+ * `coachingSessionsReport`, and `manager.controller`). The previous SheetJS
+ * (`xlsx`) writer was removed during the pre-production review (item #24) so
+ * every report-export path on the backend goes through one library. SheetJS
+ * is still a runtime dependency, but only `services/importService.ts` uses
+ * it — and only on the **read** side, where it parses uploaded .xlsx
+ * uploads (a different concern from generation).
  */
 
 import prisma from '../config/prisma';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -339,6 +347,40 @@ export async function getAvailableTables(userRole: string) {
   }));
 }
 
+// Excel sheet names are capped at 31 characters by the OOXML spec.
+const SHEET_NAME_MAX = 31;
+
+function buildRawDataWorkbook(
+  tableName: string,
+  selectedColumns: string[],
+  serialisedRows: Record<string, unknown>[],
+): ExcelJS.Workbook {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(tableName.substring(0, SHEET_NAME_MAX));
+
+  worksheet.columns = selectedColumns.map((c) => ({ header: c, key: c, width: 18 }));
+
+  worksheet.getRow(1).font = { bold: true };
+  worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'left' };
+
+  for (const row of serialisedRows) worksheet.addRow(row);
+
+  worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+  if (worksheet.columns.length > 0) {
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to:   { row: 1, column: worksheet.columns.length },
+    };
+  }
+
+  return workbook;
+}
+
+async function workbookToBuffer(workbook: ExcelJS.Workbook): Promise<Buffer> {
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
 /** Return all matching rows as an Excel buffer. Capped at 50,000 rows. */
 export async function exportRawData(params: RawDataQueryParams): Promise<Buffer> {
   const { tableName } = params;
@@ -356,10 +398,9 @@ export async function exportRawData(params: RawDataQueryParams): Promise<Buffer>
 
   const where = await buildWhereClause(params);
   if (where === null) {
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([selectedColumns]);
-    XLSX.utils.book_append_sheet(wb, ws, tableName);
-    return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+    // Caller has no rows visible (e.g. role scope returned an empty set).
+    // Still produce a valid workbook so downloads don't fail — header row only.
+    return workbookToBuffer(buildRawDataWorkbook(tableName, selectedColumns, []));
   }
 
   const select = Object.fromEntries(selectedColumns.map((c) => [c, true]));
@@ -372,8 +413,8 @@ export async function exportRawData(params: RawDataQueryParams): Promise<Buffer>
   });
 
   // Convert Decimal / Date values to plain JS before serialising
-  const serialised = rows.map((row: any) => {
-    const out: any = {};
+  const serialised: Record<string, unknown>[] = rows.map((row: any) => {
+    const out: Record<string, unknown> = {};
     for (const col of selectedColumns) {
       const v = row[col];
       if (v instanceof Date) {
@@ -387,8 +428,5 @@ export async function exportRawData(params: RawDataQueryParams): Promise<Buffer>
     return out;
   });
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(serialised, { header: selectedColumns });
-  XLSX.utils.book_append_sheet(wb, ws, tableName.substring(0, 31)); // sheet name max 31 chars
-  return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  return workbookToBuffer(buildRawDataWorkbook(tableName, selectedColumns, serialised));
 }

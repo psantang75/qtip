@@ -1,115 +1,69 @@
+import { MemoryTTLCache } from './MemoryTTLCache';
+
 /**
- * QA Cache Service
- * Simple in-memory cache for QA dashboard statistics to improve performance
+ * QACacheService — domain wrapper around the shared `MemoryTTLCache` for
+ * QA dashboard data (stats + per-QA CSR activity). Storage primitive is
+ * shared with `EnhancedCacheService` and `TrainerCache`; the keying scheme
+ * here is QA-scoped so each domain can be cleared independently.
  */
 
-interface CacheEntry {
-  data: any;
-  timestamp: number;
-  ttl: number; // Time to live in milliseconds
-}
-
 class QACacheService {
-  private cache: Map<string, CacheEntry> = new Map();
-  private readonly defaultTTL = 5 * 60 * 1000; // 5 minutes
+  private readonly store = new MemoryTTLCache({
+    name: 'QACacheService',
+    defaultTTLMs: 5 * 60 * 1000,
+    cleanupIntervalMs: 10 * 60 * 1000,
+  });
 
-  /**
-   * Get cached data if it exists and is not expired
-   */
-  get(key: string): any | null {
-    const entry = this.cache.get(key);
-    
-    if (!entry) {
-      return null;
-    }
-    
-    const now = Date.now();
-    if (now - entry.timestamp > entry.ttl) {
-      this.cache.delete(key);
-      return null;
-    }
-    
-    return entry.data;
+  /** Get cached data if it exists and is not expired. */
+  get(key: string): unknown {
+    const value = this.store.get(key);
+    return value === undefined ? null : value;
   }
 
-  /**
-   * Set cache data with optional TTL
-   */
-  set(key: string, data: any, ttl?: number): void {
-    const entry: CacheEntry = {
-      data,
-      timestamp: Date.now(),
-      ttl: ttl || this.defaultTTL
-    };
-    
-    this.cache.set(key, entry);
+  /** Set cache data with optional TTL (milliseconds). */
+  set(key: string, data: unknown, ttlMs?: number): void {
+    this.store.set(key, data, ttlMs);
   }
 
-  /**
-   * Clear specific cache entry
-   */
+  /** Clear specific cache entry. */
   delete(key: string): void {
-    this.cache.delete(key);
+    this.store.delete(key);
   }
 
-  /**
-   * Clear all cache entries
-   */
+  /** Clear all cache entries. */
   clear(): void {
-    this.cache.clear();
+    this.store.clear();
   }
 
-  /**
-   * Get cache key for QA dashboard stats
-   */
+  /** Cache key for QA dashboard stats. */
   getStatsKey(qaUserId: number): string {
     return `qa_stats_${qaUserId}`;
   }
 
-  /**
-   * Get cache key for QA CSR activity
-   */
+  /** Cache key for QA CSR activity. */
   getCSRActivityKey(qaUserId: number): string {
     return `qa_csr_activity_${qaUserId}`;
   }
 
-  /**
-   * Clear QA user specific cache
-   */
+  /** Clear QA-user-specific cache. */
   clearQAUserCache(qaUserId: number): void {
     this.delete(this.getStatsKey(qaUserId));
     this.delete(this.getCSRActivityKey(qaUserId));
   }
 
-  /**
-   * Get cache size and cleanup expired entries
-   */
+  /** Drop expired entries (also runs automatically via the shared cleanup timer). */
   cleanup(): void {
-    const now = Date.now();
-    for (const [key, entry] of this.cache.entries()) {
-      if (now - entry.timestamp > entry.ttl) {
-        this.cache.delete(key);
-      }
-    }
+    this.store.cleanup();
   }
 
-  /**
-   * Get cache statistics
-   */
+  /** Cache statistics. */
   getStats(): { size: number; keys: string[] } {
     return {
-      size: this.cache.size,
-      keys: Array.from(this.cache.keys())
+      size: this.store.getStats().size,
+      keys: this.store.keys(),
     };
   }
 }
 
-// Create singleton instance
 export const qaCacheService = new QACacheService();
-
-// Schedule cleanup every 10 minutes
-setInterval(() => {
-  qaCacheService.cleanup();
-}, 10 * 60 * 1000);
-
-export default qaCacheService; 
+export default qaCacheService;

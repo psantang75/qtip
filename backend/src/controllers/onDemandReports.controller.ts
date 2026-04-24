@@ -8,6 +8,9 @@ import {
   type OnDemandReportFilters,
   type OnDemandReportUser,
 } from '../services/onDemandReportsRegistry';
+import { formatFilename as escapeFilename } from '../utils/contentDisposition';
+// Local `escapeFilename` removed during pre-production review (item #26).
+// `utils/contentDisposition.formatFilename` is the canonical implementation.
 
 const ROLE_NAME_TO_ID: Record<string, number> = {
   Admin: 1,
@@ -16,17 +19,6 @@ const ROLE_NAME_TO_ID: Record<string, number> = {
   Trainer: 4,
   Manager: 5,
   Director: 6,
-};
-
-const escapeFilename = (filename: string): string => {
-  const cleanFilename = (filename || 'attachment').replace(/[\x00-\x1F\x7F]/g, '').trim();
-  if (!cleanFilename) return 'filename="attachment"';
-  const needsEncoding = /[^a-zA-Z0-9._-]/.test(cleanFilename);
-  if (needsEncoding) {
-    const encoded = encodeURIComponent(cleanFilename).replace(/\*/g, '%2A');
-    return `filename*=UTF-8''${encoded}`;
-  }
-  return `filename="${cleanFilename.replace(/"/g, '\\"')}"`;
 };
 
 function resolveUser(req: Request): OnDemandReportUser | null {

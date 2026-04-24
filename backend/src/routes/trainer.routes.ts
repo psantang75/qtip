@@ -2,7 +2,6 @@ import express, { RequestHandler } from 'express';
 import {
   getFilterOptions,
   generateReport,
-  exportReport,
   getTrainingStats,
   getTrainerTeamCSRs,
   getTrainerDashboardStats,
@@ -10,7 +9,7 @@ import {
   getTrainerHealthCheck,
   getTrainerCompletedSubmissions,
   getTrainerSubmissionDetails
-} from '../controllers/trainer.controller';
+} from '../controllers/trainer';
 import {
   getCoachingSessions,
   getCoachingSessionDetail,
@@ -74,8 +73,8 @@ router.get('/health', getTrainerHealthCheck as unknown as RequestHandler);
 // ─── Training Reports ────────────────────────────────────────────────────────
 router.get('/filters', auth, trainer, getFilterOptions as unknown as RequestHandler);
 router.post('/reports', auth, trainer, generateReport as unknown as RequestHandler);
-router.get('/export/:report_id', auth, trainer, exportReport as unknown as RequestHandler);
-router.get('/export/current', auth, trainer, exportReport as unknown as RequestHandler);
+// /export/:report_id and /export/current were removed during the pre-production
+// review (item #24) — see trainer.controller for context.
 router.get('/stats', auth, trainer, getTrainingStats as unknown as RequestHandler);
 router.get('/team-csrs', auth, coaching, getTrainerTeamCSRs as unknown as RequestHandler);
 router.get('/dashboard-stats', auth, coaching, getTrainerDashboardStats as unknown as RequestHandler);

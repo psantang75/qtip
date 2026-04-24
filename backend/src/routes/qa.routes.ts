@@ -1,13 +1,13 @@
 import express from 'express';
 import { authenticate, authorizeQA, authorizeQAOrTrainer } from '../middleware/auth';
-import { 
-  getCompletedSubmissions, 
+import {
+  getCompletedSubmissions,
   getSubmissionDetails,
   exportSubmission,
   finalizeSubmission,
   getQAStats,
-  getQACSRActivity
-} from '../controllers/qa.controller';
+  getQACSRActivity,
+} from '../controllers/qa';
 import { qaFeatureFlags } from '../config/qa.config';
 import { qaCacheService } from '../services/QACacheService';
 import prisma from '../config/prisma';

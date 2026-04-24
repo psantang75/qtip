@@ -2,6 +2,27 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import logger from '../config/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { UserServiceError } from '../services/UserService';
+
+/**
+ * Canonical error-handling module for the API.
+ *
+ * Exports:
+ *   - `AppError` + `ErrorType`     — structured, correlation-aware error class
+ *   - factory helpers              — createValidationError, createNotFoundError, etc.
+ *   - `addCorrelationId`           — request middleware (assigns/propagates X-Correlation-ID)
+ *   - `errorHandler`               — global Express error middleware (mounted in index.ts)
+ *   - `notFoundHandler`            — catch-all 404 (mounted in index.ts)
+ *   - `asyncHandler`               — wraps async route handlers
+ *   - `handleDatabaseError`        — normalize MySQL driver errors → AppError
+ *   - `timeoutHandler`             — request timeout middleware
+ *   - `healthCheckErrors` helpers  — counters for the /health endpoint
+ *
+ * History: this module replaced an older `middleware/errorHandler.ts` that
+ * defined a parallel `AppError` (positional `(message, statusCode, code)` ctor)
+ * and a thinner middleware. The two were consolidated during the pre-production
+ * review (item #23) so every layer throws and renders against the same shape.
+ */
 
 // Error types
 export enum ErrorType {
@@ -75,10 +96,10 @@ export const addCorrelationId = (req: Request, res: Response, next: NextFunction
 
 // Enhanced error handler middleware
 export const errorHandler = (
-  error: Error | AppError,
+  error: Error | AppError | UserServiceError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void => {
   const correlationId = req.correlationId || uuidv4();
   
@@ -93,6 +114,42 @@ export const errorHandler = (
     timestamp: new Date().toISOString(),
     ...(error instanceof AppError ? error.context : {})
   };
+
+  // UserServiceError carries its own statusCode/code — render it before the
+  // generic catch so service-layer 4xx responses survive.
+  if (error instanceof UserServiceError) {
+    logger.warn('UserService operational error', {
+      error: { message: error.message, code: error.code, statusCode: error.statusCode },
+      context: errorContext,
+    });
+    res.status(error.statusCode).json({
+      error: {
+        type: error.code || 'USER_SERVICE_ERROR',
+        message: error.message,
+        correlationId,
+        timestamp: new Date().toISOString(),
+        path: req.path,
+        method: req.method,
+      },
+    });
+    return;
+  }
+
+  // JWT errors thrown by jsonwebtoken — surface as 401 instead of 500.
+  if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+    logger.warn('JWT verification error', { error: { message: error.message }, context: errorContext });
+    res.status(401).json({
+      error: {
+        type: ErrorType.AUTHORIZATION_ERROR,
+        message: 'Invalid or expired token',
+        correlationId,
+        timestamp: new Date().toISOString(),
+        path: req.path,
+        method: req.method,
+      },
+    });
+    return;
+  }
 
   if (error instanceof AppError) {
     // Operational errors - log as warning
@@ -160,6 +217,19 @@ export const errorHandler = (
       }
     };
     res.status(400).json(errorResponse);
+  } else if (error.message && /\b(connect|connection)\b/i.test(error.message)) {
+    // Bare driver "connect ECONNREFUSED" / "Connection lost" without a code.
+    errorResponse = {
+      error: {
+        type: ErrorType.DATABASE_ERROR,
+        message: 'Database connection error',
+        correlationId,
+        timestamp: new Date().toISOString(),
+        path: req.path,
+        method: req.method,
+      },
+    };
+    res.status(503).json(errorResponse);
   } else {
     // Unknown errors - don't expose details in production
     errorResponse = {
@@ -177,6 +247,23 @@ export const errorHandler = (
     };
     res.status(500).json(errorResponse);
   }
+};
+
+/**
+ * Catch-all 404 handler for undefined routes. Mounted right before
+ * `errorHandler` in `index.ts`.
+ */
+export const notFoundHandler = (req: Request, res: Response): void => {
+  res.status(404).json({
+    error: {
+      type: ErrorType.NOT_FOUND_ERROR,
+      message: `Route ${req.originalUrl} not found`,
+      correlationId: req.correlationId || uuidv4(),
+      timestamp: new Date().toISOString(),
+      path: req.path,
+      method: req.method,
+    },
+  });
 };
 
 // Async error wrapper

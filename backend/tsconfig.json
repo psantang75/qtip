@@ -110,12 +110,12 @@
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
     "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
   },
+  "include": [
+    "src/**/*"
+  ],
   "exclude": [
     "node_modules",
     "dist",
-    "prisma.config.ts",
-    "prisma/seed.ts",
-    "src/scripts/recalculateAllScores.ts",
-    "src/setup_auth_token_refresh.ts"
+    "src/scripts/recalculateAllScores.ts"
   ]
 }

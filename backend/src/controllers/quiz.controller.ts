@@ -41,6 +41,25 @@ export const submitQuizAttempt = async (req: AuthReq, res: Response) => {
     const passed = score >= parseFloat(quiz.pass_score);
 
     const sessionId = coaching_session_id ? parseInt(coaching_session_id) : null;
+    if (coaching_session_id !== undefined && coaching_session_id !== null && (sessionId === null || isNaN(sessionId))) {
+      return res.status(400).json({ success: false, message: 'Invalid coaching_session_id' });
+    }
+
+    // Verify the caller actually owns the coaching session before we mutate
+    // session state or write quiz_attempts/audit rows for it. Without this
+    // check, a leaked session id would let any authenticated user submit
+    // attempts (and trigger auto-advance) on someone else's session.
+    if (sessionId !== null) {
+      const sessionRows = await prisma.$queryRaw<{ csr_id: number }[]>(
+        Prisma.sql`SELECT csr_id FROM coaching_sessions WHERE id = ${sessionId}`
+      );
+      if (!sessionRows.length) {
+        return res.status(404).json({ success: false, message: 'Coaching session not found' });
+      }
+      if (Number(sessionRows[0].csr_id) !== Number(userId)) {
+        return res.status(403).json({ success: false, message: 'You are not authorized to submit a quiz attempt for this coaching session' });
+      }
+    }
 
     const attemptCountRows = await prisma.$queryRaw<{ cnt: bigint }[]>(
       Prisma.sql`SELECT COUNT(*) as cnt FROM quiz_attempts WHERE quiz_id = ${quizId} AND user_id = ${userId} ${sessionId ? Prisma.sql`AND coaching_session_id = ${sessionId}` : Prisma.sql``}`

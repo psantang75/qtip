@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { formatQualityDate } from '@/utils/dateFormat'
+import { formatQualityDate, priorNinetyDays } from '@/utils/dateFormat'
 import { useToast } from '@/hooks/use-toast'
 import writeupService, { type QaSearchResult } from '@/services/writeupService'
 import { api } from '@/services/authService'
@@ -17,12 +17,9 @@ import type { ExampleInput } from './types'
 // Question types that cannot be searched by answer value
 const EXCLUDED_TYPES = ['TEXT', 'INFO_BLOCK', 'SUB_CATEGORY']
 
-function getPrior90Days() {
-  const to   = new Date()
-  const from = new Date()
-  from.setDate(from.getDate() - 90)
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }
-}
+// Local `getPrior90Days` removed during pre-production review (item #27);
+// the shared helper `priorNinetyDays` in `@/utils/dateFormat` is used by both
+// writeup search modals so the default range cannot drift.
 
 const formatAnswer = (answer: string) =>
   answer ? answer.charAt(0).toUpperCase() + answer.slice(1) : answer
@@ -99,7 +96,7 @@ interface QaSearchModalProps {
 
 export function QaSearchModal({ csrId, onImport, onClose }: QaSearchModalProps) {
   const { toast } = useToast()
-  const defaults = getPrior90Days()
+  const defaults = priorNinetyDays()
   const [formId, setFormId]         = useState('')
   const [dateFrom, setDateFrom]     = useState(defaults.from)
   const [dateTo, setDateTo]         = useState(defaults.to)

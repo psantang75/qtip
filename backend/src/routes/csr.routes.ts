@@ -1,5 +1,5 @@
 import express, { RequestHandler } from 'express';
-import multer from 'multer';
+import { disputeUpload } from '../middleware/disputeUpload';
 import { 
   getCSRStats,
   getCSRDashboardStats,
@@ -34,40 +34,6 @@ import {
 } from '../validation/csr.validation';
 
 const router = express.Router();
-
-// Configure multer for dispute file uploads
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, './uploads/disputes/');
-    },
-    filename: (req, file, cb) => {
-      // Generate unique filename with timestamp
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      cb(null, file.fieldname + '-' + uniqueSuffix + '.' + file.originalname.split('.').pop());
-    }
-  }),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB max file size
-  },
-  fileFilter: (req, file, cb) => {
-    // Allow common document and image types for disputes
-    const allowedMimeTypes = [
-      'application/pdf',
-      'application/msword', // DOC
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
-      'image/jpeg',
-      'image/jpg',
-      'image/png'
-    ];
-    
-    if (allowedMimeTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only PDF, DOC, DOCX, JPG, JPEG, PNG files are allowed.'));
-    }
-  }
-});
 
 // All CSR routes require authentication
 router.use(authenticate as unknown as RequestHandler);
@@ -123,10 +89,10 @@ router.post('/quizzes/:quiz_id/submit', submitQuizAnswers as unknown as RequestH
 // Disputes
 router.get('/disputes/history', getDisputeHistory as unknown as RequestHandler);
 // Add the missing POST route for submitting disputes with multer middleware
-router.post('/disputes', upload.single('attachment'), submitDispute as unknown as RequestHandler);
+router.post('/disputes', disputeUpload.single('attachment'), submitDispute as unknown as RequestHandler);
 router.get('/disputes/:disputeId/attachment', downloadDisputeAttachment as unknown as RequestHandler);
 
-// Coaching Sessions - rate limiting DISABLED
+// Coaching Sessions (rate limiting applied globally via apiLimiter in index.ts)
 router.get('/coaching-sessions', 
   validateSchema(CoachingSessionFiltersSchema),
   getCSRCoachingSessions as unknown as RequestHandler

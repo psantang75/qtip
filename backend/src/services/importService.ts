@@ -2,6 +2,15 @@
  * Import Service
  * Handles Excel file parsing and insertion into raw data tables.
  * Users are matched by email address. Unmatched emails become warnings.
+ *
+ * Library choice: this is the only module in the backend that depends on
+ * SheetJS (`xlsx`). It is intentionally kept on the read side because
+ * `XLSX.read` + `sheet_to_json` handle the long tail of upload formats
+ * (legacy .xls, CSV, SYLK, ODS) that the rest of the system never has to
+ * generate. All Excel **generation** paths use ExcelJS — see
+ * `services/AnalyticsService.ts`, `services/coachingSessionsReport.ts`,
+ * `services/rawDataService.ts`, and `controllers/manager.controller.ts`.
+ * Pre-production review item #24 documents the read/write split.
  */
 
 import * as XLSX from 'xlsx';

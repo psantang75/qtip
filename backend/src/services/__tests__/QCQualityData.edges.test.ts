@@ -135,7 +135,7 @@ describe('QCQualityData — edge cases', () => {
     expect(map['70-79']).toBe(1)    // 70
     expect(map['Below 60']).toBe(1) // 0 (all-NA)
     // DRAFT submission (99007) must NOT be counted.
-    const total = Object.values(map).reduce((a, b) => a + (b as number), 0)
+    const total = Object.values(map).reduce<number>((a, b) => a + (b as number), 0)
     expect(total).toBe(5)
   })
 

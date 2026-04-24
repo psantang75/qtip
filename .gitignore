@@ -32,6 +32,14 @@ uploads/
 # ── Imported CSV Data ────────────────────────────────────────────────────────
 QTIP_data/
 
+# ── Database Dumps / Destructive SQL ─────────────────────────────────────────
+# Never check DB snapshots or destructive SQL into source control — they are
+# both a data-leak risk and an accidental-execution risk.
+scripts/backups/
+scripts/truncate-all-data.sql
+*.dump
+*.sql.gz
+
 # ── Playwright E2E ───────────────────────────────────────────────────────────
 e2e/.env
 playwright-report/

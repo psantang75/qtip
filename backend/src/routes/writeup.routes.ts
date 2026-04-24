@@ -20,7 +20,7 @@ import {
   downloadAttachment,
   deleteAttachment,
   createLinkedCoachingSession,
-} from '../controllers/writeup.controller'
+} from '../controllers/writeups'
 
 const uploadDir = path.resolve('./uploads/writeups')
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })

@@ -1,0 +1,20 @@
+/**
+ * Barrel for manager-domain services.
+ */
+export * from './manager.types'
+export * from './manager.access'
+export * from './manager.dashboard.service'
+export * from './manager.disputes.list.service'
+export * from './manager.disputes.export.service'
+export * from './manager.disputes.detail.service'
+export * from './manager.disputes.resolve.service'
+export * from './manager.coaching.list.service'
+export * from './manager.coaching.export.service'
+export * from './manager.coaching.detail.service'
+export * from './manager.coaching.attachment.service'
+export * from './manager.coaching.create.service'
+export * from './manager.coaching.update.service'
+export * from './manager.coaching.transitions.service'
+export * from './manager.audits.list.service'
+export * from './manager.audits.detail.service'
+export * from './manager.team.service'

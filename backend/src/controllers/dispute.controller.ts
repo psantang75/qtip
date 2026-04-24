@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  AuditListItem,
   CreateDisputeDTO,
   DisputeListItem,
   DisputeStatus,
@@ -12,108 +11,11 @@ import { getDisputeScoreHistory, recordDisputeScore } from '../utils/disputeScor
 import prisma from '../config/prisma';
 import { Prisma, DisputeStatus as PrismaDisputeStatus, DisputeScoreHistoryType } from '../generated/prisma/client';
 
-/**
- * Get audit history for the current CSR
- * @route GET /api/disputes/csr
- */
-export const getCSRAudits = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const user_id = req.user?.user_id;
-
-    if (!user_id) {
-      res.status(401).json({ message: 'Unauthorized' });
-      return;
-    }
-
-    const page = parseInt(req.query.page as string) || 1;
-    const perPage = parseInt(req.query.perPage as string) || 10;
-    const offset = (page - 1) * perPage;
-
-    const start_date = req.query.start_date ? new Date(req.query.start_date as string) : null;
-    const end_date = req.query.end_date ? new Date(req.query.end_date as string) : null;
-    const form_id = req.query.form_id ? parseInt(req.query.form_id as string) : null;
-    const status = req.query.status as string || null;
-
-    const csrFields = await prisma.$queryRaw<{ id: number; form_id: number }[]>`
-      SELECT id, form_id FROM form_metadata_fields
-      WHERE field_name = 'CSR' AND field_type = 'DROPDOWN'
-    `;
-
-    if (csrFields.length === 0) {
-      res.status(404).json({
-        message: 'No CSR metadata fields found',
-        data: [],
-        total: 0,
-        page,
-        perPage,
-        totalPages: 0
-      });
-      return;
-    }
-
-    const conditions: Prisma.Sql[] = [Prisma.sql`sm.value = ${user_id.toString()}`];
-
-    if (start_date) conditions.push(Prisma.sql`s.submitted_at >= ${start_date}`);
-    if (end_date) conditions.push(Prisma.sql`s.submitted_at <= ${end_date}`);
-    if (form_id) conditions.push(Prisma.sql`s.form_id = ${form_id}`);
-    if (status) conditions.push(Prisma.sql`s.status = ${status}`);
-
-    const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
-
-    const [countResult, rows] = await Promise.all([
-      prisma.$queryRaw<{ total: bigint }[]>`
-        SELECT COUNT(*) as total
-        FROM submissions s
-        JOIN submission_metadata sm ON s.id = sm.submission_id
-        JOIN form_metadata_fields fmf ON sm.field_id = fmf.id AND fmf.field_name = 'CSR'
-        ${whereClause}
-      `,
-      prisma.$queryRaw<any[]>`
-        SELECT
-          s.id as submission_id,
-          s.form_id,
-          f.form_name,
-          s.total_score as score,
-          s.submitted_at,
-          s.status,
-          sm.value as csr_id,
-          CASE
-            WHEN s.status = 'SUBMITTED' AND NOT EXISTS (
-              SELECT 1 FROM disputes d WHERE d.submission_id = s.id
-            ) THEN TRUE
-            ELSE FALSE
-          END as is_disputable
-        FROM submissions s
-        JOIN submission_metadata sm ON s.id = sm.submission_id
-        JOIN form_metadata_fields fmf ON sm.field_id = fmf.id AND fmf.field_name = 'CSR'
-        JOIN forms f ON s.form_id = f.id
-        ${whereClause}
-        ORDER BY s.submitted_at DESC
-        LIMIT ${perPage} OFFSET ${offset}
-      `
-    ]);
-
-    const total = Number(countResult[0].total);
-    const totalPages = Math.ceil(total / perPage);
-
-    const audits: AuditListItem[] = rows.map((row: any) => ({
-      submission_id: Number(row.submission_id),
-      form_id: Number(row.form_id),
-      form_name: row.form_name,
-      score: row.score,
-      submitted_at: row.submitted_at,
-      status: row.status,
-      csr_id: row.csr_id,
-      is_disputable: Number(row.is_disputable) === 1
-    }));
-
-    const response: PaginatedResponse<AuditListItem> = { data: audits, total, page, perPage, totalPages };
-    res.status(200).json(response);
-  } catch (error) {
-    console.error('Error fetching CSR audits:', error);
-    res.status(500).json({ message: 'Failed to retrieve audit history' });
-  }
-};
+// NOTE: getCSRAudits used to live here (mounted at GET /api/disputes/audits)
+// but it was a parallel implementation of the same product feature served by
+// csrAudit.controller.getCSRAudits at /api/csr/audits. The frontend never
+// called this variant; it was removed during the pre-production review
+// (item #13) so there is exactly one CSR-audit list contract.
 
 /**
  * Get audit details for dispute submission

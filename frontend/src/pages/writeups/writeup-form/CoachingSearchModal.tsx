@@ -6,19 +6,16 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { formatQualityDate } from '@/utils/dateFormat'
+import { formatQualityDate, priorNinetyDays } from '@/utils/dateFormat'
 import { stripHtml } from '@/components/common/RichTextDisplay'
 import { useToast } from '@/hooks/use-toast'
 import writeupService, { type CoachingSearchResult } from '@/services/writeupService'
 import { COACHING_PURPOSE_LABELS } from '@/constants/labels'
 import type { ExampleInput, PriorDisciplineRef } from './types'
 
-function getPrior90Days() {
-  const to   = new Date()
-  const from = new Date()
-  from.setDate(from.getDate() - 90)
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }
-}
+// Local `getPrior90Days` removed during pre-production review (item #27);
+// the shared helper `priorNinetyDays` in `@/utils/dateFormat` is used by both
+// writeup search modals so the default range cannot drift.
 
 interface CoachingSearchModalProps {
   csrId: number
@@ -29,7 +26,7 @@ interface CoachingSearchModalProps {
 
 export function CoachingSearchModal({ csrId, onImport, onImportRefs, onClose }: CoachingSearchModalProps) {
   const { toast }                       = useToast()
-  const defaults = getPrior90Days()
+  const defaults = priorNinetyDays()
   const [dateFrom, setDateFrom]         = useState(defaults.from)
   const [dateTo, setDateTo]             = useState(defaults.to)
   const [selectedTopics, setTopics]     = useState<Set<string>>(new Set())

@@ -15,17 +15,26 @@ import axios, { AxiosInstance } from 'axios';
 
 const BASE = process.env.E2E_BASE_API || 'http://localhost:3000';
 
-const ADMIN_EMAIL    = process.env.E2E_ADMIN_EMAIL    || 'e2e-admin@dm-us.com';
-const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD  || 'ChangeMe123!';
-const QA_EMAIL       = process.env.E2E_QA_EMAIL        || 'e2e-qa@dm-us.com';
-const QA_PASSWORD    = process.env.E2E_QA_PASSWORD     || 'ChangeMe123!';
-const CSR_EMAIL      = process.env.E2E_CSR_EMAIL       || 'msantangelo@dm-us.com';
-const CSR_PASSWORD   = process.env.E2E_CSR_PASSWORD    || 'ChangeMe123!';
-const MGR_EMAIL      = process.env.E2E_MANAGER_EMAIL   || 'e2e-manager@dm-us.com';
-const MGR_PASSWORD   = process.env.E2E_MANAGER_PASSWORD|| 'ChangeMe123!';
+// All credentials must come from the environment (typically e2e/.env which is
+// gitignored). No fallbacks — committing default emails / passwords here was
+// previously flagged as a P0 secret leak.
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`\n  FATAL: required env var ${name} is not set. Configure e2e/.env (see e2e/env.example).`);
+    process.exit(1);
+  }
+  return v;
+}
 
-const FALLBACK_ADMIN_EMAIL = 'petes@dm-us.com';
-const FALLBACK_ADMIN_PASSWORD = 'ChangeMe123!';
+const ADMIN_EMAIL    = requireEnv('E2E_ADMIN_EMAIL');
+const ADMIN_PASSWORD = requireEnv('E2E_ADMIN_PASSWORD');
+const QA_EMAIL       = requireEnv('E2E_QA_EMAIL');
+const QA_PASSWORD    = requireEnv('E2E_QA_PASSWORD');
+const CSR_EMAIL      = requireEnv('E2E_CSR_EMAIL');
+const CSR_PASSWORD   = requireEnv('E2E_CSR_PASSWORD');
+const MGR_EMAIL      = requireEnv('E2E_MANAGER_EMAIL');
+const MGR_PASSWORD   = requireEnv('E2E_MANAGER_PASSWORD');
 
 let totalChecks = 0;
 let passed = 0;
@@ -131,8 +140,7 @@ async function main() {
   // ── Phase 1: Login ──
   console.log('Phase 1: Logging in all users...');
 
-  let adminAuth = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
-  if (!adminAuth) { console.log('  Trying fallback admin...'); adminAuth = await login(FALLBACK_ADMIN_EMAIL, FALLBACK_ADMIN_PASSWORD); }
+  const adminAuth = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
   if (!adminAuth) { console.log('\n  FATAL: Cannot login as admin.'); process.exit(1); }
   console.log(`  Admin: ${adminAuth.user.email} (ID ${adminAuth.user.id})`);
 

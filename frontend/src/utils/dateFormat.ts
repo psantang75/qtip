@@ -71,8 +71,14 @@ export function formatQualityDateTime(value: string | Date | null | undefined): 
 }
 
 /**
- * Returns a { start, end } DateRange covering the prior 90 days through today (YYYY-MM-DD).
- * Used as the default date range wherever DateRangeFilter appears.
+ * Returns a { start, end } DateRange covering the prior 90 days through 30 days
+ * forward (YYYY-MM-DD). Used as the default date range wherever
+ * DateRangeFilter appears.
+ *
+ * Note: this intentionally extends 30 days into the future to surface
+ * upcoming-but-already-scheduled records. For the strict "last 90 days
+ * through today" window used by the writeup search modals, see
+ * {@link priorNinetyDays}.
  */
 export function defaultDateRange90(): { start: string; end: string } {
   const today = new Date()
@@ -81,6 +87,20 @@ export function defaultDateRange90(): { start: string; end: string } {
   start.setDate(today.getDate() - 90)
   end.setDate(today.getDate() + 30)
   return { start: fmtLocal(start), end: fmtLocal(end) }
+}
+
+/**
+ * Returns a { from, to } range covering the previous 90 calendar days through
+ * today (YYYY-MM-DD strings). Shared by the writeup search modals
+ * (`CoachingSearchModal`, `QaSearchModal`) so they cannot drift apart — a
+ * duplicate `getPrior90Days` lived in each of them before the pre-production
+ * review (item #27).
+ */
+export function priorNinetyDays(): { from: string; to: string } {
+  const today = new Date()
+  const start = new Date(today)
+  start.setDate(today.getDate() - 90)
+  return { from: fmtLocal(start), to: fmtLocal(today) }
 }
 
 /** Format a Date as YYYY-MM-DD using local components (no UTC shift). */

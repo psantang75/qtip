@@ -10,31 +10,9 @@ import {
   fetchAllCoachingSessions,
   generateCoachingSessionsXlsx,
 } from '../services/coachingSessionsReport';
-
-/**
- * Properly escape filename for Content-Disposition header
- * Uses RFC 5987 encoding for filenames with special characters
- */
-const escapeFilename = (filename: string | null | undefined): string => {
-  if (!filename) {
-    return 'filename="attachment"';
-  }
-
-  const cleanFilename = filename.replace(/[\x00-\x1F\x7F]/g, '').trim();
-
-  if (!cleanFilename) {
-    return 'filename="attachment"';
-  }
-
-  const needsEncoding = /[^a-zA-Z0-9._-]/.test(cleanFilename);
-
-  if (needsEncoding) {
-    const encoded = encodeURIComponent(cleanFilename).replace(/\*/g, '%2A');
-    return `filename*=UTF-8''${encoded}`;
-  }
-
-  return `filename="${cleanFilename.replace(/"/g, '\\"')}"`;
-};
+import { formatFilename as escapeFilename } from '../utils/contentDisposition';
+// Local `escapeFilename` removed during pre-production review (item #26).
+// `utils/contentDisposition.formatFilename` is the canonical implementation.
 
 // Extend Request type to include user property
 interface AuthenticatedRequest extends Request {
