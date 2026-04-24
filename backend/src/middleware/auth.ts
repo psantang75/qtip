@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { authLogger, securityLogger } from '../config/logger';
 import { tokenBlacklistService } from '../services/TokenBlacklistService';
 import { ApiErrors, sendError } from '../utils/apiError';
+import { getJwtSecret } from '../config/environment';
 
 // Extend Express Request type to include user property
 declare global {
@@ -16,12 +17,10 @@ declare global {
   }
 }
 
-// JWT secret key with proper validation
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET || JWT_SECRET === 'qtip_secret_key') {
-  console.error('CRITICAL: JWT_SECRET environment variable is not set or using default value. This is insecure for production.');
-  process.exit(1);
-}
+// JWT secret resolved through the shared helper so we share one fail-fast
+// posture with `services/AuthenticationService.ts` and `config/environment.ts`.
+// See pre-production review item #44.
+const JWT_SECRET = getJwtSecret();
 
 /**
  * Authentication middleware to verify JWT token

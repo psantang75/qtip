@@ -78,6 +78,75 @@ const validateEnvironment = (): void => {
 };
 
 /**
+ * Known dev-only secret defaults. Kept here as a single source of truth
+ * so every caller can detect "the operator forgot to set the env var" the
+ * same way and refuse to issue tokens against a value that's effectively
+ * public.
+ */
+const DEV_JWT_SECRET_DEFAULT = 'qtip_secret_key_change_in_production';
+const DEV_REFRESH_SECRET_DEFAULT = 'qtip_refresh_secret_change_in_production';
+// Older code paths (now removed) used this shorter value — keep it in the
+// reject list so a stale .env that still has it can't slip into prod.
+const LEGACY_DEV_JWT_SECRETS = ['qtip_secret_key'];
+
+/**
+ * Resolve the JWT signing secret for the current process.
+ *
+ * Returns `process.env.JWT_SECRET` whenever it is set to a real value
+ * (anything other than a known dev placeholder). In production / test it
+ * **fails fast** — `process.exit(1)` after logging — when the variable is
+ * missing or still equals one of the dev defaults, so the server can never
+ * sign tokens against a value an attacker can read in this repo.
+ *
+ * In development it falls back to the documented dev default with a
+ * one-time warning so local setup keeps working without `.env` plumbing.
+ *
+ * Use this from `middleware/auth.ts` and `services/AuthenticationService.ts`
+ * — never re-derive the secret from `process.env.JWT_SECRET` at the call
+ * site, because that's how the two security postures the pre-production
+ * review (item #44) flagged ended up coexisting.
+ */
+let _devJwtWarned = false;
+let _devRefreshWarned = false;
+
+export const getJwtSecret = (): string => {
+  const raw = process.env.JWT_SECRET?.trim();
+  const isDevDefault = !raw || raw === DEV_JWT_SECRET_DEFAULT || LEGACY_DEV_JWT_SECRETS.includes(raw);
+  const env = process.env.NODE_ENV;
+  if (isDevDefault && env !== 'development') {
+    console.error('[FATAL] JWT_SECRET is not set or is using a known dev default. Refusing to start.');
+    process.exit(1);
+  }
+  if (isDevDefault) {
+    if (!_devJwtWarned) {
+      console.warn('[auth] JWT_SECRET not set — using development default. Do NOT deploy this build.');
+      _devJwtWarned = true;
+    }
+    return DEV_JWT_SECRET_DEFAULT;
+  }
+  return raw as string;
+};
+
+/** Same fail-fast policy as `getJwtSecret`, applied to the refresh secret. */
+export const getJwtRefreshSecret = (): string => {
+  const raw = process.env.REFRESH_TOKEN_SECRET?.trim();
+  const isDevDefault = !raw || raw === DEV_REFRESH_SECRET_DEFAULT;
+  const env = process.env.NODE_ENV;
+  if (isDevDefault && env !== 'development') {
+    console.error('[FATAL] REFRESH_TOKEN_SECRET is not set or is using the dev default. Refusing to start.');
+    process.exit(1);
+  }
+  if (isDevDefault) {
+    if (!_devRefreshWarned) {
+      console.warn('[auth] REFRESH_TOKEN_SECRET not set — using development default. Do NOT deploy this build.');
+      _devRefreshWarned = true;
+    }
+    return DEV_REFRESH_SECRET_DEFAULT;
+  }
+  return raw as string;
+};
+
+/**
  * Parse allowed origins from environment variable
  */
 const parseAllowedOrigins = (): string[] => {
@@ -114,10 +183,12 @@ export const config: EnvironmentConfig = {
   DB2_NAME: process.env.DB2_NAME,
   DB2_CONNECTION_LIMIT: process.env.DB2_CONNECTION_LIMIT ? parseInt(process.env.DB2_CONNECTION_LIMIT, 10) : undefined,
   
-  // JWT Configuration
-  JWT_SECRET: process.env.JWT_SECRET || 'qtip_secret_key_change_in_production',
+  // JWT Configuration — resolved through getJwtSecret/getJwtRefreshSecret so
+  // that prod / test fail fast when the env var is missing or still equals a
+  // known dev default. See pre-production review item #44.
+  JWT_SECRET: getJwtSecret(),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '24h',
-  REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET || 'qtip_refresh_secret_change_in_production',
+  REFRESH_TOKEN_SECRET: getJwtRefreshSecret(),
   REFRESH_TOKEN_EXPIRES_IN: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d',
   
   // Security Configuration
@@ -216,15 +287,8 @@ if (process.env.NODE_ENV === 'production') {
   }
 }
 
-// Warn about default secrets in production
-if (isProduction) {
-  if (config.JWT_SECRET.includes('default') || config.JWT_SECRET.includes('change')) {
-    console.error('WARNING: Using default JWT secret in production! Please set JWT_SECRET environment variable.');
-  }
-  
-  if (config.REFRESH_TOKEN_SECRET.includes('default') || config.REFRESH_TOKEN_SECRET.includes('change')) {
-    console.error('WARNING: Using default refresh token secret in production! Please set REFRESH_TOKEN_SECRET environment variable.');
-  }
-}
+// Default-secret enforcement now lives in getJwtSecret / getJwtRefreshSecret
+// (process.exit(1) on a dev default in non-development envs), so this file no
+// longer needs a separate "warn at startup" block.
 
-export default config; 
+export default config;

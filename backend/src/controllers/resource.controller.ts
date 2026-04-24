@@ -1,18 +1,65 @@
 import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
+import { getJwtSecret } from '../config/environment';
 const fs     = require('fs').promises;
 const path   = require('path');
-const crypto = require('crypto');
 const { createReadStream } = require('fs');
 
-// Short-lived signed tokens for Office Online viewer (2-min TTL, no auth header required)
-const viewTokens = new Map<string, { resourceId: number; expires: number }>();
+/**
+ * Office Online viewer / cross-origin file access — pre-production review item #45.
+ *
+ * Previously this controller minted a random hex token and kept it in a
+ * per-process `Map`. That made the URL useless across PM2 workers and
+ * across restarts (the lookup map was empty after either event), and the
+ * download path returned `Access-Control-Allow-Origin: *` so any site that
+ * could guess the URL could fetch the bytes.
+ *
+ * Both problems collapse into one fix: sign the (resourceId, exp) pair as a
+ * JWT instead of storing it server-side. Verification is stateless, so it
+ * works on any worker and survives any restart, and we can tighten CORS to
+ * the actual Office Online viewer origins instead of `*`.
+ */
 
-function cleanExpiredTokens() {
-  const now = Date.now();
-  for (const [k, v] of viewTokens) {
-    if (v.expires < now) viewTokens.delete(k);
+const VIEW_TOKEN_TTL_SECONDS = 120; // 2-minute window — same effective TTL as the old Map.
+const VIEW_TOKEN_AUDIENCE   = 'qtip:resource-view';
+
+interface ViewTokenPayload {
+  /** Token is valid only for this resource id — prevents URL-substitution attacks. */
+  rid: number;
+  /** Audience tag so a regular auth JWT can never be used as a view token. */
+  aud: string;
+}
+
+/**
+ * Office Online viewer / Office Apps origins we explicitly allow to fetch
+ * the bytes via CORS. Configurable through `OFFICE_VIEWER_ALLOWED_ORIGINS`
+ * (comma-separated) for environments that need additional viewers. Anything
+ * not on this list gets no `Access-Control-Allow-Origin` header at all,
+ * which is the safe default — same-origin requests still work because they
+ * don't need CORS in the first place.
+ */
+const OFFICE_VIEWER_ORIGINS = (() => {
+  const fromEnv = process.env.OFFICE_VIEWER_ALLOWED_ORIGINS?.trim();
+  if (fromEnv) {
+    return fromEnv.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return [
+    'https://view.officeapps.live.com',
+    'https://officeapps.live.com',
+    'https://word-edit.officeapps.live.com',
+    'https://excel.officeapps.live.com',
+    'https://powerpoint.officeapps.live.com',
+    'https://outlook.officeapps.live.com',
+  ];
+})();
+
+function applyOfficeViewerCors(req: Request, res: Response): void {
+  const origin = (req.headers.origin as string | undefined)?.trim();
+  if (origin && OFFICE_VIEWER_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
   }
 }
 
@@ -225,9 +272,11 @@ export const generateViewToken = async (req: AuthReq, res: Response) => {
     );
     if (!rows.length) return res.status(404).json({ success: false, message: 'File not found' });
 
-    cleanExpiredTokens();
-    const token = crypto.randomBytes(32).toString('hex');
-    viewTokens.set(token, { resourceId, expires: Date.now() + 120_000 }); // 2 min
+    const token = jwt.sign(
+      { rid: resourceId, aud: VIEW_TOKEN_AUDIENCE } satisfies ViewTokenPayload,
+      getJwtSecret(),
+      { expiresIn: VIEW_TOKEN_TTL_SECONDS },
+    );
 
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const host     = req.headers['x-forwarded-host'] || req.get('host');
@@ -249,13 +298,19 @@ export const serveFileWithToken = async (req: Request, res: Response) => {
 
     if (!token) return res.status(401).json({ success: false, message: 'Token required' });
 
-    const entry = viewTokens.get(token);
-    if (!entry || entry.expires < Date.now() || entry.resourceId !== resourceId) {
+    let payload: ViewTokenPayload;
+    try {
+      const decoded = jwt.verify(token, getJwtSecret()) as ViewTokenPayload & { exp?: number };
+      if (decoded.aud !== VIEW_TOKEN_AUDIENCE || typeof decoded.rid !== 'number' || decoded.rid !== resourceId) {
+        return res.status(401).json({ success: false, message: 'Invalid token' });
+      }
+      payload = decoded;
+    } catch {
       return res.status(401).json({ success: false, message: 'Invalid or expired token' });
     }
 
     const rows = await prisma.$queryRaw<any[]>(
-      Prisma.sql`SELECT file_path, file_name, file_mime_type FROM training_resources WHERE id = ${resourceId} AND file_path IS NOT NULL`
+      Prisma.sql`SELECT file_path, file_name, file_mime_type FROM training_resources WHERE id = ${payload.rid} AND file_path IS NOT NULL`
     );
     if (!rows.length) return res.status(404).json({ success: false, message: 'File not found' });
 
@@ -267,8 +322,9 @@ export const serveFileWithToken = async (req: Request, res: Response) => {
     res.setHeader('Content-Type', file_mime_type || 'application/octet-stream');
     res.setHeader('Content-Length', stats.size);
     res.setHeader('Content-Disposition', `inline; filename="${file_name}"`);
-    // Allow Office Online to fetch this cross-origin
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Office Online needs cross-origin access; only echo Origin when it's on
+    // the explicit Office viewer allowlist (see OFFICE_VIEWER_ORIGINS).
+    applyOfficeViewerCors(req, res);
 
     const stream = createReadStream(absPath);
     stream.on('error', () => { if (!res.headersSent) res.status(500).end(); });

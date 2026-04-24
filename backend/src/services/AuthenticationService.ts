@@ -13,6 +13,7 @@ interface JwtTokenPayload {
 import { Request } from 'express';
 import { User } from '../models/User';
 import { tokenBlacklistService } from './TokenBlacklistService';
+import { getJwtSecret, getJwtRefreshSecret } from '../config/environment';
 
 // Authentication-specific repository interface (simplified for auth needs)
 interface IAuthRepository {
@@ -81,13 +82,15 @@ export class AuthenticationService {
 
   constructor(repository: IAuthRepository) {
     this.repository = repository;
-    this.JWT_SECRET = process.env.JWT_SECRET || 'qtip_secret_key';
+    // Shared resolver — fails fast in non-development envs when the secret
+    // is missing or still equals a known dev default. See pre-production
+    // review item #44; do not re-derive this from process.env here.
+    this.JWT_SECRET = getJwtSecret();
+    // Touch the refresh secret on construction so a misconfigured prod
+    // process exits at the same point in startup as the access-token path.
+    void getJwtRefreshSecret();
     this.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
     this.REFRESH_TOKEN_EXPIRES_IN = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
-
-    if (!process.env.JWT_SECRET) {
-      console.warn('[NEW AUTH] AuthenticationService: JWT_SECRET not set in environment variables, using default');
-    }
   }
 
   /**

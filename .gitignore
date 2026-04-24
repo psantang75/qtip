@@ -29,6 +29,12 @@ yarn-error.log*
 backend/uploads/
 uploads/
 
+# ── Local persistent service stores (not for source control) ─────────────────
+# - token-blacklist.jsonl: TokenBlacklistService persistent log (item #43)
+# - resource-view-tokens.jsonl: legacy if still emitted (item #45 superseded by JWT)
+backend/data/
+data/
+
 # ── Imported CSV Data ────────────────────────────────────────────────────────
 QTIP_data/
 
