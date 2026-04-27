@@ -21,11 +21,19 @@ lives at the [top-level README](../README.md); deploy templates live in
 ## Production / operations
 
 - [`PRODUCTION_READINESS_GUIDE.md`](./PRODUCTION_READINESS_GUIDE.md) — production checklist
-- [`PRODUCTION_GUIDE.md`](./PRODUCTION_GUIDE.md) — deploy / runbook
+- [`PRODUCTION_GUIDE.md`](./PRODUCTION_GUIDE.md) — deploy / runbook overview
+- [`deployment_runbook.md`](./deployment_runbook.md) — step-by-step deploy + rollback (PM2 / IIS)
+- [`backup_restore_runbook.md`](./backup_restore_runbook.md) — DB backup, restore, partial-restore flows
+- [`observability.md`](./observability.md) — `/metrics`, alerts, SLOs
+- [`environment_variables.md`](./environment_variables.md) — single env-var reference (backend + frontend)
+- [`role_permission_matrix.md`](./role_permission_matrix.md) — role → API / UI route map
 - [`LOGGING_CONFIGURATION.md`](./LOGGING_CONFIGURATION.md) — winston / PM2 logging
 - [`audit_logging.md`](./audit_logging.md) — application audit trail
 - [`multiple_database_connections.md`](./multiple_database_connections.md) — DB connection topology
+- [`database_schema.md`](./database_schema.md) — schema reference + ER diagram
 - [`database_schema_updates.md`](./database_schema_updates.md) — schema change process
+- [`openapi_coverage.md`](./openapi_coverage.md) — Swagger coverage + versioning policy
+- [`jsdoc_coverage_standard.md`](./jsdoc_coverage_standard.md) — doc-comment contract for new code
 
 ## Role dashboards
 
