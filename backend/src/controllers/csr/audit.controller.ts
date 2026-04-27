@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
-import { CSRService, CSRAuditFilters } from '../services/CSRService';
-import logger from '../config/logger';
+import { CSRService, CSRAuditFilters } from '../../services/CSRService';
+import logger from '../../config/logger';
 
 /**
- * CSR Audit Controller
- * Handles audit-related endpoints for CSR users
+ * CSR audit handlers — `/api/csr/audits/*` and the finalize endpoint.
+ *
+ * One of three transport modules under `controllers/csr/` (consolidated
+ * during pre-production review item #69). Re-exported via `./index`.
  */
 
 /**

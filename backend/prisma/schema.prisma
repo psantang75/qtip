@@ -1,3 +1,20 @@
+// Pre-production review item #96 — generator output location.
+//
+// We intentionally keep the generated Prisma client inside `src/generated/`
+// (gitignored but in-tree) rather than pointing `output` at
+// `node_modules/.prisma/client`:
+//
+//   - 60+ call sites import from `../generated/prisma/client`. Flipping to a
+//     package-style import (`@prisma/client`) is a large cross-cutting
+//     refactor and risks drift against the deployment pipeline
+//     (`prisma generate` runs on every CI build and in Docker).
+//   - The in-tree path gives editors and tsc consistent resolution without
+//     relying on `node_modules` being present on disk (OneDrive-backed
+//     workspaces on Windows have been known to virtualize node_modules).
+//   - The trade-off is local TS compile cost — the generated files are
+//     included by `tsconfig.json`'s `"src/**/*"` glob. If this becomes a
+//     real bottleneck, switch to the node_modules output and migrate the
+//     import paths in one dedicated pass.
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"

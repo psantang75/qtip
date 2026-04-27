@@ -13,8 +13,15 @@
 
 import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
-import { trainerCache } from '../TrainerCache'
+import { MemoryTTLCache } from '../MemoryTTLCache'
 import { trainerLogger } from '../TrainerLogger'
+
+// Self-contained probe cache. The previous standalone `TrainerCache` wrapper
+// was deleted during the pre-production review (item #74) because the
+// trainer service stack stopped consuming it after the dashboard refactor;
+// the only remaining caller was this health probe. A local instance keeps
+// the probe self-contained without keeping the unused singleton alive.
+const probeCache = new MemoryTTLCache({ name: 'TrainerHealthProbe', defaultTTLMs: 10_000 })
 
 export interface TrainerHealthReport {
   status:    'healthy' | 'degraded' | 'unhealthy'
@@ -45,11 +52,11 @@ export async function getTrainerHealthReport(): Promise<TrainerHealthReport> {
 
   try {
     const testKey = 'health_check_test_trainer'
-    trainerCache.set(testKey, 'test', 1000)
-    const testValue = trainerCache.get(testKey)
+    probeCache.set(testKey, 'test', 1000)
+    const testValue = probeCache.get<string>(testKey)
     report.checks.cache = testValue === 'test'
-    trainerCache.delete(testKey)
-    report.performance.cache = trainerCache.getStats()
+    probeCache.delete(testKey)
+    report.performance.cache = probeCache.getStats()
   } catch {
     report.checks.cache = false
     report.details.cache = 'Cache operation failed'

@@ -23,6 +23,59 @@ import logger from '../config/logger';
  * defined a parallel `AppError` (positional `(message, statusCode, code)` ctor)
  * and a thinner middleware. The two were consolidated during the pre-production
  * review (item #23) so every layer throws and renders against the same shape.
+ *
+ * ── Response-envelope policy (pre-production review item #89) ────────────
+ *
+ * The API currently emits three envelope shapes, each with a specific role.
+ * New code MUST use shapes (A) or (B); shape (C) is legacy and MUST NOT be
+ * added to new handlers.
+ *
+ *   (A) Rich envelope — THIS module (`utils/errorHandler.ts`)
+ *
+ *         {
+ *           error: {
+ *             type:          ErrorType | string,
+ *             message:       string,
+ *             correlationId: string,       // also echoed in X-Correlation-ID
+ *             timestamp:     string,       // ISO 8601
+ *             path:          string,
+ *             method:        string,
+ *             details?:      object        // only in non-production
+ *           }
+ *         }
+ *
+ *       Source: any handler that `throw`s an `AppError` (or a known subclass
+ *       like `UserServiceError` / `QueryTimeoutError` / `ZodError`) and
+ *       falls through to the global middleware. Use this for every
+ *       controller-layer error going forward — throw `AppError`, let the
+ *       middleware render.
+ *
+ *   (B) Flat auth envelope — `utils/apiError.ts` via `ApiErrors.*`
+ *
+ *         { error: string, message: string, code: string }
+ *
+ *       Source: authentication / authorization middleware
+ *       (`authenticate`, `authorizeAdmin`, `authorizeManager`, …) that
+ *       fails before the request ever reaches a controller. These short-
+ *       circuit with `sendError(res, ...)` because there is no `AppError`
+ *       to throw yet. Use `ApiErrors.unauthorized(res)` /
+ *       `ApiErrors.forbidden(res)` for new middleware; do not invent a
+ *       fourth shape.
+ *
+ *   (C) Service-style envelope — legacy
+ *
+ *         { success: boolean, message: string, data?: unknown }
+ *
+ *       Source: older controllers (coaching, writeups, manager, CSR) that
+ *       explicitly `res.status(n).json({ success: false, message })` from
+ *       inside a `catch`. The frontend already treats `{ success: false }`
+ *       as the same class of error as (A), so existing endpoints stay on
+ *       (C) to avoid breaking clients. Do not add new handlers in this
+ *       shape — throw `AppError` and let (A) render instead.
+ *
+ * A planned future pass (tracked separately) will migrate the remaining (C)
+ * call sites to (A) endpoint-by-endpoint behind feature flags so the
+ * frontend can adopt the richer payload without a breaking change.
  */
 
 // Error types

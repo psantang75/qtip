@@ -1,10 +1,13 @@
 import { Request, Response } from 'express';
-import { CSRRepository } from '../repositories/CSRRepository';
-import { asyncHandler, createAuthorizationError } from '../utils/errorHandler';
+import { CSRRepository } from '../../repositories/CSRRepository';
+import { asyncHandler, createAuthorizationError } from '../../utils/errorHandler';
 
 /**
- * CSR Dashboard Controller
- * Handles dashboard-related endpoints for CSR users
+ * CSR dashboard handlers — `/api/csr/{stats, dashboard-stats, csr-activity}`.
+ *
+ * One of three transport modules under `controllers/csr/` (consolidated
+ * during pre-production review item #69 from the old `csrDashboard`,
+ * `csrAudit`, and `csr` controllers). Re-exported via `./index`.
  */
 
 /**

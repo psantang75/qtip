@@ -83,7 +83,6 @@ want them to run against a golden-slice schema.
 - [`docs/project_overview.md`](./docs/project_overview.md) — system objective + roles + architecture
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — backend/frontend architecture
 - [`docs/PRODUCTION_READINESS_GUIDE.md`](./docs/PRODUCTION_READINESS_GUIDE.md) — production checklist
-- [`docs/Contributing.md`](./docs/Contributing.md) — contribution guidelines
 - [`deploy/README.md`](./deploy/README.md) — Docker / nginx / IIS / env templates
 - [`scripts/README.md`](./scripts/README.md) — deploy / DB / verification scripts
 

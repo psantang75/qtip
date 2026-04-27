@@ -1,5 +1,4 @@
-import apiClient from './apiClient';
-import { logError } from '../utils/errorHandling';
+import { apiDelete, apiGet, apiPost, apiPut } from './apiClient';
 
 // Types for Audit Assignment Management
 export interface AuditAssignment {
@@ -37,75 +36,50 @@ export interface PaginatedResponse<T> {
   currentPage: number;
 }
 
+const SCOPE = 'auditAssignmentService';
+
 const auditAssignmentService = {
   // Get audit assignments with pagination and search
-  getAuditAssignments: async (
+  getAuditAssignments: (
     page: number = 1,
     limit: number = 10,
     search: string = '',
     additionalParams: Record<string, string> = {}
   ): Promise<PaginatedResponse<AuditAssignment>> => {
-    try {
-      let url = `/audit-assignments?page=${page}&limit=${limit}`;
-      
-      if (search) {
-        url += `&search=${encodeURIComponent(search)}`;
-      }
-      
-      Object.entries(additionalParams).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-          url += `&${key}=${encodeURIComponent(value)}`;
-        }
-      });
-      
-      const response = await apiClient.get(url);
-      return response.data;
-    } catch (error) {
-      logError('auditAssignmentService', 'Error fetching audit assignments:', error);
-      throw error;
+    const params: Record<string, string | number> = { page, limit };
+    if (search) params.search = search;
+    for (const [key, value] of Object.entries(additionalParams)) {
+      if (value !== undefined && value !== null && value !== '') params[key] = value;
     }
+    return apiGet<PaginatedResponse<AuditAssignment>>(SCOPE, '/audit-assignments', { params });
   },
-  
+
   // Create multiple audit assignments in bulk
-  createAuditAssignments: async (
+  createAuditAssignments: (
     assignments: AuditAssignmentCreateDTO[]
-  ): Promise<{ message: string; assignments: AuditAssignment[] }> => {
-    try {
-      // Send the assignments array in the expected format
-      const response = await apiClient.post('/audit-assignments', { assignments });
-      return response.data;
-    } catch (error) {
-      logError('auditAssignmentService', 'Error creating audit assignments:', error);
-      throw error;
-    }
-  },
-  
+  ): Promise<{ message: string; assignments: AuditAssignment[] }> =>
+    apiPost<{ message: string; assignments: AuditAssignment[] }>(
+      SCOPE,
+      '/audit-assignments',
+      { assignments },
+    ),
+
   // Update an existing audit assignment
-  updateAuditAssignment: async (
+  updateAuditAssignment: (
     id: number,
     assignment: Partial<AuditAssignmentCreateDTO>
-  ): Promise<{ message: string; assignment: AuditAssignment }> => {
-    try {
-      const response = await apiClient.put(`/audit-assignments/${id}`, assignment);
-      return response.data;
-    } catch (error) {
-      logError('auditAssignmentService', `Error updating audit assignment ${id}:`, error);
-      throw error;
-    }
-  },
-  
+  ): Promise<{ message: string; assignment: AuditAssignment }> =>
+    apiPut<{ message: string; assignment: AuditAssignment }>(
+      SCOPE,
+      `/audit-assignments/${id}`,
+      assignment,
+    ),
+
   // Deactivate an audit assignment (soft delete)
-  deactivateAuditAssignment: async (
+  deactivateAuditAssignment: (
     id: number
-  ): Promise<{ message: string }> => {
-    try {
-      const response = await apiClient.delete(`/audit-assignments/${id}`);
-      return response.data;
-    } catch (error) {
-      logError('auditAssignmentService', `Error deactivating audit assignment ${id}:`, error);
-      throw error;
-    }
-  }
+  ): Promise<{ message: string }> =>
+    apiDelete<{ message: string }>(SCOPE, `/audit-assignments/${id}`),
 };
 
-export default auditAssignmentService; 
+export default auditAssignmentService;

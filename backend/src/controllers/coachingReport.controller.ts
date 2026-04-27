@@ -1,22 +1,39 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
-import { buildCoachingSessionScope } from '../services/coachingSessionsReport';
+import { buildCoachingSessionScope, getCsrRoleId } from '../services/coachingSessionsReport';
 import logger from '../config/logger';
+
+/**
+ * Coaching reports controller — manager/admin aggregates over coaching
+ * sessions (`/api/coaching/reports/*`).
+ *
+ * Domain boundary (pre-production review item #70):
+ *
+ *   - This controller is **manager-audience** and uses
+ *     `buildCoachingSessionScope` from `services/coachingSessionsReport.ts`
+ *     so visibility honors role (CSR → self, Manager → direct reports,
+ *     etc.). The same scope helper is consumed by the live list in
+ *     `coaching.controller.ts` and by the on-demand exports — keep all
+ *     three on the shared helper.
+ *
+ *   - `services/QCCoachingData.ts` is the **insights-audience** sibling
+ *     (department-scoped via `deptClause`) and powers the qc_coaching
+ *     insights dashboards. The two paths intentionally compute different
+ *     aggregates with different scoping. Do NOT merge the SQL.
+ *
+ *   - All aggregates here MUST `JOIN users u ON cs.csr_id = u.id` so the
+ *     manager branch (`u.manager_id = ?`) inside `buildCoachingSessionScope`
+ *     can resolve.
+ */
 
 interface AuthReq extends Request {
   user?: { user_id: number; role: string };
 }
 
-/**
- * Visibility scope applied to every coaching report query — re-exported from
- * `services/coachingSessionsReport.ts` so the aggregates here, the live list
- * in `coaching.controller.ts`, and the on-demand exports all share one
- * predicate (pre-production review item #21).
- *
- * All consumers MUST also `JOIN users u ON cs.csr_id = u.id` so the manager
- * branch (`u.manager_id = ?`) can resolve.
- */
+// Local alias for readability — the canonical helper lives in
+// `services/coachingSessionsReport.ts`. See file header for the full
+// boundary contract (pre-production review items #21, #70).
 const reportScopeCondition = buildCoachingSessionScope;
 
 export const getReportsSummary = async (req: AuthReq, res: Response) => {
@@ -143,6 +160,15 @@ export const getCSRCoachingList = async (req: AuthReq, res: Response) => {
       ? Prisma.sql`AND ${Prisma.join(dateConditions, ' AND ')} AND ${scope}`
       : Prisma.sql`AND ${scope}`;
 
+    // Resolve the CSR role id dynamically rather than hard-coding `3`.
+    // The role id can drift between dev/prod installs, and we already have a
+    // shared, process-cached lookup in `services/coachingSessionsReport.ts`
+    // that every other coaching aggregate uses (pre-production review #91).
+    const csrRoleId = await getCsrRoleId();
+    if (csrRoleId === null) {
+      return res.status(500).json({ success: false, message: 'CSR role is not configured' });
+    }
+
     const [countRows, rows] = await Promise.all([
       prisma.$queryRaw<{ total: bigint }[]>(
         Prisma.sql`
@@ -165,7 +191,7 @@ export const getCSRCoachingList = async (req: AuthReq, res: Response) => {
           FROM users u
           JOIN coaching_sessions cs ON u.id = cs.csr_id ${csJoinFilter}
           LEFT JOIN quiz_attempts qa ON qa.coaching_session_id = cs.id AND qa.user_id = u.id
-          WHERE u.role_id = 3 AND u.is_active = 1
+          WHERE u.role_id = ${csrRoleId} AND u.is_active = 1
           GROUP BY u.id
           ORDER BY total_sessions DESC
           LIMIT ${limit} OFFSET ${offset}

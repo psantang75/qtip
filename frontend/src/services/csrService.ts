@@ -1,9 +1,9 @@
-import apiClient from './apiClient';
+import apiClient, { apiGet, apiPost, apiPut } from './apiClient';
 import type { CSRDashboardData, CSRAudit, CSRAuditDetail, CSRDispute } from '../types/csr.types';
 import { logError } from '../utils/errorHandling';
 
-// Base URL for all CSR endpoints - apiClient already adds /api prefix
-const BASE_URL = '';
+// apiClient already sets `baseURL: '/api'`, so all paths here start with `/...`
+// (pre-production review item #80 — removed the one hard-coded `/api/...` call).
 
 // Types for the new dashboard endpoints (similar to manager dashboard)
 export interface CSRDashboardStats {
@@ -39,129 +39,77 @@ export interface CSRActivityData {
   coachingCompleted_month: number;
 }
 
+const SCOPE = 'csrService';
+
 // Fetch CSR dashboard data
-export const fetchCSRDashboardData = async (): Promise<CSRDashboardData> => {
-  try {
-    const response = await apiClient.get(`${BASE_URL}/csr/stats`);
-    return response.data;
-  } catch (error) {
-    logError('csrService', 'Error fetching CSR dashboard data:', error);
-    throw error;
-  }
-};
+export const fetchCSRDashboardData = (): Promise<CSRDashboardData> =>
+  apiGet<CSRDashboardData>(SCOPE, '/csr/stats');
 
 // Fetch CSR dashboard stats (new manager-style format)
-export const fetchCSRDashboardStats = async (): Promise<CSRDashboardStats> => {
-  try {
-    const response = await apiClient.get(`${BASE_URL}/csr/dashboard-stats`);
-    return response.data;
-  } catch (error) {
-    logError('csrService', 'Error fetching CSR dashboard stats:', error);
-    throw error;
-  }
-};
+export const fetchCSRDashboardStats = (): Promise<CSRDashboardStats> =>
+  apiGet<CSRDashboardStats>(SCOPE, '/csr/dashboard-stats');
 
 // Fetch CSR activity data (shows only logged-in CSR's data)
-export const fetchCSRActivity = async (): Promise<CSRActivityData[]> => {
-  try {
-    const response = await apiClient.get(`${BASE_URL}/csr/csr-activity`);
-    return response.data;
-  } catch (error) {
-    logError('csrService', 'Error fetching CSR activity data:', error);
-    throw error;
-  }
-};
+export const fetchCSRActivity = (): Promise<CSRActivityData[]> =>
+  apiGet<CSRActivityData[]>(SCOPE, '/csr/csr-activity');
 
 // Fetch audits for CSR
-export const fetchCSRAudits = async (
-  page = 1, 
-  limit = 10, 
-  filters?: { 
+export const fetchCSRAudits = (
+  page = 1,
+  limit = 10,
+  filters?: {
     formName?: string,
     form_id_search?: string,
-    startDate?: string, 
-    endDate?: string, 
-    status?: string, 
-    searchTerm?: string 
+    startDate?: string,
+    endDate?: string,
+    status?: string,
+    searchTerm?: string
   }
 ): Promise<{
   audits: CSRAudit[];
   totalCount: number;
-}> => {
-  try {
-    // Make real API call with filters
-    const params = {
-      page,
-      limit,
-      ...filters
-    };
-    
-    const response = await apiClient.get(`${BASE_URL}/csr/audits`, { params });
-    return response.data;
-  } catch (error) {
-    logError('csrService', 'Error fetching CSR audits:', error);
-    throw error;
-  }
-};
+}> =>
+  apiGet<{ audits: CSRAudit[]; totalCount: number }>(SCOPE, '/csr/audits', {
+    params: { page, limit, ...filters },
+  });
 
 // Fetch specific audit details
-export const fetchAuditDetails = async (id: number): Promise<CSRAuditDetail> => {
-  try {
-    const response = await apiClient.get(`${BASE_URL}/csr/audits/${id}`);
-    return response.data;
-  } catch (error) {
-    logError('csrService', 'Error fetching audit details:', error);
-    throw error;
-  }
-};
+export const fetchAuditDetails = (id: number): Promise<CSRAuditDetail> =>
+  apiGet<CSRAuditDetail>(SCOPE, `/csr/audits/${id}`);
 
-// Submit a dispute for an audit
-export const submitDispute = async (submissionId: number, disputeData: FormData): Promise<any> => {
+// Submit a dispute for an audit. FormData requires multipart — the request
+// interceptor strips the JSON Content-Type so axios can set the boundary.
+export const submitDispute = async (_submissionId: number, disputeData: FormData): Promise<any> => {
   try {
-    const response = await apiClient.post(`${BASE_URL}/csr/disputes`, disputeData);
+    const response = await apiClient.post('/csr/disputes', disputeData);
     return response.data;
   } catch (error) {
-    logError('csrService', 'Error submitting dispute:', error);
+    logError(SCOPE, 'Error submitting dispute:', error);
     throw error;
   }
 };
 
 // Finalize an audit (CSR accepts the review)
-export const finalizeAudit = async (submissionId: number, finalData: any): Promise<any> => {
-  try {
-    const response = await apiClient.put(`${BASE_URL}/csr/audits/${submissionId}/finalize`, finalData);
-    return response.data;
-  } catch (error) {
-    logError('csrService', 'Error finalizing audit:', error);
-    throw error;
-  }
-};
+export const finalizeAudit = (submissionId: number, finalData: any): Promise<any> =>
+  apiPut(SCOPE, `/csr/audits/${submissionId}/finalize`, finalData);
 
-// Finalize a submission (QA/Manager/Admin accepts the review)
-export const finalizeSubmission = async (submissionId: number, finalData: any): Promise<any> => {
-  try {
-    const url = `/api/submissions/${submissionId}/finalize`;
-    const response = await apiClient.put(url, finalData);
-    return response.data;
-  } catch (error) {
-    logError('csrService', 'Error finalizing submission:', error);
-    throw error;
-  }
-};
+// Finalize a submission (QA/Manager/Admin accepts the review).
+// apiClient already sets baseURL to '/api', so the path must NOT include the
+// prefix (pre-production review item #80 — this was the one site that did).
+export const finalizeSubmission = (submissionId: number, finalData: any): Promise<any> =>
+  apiPut(SCOPE, `/submissions/${submissionId}/finalize`, finalData);
 
 // Check if an audit is disputable
 export const isAuditDisputable = async (submissionId: number): Promise<boolean> => {
-  try {
-    const response = await apiClient.get(`${BASE_URL}/csr/audits/${submissionId}/disputable`);
-    return response.data.disputable;
-  } catch (error) {
-    logError('csrService', 'Error checking if audit is disputable:', error);
-    throw error;
-  }
+  const res = await apiGet<{ disputable: boolean }>(
+    SCOPE,
+    `/csr/audits/${submissionId}/disputable`,
+  );
+  return res.disputable;
 };
 
 // Fetch dispute history for CSR
-export const fetchDisputeHistory = async (
+export const fetchDisputeHistory = (
   page = 1,
   perPage = 10,
   filters?: {
@@ -177,45 +125,28 @@ export const fetchDisputeHistory = async (
   page: number;
   perPage: number;
   totalPages: number;
-}> => {
-  try {
-    const params = {
-      page,
-      perPage,
-      ...filters
-    };
-    
-    // Use the correct endpoint path for disputes history
-    // The backend has routes at both /api/disputes/history and /api/csr/disputes/history
-    const response = await apiClient.get(`${BASE_URL}/disputes/history`, { params });
-    return response.data;
-  } catch (error) {
-    logError('csrService', 'Error fetching dispute history:', error);
-    throw error;
-  }
-};
+}> =>
+  apiGet<{
+    data: CSRDispute[];
+    total: number;
+    page: number;
+    perPage: number;
+    totalPages: number;
+  }>(SCOPE, '/disputes/history', {
+    params: { page, perPage, ...filters },
+  });
 
 // Get dispute details by ID
-export const getDisputeDetails = async (disputeId: number): Promise<CSRDispute> => {
+export const getDisputeDetails = (disputeId: number): Promise<CSRDispute> =>
+  apiGet<CSRDispute>(SCOPE, `/disputes/${disputeId}`);
+
+// Update a dispute (reason and/or attachment). FormData triggers multipart.
+export const updateDispute = async (disputeId: number, disputeData: FormData): Promise<any> => {
   try {
-    // Use the correct endpoint path for dispute details
-    // The backend has this route at /api/disputes/:disputeId
-    const response = await apiClient.get(`${BASE_URL}/disputes/${disputeId}`);
+    const response = await apiClient.put(`/disputes/${disputeId}`, disputeData);
     return response.data;
   } catch (error) {
-    logError('csrService', 'Error fetching dispute details:', error);
+    logError(SCOPE, 'Error updating dispute:', error);
     throw error;
   }
 };
-
-// Update a dispute (reason and/or attachment)
-export const updateDispute = async (disputeId: number, disputeData: FormData): Promise<any> => {
-  try {
-    // Don't set Content-Type header - axios will automatically set it with the correct boundary for FormData
-    const response = await apiClient.put(`${BASE_URL}/disputes/${disputeId}`, disputeData);
-    return response.data;
-  } catch (error) {
-    logError('csrService', 'Error updating dispute:', error);
-    throw error;
-  }
-}; 

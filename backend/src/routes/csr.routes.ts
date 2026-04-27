@@ -1,26 +1,20 @@
 import express, { RequestHandler } from 'express';
 import { disputeUpload } from '../middleware/disputeUpload';
-import { 
+import {
   getCSRStats,
   getCSRDashboardStats,
-  getCSRActivity
-} from '../controllers/csrDashboard.controller';
-import { 
+  getCSRActivity,
   getCSRAudits,
   getCSRAuditDetails,
   isAuditDisputable,
-  finalizeSubmission
-} from '../controllers/csrAudit.controller';
-import { 
-  submitQuizAnswers
-} from '../controllers/csr.controller';
-import { 
+  finalizeSubmission,
+  submitQuizAnswers,
   getCSRCoachingSessions,
   getCSRCoachingSessionDetails,
   downloadCSRCoachingAttachment,
   submitCSRResponse,
   getCSRResourceFile,
-} from '../controllers/csr.controller';
+} from '../controllers/csr';
 import { getDisputeHistory, submitDispute, downloadDisputeAttachment } from '../controllers/dispute.controller';
 import { authenticate } from '../middleware/auth';
 import {

@@ -17,7 +17,10 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
     mutationFn: () => qaService.submitCSRDispute({ submission_id: submissionId, reason }),
     onSuccess: () => {
       toast({ title: 'Dispute submitted', description: 'Sent to your manager for review.' })
-      qc.invalidateQueries({ queryKey: ['submission-detail'] })
+      // Narrow invalidation — only this submission's detail (all roles),
+      // not every submission detail in the cache. See
+      // docs/frontend_query_keys.md (review item #77).
+      qc.invalidateQueries({ queryKey: ['submission-detail', submissionId] })
       qc.invalidateQueries({ queryKey: ['submissions'] })
       qc.invalidateQueries({ queryKey: ['agent-dispute-history'] })
       onSuccess()
@@ -48,10 +51,12 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
 
 // ── Agent edit open dispute ──────────────────────────────────────────────────
 export function EditDisputeForm({
+  submissionId,
   dispute,
   onSuccess,
   onCancel,
 }: {
+  submissionId: number
   dispute: { id: number; reason: string; attachment_url?: string | null }
   onSuccess: () => void
   onCancel: () => void
@@ -66,7 +71,9 @@ export function EditDisputeForm({
     mutationFn: () => qaService.updateCSRDispute(dispute.id, reason, file),
     onSuccess: () => {
       toast({ title: 'Dispute updated' })
-      qc.invalidateQueries({ queryKey: ['submission-detail'] })
+      // Narrow invalidation — this submission only, across roles. See
+      // docs/frontend_query_keys.md (review item #77).
+      qc.invalidateQueries({ queryKey: ['submission-detail', submissionId] })
       qc.invalidateQueries({ queryKey: ['agent-dispute-history'] })
       onSuccess()
     },

@@ -8,7 +8,11 @@ import type { PeriodRanges } from '../utils/periodUtils'
 import { getInsightsRoleId } from '../utils/insightsRoleMap'
 import { qcKpiService } from '../services/QCKpiService'
 import { qcAnalyticsService } from '../services/QCAnalyticsService'
-import * as qcData from '../services/QCInsightsData'
+// QC insight data sources are split by domain. Pre-production review (#68)
+// removed the misleadingly named `QCInsightsData` barrel; import the domain
+// modules directly so each call site documents which data layer it touches.
+import * as qcQuality from '../services/QCQualityData'
+import * as qcWarnings from '../services/QCWarningsData'
 import * as qcCoaching from '../services/QCCoachingData'
 
 const permissionService = new InsightsPermissionService()
@@ -177,8 +181,8 @@ export const getQCAgentFull = qcHandler('qc_agents', async (deptFilter, ranges, 
     qcAnalyticsService.getAgentProfile(userId, ranges),
     qcKpiService.getKpiValues(deptFilter, ranges, formNames, userId),
     qcKpiService.getTrends(deptFilter, trendCodes, ranges.current.end, userId, formNames),
-    qcData.getFormScores(deptFilter, ranges, userId),
-    qcData.getCategoryScores(deptFilter, formNames, ranges, userId),
+    qcQuality.getFormScores(deptFilter, ranges, userId),
+    qcQuality.getCategoryScores(deptFilter, formNames, ranges, userId),
   ])
   return { profile, kpis, trends, formScores, categoryScores }
 })
@@ -210,7 +214,7 @@ export const getFilterOptions = async (req: Request, res: Response): Promise<voi
     const formNames = req.query.forms
       ? (req.query.forms as string).split(',').map(s => s.trim()).filter(Boolean)
       : []
-    const data = await qcData.getFilterOptions(deptFilter, formNames, ranges)
+    const data = await qcQuality.getFilterOptions(deptFilter, formNames, ranges)
     res.json(data)
   } catch (err) {
     logger.error('insightsQC [filter-options] error:', err)
@@ -226,7 +230,7 @@ function parseFormNames(req: Request): string[] {
 }
 
 export const getScoreDistribution = qcHandler('qc_quality', (deptFilter, ranges, req) =>
-  qcData.getScoreDistribution(deptFilter, parseFormNames(req), ranges),
+  qcQuality.getScoreDistribution(deptFilter, parseFormNames(req), ranges),
 )
 
 // Category & form scores and missed questions are also surfaced inside the
@@ -239,15 +243,15 @@ export const getCategoryScores = qcHandler(['qc_quality', 'qc_agents'], (deptFil
   const userId = access.dataScope === 'SELF'
     ? req.user?.user_id ?? null
     : (Number.isFinite(requestedUserId) ? requestedUserId : null)
-  return qcData.getCategoryScores(deptFilter, parseFormNames(req), ranges, userId)
+  return qcQuality.getCategoryScores(deptFilter, parseFormNames(req), ranges, userId)
 })
 
 export const getMissedQuestions = qcHandler(['qc_quality', 'qc_agents'], (deptFilter, ranges, req) =>
-  qcData.getMissedQuestions(deptFilter, parseFormNames(req), ranges),
+  qcQuality.getMissedQuestions(deptFilter, parseFormNames(req), ranges),
 )
 
 export const getQualityDeptComparison = qcHandler('qc_quality', (deptFilter, ranges, req) =>
-  qcData.getQualityDeptComparison(deptFilter, ranges, parseFormNames(req)),
+  qcQuality.getQualityDeptComparison(deptFilter, ranges, parseFormNames(req)),
 )
 
 // Form scores are also surfaced inside the Agent Profile drill-down on the
@@ -258,7 +262,7 @@ export const getFormScores = qcHandler(['qc_quality', 'qc_agents'], (deptFilter,
   const userId = access.dataScope === 'SELF'
     ? req.user?.user_id ?? null
     : (Number.isFinite(requestedUserId) ? requestedUserId : null)
-  return qcData.getFormScores(deptFilter, ranges, userId)
+  return qcQuality.getFormScores(deptFilter, ranges, userId)
 })
 
 // Lazy-loaded per-agent breakdown for a single form. Backs the Quality page's
@@ -267,7 +271,7 @@ export const getFormScores = qcHandler(['qc_quality', 'qc_agents'], (deptFilter,
 export const getFormAgentBreakdown = qcHandler('qc_quality', (deptFilter, ranges, req) => {
   const formId = parseInt(req.params.formId, 10)
   if (isNaN(formId)) throw new BadRequestError('Invalid formId')
-  return qcData.getFormAgentBreakdown(deptFilter, formId, ranges)
+  return qcQuality.getFormAgentBreakdown(deptFilter, formId, ranges)
 })
 
 // Lazy-loaded per-agent breakdown for a single (form, category). Backs the
@@ -281,17 +285,17 @@ export const getCategoryAgentBreakdown = qcHandler('qc_quality', async (deptFilt
   if (isNaN(categoryId)) {
     const categoryName = (req.query.category as string | undefined)?.trim()
     if (!categoryName) throw new BadRequestError('categoryId or category query parameter is required')
-    const found = await qcData.findCategoryId(formId, categoryName)
+    const found = await qcQuality.findCategoryId(formId, categoryName)
     if (found == null) return []
     categoryId = found
   }
-  return qcData.getCategoryAgentBreakdown(deptFilter, formId, categoryId, ranges)
+  return qcQuality.getCategoryAgentBreakdown(deptFilter, formId, categoryId, ranges)
 })
 
 // ── Coaching ──────────────────────────────────────────────────────────────────
 
 export const getCoachingTopics = qcHandler('qc_coaching', (deptFilter, ranges) =>
-  qcData.getCoachingTopics(deptFilter, ranges),
+  qcCoaching.getCoachingTopics(deptFilter, ranges),
 )
 
 export const getRepeatOffenders = qcHandler('qc_coaching', (deptFilter, ranges) =>
@@ -317,17 +321,17 @@ export const getSessionsByStatus = qcHandler('qc_coaching', (deptFilter, ranges)
 )
 
 export const getCoachingDeptComparison = qcHandler('qc_coaching', (_deptFilter, ranges) =>
-  qcData.getCoachingDeptComparison(ranges),
+  qcCoaching.getCoachingDeptComparison(ranges),
 )
 
 // ── Warnings ──────────────────────────────────────────────────────────────────
 
 export const getWriteUpPipeline = qcHandler('qc_warnings', (deptFilter, ranges) =>
-  qcData.getWriteUpPipeline(deptFilter, ranges),
+  qcWarnings.getWriteUpPipeline(deptFilter, ranges),
 )
 
 export const getActiveWriteUps = qcHandler('qc_warnings', (deptFilter, ranges) =>
-  qcData.getActiveWriteUps(deptFilter, ranges),
+  qcWarnings.getActiveWriteUps(deptFilter, ranges),
 )
 
 // Combined step-up + agents-on-final payload powering the Escalation Path
@@ -335,22 +339,22 @@ export const getActiveWriteUps = qcHandler('qc_warnings', (deptFilter, ranges) =
 // the Type Distribution bars in WarningsPipelineSection).
 export const getEscalationData = qcHandler('qc_warnings', async (deptFilter, ranges) => {
   const [stepUps, agentsOnFinal] = await Promise.all([
-    qcData.getStepUpData(deptFilter, ranges),
-    qcData.getAgentsOnFinalWarning(deptFilter, ranges),
+    qcWarnings.getStepUpData(deptFilter, ranges),
+    qcWarnings.getAgentsOnFinalWarning(deptFilter, ranges),
   ])
   return { stepUps, agentsOnFinal }
 })
 
 export const getRepeatWarningAgents = qcHandler('qc_warnings', (deptFilter, ranges) =>
-  qcData.getRepeatWarningAgents(deptFilter, ranges),
+  qcWarnings.getRepeatWarningAgents(deptFilter, ranges),
 )
 
 export const getPolicyViolations = qcHandler('qc_warnings', (deptFilter, ranges) =>
-  qcData.getPolicyViolations(deptFilter, ranges),
+  qcWarnings.getPolicyViolations(deptFilter, ranges),
 )
 
 export const getWarningsDeptComparison = qcHandler('qc_warnings', (_deptFilter, ranges) =>
-  qcData.getWarningsDeptComparison(ranges),
+  qcWarnings.getWarningsDeptComparison(ranges),
 )
 
 import logger from '../config/logger';

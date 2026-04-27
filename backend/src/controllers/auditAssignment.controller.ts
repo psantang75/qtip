@@ -7,13 +7,7 @@ import {
   UpdateAuditAssignmentDTO
 } from '../models';
 import logger from '../config/logger';
-
-class HttpError extends Error {
-  constructor(public statusCode: number, message: string, public responseData?: Record<string, any>) {
-    super(message);
-    this.name = 'HttpError';
-  }
-}
+import { HttpError } from '../utils/httpError';
 
 /**
  * Get all audit assignments with pagination and optional filtering

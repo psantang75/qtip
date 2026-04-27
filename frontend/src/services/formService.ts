@@ -1,22 +1,25 @@
-import apiClient from './apiClient';
+import apiClient, { apiGet } from './apiClient';
 import type { Form, FormListItem } from '../types/form.types';
 import { logError } from '../utils/errorHandling';
 
+// The other handlers in this file keep their own try/catch because they
+// translate specific HTTP status codes into user-facing messages
+// (e.g. 404 → "Form not found…"). Only simple pass-through calls use
+// the shared `apiGet`/`apiPost`/etc. helpers from apiClient.
+
 // Get all forms with optional active filter
 export const getAllForms = async (isActive?: boolean): Promise<FormListItem[]> => {
-  try {
-    let url = '/forms';
-    if (isActive !== undefined) url += `?is_active=${isActive}`;
-    const response = await apiClient.get(url);
-    const d = response.data;
-    if (Array.isArray(d))        return d;
-    if (Array.isArray(d?.forms)) return d.forms;
-    if (Array.isArray(d?.items)) return d.items;
-    return [];
-  } catch (error) {
-    logError('formService', 'Error fetching forms:', error);
-    throw error;
-  }
+  const d = await apiGet<unknown>(
+    'formService',
+    '/forms',
+    isActive !== undefined ? { params: { is_active: isActive } } : undefined,
+  );
+  if (Array.isArray(d))                               return d as FormListItem[];
+  if (d && typeof d === 'object' && 'forms' in d && Array.isArray((d as { forms: unknown }).forms))
+    return (d as { forms: FormListItem[] }).forms;
+  if (d && typeof d === 'object' && 'items' in d && Array.isArray((d as { items: unknown }).items))
+    return (d as { items: FormListItem[] }).items;
+  return [];
 };
 
 // Get form by ID with all details

@@ -1,5 +1,5 @@
 import express, { RequestHandler } from 'express';
-import { submitQuizAnswers } from '../controllers/csr.controller';
+import { submitQuizAnswers } from '../controllers/csr';
 import { submitQuizAttempt, getMyAttempts } from '../controllers/quiz.controller';
 import { authenticate } from '../middleware/auth';
 

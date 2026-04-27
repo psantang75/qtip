@@ -4,16 +4,22 @@
  * Users are matched by email address. Unmatched emails become warnings.
  *
  * Library choice: this is the only module in the backend that depends on
- * SheetJS (`xlsx`). It is intentionally kept on the read side because
+ * SheetJS. It is intentionally kept on the read side because
  * `XLSX.read` + `sheet_to_json` handle the long tail of upload formats
  * (legacy .xls, CSV, SYLK, ODS) that the rest of the system never has to
  * generate. All Excel **generation** paths use ExcelJS — see
  * `services/AnalyticsService.ts`, `services/coachingSessionsReport.ts`,
  * `services/rawDataService.ts`, and `controllers/manager.controller.ts`.
  * Pre-production review item #24 documents the read/write split.
+ *
+ * We import from `@e965/xlsx`, the community-maintained fork of SheetJS,
+ * because the plain `xlsx` package on npm has not been published with
+ * security fixes for some of its historical CVEs. `@e965/xlsx` preserves
+ * the exact same API surface (`read`, `utils.sheet_to_json`), so swapping
+ * is a pure package-name change (pre-production review item #84).
  */
 
-import * as XLSX from 'xlsx';
+import * as XLSX from '@e965/xlsx';
 import prisma from '../config/prisma';
 
 const BATCH_SIZE = 500;

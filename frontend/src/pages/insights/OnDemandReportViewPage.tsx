@@ -11,6 +11,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { ListPagination } from '@/components/common/ListPagination'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
+import { StickyFilterBar, StickyFilterField } from '@/components/common/StickyFilterBar'
 import { InsightsSection } from '@/components/insights'
 import { PERIOD_OPTIONS } from '@/components/insights/InsightsFilterBar'
 
@@ -260,17 +261,16 @@ export default function OnDemandReportViewPage() {
 
   return (
     <div>
-      {/* Sticky filter bar — same shape & styling as `InsightsFilterBar`.
-          Row 1: Agent · Department · Form · ... · result count + Reset Filters
-          Row 2: Period (+ Custom dates) · Review # · ... · Run + Back */}
-      <div className="sticky -top-6 z-40 bg-slate-50 border-b border-slate-200 px-6 py-3 -mx-6 -mt-6 mb-5">
+      {/* Sticky filter bar — shared chrome with `InsightsFilterBar`.
+          Row 1: Agent · Department · Form · ... · result count + Back
+          Row 2: Period (+ Custom dates) · Review # · ... · Reset Filters + Run */}
+      <StickyFilterBar>
 
-        {/* Row 1 — entity filters + results / reset */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Row 1 — entity filters + results / back */}
+        <StickyFilterBar.Row>
 
           {showAgent && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 shrink-0">Agent</span>
+            <StickyFilterField label="Agent">
               <StagedMultiSelect
                 options={opts.agents}
                 selected={draft.agents}
@@ -278,12 +278,11 @@ export default function OnDemandReportViewPage() {
                 placeholder="All Agents"
                 width="w-[200px]"
               />
-            </div>
+            </StickyFilterField>
           )}
 
           {showDept && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 shrink-0">Department</span>
+            <StickyFilterField label="Department">
               <StagedMultiSelect
                 options={opts.departments}
                 selected={draft.departments}
@@ -291,12 +290,11 @@ export default function OnDemandReportViewPage() {
                 placeholder="All Departments"
                 width="w-[200px]"
               />
-            </div>
+            </StickyFilterField>
           )}
 
           {showForm && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 shrink-0">Form</span>
+            <StickyFilterField label="Form">
               <StagedMultiSelect
                 options={opts.forms}
                 selected={draft.forms}
@@ -304,12 +302,11 @@ export default function OnDemandReportViewPage() {
                 placeholder="All Forms"
                 width="w-[230px]"
               />
-            </div>
+            </StickyFilterField>
           )}
 
           {showTopics && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 shrink-0">Training Topics</span>
+            <StickyFilterField label="Training Topics">
               <StagedMultiSelect
                 options={opts.topics}
                 selected={draft.topics}
@@ -317,12 +314,11 @@ export default function OnDemandReportViewPage() {
                 placeholder="All Topics"
                 width="w-[200px]"
               />
-            </div>
+            </StickyFilterField>
           )}
 
           {showStatus && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 shrink-0">Status</span>
+            <StickyFilterField label="Status">
               <Select
                 value={draft.status || '__all__'}
                 onValueChange={v => setDraft(d => ({ ...d, status: v === '__all__' ? '' : v }))}
@@ -337,10 +333,10 @@ export default function OnDemandReportViewPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </StickyFilterField>
           )}
 
-          <div className="ml-auto flex items-center gap-3">
+          <StickyFilterBar.RightCluster>
             {applied && dataQuery.data && (
               <span className="text-[12px] text-slate-500">
                 <span className="font-semibold text-slate-700">
@@ -358,15 +354,14 @@ export default function OnDemandReportViewPage() {
               <ArrowLeft size={14} className="mr-1" />
               Back to Reports
             </Button>
-          </div>
-        </div>
+          </StickyFilterBar.RightCluster>
 
-        {/* Row 2 — period + review # + Run / Back */}
-        <div className="flex flex-wrap items-center gap-3 mt-3">
+        </StickyFilterBar.Row>
 
-          {/* Period */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 shrink-0">Period</span>
+        {/* Row 2 — period + review #/session # + reset/run */}
+        <StickyFilterBar.Row className="mt-3">
+
+          <StickyFilterField label="Period">
             <Select
               value={draft.period}
               onValueChange={v => setDraft(d => ({ ...d, period: v }))}
@@ -380,9 +375,8 @@ export default function OnDemandReportViewPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </StickyFilterField>
 
-          {/* Custom date range */}
           {isCustom && (
             <div className="flex items-center gap-1.5">
               <Input
@@ -401,10 +395,8 @@ export default function OnDemandReportViewPage() {
             </div>
           )}
 
-          {/* Review # */}
           {showSubmissionId && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 shrink-0">Review #</span>
+            <StickyFilterField label="Review #">
               <div className="relative w-[150px]">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                 <Input
@@ -417,13 +409,11 @@ export default function OnDemandReportViewPage() {
                   className="pl-8 h-8 text-xs bg-white"
                 />
               </div>
-            </div>
+            </StickyFilterField>
           )}
 
-          {/* Session # (coaching) */}
           {showSessionId && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 shrink-0">Session #</span>
+            <StickyFilterField label="Session #">
               <div className="relative w-[150px]">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                 <Input
@@ -436,10 +426,10 @@ export default function OnDemandReportViewPage() {
                   className="pl-8 h-8 text-xs bg-white"
                 />
               </div>
-            </div>
+            </StickyFilterField>
           )}
 
-          <div className="ml-auto flex items-center gap-3">
+          <StickyFilterBar.RightCluster>
             <Button
               variant="ghost"
               size="sm"
@@ -460,9 +450,11 @@ export default function OnDemandReportViewPage() {
                 : <Play className="h-3.5 w-3.5 mr-1" />}
               Run
             </Button>
-          </div>
-        </div>
-      </div>
+          </StickyFilterBar.RightCluster>
+
+        </StickyFilterBar.Row>
+
+      </StickyFilterBar>
 
       <div className="space-y-5">
         <div>

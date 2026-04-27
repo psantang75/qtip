@@ -3,6 +3,8 @@ import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
 import { authenticate, authorizeManager } from '../middleware/auth'
+import { validateSchema } from '../validation/csr.validation'
+import { CreateWriteUpSchema, UpdateWriteUpSchema } from '../validation/writeup.validation'
 import {
   getWriteUps,
   getWriteUpById,
@@ -58,10 +60,12 @@ router.get('/prior-discipline/:csrId', getPriorDiscipline                       
 router.get('/:id',                     getWriteUpById                                                                                                           as unknown as RequestHandler)
 router.get('/:id/attachments/:attachmentId',                                                                                             downloadAttachment      as unknown as RequestHandler)
 
-// Write routes — Manager, Admin, QA only
-router.post('/',                       authorizeManager as unknown as RequestHandler, createWriteUp                                                              as unknown as RequestHandler)
+// Write routes — Manager, Admin, QA only (Trainer intentionally excluded;
+// see file header on `services/writeups/writeup.lifecycle.service.ts` for
+// the rationale — pre-production review item #90).
+router.post('/',                       authorizeManager as unknown as RequestHandler, validateSchema(CreateWriteUpSchema), createWriteUp                         as unknown as RequestHandler)
 router.post('/coaching-session',       authorizeManager as unknown as RequestHandler, createLinkedCoachingSession                                                as unknown as RequestHandler)
-router.put('/:id',                     authorizeManager as unknown as RequestHandler, updateWriteUp                                                              as unknown as RequestHandler)
+router.put('/:id',                     authorizeManager as unknown as RequestHandler, validateSchema(UpdateWriteUpSchema), updateWriteUp                         as unknown as RequestHandler)
 router.patch('/:id/internal-notes',    authorizeManager as unknown as RequestHandler, updateInternalNotes                                                        as unknown as RequestHandler)
 router.patch('/:id/follow-up-notes',   authorizeManager as unknown as RequestHandler, updateFollowUpNotes                                                        as unknown as RequestHandler)
 router.patch('/:id/status',            authorizeManager as unknown as RequestHandler, transitionStatus                                                           as unknown as RequestHandler)

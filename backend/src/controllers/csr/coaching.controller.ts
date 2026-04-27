@@ -1,23 +1,20 @@
 ﻿import { Request, Response } from 'express';
-import prisma from '../config/prisma';
-import { Prisma } from '../generated/prisma/client';
-import { applyAutoAdvance } from '../utils/coachingAutoAdvance';
-import { formatFilename as escapeFilename } from '../utils/contentDisposition';
-import logger from '../config/logger';
+import prisma from '../../config/prisma';
+import { Prisma } from '../../generated/prisma/client';
+import { applyAutoAdvance } from '../../utils/coachingAutoAdvance';
+import { formatFilename as escapeFilename } from '../../utils/contentDisposition';
+import logger from '../../config/logger';
 
 /**
- * CSR controller — handlers for the authenticated CSR experience.
+ * CSR coaching handlers — quiz submission, coaching-session list/details/
+ * attachment, the resource-file pass-through, and CSR response submission.
  *
- * Scope: quiz submission, coaching-session list/details/attachment, CSR
- * response submission. The dashboard, audit list/detail, and finalize handlers
- * that used to live here were duplicates of the canonical implementations in
- * `csrDashboard.controller.ts` and `csrAudit.controller.ts` and were removed
- * during the pre-production review (item #12) so bug fixes only have to land
- * in one place.
+ * One of three transport modules under `controllers/csr/` (consolidated
+ * during pre-production review item #69). The dashboard, audit list/detail,
+ * and finalize handlers that used to be duplicated here were removed during
+ * pre-production review item #12 so bug fixes only have to land in one
+ * place. Re-exported via `./index`.
  */
-
-// Local `escapeFilename` removed during pre-production review (item #26).
-// `utils/contentDisposition.formatFilename` is the canonical implementation.
 
 /**
  * Submit quiz answers for CSR

@@ -287,6 +287,7 @@ export default function SubmissionDetailPage() {
             />
             {detail.dispute && (
               <DisputePanel
+                submissionId={Number(id)}
                 dispute={detail.dispute}
                 isAgent={isAgent}
                 editingDispute={editingDispute}

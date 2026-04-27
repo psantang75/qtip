@@ -16,7 +16,6 @@ lives at the [top-level README](../README.md); deploy templates live in
 - [`project_overview.md`](./project_overview.md) — system objective, roles, architecture
 - [`design.md`](./design.md) — design decisions
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — backend + frontend architecture
-- [`Contributing.md`](./Contributing.md) — contribution guidelines
 - [`CHANGELOG.md`](./CHANGELOG.md) — change log
 
 ## Production / operations
@@ -102,6 +101,11 @@ lives at the [top-level README](../README.md); deploy templates live in
 
 See [`instructions/`](./instructions) for in-depth feature implementation
 notes (form builder, scoring logic, trainer course creation, etc.).
+
+## Frontend conventions
+
+- [`frontend_query_keys.md`](./frontend_query_keys.md) — TanStack Query
+  key conventions (domain-first tuples, how to invalidate safely).
 
 ---
 

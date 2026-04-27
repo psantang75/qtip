@@ -6,7 +6,7 @@ import logger from '../config/logger';
  * EnhancedCacheService — domain wrapper around the shared `MemoryTTLCache`
  * that adds CSR/analytics-specific keying (e.g. `csr:dashboard:{id}`),
  * per-bucket invalidation, and cache warming. The underlying TTL store is
- * the same primitive used by `QACacheService` and `TrainerCache` so all
+ * the same primitive used by `QACacheService` so all
  * three behave consistently.
  */
 

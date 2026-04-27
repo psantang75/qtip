@@ -7,6 +7,51 @@
  * 300-line cap. Both files were extracted from the old
  * `controllers/writeup.controller.ts` during the pre-production review
  * (item #29).
+ *
+ * ── Role policy (pre-production review item #90) ─────────────────────────
+ *
+ * The route layer mounts create / update / status / attachment handlers
+ * behind `authorizeManager`, which resolves to **Manager, Admin, QA**.
+ * Trainers are intentionally excluded even though they can author coaching
+ * sessions: write-ups are HR disciplinary records (Verbal → Written → Final
+ * Warning) and the system-of-record for the corrective-action process.
+ * Trainer scope is onboarding / performance coaching, not formal discipline.
+ * If this policy changes, update `routes/writeup.routes.ts`, the
+ * `authorizeManager` allow-list, and this comment together.
+ *
+ * ── Audit trail (pre-production review item #86) ─────────────────────────
+ *
+ * Write-ups do **not** emit separate `audit_log` rows. The state-machine
+ * columns on the record itself capture actorship and timing:
+ *   `created_by`, `meeting_date`, `delivered_at`, `refused_at`,
+ *   `refusal_reason`, `signed_at`, `signed_ip`, `acknowledged_at`,
+ *   `follow_up_completed_at`, `closed_at`.
+ * That is the audit trail for the discipline process; new state transitions
+ * should add columns here rather than branching into a parallel log.
+ *
+ * ── Naming convention (pre-production review item #101) ──────────────────
+ *
+ * The canonical compound is **`WriteUp`** (two capitals) — matches the
+ * Prisma models (`WriteUp`, `WriteUpIncident`, `WriteUpAttachment`, …) and
+ * the enums (`WriteUpType`, `WriteUpStatus`, `WriteUpExampleSource`). Apply
+ * that everywhere a type, class, or React component name is needed:
+ *
+ *   • Backend types / interfaces:    `WriteUpServiceError`, `CreateWriteUpInput`
+ *   • Frontend React components:     `WriteUpFormPage`, `WriteUpPdf`
+ *
+ * File naming is intentionally layer-specific:
+ *
+ *   • Backend — `lowercase.dotted.ts` (`writeup.lifecycle.service.ts`,
+ *     `writeup.routes.ts`, `writeup.validation.ts`). Keeps the folder
+ *     alphabetized by feature and mirrors every other backend module.
+ *   • Frontend — `PascalCase.tsx` for React components
+ *     (`WriteUpFormPage.tsx`), `camelCase.ts` for hooks / helpers
+ *     (`warningListHelpers.tsx`, `openPdf.ts`). That's the React
+ *     ecosystem norm and aligns with the rest of `frontend/src/pages/`.
+ *
+ * The case-variant `Writeup` (one capital) shows up in a handful of
+ * historical spots but should not spread — prefer `WriteUp` for all new
+ * symbols so the codebase matches the Prisma source of truth.
  */
 
 import prisma from '../../config/prisma'

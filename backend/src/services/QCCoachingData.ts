@@ -4,6 +4,33 @@ import type { PeriodRanges } from '../utils/periodUtils'
 import { fmtDatetime as fmt } from '../utils/dateHelpers'
 import { deptClause } from './qcQueryHelpers'
 
+/**
+ * QC coaching insight data layer — backs the `qc_coaching` insights page
+ * (`/api/insights-qc/coaching/*` via `insightsQC.controller.ts`).
+ *
+ * Domain boundary (pre-production review item #70):
+ *
+ *   - This module is **insights-audience**: department-scoped only
+ *     (`deptClause(deptFilter, 'u')`) and pre-aggregated for the QC
+ *     dashboards. The HTTP layer routes through `qcHandler` +
+ *     `middleware/qcCache`, and the dept filter is resolved per-user
+ *     before reaching us — see `resolveDeptFilter` in
+ *     `controllers/insightsQC.controller.ts`.
+ *
+ *   - `controllers/coachingReport.controller.ts` is the **manager-audience**
+ *     surface: role-based visibility (`buildCoachingSessionScope` from
+ *     `services/coachingSessionsReport.ts`) so a Manager only sees their
+ *     direct reports' coaching, a CSR only sees their own, etc.
+ *
+ *   - `services/coachingSessionsReport.ts` owns the canonical role-scope
+ *     helper that the live coaching list (`coaching.controller.ts`) and
+ *     the on-demand exports also use. Do NOT add a second role-scope
+ *     here — extend `buildCoachingSessionScope` and re-export it.
+ *
+ * If a future aggregate needs both audiences, wrap it once and let each
+ * caller pass its own scope predicate; do not duplicate the SQL shape.
+ */
+
 /** Agents coached on a specific topic in the period */
 export async function getCoachingTopicAgents(
   topic: string, deptFilter: number[], ranges: PeriodRanges,
@@ -257,7 +284,7 @@ export async function getAgentsFailedQuizzes(deptFilter: number[], ranges: Perio
   }))
 }
 
-// ── Coaching insight summaries (moved from QCInsightsData) ───────────────────
+// ── Coaching insight summaries ────────────────────────────────────────────────
 
 export async function getCoachingTopics(deptFilter: number[], ranges: PeriodRanges) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)

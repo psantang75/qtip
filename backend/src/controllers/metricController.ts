@@ -9,6 +9,34 @@ import {
 } from '../services/metricService';
 import logger from '../config/logger';
 
+/**
+ * Metric controller — CRUD over the legacy `metrics` + `metric_thresholds`
+ * tables that back the Performance Metrics admin UI (`/api/metrics/*`).
+ *
+ * Domain boundary (do not merge with the KPI controller — pre-production
+ * review item #73):
+ *
+ *   - `/api/metrics/*` (this controller, `services/metricService.ts`,
+ *     tables `metrics` + `metric_thresholds`) is the **manager-facing**
+ *     metric registry. It models the Performance Goals + Performance
+ *     Reviews surfaces. Aggregation is `AVG`/`SUM`/`COUNT` against
+ *     submission/coaching rows. Direction set is the legacy
+ *     `UP_IS_GOOD | DOWN_IS_GOOD | NEUTRAL`.
+ *
+ *   - `/api/insights/admin/kpis/*`
+ *     (`insightsAdminKpi.controller.ts`, tables `ie_kpi` +
+ *     `ie_kpi_threshold`) is the **insights-platform** KPI registry. It
+ *     drives the Insights dashboards (Overview / Quality / Coaching /
+ *     Warnings) through `QCKpiService` + the rollup workers. KPIs carry
+ *     a `formula` (raw SQL) + a `formula_type`, `format_type`, and
+ *     `unit_label`, none of which exist on `metrics`.
+ *
+ * The two registries are intentionally separate because their consumers,
+ * caching layers, and lifecycle (manager edits vs. platform-curated
+ * KPIs) are different. New work goes into whichever registry already
+ * owns the surface the change applies to; do not bridge them.
+ */
+
 export const getAllMetricsHandler = async (_req: Request, res: Response): Promise<void> => {
   try {
     const metrics = await getAllMetrics();

@@ -3,7 +3,7 @@ import { MemoryTTLCache } from './MemoryTTLCache';
 /**
  * QACacheService — domain wrapper around the shared `MemoryTTLCache` for
  * QA dashboard data (stats + per-QA CSR activity). Storage primitive is
- * shared with `EnhancedCacheService` and `TrainerCache`; the keying scheme
+ * shared with `EnhancedCacheService`; the keying scheme
  * here is QA-scoped so each domain can be cleared independently.
  */
 

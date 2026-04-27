@@ -31,6 +31,7 @@ export interface ResolutionState {
 }
 
 interface Props {
+  submissionId:     number
   dispute:          Dispute
   isAgent:          boolean
   editingDispute:   boolean
@@ -41,7 +42,7 @@ interface Props {
 }
 
 export function DisputePanel({
-  dispute, isAgent, editingDispute, onEditDispute,
+  submissionId, dispute, isAgent, editingDispute, onEditDispute,
   canResolveDispute, resolution, formData,
 }: Props) {
   const headerRight = (
@@ -69,6 +70,7 @@ export function DisputePanel({
 
           {editingDispute ? (
             <EditDisputeForm
+              submissionId={submissionId}
               dispute={dispute}
               onSuccess={() => onEditDispute(false)}
               onCancel={() => onEditDispute(false)}

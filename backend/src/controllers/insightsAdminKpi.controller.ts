@@ -4,6 +4,32 @@ import pool from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import logger from '../config/logger';
 
+/**
+ * Insights Admin KPI controller — CRUD over the `ie_kpi` +
+ * `ie_kpi_threshold` tables that drive the Insights dashboards
+ * (`/api/insights/admin/kpis/*`).
+ *
+ * Domain boundary (do not merge with `metricController.ts` — pre-production
+ * review item #73):
+ *
+ *   - This controller owns the **insights-platform** KPI registry: SQL
+ *     formulas resolved by `services/QCKpiService.ts`, materialized by
+ *     the rollup workers, and consumed by Overview / Quality / Coaching
+ *     / Warnings dashboards. KPIs carry `formula`, `formula_type`,
+ *     `format_type`, `unit_label`, and `category` columns that the
+ *     legacy `metrics` table does not have.
+ *
+ *   - `metricController.ts` (`/api/metrics/*`, `services/metricService.ts`)
+ *     owns the **manager-facing** Performance Metrics registry backing
+ *     Performance Goals + Performance Reviews. Aggregation is
+ *     `AVG`/`SUM`/`COUNT`, no formula text.
+ *
+ * The two registries stay separate because their consumers, caching
+ * layers, and lifecycle (platform-curated KPIs vs. manager-edited
+ * metrics) are different. New work goes into whichever registry already
+ * owns the surface the change applies to; do not bridge them.
+ */
+
 const VALID_DIRECTIONS = ['UP_IS_GOOD', 'DOWN_IS_GOOD', 'NEUTRAL'] as const;
 const VALID_FORMAT_TYPES = ['PERCENT', 'NUMBER'] as const;
 

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
+import { StickyFilterBar, StickyFilterField } from '@/components/common/StickyFilterBar'
 
 export const PERIOD_OPTIONS = [
   'Current Week',
@@ -73,16 +74,35 @@ export default function InsightsFilterBar({
   const isCustom = period === 'Custom'
   const hasInfoRow = businessDays != null || priorDateRange
 
+  const infoRow = hasInfoRow ? (
+    <>
+      {businessDays != null && (
+        <span className="flex items-center gap-1.5">
+          <CalendarDays size={13} className="text-primary" />
+          Business Days: <strong className="text-slate-700">{businessDays}</strong> current,{' '}
+          <strong className="text-slate-700">{priorBusinessDays ?? '…'}</strong> prior
+        </span>
+      )}
+      {priorDateRange && (
+        <span className="flex items-center gap-1.5 ml-2">
+          <CalendarDays size={13} className="text-primary" />
+          <span className="w-2.5 h-px bg-primary inline-block" />
+          <CalendarDays size={13} className="text-primary" />
+          <span className="ml-1">Prior Date Range:</span>
+          <strong className="text-slate-700">{priorDateRange.start}</strong>
+          <span className="text-slate-400">to</span>
+          <strong className="text-slate-700">{priorDateRange.end}</strong>
+        </span>
+      )}
+    </>
+  ) : undefined
+
   return (
-    <div className="sticky -top-6 z-40 bg-slate-50 border-b border-slate-200 px-6 py-3 -mx-6 -mt-6 mb-5">
+    <StickyFilterBar infoRow={infoRow}>
+      <StickyFilterBar.Row>
 
-      {/* Row 1: Filters */}
-      <div className="flex gap-3 items-center flex-wrap">
-
-        {/* Department filter */}
         {!hideDeptFilter && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 shrink-0">Department</span>
+          <StickyFilterField label="Department">
             <StagedMultiSelect
               options={availableDepts}
               selected={selectedDepts}
@@ -90,13 +110,11 @@ export default function InsightsFilterBar({
               placeholder="All Departments"
               width="w-[200px]"
             />
-          </div>
+          </StickyFilterField>
         )}
 
-        {/* Form filter */}
         {showFormFilter && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 shrink-0">Form</span>
+          <StickyFilterField label="Form">
             <StagedMultiSelect
               options={availableForms}
               selected={selectedForms}
@@ -104,12 +122,10 @@ export default function InsightsFilterBar({
               placeholder="All Forms"
               width="w-[230px]"
             />
-          </div>
+          </StickyFilterField>
         )}
 
-        {/* Time period filter */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-500 shrink-0">Period</span>
+        <StickyFilterField label="Period">
           <Select value={period} onValueChange={onPeriodChange}>
             <SelectTrigger className="h-8 text-xs w-[175px] bg-white">
               <SelectValue />
@@ -120,9 +136,8 @@ export default function InsightsFilterBar({
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </StickyFilterField>
 
-        {/* Custom date range */}
         {isCustom && (
           <div className="flex items-center gap-1.5">
             <Input
@@ -141,8 +156,7 @@ export default function InsightsFilterBar({
           </div>
         )}
 
-        {/* Right-side actions */}
-        <div className="ml-auto flex items-center gap-2">
+        <StickyFilterBar.RightCluster className="gap-2">
           {onReset && (
             <Button
               variant="ghost"
@@ -165,32 +179,9 @@ export default function InsightsFilterBar({
               Back to List
             </Button>
           )}
-        </div>
-      </div>
+        </StickyFilterBar.RightCluster>
 
-      {/* Row 2: Business days + prior date range */}
-      {hasInfoRow && (
-        <div className="flex gap-10 items-center mt-4 pt-3 border-t border-slate-200 text-xs text-slate-500">
-          {businessDays != null && (
-            <span className="flex items-center gap-1.5">
-              <CalendarDays size={13} className="text-primary" />
-              Business Days: <strong className="text-slate-700">{businessDays}</strong> current,{' '}
-              <strong className="text-slate-700">{priorBusinessDays ?? '…'}</strong> prior
-            </span>
-          )}
-          {priorDateRange && (
-            <span className="flex items-center gap-1.5 ml-2">
-              <CalendarDays size={13} className="text-primary" />
-              <span className="w-2.5 h-px bg-primary inline-block" />
-              <CalendarDays size={13} className="text-primary" />
-              <span className="ml-1">Prior Date Range:</span>
-              <strong className="text-slate-700">{priorDateRange.start}</strong>
-              <span className="text-slate-400">to</span>
-              <strong className="text-slate-700">{priorDateRange.end}</strong>
-            </span>
-          )}
-        </div>
-      )}
-    </div>
+      </StickyFilterBar.Row>
+    </StickyFilterBar>
   )
 }

@@ -48,20 +48,15 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.51.0",
-    "dotenv": "^16.4.7",
-    "@types/cookie-parser": "^1.4.9",
-    "@types/csurf": "^1.11.5",
     "concurrently": "^8.2.2",
+    "dotenv": "^16.4.7",
     "rimraf": "^5.0.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "cjs": "^0.0.11",
-    "cookie-parser": "^1.4.7",
-    "csurf": "^1.2.2",
-    "express-status-monitor": "1.2.3",
     "pm2": "^6.0.8",
+    "qtip-system": "file:",
     "serve": "^14.2.4"
   },
   "engines": {

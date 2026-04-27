@@ -1,6 +1,6 @@
-import axios, { type InternalAxiosRequestConfig } from 'axios';
+import axios, { type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios';
 import { getCookie } from '../utils/apiHelpers';
-import { logWarn } from '../utils/errorHandling';
+import { logError, logWarn } from '../utils/errorHandling';
 
 interface DedupConfig extends InternalAxiosRequestConfig {
   skipDedup?: boolean;
@@ -125,3 +125,87 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
+
+// ── Shared request helpers ────────────────────────────────────────────────────
+// Pre-production review item #78 — the QA / Form / Submission / CSR /
+// AuditAssignment services were all repeating the same
+// `try { axios.X } catch (e) { logError(...); throw e }` boilerplate. These
+// helpers collapse that pattern so each service function is a one-liner and
+// every failure is logged with a consistent `[<scope>] <METHOD> <url>` tag
+// through the shared `logError` utility (dev-only, no-op in prod builds).
+//
+//   fetchCSRDashboardStats = () =>
+//     apiGet<CSRDashboardStats>('csrService', '/csr/dashboard-stats');
+//
+// 401s are still handled centrally by the response interceptor above — these
+// helpers re-throw so callers that need to render an error state still can.
+
+/** Issue a GET and return `response.data`. Errors are logged via `logError` and re-thrown. */
+export async function apiGet<T>(scope: string, url: string, config?: AxiosRequestConfig): Promise<T> {
+  try {
+    const res = await apiClient.get<T>(url, config);
+    return res.data;
+  } catch (error) {
+    logError(scope, `GET ${url}`, error);
+    throw error;
+  }
+}
+
+/** Issue a POST and return `response.data`. Errors are logged via `logError` and re-thrown. */
+export async function apiPost<T>(
+  scope: string,
+  url: string,
+  data?: unknown,
+  config?: AxiosRequestConfig,
+): Promise<T> {
+  try {
+    const res = await apiClient.post<T>(url, data, config);
+    return res.data;
+  } catch (error) {
+    logError(scope, `POST ${url}`, error);
+    throw error;
+  }
+}
+
+/** Issue a PUT and return `response.data`. Errors are logged via `logError` and re-thrown. */
+export async function apiPut<T>(
+  scope: string,
+  url: string,
+  data?: unknown,
+  config?: AxiosRequestConfig,
+): Promise<T> {
+  try {
+    const res = await apiClient.put<T>(url, data, config);
+    return res.data;
+  } catch (error) {
+    logError(scope, `PUT ${url}`, error);
+    throw error;
+  }
+}
+
+/** Issue a PATCH and return `response.data`. Errors are logged via `logError` and re-thrown. */
+export async function apiPatch<T>(
+  scope: string,
+  url: string,
+  data?: unknown,
+  config?: AxiosRequestConfig,
+): Promise<T> {
+  try {
+    const res = await apiClient.patch<T>(url, data, config);
+    return res.data;
+  } catch (error) {
+    logError(scope, `PATCH ${url}`, error);
+    throw error;
+  }
+}
+
+/** Issue a DELETE and return `response.data`. Errors are logged via `logError` and re-thrown. */
+export async function apiDelete<T>(scope: string, url: string, config?: AxiosRequestConfig): Promise<T> {
+  try {
+    const res = await apiClient.delete<T>(url, config);
+    return res.data;
+  } catch (error) {
+    logError(scope, `DELETE ${url}`, error);
+    throw error;
+  }
+}

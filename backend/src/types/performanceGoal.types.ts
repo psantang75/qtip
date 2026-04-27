@@ -1,6 +1,20 @@
-﻿
-// Focus on QA_SCORE only - future enhancement for AUDIT_RATE and DISPUTE_RATE
-export type goal_type = 'QA_SCORE'; // | 'AUDIT_RATE' | 'DISPUTE_RATE'; // Future enhancement
+﻿/**
+ * Performance-goal metric types supported end-to-end (pre-production review
+ * item #93).
+ *
+ * - `QA_SCORE`     — average QA form score (0-100). Has an extra target_value
+ *                    ceiling check in `EnhancedPerformanceGoalService`.
+ * - `AUDIT_RATE`   — audits completed vs. assigned, as a rate.
+ * - `DISPUTE_RATE` — disputed submissions as a rate.
+ *
+ * All three are implemented in
+ * `services/analytics/analytics.performanceGoals.service.ts` and wired
+ * through `IAnalyticsRepository.getAuditRateData` /
+ * `getDisputeRateData`. The frontend `GoalType` in
+ * `frontend/src/types/performance.types.ts` matches this list — keep them
+ * in lock-step if a new metric is added.
+ */
+export type goal_type = 'QA_SCORE' | 'AUDIT_RATE' | 'DISPUTE_RATE';
 
 export type GoalScope = 'GLOBAL' | 'DEPARTMENT' | 'USER' | 'MULTI_USER' | 'MULTI_DEPARTMENT';
 
