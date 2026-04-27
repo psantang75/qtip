@@ -51,13 +51,13 @@
     "concurrently": "^8.2.2",
     "dotenv": "^16.4.7",
     "rimraf": "^5.0.10",
+    "serve": "^14.2.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
   },
   "dependencies": {
     "pm2": "^6.0.8",
-    "qtip-system": "file:",
-    "serve": "^14.2.4"
+    "qtip-system": "file:"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -65,7 +65,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-org/qtip.git"
+    "url": "git+https://github.com/psantang75/qtip.git"
   },
   "keywords": [
     "quality",
@@ -75,10 +75,10 @@
     "react",
     "mysql"
   ],
-  "author": "Your Organization",
-  "license": "MIT",
+  "author": "Dynamic Media",
+  "license": "UNLICENSED",
   "bugs": {
-    "url": "https://github.com/your-org/qtip/issues"
+    "url": "https://github.com/psantang75/qtip/issues"
   },
-  "homepage": "https://github.com/your-org/qtip#readme"
+  "homepage": "https://github.com/psantang75/qtip#readme"
 }

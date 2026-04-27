@@ -1,7 +1,8 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "QTIP backend API (Express + Prisma + MySQL)",
+  "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
@@ -17,9 +18,15 @@
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "qtip",
+    "backend",
+    "express",
+    "prisma"
+  ],
+  "author": "Dynamic Media",
+  "license": "UNLICENSED",
+  "private": true,
   "dependencies": {
     "@e965/xlsx": "^0.20.3",
     "@prisma/adapter-mariadb": "^7.5.0",
@@ -53,7 +60,6 @@
     "winston-daily-rotate-file": "^5.0.0",
     "zod": "^3.25.51"
   },
-  "description": "",
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.9",

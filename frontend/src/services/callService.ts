@@ -1,5 +1,4 @@
 import apiClient from './apiClient';
-import authService from './authService';
 import { logError, logWarn } from '../utils/errorHandling';
 
 // Types for Call Management
@@ -213,32 +212,6 @@ const callService = {
       minute: '2-digit'
     };
     return new Date(dateString).toLocaleDateString(undefined, options);
-  },
-
-  // Check if current user can access call
-  canAccessCall: (call: Call): boolean => {
-    const currentUser = authService.getCurrentUser();
-    if (!currentUser) return false;
-    
-    // Note: This is a basic implementation. In practice, you'd need to
-    // check the user's role name from a role mapping or additional API call
-    // since the User interface only contains role_id, not role name
-    
-    // For now, we allow access based on user ID matching CSR ID
-    // or if they have admin/qa role_id (would need role mapping)
-    
-    // CSRs can only access their own calls
-    if (call.csr_id === currentUser.id) {
-      return true;
-    }
-    
-    // TODO: Implement proper role-based access control
-    // This would require either:
-    // 1. Adding role name to User interface
-    // 2. Creating a role mapping service
-    // 3. Making an API call to check permissions
-    
-    return false;
   },
 
   // Check if call exists in database by conversation ID
