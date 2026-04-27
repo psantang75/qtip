@@ -164,7 +164,82 @@ If any step returns non-2xx, treat it as a rollback trigger.
 
 ---
 
-## 6. Staggered migration caveat
+## 6. Secret rotation (JWT_SECRET, REFRESH_TOKEN_SECRET)
+
+Rotation is an **operational task on the production host**. It does **not**
+require a code change, a new release, a `git push`, or an `npm install` — you
+are only changing environment-variable values and restarting the API.
+
+### 6.1 When to rotate
+
+- Immediately if a signed JWT has leaked (e.g. a token committed to git
+  history, pasted into a ticket, or posted to a log aggregator).
+- On a regular cadence (recommended: every 90 days) as defence in depth.
+- Whenever an employee with access to the production `.env` leaves the team.
+
+### 6.2 Generate new values
+
+Both secrets must be long (≥ 48 bytes) and random. Generate on any machine:
+
+```powershell
+# Windows / PowerShell
+[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+```
+
+```bash
+# Linux / macOS
+openssl rand -base64 48
+```
+
+Run twice — one value per secret. Do not reuse `JWT_SECRET` as
+`REFRESH_TOKEN_SECRET`.
+
+### 6.3 Apply on the production host
+
+1. Stage the new values in the deploy channel / password manager.
+2. Edit the production `.env` (or PM2 `ecosystem.config.cjs` env block, or
+   Windows service env — whichever the host uses) and replace:
+
+   ```
+   JWT_SECRET=<new value 1>
+   REFRESH_TOKEN_SECRET=<new value 2>
+   ```
+
+3. Restart the API to pick up the new values:
+
+   ```powershell
+   pm2 restart qtip-backend
+   ```
+
+   Workers do not mint JWTs and do not need to restart.
+
+### 6.4 Expected user impact
+
+All currently logged-in users are bumped back to `/login` on their next
+request, because their stored access and refresh tokens no longer verify
+against the new secret. This is expected and harmless. Post a brief notice
+in the ops channel if the maintenance window does not already cover it.
+
+### 6.5 Verification
+
+After restart:
+
+- `pm2 logs qtip-backend --lines 50` should show no "invalid signature" loops
+  other than the expected one-time re-auth of active sessions.
+- `/api/auth/login` with a known-good canary must return 200 and set a
+  new CSRF cookie (§5 smoke test covers this).
+- The old token (the one that prompted the rotation, if any) must now return
+  401 on any authenticated endpoint.
+
+### 6.6 Rollback
+
+If the new value was mistyped and no user can log in, restore the previous
+`.env` value and `pm2 restart qtip-backend`. Nothing is persisted server-side
+against the in-flight secret, so the rollback is instantaneous.
+
+---
+
+## 7. Staggered migration caveat
 
 For migrations that add **not-null columns** or drop columns still in use:
 
