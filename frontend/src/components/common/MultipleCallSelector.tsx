@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Phone, MicOff, Plus, X } from 'lucide-react'
+import { Phone, MicOff, Plus, X, FileDown, ChevronDown, ChevronUp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import callService, { type Call } from '@/services/callService'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
+import { formatTranscriptText } from '@/utils/transcriptUtils'
 
 interface MultipleCallSelectorProps {
   selectedCalls: Call[]
@@ -14,11 +15,17 @@ interface MultipleCallSelectorProps {
 }
 
 export default function MultipleCallSelector({ selectedCalls, onCallsChange, disabled }: MultipleCallSelectorProps) {
-  const [activeIndex, setActiveIndex] = useState(0)
-  const [adding,   setAdding]   = useState(false)
-  const [callId,   setCallId]   = useState('')
-  const [callDate, setCallDate] = useState('')
-  const [error,    setError]    = useState('')
+  const [activeIndex,    setActiveIndex]    = useState(0)
+  const [transcriptOpen, setTranscriptOpen] = useState(false)
+  const [adding,         setAdding]         = useState(false)
+  const [callId,         setCallId]         = useState('')
+  const [callDate,       setCallDate]       = useState('')
+  const [error,          setError]          = useState('')
+
+  const setActiveTab = (i: number) => {
+    setActiveIndex(i)
+    setTranscriptOpen(false)
+  }
 
   const addMut = useMutation({
     mutationFn: () => callService.searchCalls({
@@ -47,7 +54,7 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
       }
       const updated = [...selectedCalls, call]
       onCallsChange(updated)
-      setActiveIndex(updated.length - 1)
+      setActiveTab(updated.length - 1)
       setAdding(false)
       setCallId('')
       setCallDate('')
@@ -67,7 +74,7 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
       }
       const updated = [...selectedCalls, call]
       onCallsChange(updated)
-      setActiveIndex(updated.length - 1)
+      setActiveTab(updated.length - 1)
       setAdding(false)
       setCallId('')
       setCallDate('')
@@ -78,7 +85,7 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
   const removeCall = (idx: number) => {
     const updated = selectedCalls.filter((_, i) => i !== idx)
     onCallsChange(updated)
-    setActiveIndex(Math.min(activeIndex, updated.length - 1))
+    setActiveTab(Math.min(activeIndex, updated.length - 1))
   }
 
   const handleAdd = () => {
@@ -106,7 +113,7 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
             <button
               key={i}
               type="button"
-              onClick={() => setActiveIndex(i)}
+              onClick={() => setActiveTab(i)}
               className={cn(
                 'flex items-center gap-2 px-4 py-2.5 text-[12px] font-semibold border-b-2 transition-colors',
                 activeIndex === i
@@ -127,7 +134,7 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
       {/* ── Active call details ───────────────────────────────────────── */}
       {activeCall && (
         <div className="space-y-3 py-3">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-8 gap-y-2">
             {activeCall.call_id && (
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Conversation ID</p>
@@ -138,6 +145,14 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Call Date</p>
                 <p className="text-[12px] font-medium text-slate-700 mt-0.5">{fmtDate(activeCall.call_date)}</p>
+              </div>
+            )}
+            {activeCall.duration > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Call Duration</p>
+                <p className="text-[12px] font-medium text-slate-700 mt-0.5">
+                  {callService.formatDuration(activeCall.duration)}
+                </p>
               </div>
             )}
           </div>
@@ -153,6 +168,34 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
             <div className="flex items-center gap-2 py-2 px-3 bg-slate-50 rounded-lg">
               <MicOff className="h-4 w-4 text-slate-400 shrink-0" />
               <p className="text-[12px] text-slate-400">No audio recording available</p>
+            </div>
+          )}
+
+          {activeCall.transcript && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setTranscriptOpen(v => !v)}
+                className="w-full flex items-center justify-between py-2 px-3 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <FileDown className="h-3.5 w-3.5 text-slate-500" />
+                  <span className="text-[12px] font-medium text-slate-700">
+                    {transcriptOpen ? 'Hide' : 'Show'} Transcript
+                  </span>
+                </div>
+                {transcriptOpen
+                  ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                  : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                }
+              </button>
+              {transcriptOpen && (
+                <div className="mt-2 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50"
+                  style={{ maxHeight: '40vh' }}>
+                  <div className="p-3 text-[12px] text-slate-700 whitespace-pre-wrap break-words leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: formatTranscriptText(activeCall.transcript) }} />
+                </div>
+              )}
             </div>
           )}
 

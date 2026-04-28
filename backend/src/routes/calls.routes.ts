@@ -3,13 +3,74 @@ import { authenticate } from '../middleware/auth';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { Call } from '../models/Call';
-import phoneSystemService from '../services/PhoneSystemService';
+import phoneSystemService, { type ConversationDetailResponse, type ConversationMeta } from '../services/PhoneSystemService';
 import logger from '../config/logger';
 
 const router = express.Router();
 
 // Apply authentication to all call routes
 router.use(authenticate);
+
+/**
+ * Format the raw Genesys transcript JSON into the Customer:/Agent: prefixed
+ * text the QA UI renders. Returns null when nothing usable came back.
+ */
+function formatTranscripts(transcripts: ConversationDetailResponse[] | null | undefined): string | null {
+  if (!transcripts || transcripts.length === 0) return null;
+  return transcripts
+    .map((t) => {
+      try {
+        const parsed = JSON.parse(t.transcript);
+        if (parsed?.transcripts && Array.isArray(parsed.transcripts)) {
+          return parsed.transcripts
+            .map((segment: any) =>
+              segment.phrases
+                ?.map((phrase: any) => {
+                  const prefix = phrase.participantPurpose === 'external'
+                    ? '<span class="font-bold">Customer:</span> '
+                    : '<span class="font-bold">Agent:</span> ';
+                  return prefix + phrase.text;
+                })
+                .join('\n') || ''
+            )
+            .join('\n\n---\n\n');
+        }
+        return t.transcript;
+      } catch (error) {
+        logger.warn('[CALLS ROUTE] Failed to parse transcript JSON:', error);
+        return t.transcript;
+      }
+    })
+    .join('\n\n---\n\n');
+}
+
+/**
+ * Build the synthetic "virtual" call record returned for conversations that
+ * exist in PhoneSystem but not yet in Q-Tip's own `calls` table. Pulls real
+ * call_date and duration from tblConversations when meta is provided.
+ */
+function buildVirtualCall(
+  externalId: string,
+  phoneSystemData: {
+    audio: { audio_url: string } | null;
+    transcript: ConversationDetailResponse[] | null;
+  },
+  meta: ConversationMeta | null,
+  numericId: number = -1
+) {
+  return {
+    id: numericId,
+    call_id: externalId,
+    csr_id: 0,
+    customer_id: null,
+    call_date: meta?.start_et ?? new Date(),
+    duration: meta?.duration_seconds ?? 0,
+    recording_url: phoneSystemData.audio?.audio_url || null,
+    transcript: formatTranscripts(phoneSystemData.transcript),
+    csr_name: 'Unknown',
+    department_name: 'Unknown',
+  };
+}
 
 // Search calls endpoint
 router.get('/search', async (req: Request, res: Response) => {
@@ -115,41 +176,13 @@ router.get('/search', async (req: Request, res: Response) => {
     // If searching by external_id and no results in main DB, create a virtual call record
     if (external_id && calls.length === 0) {
       logger.info(`[CALLS ROUTE] Creating virtual call record for conversation ID: ${external_id}`);
-      
-      const phoneSystemData = await phoneSystemService.getAudioAndTranscriptByConversationId(external_id as string);
-      
-      const virtualCall = {
-        id: -1,
-        call_id: external_id as string,
-        csr_id: 0,
-        customer_id: null,
-        call_date: new Date(),
-        duration: 0,
-        recording_url: phoneSystemData.audio?.audio_url || null,
-        transcript: phoneSystemData.transcript && phoneSystemData.transcript.length > 0 
-          ? phoneSystemData.transcript.map(t => {
-              try {
-                const transcriptData = JSON.parse(t.transcript);
-                if (transcriptData.transcripts && Array.isArray(transcriptData.transcripts)) {
-                  return transcriptData.transcripts
-                    .map((transcript: any) => transcript.phrases?.map((phrase: any) => {
-                      const prefix = phrase.participantPurpose === 'external' ? '<span class="font-bold">Customer:</span> ' : '<span class="font-bold">Agent:</span> ';
-                      return prefix + phrase.text;
-                    }).join('\n') || '')
-                    .join('\n\n---\n\n');
-                }
-                return t.transcript;
-              } catch (error) {
-                logger.warn('[CALLS ROUTE] Failed to parse transcript JSON:', error);
-                return t.transcript;
-              }
-            }).join('\n\n---\n\n')
-          : null,
-        csr_name: 'Unknown',
-        department_name: 'Unknown'
-      };
-      
-      calls.push(virtualCall);
+
+      const [phoneSystemData, meta] = await Promise.all([
+        phoneSystemService.getAudioAndTranscriptByConversationId(external_id as string),
+        phoneSystemService.getConversationMetaByConversationId(external_id as string),
+      ]);
+
+      calls.push(buildVirtualCall(external_id as string, phoneSystemData, meta));
     }
 
     res.json(calls);
@@ -172,45 +205,17 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (parseInt(id) < 0) {
       const conversationId = id.substring(1);
       logger.info(`[CALLS ROUTE] Getting virtual call for conversation ID: ${conversationId}`);
-      
-      const phoneSystemData = await phoneSystemService.getAudioAndTranscriptByConversationId(conversationId);
-      
+
+      const [phoneSystemData, meta] = await Promise.all([
+        phoneSystemService.getAudioAndTranscriptByConversationId(conversationId),
+        phoneSystemService.getConversationMetaByConversationId(conversationId),
+      ]);
+
       if (!phoneSystemData.audio && (!phoneSystemData.transcript || phoneSystemData.transcript.length === 0)) {
         return res.status(404).json({ error: 'Call not found' });
       }
-      
-      const virtualCall = {
-        id: parseInt(id),
-        call_id: conversationId,
-        csr_id: 0,
-        customer_id: null,
-        call_date: new Date().toISOString(),
-        duration: 0,
-        recording_url: phoneSystemData.audio?.audio_url || null,
-        transcript: phoneSystemData.transcript && phoneSystemData.transcript.length > 0 
-          ? phoneSystemData.transcript.map((t: any) => {
-              try {
-                const transcriptData = JSON.parse(t.transcript);
-                if (transcriptData.transcripts && Array.isArray(transcriptData.transcripts)) {
-                  return transcriptData.transcripts
-                    .map((transcript: any) => transcript.phrases?.map((phrase: any) => {
-                      const prefix = phrase.participantPurpose === 'external' ? '<span class="font-bold">Customer:</span> ' : '<span class="font-bold">Agent:</span> ';
-                      return prefix + phrase.text;
-                    }).join('\n') || '')
-                    .join('\n\n---\n\n');
-                }
-                return t.transcript;
-              } catch (error) {
-                logger.warn('[CALLS ROUTE] Failed to parse transcript JSON:', error);
-                return t.transcript;
-              }
-            }).join('\n\n---\n\n')
-          : null,
-        csr_name: 'Unknown',
-        department_name: 'Unknown'
-      };
-      
-      return res.json(virtualCall);
+
+      return res.json(buildVirtualCall(conversationId, phoneSystemData, meta, parseInt(id)));
     }
 
     // Regular call lookup from main database

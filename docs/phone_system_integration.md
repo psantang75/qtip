@@ -31,12 +31,12 @@ Add the following variables to your `.env` file:
 # ===============================================
 # PHONESYSTEM DATABASE CONFIGURATION
 # ===============================================
-DB2_HOST=localhost
-DB2_PORT=3306
-DB2_USER=phonesystem_user
-DB2_PASSWORD=YOUR_SECURE_PHONESYSTEM_PASSWORD_HERE
-DB2_NAME=PhoneSystem
-DB2_CONNECTION_LIMIT=10
+PHONE_DB_HOST=localhost
+PHONE_DB_PORT=3306
+PHONE_DB_USER=phonesystem_user
+PHONE_DB_PASSWORD=YOUR_SECURE_PHONESYSTEM_PASSWORD_HERE
+PHONE_DB_NAME=PhoneSystem
+PHONE_DB_CONNECTION_LIMIT=10
 ```
 
 ### 2. Database Schema
@@ -248,7 +248,7 @@ SELECT * FROM tempRecording WHERE ConversationID = 'YOUR_TEST_CONVERSATION_ID';
 ### Common Issues
 
 1. **Database Connection Failed**
-   - Check DB2_* environment variables
+   - Check PHONE_DB_* environment variables
    - Verify PhoneSystem database is accessible
    - Ensure database user has correct permissions
 

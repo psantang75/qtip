@@ -16,14 +16,31 @@ interface EnvironmentConfig {
   DB_PASSWORD: string;
   DB_NAME: string;
   DB_CONNECTION_LIMIT: number;
-  
-  // Secondary Database Configuration (Optional)
-  DB2_HOST?: string;
-  DB2_USER?: string;
-  DB2_PASSWORD?: string;
-  DB2_NAME?: string;
-  DB2_CONNECTION_LIMIT?: number;
-  
+
+  // Phone System Database Configuration (read-only consumer; optional)
+  PHONE_DB_HOST?: string;
+  PHONE_DB_USER?: string;
+  PHONE_DB_PASSWORD?: string;
+  PHONE_DB_NAME?: string;
+  PHONE_DB_CONNECTION_LIMIT?: number;
+
+  // CRM Database Configuration (Phase 2 read-only consumer; optional)
+  CRM_DB_HOST?: string;
+  CRM_DB_USER?: string;
+  CRM_DB_PASSWORD?: string;
+  CRM_DB_NAME?: string;
+  CRM_DB_CONNECTION_LIMIT?: number;
+
+  // AI Provider Configuration (per-provider; either may be absent)
+  OPENAI_API_KEY?: string;
+  OPENAI_DEFAULT_MODEL?: string;
+  OPENAI_TIMEOUT_MS?: number;
+  OPENAI_MAX_RETRIES?: number;
+  ANTHROPIC_API_KEY?: string;
+  ANTHROPIC_DEFAULT_MODEL?: string;
+  ANTHROPIC_TIMEOUT_MS?: number;
+  ANTHROPIC_MAX_RETRIES?: number;
+
   // JWT Configuration
   JWT_SECRET: string;
   JWT_EXPIRES_IN: string;
@@ -175,14 +192,31 @@ export const config: EnvironmentConfig = {
   })(),
   DB_NAME: process.env.DB_NAME || 'qtip',
   DB_CONNECTION_LIMIT: parseInt(process.env.DB_CONNECTION_LIMIT || '25', 10),
-  
-  // Secondary Database Configuration (Optional)
-  DB2_HOST: process.env.DB2_HOST,
-  DB2_USER: process.env.DB2_USER,
-  DB2_PASSWORD: process.env.DB2_PASSWORD,
-  DB2_NAME: process.env.DB2_NAME,
-  DB2_CONNECTION_LIMIT: process.env.DB2_CONNECTION_LIMIT ? parseInt(process.env.DB2_CONNECTION_LIMIT, 10) : undefined,
-  
+
+  // Phone System Database (optional; pool only created when fully configured)
+  PHONE_DB_HOST: process.env.PHONE_DB_HOST,
+  PHONE_DB_USER: process.env.PHONE_DB_USER,
+  PHONE_DB_PASSWORD: process.env.PHONE_DB_PASSWORD,
+  PHONE_DB_NAME: process.env.PHONE_DB_NAME,
+  PHONE_DB_CONNECTION_LIMIT: process.env.PHONE_DB_CONNECTION_LIMIT ? parseInt(process.env.PHONE_DB_CONNECTION_LIMIT, 10) : undefined,
+
+  // CRM Database (Phase 2; optional; pool only created when fully configured)
+  CRM_DB_HOST: process.env.CRM_DB_HOST,
+  CRM_DB_USER: process.env.CRM_DB_USER,
+  CRM_DB_PASSWORD: process.env.CRM_DB_PASSWORD,
+  CRM_DB_NAME: process.env.CRM_DB_NAME,
+  CRM_DB_CONNECTION_LIMIT: process.env.CRM_DB_CONNECTION_LIMIT ? parseInt(process.env.CRM_DB_CONNECTION_LIMIT, 10) : undefined,
+
+  // AI Providers (each provider independently optional; client built only when key set)
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  OPENAI_DEFAULT_MODEL: process.env.OPENAI_DEFAULT_MODEL || 'gpt-4o-mini',
+  OPENAI_TIMEOUT_MS: process.env.OPENAI_TIMEOUT_MS ? parseInt(process.env.OPENAI_TIMEOUT_MS, 10) : 30000,
+  OPENAI_MAX_RETRIES: process.env.OPENAI_MAX_RETRIES ? parseInt(process.env.OPENAI_MAX_RETRIES, 10) : 2,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  ANTHROPIC_DEFAULT_MODEL: process.env.ANTHROPIC_DEFAULT_MODEL || 'claude-3-5-sonnet-latest',
+  ANTHROPIC_TIMEOUT_MS: process.env.ANTHROPIC_TIMEOUT_MS ? parseInt(process.env.ANTHROPIC_TIMEOUT_MS, 10) : 30000,
+  ANTHROPIC_MAX_RETRIES: process.env.ANTHROPIC_MAX_RETRIES ? parseInt(process.env.ANTHROPIC_MAX_RETRIES, 10) : 2,
+
   // JWT Configuration — resolved through getJwtSecret/getJwtRefreshSecret so
   // that prod / test fail fast when the env var is missing or still equals a
   // known dev default. See pre-production review item #44.
@@ -244,21 +278,63 @@ export const databaseConfig = {
 };
 
 /**
- * Secondary database configuration object for connection pooling (optional)
+ * Phone System database configuration (optional). Only built when every
+ * required value is present so a half-configured environment never produces
+ * a half-working pool. Read-only consumer — Q-Tip never writes here.
  */
-export const secondaryDatabaseConfig = config.DB2_HOST && config.DB2_USER && config.DB2_PASSWORD && config.DB2_NAME ? {
-  host: config.DB2_HOST,
-  user: config.DB2_USER,
-  password: config.DB2_PASSWORD,
-  database: config.DB2_NAME,
+export const phoneDatabaseConfig = config.PHONE_DB_HOST && config.PHONE_DB_USER && config.PHONE_DB_PASSWORD && config.PHONE_DB_NAME ? {
+  host: config.PHONE_DB_HOST,
+  user: config.PHONE_DB_USER,
+  password: config.PHONE_DB_PASSWORD,
+  database: config.PHONE_DB_NAME,
   waitForConnections: true,
-  connectionLimit: config.DB2_CONNECTION_LIMIT || 5,
+  connectionLimit: config.PHONE_DB_CONNECTION_LIMIT || 10,
   queueLimit: 0,
   acquireTimeout: 60000,
   timeout: 60000,
   reconnect: true,
   charset: 'utf8mb4'
 } : null;
+
+/**
+ * CRM database configuration (Phase 2; optional). Same conditional pattern as
+ * phoneDatabaseConfig — leave any of the four required env vars blank in
+ * .env to disable the pool entirely. Read-only consumer.
+ */
+export const crmDatabaseConfig = config.CRM_DB_HOST && config.CRM_DB_USER && config.CRM_DB_PASSWORD && config.CRM_DB_NAME ? {
+  host: config.CRM_DB_HOST,
+  user: config.CRM_DB_USER,
+  password: config.CRM_DB_PASSWORD,
+  database: config.CRM_DB_NAME,
+  waitForConnections: true,
+  connectionLimit: config.CRM_DB_CONNECTION_LIMIT || 5,
+  queueLimit: 0,
+  acquireTimeout: 60000,
+  timeout: 60000,
+  reconnect: true,
+  charset: 'utf8mb4'
+} : null;
+
+/**
+ * AI provider configuration. Each provider is independently optional; an
+ * absent API key means the corresponding entry is `null` and the client
+ * factory in services/ai/ will refuse to construct a client. Health pings
+ * for an unconfigured provider report `not_configured` rather than failing.
+ */
+export const aiConfig = {
+  openai: config.OPENAI_API_KEY ? {
+    apiKey: config.OPENAI_API_KEY,
+    defaultModel: config.OPENAI_DEFAULT_MODEL!,
+    timeoutMs: config.OPENAI_TIMEOUT_MS!,
+    maxRetries: config.OPENAI_MAX_RETRIES!,
+  } : null,
+  anthropic: config.ANTHROPIC_API_KEY ? {
+    apiKey: config.ANTHROPIC_API_KEY,
+    defaultModel: config.ANTHROPIC_DEFAULT_MODEL!,
+    timeoutMs: config.ANTHROPIC_TIMEOUT_MS!,
+    maxRetries: config.ANTHROPIC_MAX_RETRIES!,
+  } : null,
+};
 
 /**
  * JWT configuration object

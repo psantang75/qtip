@@ -1,24 +1,42 @@
 import mysql from 'mysql2/promise';
-import { databaseConfig, secondaryDatabaseConfig } from './environment';
+import { databaseConfig, phoneDatabaseConfig, crmDatabaseConfig } from './environment';
 import { DB_SESSION_TIMEOUT_SECONDS } from '../utils/queryTimeout';
 import logger from './logger';
 
 /**
- * Primary database pool — used by controllers that have not yet been migrated to Prisma.
- * Repositories and new code should use Prisma (see ./prisma.ts) instead.
+ * Named database pools.
+ * - 'primary' -> Q-Tip's own DB (read/write). Most new code should use Prisma
+ *   via ./prisma.ts; this pool is kept for legacy controllers.
+ * - 'phone'   -> external Phone System DB, read-only consumer.
+ * - 'crm'     -> external CRM DB (Phase 2), read-only consumer.
  *
- * Every new connection has a per-session statement timeout applied via
- * `SET SESSION max_statement_time`. MariaDB takes the value as seconds
- * (double), and any single SELECT that exceeds it gets killed by the
- * engine (returning ER_STATEMENT_TIMEOUT). This is the engine-side
- * counterpart to `withQueryTimeout()` in `utils/queryTimeout.ts`.
+ * Each non-primary pool is optional: if its config block is missing in
+ * environment.ts (because the relevant env vars aren't set), getPool() throws
+ * a clear error so callers can detect "feature not configured" without
+ * connecting against half-set credentials.
+ *
+ * Every new physical connection has a per-session statement timeout applied
+ * via `SET SESSION max_statement_time`. MariaDB takes the value as seconds
+ * (double); any SELECT that exceeds it gets killed by the engine
+ * (ER_STATEMENT_TIMEOUT). This is the engine-side counterpart to
+ * `withQueryTimeout()` in `utils/queryTimeout.ts`.
  */
-class DatabasePoolFactory {
-  private static pools: Map<string, mysql.Pool> = new Map();
+export type DatabasePoolName = 'primary' | 'phone' | 'crm';
 
-  static getPool(connectionName: string = 'primary'): mysql.Pool {
+function configForPool(name: DatabasePoolName) {
+  switch (name) {
+    case 'primary': return databaseConfig;
+    case 'phone':   return phoneDatabaseConfig;
+    case 'crm':     return crmDatabaseConfig;
+  }
+}
+
+class DatabasePoolFactory {
+  private static pools: Map<DatabasePoolName, mysql.Pool> = new Map();
+
+  static getPool(connectionName: DatabasePoolName = 'primary'): mysql.Pool {
     if (!this.pools.has(connectionName)) {
-      const config = connectionName === 'primary' ? databaseConfig : secondaryDatabaseConfig;
+      const config = configForPool(connectionName);
 
       if (!config) {
         throw new Error(`Database configuration not found for connection: ${connectionName}`);
@@ -48,7 +66,7 @@ class DatabasePoolFactory {
         conn.query(`SET SESSION max_statement_time = ${DB_SESSION_TIMEOUT_SECONDS}`, (err) => {
           if (err) {
             // MariaDB-only — MySQL uses a different syntax. Log once and move on.
-            logger.warn('[db] SET SESSION max_statement_time failed:', (err as Error).message);
+            logger.warn('[db] SET SESSION max_statement_time failed', { error: (err as Error).message });
           }
         });
       });
@@ -66,7 +84,7 @@ class DatabasePoolFactory {
   }
 }
 
-export async function testDatabaseConnection(connectionName: string = 'primary'): Promise<boolean> {
+export async function testDatabaseConnection(connectionName: DatabasePoolName = 'primary'): Promise<boolean> {
   try {
     const pool = DatabasePoolFactory.getPool(connectionName);
     const connection = await pool.getConnection();
@@ -82,14 +100,17 @@ export async function testDatabaseConnection(connectionName: string = 'primary')
 export async function testAllDatabaseConnections(): Promise<Record<string, boolean>> {
   const results: Record<string, boolean> = {};
   results.primary = await testDatabaseConnection('primary');
-  if (secondaryDatabaseConfig) {
-    results.secondary = await testDatabaseConnection('secondary');
+  if (phoneDatabaseConfig) {
+    results.phone = await testDatabaseConnection('phone');
+  }
+  if (crmDatabaseConfig) {
+    results.crm = await testDatabaseConnection('crm');
   }
   return results;
 }
 
-export function getPoolStats(connectionName: string = 'primary') {
-  const config = connectionName === 'primary' ? databaseConfig : secondaryDatabaseConfig;
+export function getPoolStats(connectionName: DatabasePoolName = 'primary') {
+  const config = configForPool(connectionName);
   return {
     connectionName,
     connectionLimit: config?.connectionLimit,
@@ -101,7 +122,8 @@ export function getPoolStats(connectionName: string = 'primary') {
 export function getAllPoolStats() {
   const stats: Record<string, any> = {};
   stats.primary = getPoolStats('primary');
-  if (secondaryDatabaseConfig) stats.secondary = getPoolStats('secondary');
+  if (phoneDatabaseConfig) stats.phone = getPoolStats('phone');
+  if (crmDatabaseConfig) stats.crm = getPoolStats('crm');
   return stats;
 }
 
@@ -113,7 +135,7 @@ export async function closeDatabaseConnections(): Promise<void> {
   }
 }
 
-export function getDatabasePool(connectionName: string = 'primary'): mysql.Pool {
+export function getDatabasePool(connectionName: DatabasePoolName = 'primary'): mysql.Pool {
   return DatabasePoolFactory.getPool(connectionName);
 }
 

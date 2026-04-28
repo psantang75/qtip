@@ -34,8 +34,21 @@ export interface ConversationDetailResponse {
 }
 
 /**
- * PhoneSystem Service for handling call recording operations
- * Uses secondary database connection to access PhoneSystem database
+ * Lightweight metadata pulled from PhoneSystem's tblConversations.
+ * Used to populate the real call_date and duration on the virtual call
+ * record returned by /api/calls/search and /api/calls/:id.
+ */
+export interface ConversationMeta {
+  conversation_id: string;
+  start_et: Date | null;     // ConversationStart_ET
+  end_et: Date | null;       // ConversationEnd_ET
+  duration_seconds: number;  // 0 when either timestamp is null
+}
+
+/**
+ * PhoneSystem Service for handling call recording operations.
+ * Uses the 'phone' database pool (PHONE_DB_* env block) — a read-only
+ * consumer of the external phone system DB. Q-Tip never writes here.
  */
 class PhoneSystemService {
   /**
@@ -61,7 +74,7 @@ class PhoneSystemService {
         LIMIT 1
       `;
       
-      const results = await executeQuery<TempRecording>(query, [conversationId], 'secondary');
+      const results = await executeQuery<TempRecording>(query, [conversationId], 'phone');
       
       if (results.length === 0) {
         logger.info(`[PHONE SYSTEM SERVICE] No recording found for conversation ID: ${conversationId}`);
@@ -112,7 +125,7 @@ class PhoneSystemService {
         WHERE ConversationID IN (${placeholders})
       `;
       
-      const results = await executeQuery<TempRecording>(query, conversationIds, 'secondary');
+      const results = await executeQuery<TempRecording>(query, conversationIds, 'phone');
       
       logger.info(`[PHONE SYSTEM SERVICE] Found ${results.length} recordings`);
       
@@ -149,7 +162,7 @@ class PhoneSystemService {
         LIMIT ?
       `;
       
-      const results = await executeQuery<TempRecording>(query, [limit], 'secondary');
+      const results = await executeQuery<TempRecording>(query, [limit], 'phone');
       
       logger.info(`[PHONE SYSTEM SERVICE] Found ${results.length} recordings`);
       
@@ -173,7 +186,7 @@ class PhoneSystemService {
       logger.info('[PHONE SYSTEM SERVICE] Testing PhoneSystem database connection');
       
       const query = 'SELECT 1 as test';
-      await executeQuery(query, [], 'secondary');
+      await executeQuery(query, [], 'phone');
       
       logger.info('[PHONE SYSTEM SERVICE] PhoneSystem database connection successful');
       return true;
@@ -203,7 +216,7 @@ class PhoneSystemService {
       
       const results = await executeQuery<{
         total_recordings: number;
-      }>(statsQuery, [], 'secondary');
+      }>(statsQuery, [], 'phone');
       
       if (results.length === 0) {
         return {
@@ -245,7 +258,7 @@ class PhoneSystemService {
           AND Transcript != ''
       `;
       
-      const results = await executeQuery<tblConversationTranscript>(query, [conversationId], 'secondary');
+      const results = await executeQuery<tblConversationTranscript>(query, [conversationId], 'phone');
       
       if (results.length === 0) {
         logger.info(`[PHONE SYSTEM SERVICE] No transcript found for conversation ID: ${conversationId}`);
@@ -286,7 +299,7 @@ class PhoneSystemService {
         WHERE ConversationID IN (${placeholders})
       `;
       
-      const results = await executeQuery<tblConversationTranscript>(query, conversationIds, 'secondary');
+      const results = await executeQuery<tblConversationTranscript>(query, conversationIds, 'phone');
       
       logger.info(`[PHONE SYSTEM SERVICE] Found ${results.length} transcripts`);
       
@@ -330,6 +343,51 @@ class PhoneSystemService {
     } catch (error) {
       logger.error(`[PHONE SYSTEM SERVICE] Error fetching audio and transcript for conversation ID ${conversationId}:`, error);
       throw new Error(`Failed to retrieve audio and transcript for conversation ID: ${conversationId}`);
+    }
+  }
+
+  /**
+   * Fetch start/end timestamps and duration for a conversation. Returns null
+   * when no matching row exists in tblConversations (e.g. transcript present
+   * but no conversation header yet — rare but possible during ingestion).
+   */
+  async getConversationMetaByConversationId(conversationId: string): Promise<ConversationMeta | null> {
+    try {
+      logger.info(`[PHONE SYSTEM SERVICE] Fetching conversation meta for: ${conversationId}`);
+
+      const query = `
+        SELECT
+          ConversationId,
+          ConversationStart_ET,
+          ConversationEnd_ET,
+          TIMESTAMPDIFF(SECOND, ConversationStart_ET, ConversationEnd_ET) AS duration_seconds
+        FROM tblConversations
+        WHERE ConversationId = ?
+        LIMIT 1
+      `;
+
+      const rows = await executeQuery<{
+        ConversationId: string;
+        ConversationStart_ET: Date | null;
+        ConversationEnd_ET: Date | null;
+        duration_seconds: number | null;
+      }>(query, [conversationId], 'phone');
+
+      if (rows.length === 0) {
+        logger.info(`[PHONE SYSTEM SERVICE] No conversation meta found for: ${conversationId}`);
+        return null;
+      }
+
+      const row = rows[0];
+      return {
+        conversation_id: row.ConversationId,
+        start_et: row.ConversationStart_ET,
+        end_et: row.ConversationEnd_ET,
+        duration_seconds: row.duration_seconds && row.duration_seconds > 0 ? row.duration_seconds : 0,
+      };
+    } catch (error) {
+      logger.error(`[PHONE SYSTEM SERVICE] Error fetching conversation meta for ${conversationId}:`, error);
+      return null;
     }
   }
 }

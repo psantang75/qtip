@@ -1,307 +1,154 @@
 # Multiple Database Connections Guide
 
-This guide explains how to configure and use multiple database connections in the QTIP application.
+Q-Tip uses one read/write database for its own data and reads from one or
+more external databases owned by other systems. This doc explains the named
+pools, how each is configured, and the patterns to follow when adding a new
+external integration.
 
-## Overview
+## The pools
 
-The QTIP application now supports multiple database connections, allowing you to:
-- Separate operational data from analytics/reporting data
-- Use different databases for different types of operations
-- Improve performance by routing queries to appropriate databases
-- Maintain backward compatibility with existing code
+| Pool name | Purpose                                                  | Access     | Required env block |
+| --------- | -------------------------------------------------------- | ---------- | ------------------ |
+| `primary` | Q-Tip's own DB. New code should use Prisma; this raw pool stays for legacy controllers. | Read/write | `DB_*`             |
+| `phone`   | External Phone System DB — source of call audio URLs and transcripts. Q-Tip queries on demand and snapshots reviewed calls into its own tables. | Read-only  | `PHONE_DB_*`       |
+| `crm`     | External CRM DB (Phase 2) — source of ticket data attached to QA submissions. | Read-only  | `CRM_DB_*`         |
+
+Each external pool is **optional**. If any of the four required env vars in
+its block is missing, `phoneDatabaseConfig` / `crmDatabaseConfig` in
+[`backend/src/config/environment.ts`](../backend/src/config/environment.ts)
+evaluates to `null` and the pool is never created. Calling code that tries
+to use it gets a clear `Database configuration not found for connection: …`
+error rather than half-connecting against blank credentials.
+
+See [`docs/environment_variables.md`](environment_variables.md) for the full
+variable reference.
 
 ## Configuration
 
-### 1. Environment Variables
-
-Add the following variables to your `.env` file:
+Add the relevant blocks to `.env`. The minimum is the `DB_*` (primary) block;
+add `PHONE_DB_*` to enable phone-system integration and `CRM_DB_*` to enable
+the CRM integration.
 
 ```env
-# ===============================================
-# PRIMARY DATABASE CONFIGURATION
-# ===============================================
+# Primary (Q-Tip)
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=qtip_user
-DB_PASSWORD=YOUR_SECURE_DATABASE_PASSWORD_HERE
-DB_NAME=qtip_production
+DB_PASSWORD=...
+DB_NAME=qtip
 DB_CONNECTION_LIMIT=20
 
-# ===============================================
-# SECONDARY DATABASE CONFIGURATION (Optional)
-# ===============================================
-DB2_HOST=localhost
-DB2_PORT=3306
-DB2_USER=qtip_analytics_user
-DB2_PASSWORD=YOUR_SECURE_SECONDARY_DATABASE_PASSWORD_HERE
-DB2_NAME=qtip_analytics
-DB2_CONNECTION_LIMIT=10
+# Phone System (read-only)
+PHONE_DB_HOST=blazer.dm.local
+PHONE_DB_PORT=3306
+PHONE_DB_USER=qtip_phone_ro
+PHONE_DB_PASSWORD=...
+PHONE_DB_NAME=PhoneSystem
+PHONE_DB_CONNECTION_LIMIT=10
 
-# ===============================================
-# DATABASE SELECTION
-# ===============================================
-DEFAULT_DB=primary
-ANALYTICS_DB=secondary
-REPORTING_DB=secondary
+# CRM (read-only, Phase 2)
+CRM_DB_HOST=
+CRM_DB_PORT=3306
+CRM_DB_USER=
+CRM_DB_PASSWORD=
+CRM_DB_NAME=
+CRM_DB_CONNECTION_LIMIT=5
 ```
 
-### 2. Database Setup
+Use a dedicated **read-only** MySQL user for both `PHONE_DB_USER` and
+`CRM_DB_USER`. Q-Tip never needs to write to either — enforcing it at the
+DB user level removes any chance of an accidental mutation.
 
-#### Primary Database
-- Contains core application data (users, forms, submissions, etc.)
-- Used for all operational queries
-- Should be optimized for read/write operations
+## Using a pool
 
-#### Secondary Database
-- Contains analytics, reporting, and historical data
-- Used for data analysis and reporting queries
-- Can be optimized for read-heavy operations
+### From feature code
 
-## Usage
-
-### Basic Usage
+Prefer the typed helper functions over reaching for the pool directly:
 
 ```typescript
-import { getDatabasePool, executeQuery } from '../config/database';
-import { getPoolForOperation } from '../utils/databaseUtils';
+import { executeQuery } from '../utils/databaseUtils';
 
-// Get a specific database pool
-const primaryPool = getDatabasePool('primary');
-const secondaryPool = getDatabasePool('secondary');
+// Phone System DB
+const rows = await executeQuery(
+  'SELECT Transcript FROM tblConversationTranscript WHERE ConversationID = ?',
+  [conversationId],
+  'phone'
+);
 
-// Execute queries on specific databases
-const users = await executeQuery('SELECT * FROM users', [], 'primary');
-const analytics = await executeQuery('SELECT * FROM analytics_events', [], 'analytics');
+// CRM DB (Phase 2)
+const tickets = await executeQuery(
+  'SELECT id, subject FROM tickets WHERE id = ?',
+  [ticketId],
+  'crm'
+);
 ```
 
-### Using Database Utils
+`executeQuery`'s third argument routes to the correct pool. Valid values:
+`'default'` / `'primary'` / `'phone'` / `'crm'`.
+
+### From a service module
+
+The phone-system service already follows the pattern that any new external
+integration should mirror — see
+[`backend/src/services/PhoneSystemService.ts`](../backend/src/services/PhoneSystemService.ts).
+A CRM service for Phase 2 should look the same shape: thin wrapper class,
+named pool routing, no SQL outside the service.
+
+### Direct pool access
+
+If you need raw `mysql.Pool` access (transactions, prepared streams, etc.):
 
 ```typescript
-import { 
-  executeQuery, 
-  executeTransaction, 
-  getUserData, 
-  getAnalyticsData 
-} from '../utils/databaseUtils';
+import { getPhonePool, getCrmPool } from '../utils/databaseUtils';
 
-// Get user data from primary database
-const user = await getUserData(123);
-
-// Get analytics data from secondary database
-const analytics = await getAnalyticsData({
-  start: '2024-01-01',
-  end: '2024-01-31'
-});
-
-// Execute a transaction on primary database
-const result = await executeTransaction(async (connection) => {
-  // Your transaction logic here
-  await connection.execute('INSERT INTO users (name, email) VALUES (?, ?)', ['John', 'john@example.com']);
-  return { success: true };
-}, 'primary');
-```
-
-### Operation Types
-
-The following operation types are supported:
-
-- `'primary'` - Uses the primary database
-- `'secondary'` - Uses the secondary database
-- `'analytics'` - Uses the secondary database (alias for analytics operations)
-- `'reporting'` - Uses the secondary database (alias for reporting operations)
-- `'default'` - Uses the primary database (default behavior)
-
-## Migration from Single Database
-
-### Existing Code Compatibility
-
-All existing code will continue to work without changes. The default export from `database.ts` still points to the primary database pool.
-
-```typescript
-// This still works (uses primary database)
-import pool from '../config/database';
-const [rows] = await pool.execute('SELECT * FROM users');
-```
-
-### Gradual Migration
-
-You can gradually migrate specific operations to use the secondary database:
-
-```typescript
-// Before (uses primary database)
-const analytics = await pool.execute('SELECT * FROM analytics_events');
-
-// After (uses secondary database)
-const analytics = await executeQuery('SELECT * FROM analytics_events', [], 'analytics');
-```
-
-## Testing Database Connections
-
-```typescript
-import { 
-  testDatabaseConnection, 
-  testAllDatabaseConnections,
-  getAllPoolStats 
-} from '../config/database';
-
-// Test a specific connection
-const primaryConnected = await testDatabaseConnection('primary');
-const secondaryConnected = await testDatabaseConnection('secondary');
-
-// Test all connections
-const allConnections = await testAllDatabaseConnections();
-// Returns: { primary: true, secondary: true }
-
-// Get pool statistics
-const stats = getAllPoolStats();
-// Returns detailed information about all connection pools
-```
-
-## Best Practices
-
-### 1. Database Selection
-
-- Use `primary` for operational data (users, forms, submissions)
-- Use `secondary` for analytics, reporting, and historical data
-- Use `analytics` alias for analytics-specific operations
-- Use `reporting` alias for reporting-specific operations
-
-### 2. Connection Management
-
-- The application automatically manages connection pools
-- Connections are reused efficiently
-- Pools are created on-demand and cached
-
-### 3. Error Handling
-
-```typescript
+const pool = getPhonePool();
+const conn = await pool.getConnection();
 try {
-  const data = await executeQuery('SELECT * FROM users', [], 'primary');
-} catch (error) {
-  if (error.code === 'ECONNREFUSED') {
-    console.error('Database connection failed');
-  }
-  throw error;
+  // ...
+} finally {
+  conn.release();
 }
 ```
 
-### 4. Performance Considerations
-
-- Use appropriate connection limits for each database
-- Monitor pool statistics regularly
-- Consider read replicas for the secondary database if needed
-
-## Monitoring
-
-### Pool Statistics
+## Health checks
 
 ```typescript
-import { getAllPoolStats } from '../config/database';
+import { testAllDatabaseConnections, getAllPoolStats } from '../config/database';
+
+const status = await testAllDatabaseConnections();
+// -> { primary: true, phone: true, crm: true } when all are configured.
+// Pools that aren't configured are simply absent from the result.
 
 const stats = getAllPoolStats();
-console.log('Primary DB Stats:', stats.primary);
-console.log('Secondary DB Stats:', stats.secondary);
+// -> { primary: {...}, phone?: {...}, crm?: {...} }
 ```
 
-### Health Checks
+These are safe to call from a `/health/integrations`-style endpoint; they
+ping the pool, never query application tables, and never throw.
 
-```typescript
-import { testAllDatabaseConnections } from '../config/database';
+## Adding a new external pool
 
-// In your health check endpoint
-app.get('/health/databases', async (req, res) => {
-  const connections = await testAllDatabaseConnections();
-  res.json({
-    status: 'healthy',
-    databases: connections
-  });
-});
-```
+1. Add the env block (`FOO_DB_HOST`, `FOO_DB_USER`, `FOO_DB_PASSWORD`,
+   `FOO_DB_NAME`, `FOO_DB_CONNECTION_LIMIT`) to `.env` and to
+   [`deploy/production_environment_template.env`](../deploy/production_environment_template.env).
+2. Declare the keys on `EnvironmentConfig` and source them in `process.env`
+   inside [`backend/src/config/environment.ts`](../backend/src/config/environment.ts).
+3. Build a `fooDatabaseConfig` using the same all-or-nothing conditional
+   pattern (`null` if any required value is missing).
+4. Extend `DatabasePoolName` and `configForPool()` in
+   [`backend/src/config/database.ts`](../backend/src/config/database.ts) to
+   include `'foo'`.
+5. Extend `DatabaseOperation` and `poolNameFor()` in
+   [`backend/src/utils/databaseUtils.ts`](../backend/src/utils/databaseUtils.ts).
+6. Update `testAllDatabaseConnections()` and `getAllPoolStats()` to surface
+   the new pool when configured.
+7. Document the new variables in
+   [`docs/environment_variables.md`](environment_variables.md) and the new
+   pool in this file.
 
-## Troubleshooting
+## Security
 
-### Common Issues
-
-1. **Secondary database not configured**
-   - Check that all DB2_* environment variables are set
-   - Verify the secondary database is accessible
-
-2. **Connection pool exhausted**
-   - Increase `DB_CONNECTION_LIMIT` or `DB2_CONNECTION_LIMIT`
-   - Check for connection leaks in your code
-
-3. **Performance issues**
-   - Monitor query performance on each database
-   - Consider database-specific optimizations
-
-### Debug Mode
-
-Enable debug logging to see database connection details:
-
-```typescript
-// In your application startup
-if (process.env.NODE_ENV === 'development') {
-  const stats = getAllPoolStats();
-  console.log('Database pools initialized:', stats);
-}
-```
-
-## Security Considerations
-
-1. **Separate database users**
-   - Use different users for primary and secondary databases
-   - Grant minimal required permissions to each user
-
-2. **Environment variables**
-   - Never commit `.env` files to version control
-   - Use secure passwords for production databases
-
-3. **Connection encryption**
-   - Enable SSL/TLS for database connections in production
-   - Use secure connection strings
-
-## Example Implementation
-
-Here's a complete example of how to use multiple databases in a service:
-
-```typescript
-import { executeQuery, executeTransaction } from '../utils/databaseUtils';
-
-export class AnalyticsService {
-  async getUserAnalytics(userId: number, dateRange: { start: string; end: string }) {
-    // Get user data from primary database
-    const user = await executeQuery(
-      'SELECT id, name, email FROM users WHERE id = ?',
-      [userId],
-      'primary'
-    );
-
-    // Get analytics data from secondary database
-    const analytics = await executeQuery(
-      'SELECT * FROM user_analytics WHERE user_id = ? AND date BETWEEN ? AND ?',
-      [userId, dateRange.start, dateRange.end],
-      'analytics'
-    );
-
-    return {
-      user: user[0],
-      analytics
-    };
-  }
-
-  async logAnalyticsEvent(eventData: any) {
-    return executeTransaction(async (connection) => {
-      await connection.execute(
-        'INSERT INTO analytics_events (event_type, event_data, created_at) VALUES (?, ?, NOW())',
-        [eventData.type, JSON.stringify(eventData.data)]
-      );
-      
-      // Update analytics summary
-      await connection.execute(
-        'UPDATE analytics_summary SET event_count = event_count + 1 WHERE event_type = ?',
-        [eventData.type]
-      );
-    }, 'analytics');
-  }
-}
-``` 
+- Read-only user for every external pool. Q-Tip is a consumer.
+- Never commit `.env`. The production template is the only checked-in source.
+- For production, set network-level rules (firewall / security group) so
+  Q-Tip can only reach the read replica it should be hitting.
