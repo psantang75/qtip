@@ -32,6 +32,8 @@ export interface SubmissionDetail {
   form: any
   metadata: any[]
   calls: any[]
+  /** Reference-only — frontend live-fetches header + notes from /api/crm. */
+  ticket_tasks: Array<{ kind: 'TICKET' | 'TASK'; external_id: number; sort_order: number }>
   answers: any[]
   dispute: any | null
   scoreBreakdown: any | null
@@ -66,9 +68,10 @@ export async function getSubmissionDetail(submissionId: number, includeFullForm:
     )
   }
 
-  const [metadata, calls, answers, disputes, scoreBreakdown] = await Promise.all([
+  const [metadata, calls, ticket_tasks, answers, disputes, scoreBreakdown] = await Promise.all([
     loadMetadata(submissionId),
     loadCalls(submissionId),
+    loadTicketTasks(submissionId),
     loadAnswers(submissionId),
     loadDispute(submissionId),
     loadScoreBreakdown(submissionId),
@@ -96,6 +99,7 @@ export async function getSubmissionDetail(submissionId: number, includeFullForm:
     },
     metadata,
     calls,
+    ticket_tasks,
     answers,
     dispute: disputes[0] ?? null,
     scoreBreakdown,
@@ -159,6 +163,30 @@ async function loadCalls(submissionId: number): Promise<any[]> {
     WHERE sc.submission_id = ${submissionId}
     ORDER BY sc.sort_order ASC
   `)
+}
+
+/**
+ * Reference-only loader for linked CRM tickets/tasks. Returns nothing
+ * but {kind, external_id, sort_order} — the full header + notes are
+ * live-fetched by the frontend through `/api/crm/{ticket|task}/:id`.
+ *
+ * `external_id` is BIGINT in MySQL; we cast to string in the query so
+ * mysql2 doesn't return a JS BigInt the JSON serializer would choke on,
+ * then convert to Number for the response (TaskID/TicketID values fit
+ * comfortably in JS's safe-integer range — current max ~1.08M).
+ */
+async function loadTicketTasks(submissionId: number): Promise<Array<{ kind: 'TICKET' | 'TASK'; external_id: number; sort_order: number }>> {
+  const rows = await prisma.$queryRaw<Array<{ kind: 'TICKET' | 'TASK'; external_id: string; sort_order: number }>>(Prisma.sql`
+    SELECT kind, CAST(external_id AS CHAR) AS external_id, sort_order
+    FROM submission_ticket_tasks
+    WHERE submission_id = ${submissionId}
+    ORDER BY sort_order ASC, id ASC
+  `)
+  return rows.map(r => ({
+    kind: r.kind,
+    external_id: Number(r.external_id),
+    sort_order: r.sort_order,
+  }))
 }
 
 async function loadAnswers(submissionId: number): Promise<any[]> {

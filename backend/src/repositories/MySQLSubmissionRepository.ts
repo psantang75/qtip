@@ -243,6 +243,31 @@ export class MySQLSubmissionRepository {
           }
         }
 
+        // Linked CRM tickets/tasks. Reference-only persistence: we store
+        // {kind, external_id, sort_order} and live-fetch all body data
+        // from the CRM at view time. Upsert keeps double-submits idempotent.
+        if (submissionData.ticket_tasks && submissionData.ticket_tasks.length > 0) {
+          for (let i = 0; i < submissionData.ticket_tasks.length; i++) {
+            const ref = submissionData.ticket_tasks[i];
+            await tx.submissionTicketTask.upsert({
+              where: {
+                unique_submission_ticket_task: {
+                  submission_id: submission.id,
+                  kind: ref.kind,
+                  external_id: BigInt(ref.external_id),
+                },
+              },
+              create: {
+                submission_id: submission.id,
+                kind: ref.kind,
+                external_id: BigInt(ref.external_id),
+                sort_order: i,
+              },
+              update: { sort_order: i },
+            });
+          }
+        }
+
         return submission.id;
       });
 

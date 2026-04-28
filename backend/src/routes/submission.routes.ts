@@ -77,6 +77,7 @@ const submitAudit = async (req: Request, res: Response) => {
       call_id:    req.body.call_id,
       call_ids:   req.body.call_ids,
       call_data:  req.body.call_data,
+      ticket_tasks: req.body.ticket_tasks,
       submitted_by: qa_id,
       answers:    req.body.answers  || [],
       metadata:   req.body.metadata || [],
@@ -108,7 +109,8 @@ const saveDraft = async (req: Request, res: Response) => {
     const submissionData = {
       form_id: req.body.form_id,
       call_id: req.body.call_id,
-      call_ids: req.body.call_ids, // Add this line
+      call_ids: req.body.call_ids,
+      ticket_tasks: req.body.ticket_tasks,
       submitted_by: qa_id,
       answers: req.body.answers || [],
       metadata: req.body.metadata || []

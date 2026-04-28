@@ -65,6 +65,14 @@ export interface SubmissionMetadataDTO {
   value: string;
 }
 
+export type TicketTaskKind = 'TICKET' | 'TASK';
+
+export interface TicketTaskRefDTO {
+  kind: TicketTaskKind;
+  /** External CRM id — `tblTicket.TicketID` (bigint) or `tblTask.TaskID` (int). */
+  external_id: number;
+}
+
 export interface CreateSubmissionDTO {
   form_id: number;
   call_id?: number | null;
@@ -79,6 +87,12 @@ export interface CreateSubmissionDTO {
     transcript?: string | null;
     metadata?: Record<string, unknown> | null;
   }>;
+  /**
+   * Linked CRM tickets/tasks for this submission. Stored only as
+   * references (kind + external_id) in `submission_ticket_tasks`; the
+   * full ticket/task data is live-fetched from the CRM at view time.
+   */
+  ticket_tasks?: TicketTaskRefDTO[];
   /** CSR user ID resolved from the form's metadata CSR dropdown */
   csr_id?: number | null;
   submitted_by: number;

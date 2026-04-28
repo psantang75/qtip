@@ -25,6 +25,8 @@ interface SubmissionCall {
 type SubmissionDetailWithForm = SubmissionDetail & {
   formData?: Form
   calls?: SubmissionCall[]
+  ticket_tasks?: Array<{ kind: 'TICKET' | 'TASK'; external_id: number; sort_order: number }>
+  submitted_at?: string | Date
 }
 import { useToast } from '@/hooks/use-toast'
 import { DisputeForm } from './submission-detail/DisputeForms'
@@ -32,6 +34,7 @@ import { SubmissionHeader } from './submission-detail/SubmissionHeader'
 import { ReviewDetailsPanel } from './submission-detail/ReviewDetailsPanel'
 import { DisputePanel, type ResolutionState } from './submission-detail/DisputePanel'
 import { CallDetailsPanel } from './submission-detail/CallDetailsPanel'
+import { TicketTaskDetailsPanel } from './submission-detail/TicketTaskDetailsPanel'
 import { ScorePanel } from './submission-detail/ScorePanel'
 
 export default function SubmissionDetailPage() {
@@ -108,9 +111,11 @@ export default function SubmissionDetailPage() {
     )
   }
 
-  const formData = detail.formData
-  const calls    = detail.calls
-  const score    = typeof detail.score === 'string' ? parseFloat(detail.score) || 0 : Number(detail.score) || 0
+  const formData    = detail.formData
+  const calls       = detail.calls
+  const ticketTasks = detail.ticket_tasks ?? []
+  const auditAt     = detail.submitted_at ? String(detail.submitted_at) : null
+  const score       = typeof detail.score === 'string' ? parseFloat(detail.score) || 0 : Number(detail.score) || 0
 
   const canDispute      = isAgent && detail.status === 'SUBMITTED' && !detail.dispute
   const canAcceptReview = isAgent && detail.status !== 'FINALIZED' && detail.status !== 'DISPUTED' && detail.status !== 'RESOLVED'
@@ -297,6 +302,7 @@ export default function SubmissionDetailPage() {
                 formData={formData}
               />
             )}
+            <TicketTaskDetailsPanel ticketTasks={ticketTasks} auditAt={auditAt} />
             <CallDetailsPanel calls={calls ?? []} />
           </div>
         </div>

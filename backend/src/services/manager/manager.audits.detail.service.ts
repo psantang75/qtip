@@ -37,6 +37,8 @@ export interface AuditDetailResponse {
   isDisputable: boolean
   metadata: Array<Record<string, unknown>>
   calls: Array<Record<string, unknown>>
+  /** Reference-only — frontend live-fetches header + notes from /api/crm. */
+  ticket_tasks: Array<{ kind: 'TICKET' | 'TASK'; external_id: number; sort_order: number }>
   answers: Array<Record<string, unknown>>
   dispute: Record<string, unknown> | null
   scoreBreakdown?: unknown
@@ -141,7 +143,7 @@ export async function getManagerTeamAuditDetails(
   }
   const submission = submissionRows[0]
 
-  const [metadata, calls, answers, qaResults] = await Promise.all([
+  const [metadata, calls, ticketTaskRows, answers, qaResults] = await Promise.all([
     prisma.$queryRaw<Array<{ field_name: string; value: string }>>(Prisma.sql`
       SELECT fmf.field_name, sm.value
       FROM submission_metadata sm
@@ -154,6 +156,12 @@ export async function getManagerTeamAuditDetails(
       JOIN calls c ON sc.call_id = c.id
       WHERE sc.submission_id = ${params.submissionId}
       ORDER BY sc.sort_order ASC
+    `),
+    prisma.$queryRaw<Array<{ kind: 'TICKET' | 'TASK'; external_id: string; sort_order: number }>>(Prisma.sql`
+      SELECT kind, CAST(external_id AS CHAR) AS external_id, sort_order
+      FROM submission_ticket_tasks
+      WHERE submission_id = ${params.submissionId}
+      ORDER BY sort_order ASC, id ASC
     `),
     prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
       SELECT sa.question_id, fq.question_text, sa.answer, sa.notes, fq.question_type,
@@ -223,6 +231,11 @@ export async function getManagerTeamAuditDetails(
     isDisputable: false,
     metadata,
     calls,
+    ticket_tasks: ticketTaskRows.map((r) => ({
+      kind: r.kind,
+      external_id: Number(r.external_id),
+      sort_order: r.sort_order,
+    })),
     answers,
     dispute: disputeRows.length > 0 ? disputeRows[0] : null,
   }

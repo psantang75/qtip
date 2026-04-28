@@ -29,11 +29,18 @@ export interface SubmissionCallDataPayload {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface SubmissionTicketTaskPayload {
+  kind: 'TICKET' | 'TASK';
+  external_id: number;
+}
+
 export interface SubmissionPayload {
   form_id: number;
   call_id?: number | null;
   call_ids?: number[];
   call_data?: SubmissionCallDataPayload[];
+  /** Linked CRM tickets/tasks; reference-only — body fetched live. */
+  ticket_tasks?: SubmissionTicketTaskPayload[];
   csr_id?: number | null;
   submitted_by?: number;
   answers: SubmissionAnswerPayload[];

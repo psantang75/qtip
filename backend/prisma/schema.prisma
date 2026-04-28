@@ -671,16 +671,44 @@ model Submission {
   call      Call? @relation(fields: [call_id], references: [id], onDelete: Cascade)
   submitter User  @relation(fields: [submitted_by], references: [id], onDelete: Cascade)
 
-  submission_metadata   SubmissionMetadata[]
-  submission_calls      SubmissionCall[]
-  submission_answers    SubmissionAnswer[]
-  score_snapshots       ScoreSnapshot[]
-  disputes              Dispute[]
-  dispute_score_history DisputeScoreHistory[]
+  submission_metadata     SubmissionMetadata[]
+  submission_calls        SubmissionCall[]
+  submission_ticket_tasks SubmissionTicketTask[]
+  submission_answers      SubmissionAnswer[]
+  score_snapshots         ScoreSnapshot[]
+  disputes                Dispute[]
+  dispute_score_history   DisputeScoreHistory[]
 
   @@index([status, submitted_at], map: "idx_submissions_status_date")
   @@index([form_id, status, submitted_at], map: "idx_submissions_form_status_date")
   @@map("submissions")
+}
+
+/// Junction linking a Submission to one or more external CRM tickets/tasks.
+/// Q-Tip stores ONLY the reference (kind + external_id); the ticket/task
+/// header and notes are live-fetched from the CRM read-only pool every time
+/// the section is rendered. See backend/src/services/CRMService.ts.
+///
+/// `external_id` is BigInt because tblTicket.TicketID is bigint(20) on the
+/// CRM side; tblTask.TaskID is int but fits comfortably in BigInt.
+enum TicketTaskKind {
+  TICKET
+  TASK
+}
+
+model SubmissionTicketTask {
+  id            Int            @id @default(autoincrement())
+  submission_id Int
+  kind          TicketTaskKind
+  external_id   BigInt
+  sort_order    Int            @default(0)
+  created_at    DateTime       @default(now()) @db.DateTime(0)
+
+  submission Submission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+
+  @@unique([submission_id, kind, external_id], name: "unique_submission_ticket_task")
+  @@index([submission_id])
+  @@map("submission_ticket_tasks")
 }
 
 model SubmissionMetadata {

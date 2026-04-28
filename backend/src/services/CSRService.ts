@@ -227,7 +227,7 @@ export class CSRService {
         });
       }
       
-      const [auditDetails, metadata, categories, questions, answers, calls, disputes] = await Promise.all([
+      const [auditDetails, metadata, categories, questions, answers, calls, ticket_tasks, disputes] = await Promise.all([
         prisma.$queryRaw<any[]>(
           Prisma.sql`
             SELECT 
@@ -324,6 +324,14 @@ export class CSRService {
         ),
         prisma.$queryRaw<any[]>(
           Prisma.sql`
+            SELECT kind, CAST(external_id AS CHAR) AS external_id, sort_order
+            FROM submission_ticket_tasks
+            WHERE submission_id = ${auditId}
+            ORDER BY sort_order ASC, id ASC
+          `
+        ),
+        prisma.$queryRaw<any[]>(
+          Prisma.sql`
             SELECT 
               d.id,
               d.reason,
@@ -374,6 +382,11 @@ export class CSRService {
         },
         metadata: metadataArray,
         calls: calls,
+        ticket_tasks: ticket_tasks.map((r: any) => ({
+          kind: r.kind,
+          external_id: Number(r.external_id),
+          sort_order: r.sort_order,
+        })),
         answers: answers,
         dispute: disputes.length > 0 ? disputes[0] : null
       };

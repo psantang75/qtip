@@ -7,6 +7,7 @@ import { getFormById } from '@/services/formService'
 import { normalizeFormMetadata } from '@/pages/quality/form-builder/formBuilderUtils'
 import submissionService from '@/services/submissionService'
 import MultipleCallSelector from '@/components/common/MultipleCallSelector'
+import TicketTaskSelector, { type TicketTaskRef } from '@/components/common/TicketTaskSelector'
 import type { Call } from '@/services/callService'
 import FormMetadataDisplay from '@/components/common/FormMetadataDisplay'
 import userService from '@/services/userService'
@@ -90,6 +91,7 @@ export default function AuditFormPage() {
   })
   const [metadataValues, setMetadataValues] = useState<Record<string, string>>({})
   const [selectedCalls, setSelectedCalls] = useState<Call[]>([])
+  const [linkedTicketTasks, setLinkedTicketTasks] = useState<TicketTaskRef[]>([])
 
   const scrollToQuestion = (questionId: number) => {
     const el = document.getElementById(`question-${questionId}`)
@@ -214,6 +216,7 @@ export default function AuditFormPage() {
         call_id: c.call_id, customer_id: customerId || c.customer_id,
         call_date: c.call_date, duration: c.duration, recording_url: c.recording_url, transcript: c.transcript,
       })),
+      ticket_tasks: linkedTicketTasks,
       csr_id: agentUserId,
       submitted_by: user.id,
       answers: Object.entries(answers).map(([qId, a]) => ({ question_id: Number(qId), answer: a.answer, notes: a.notes || '' })),
@@ -229,6 +232,7 @@ export default function AuditFormPage() {
       form_id:  Number(formId),
       call_id:  callId ? Number(callId) : null,
       call_ids: selectedCalls.map(c => c.id),
+      ticket_tasks: linkedTicketTasks,
       submitted_by: user.id,
       answers:  Object.entries(answers).map(([qId, a]) => ({ question_id: Number(qId), answer: a.answer, notes: a.notes || '' })),
       metadata: Object.entries(metadataValues).map(([fieldId, value]) => ({ field_id: fieldId, value })),
@@ -346,6 +350,21 @@ export default function AuditFormPage() {
                 </div>
               </div>
             )}
+
+            {/* Ticket / Task selector — placed above Call Details so reviewers
+                can capture CRM context first, then the call(s) that drove it. */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100">
+                <span className="text-[13px] font-semibold text-slate-800">Ticket / Task Details</span>
+              </div>
+              <div className="px-4 py-3">
+                <TicketTaskSelector
+                  selected={linkedTicketTasks}
+                  onChange={setLinkedTicketTasks}
+                  disabled={isSubmitting || isSavingDraft}
+                />
+              </div>
+            </div>
 
             {/* Call selector */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

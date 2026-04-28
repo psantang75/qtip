@@ -486,6 +486,35 @@ export class SubmissionService implements ISubmissionService {
     for (const answer of submissionData.answers) {
       await this.validateAnswer(answer);
     }
+
+    this.validateTicketTaskRefs(submissionData);
+  }
+
+  /**
+   * Shared validator for the optional `ticket_tasks` payload — kind must
+   * be TICKET|TASK and external_id must be a positive integer. Used by
+   * both the strict submit path and the draft path so a malformed
+   * reference can never reach the repository upsert.
+   */
+  private validateTicketTaskRefs(submissionData: CreateSubmissionDTO): void {
+    if (!submissionData.ticket_tasks || submissionData.ticket_tasks.length === 0) return;
+
+    for (const ref of submissionData.ticket_tasks) {
+      if (ref.kind !== 'TICKET' && ref.kind !== 'TASK') {
+        throw new SubmissionServiceError(
+          `Invalid ticket/task kind: ${ref.kind}`,
+          'INVALID_TICKET_TASK_KIND',
+          400
+        );
+      }
+      if (!Number.isInteger(ref.external_id) || ref.external_id <= 0) {
+        throw new SubmissionServiceError(
+          `Invalid ticket/task external_id: ${ref.external_id}`,
+          'INVALID_TICKET_TASK_ID',
+          400
+        );
+      }
+    }
   }
 
   /**
@@ -516,6 +545,8 @@ export class SubmissionService implements ISubmissionService {
         await this.validateAnswer(answer);
       }
     }
+
+    this.validateTicketTaskRefs(submissionData);
   }
 
   /**
