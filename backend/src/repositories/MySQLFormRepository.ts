@@ -8,7 +8,7 @@ import type {
   FormInteractionType, FormQuestionType, FormMetadataFieldType,
   FormMetadataInteractionType, FormQuestionConditionType, FormQuestionLogicalOperator,
   Prisma,
-} from '@prisma/client';
+} from '../generated/prisma/client';
 import logger from '../config/logger';
 
 const safeParam = <T>(value: T | undefined): T | null => (value === undefined ? null : value);
