@@ -19,7 +19,8 @@ import { useToast } from '@/hooks/use-toast'
 const FORMS_BASE = '/app/quality/forms'
 
 function isValidStep(s: string | null): s is Step {
-  return s !== null && STEPS.includes(s as Step)
+  if (s === null) return false
+  return STEPS.includes(s as Step)
 }
 
 export default function FormsPage() {
@@ -187,9 +188,9 @@ export default function FormsPage() {
       <StepBar current={step} />
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 min-h-[300px]">
-        {step === 'metadata'   && <MetadataStep   form={form} onChange={handleChange} />}
-        {step === 'categories' && <CategoriesStep form={form} onChange={handleChange} />}
-        {step === 'questions'  && <QuestionsStep  form={form} onChange={handleChange} />}
+        {step === 'metadata'    && <MetadataStep    form={form} onChange={handleChange} />}
+        {step === 'categories'  && <CategoriesStep  form={form} onChange={handleChange} />}
+        {step === 'questions'   && <QuestionsStep   form={form} onChange={handleChange} />}
 
         <div className="flex items-center justify-between pt-6 mt-6 border-t border-slate-200">
           <Button variant="outline" onClick={prevStep}>

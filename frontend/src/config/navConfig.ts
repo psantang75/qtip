@@ -39,6 +39,8 @@ export const NAV_CONFIG: SectionConfig[] = [
     items: [
       { label: 'Form Builder',      path: '/app/quality/forms',           icon: 'ClipboardList',   roles: [1] },
       { label: 'Review Forms',      path: '/app/quality/review-forms',    icon: 'ClipboardCheck',  roles: [1,2] },
+      { label: 'AI Reviewer',       path: '/app/quality/ai-reviewer',     icon: 'Sliders',         roles: [1,2] },
+      { label: 'AI Inbox',          path: '/app/quality/ai-inbox',        icon: 'Bot',             roles: [1,2] },
       { label: 'Completed Forms',    path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [1,2,4] },
       { label: 'Completed Reviews',  path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [5] },
       { label: 'My Reviews',        path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [3] },

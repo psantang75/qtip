@@ -95,6 +95,7 @@ lives at the [top-level README](../README.md); deploy templates live in
 - [`profile_settings.md`](./profile_settings.md)
 - [`help_center.md`](./help_center.md)
 - [`phone_system_integration.md`](./phone_system_integration.md)
+- [`bookstack_kb_integration.md`](./bookstack_kb_integration.md)
 - [`ADMIN_COMPONENTS_README.md`](./ADMIN_COMPONENTS_README.md)
 
 ## Testing

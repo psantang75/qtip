@@ -178,6 +178,15 @@ export class MySQLSubmissionRepository {
             submitted_by: submissionData.submitted_by,
             status: submissionData.status as PrismaSubmissionStatus,
             submitted_at: submissionData.submitted_at ?? undefined,
+            ai_overall_confidence:
+              submissionData.ai_overall_confidence == null
+                ? null
+                : (submissionData.ai_overall_confidence as any),
+            ai_calibrated_confidence:
+              submissionData.ai_calibrated_confidence == null
+                ? null
+                : (submissionData.ai_calibrated_confidence as any),
+            ai_extras: (submissionData.ai_extras as any) ?? undefined,
           },
         });
 
@@ -188,6 +197,7 @@ export class MySQLSubmissionRepository {
               question_id: a.question_id,
               answer: a.answer ?? null,
               notes: a.notes ?? null,
+              ai_confidence: a.ai_confidence == null ? null : (a.ai_confidence as any),
             })),
           });
         }
@@ -317,6 +327,18 @@ export class MySQLSubmissionRepository {
           data: {
             status: submissionData.status as PrismaSubmissionStatus,
             submitted_at: submissionData.submitted_at ?? undefined,
+            // Only overwrite AI side outputs when the new payload supplies
+            // them; otherwise leave whatever was there. (Lets human edits
+            // to a draft preserve the original AI-emitted timeline/etc.)
+            ...(submissionData.ai_overall_confidence !== undefined
+              ? { ai_overall_confidence: submissionData.ai_overall_confidence as any }
+              : {}),
+            ...(submissionData.ai_calibrated_confidence !== undefined
+              ? { ai_calibrated_confidence: submissionData.ai_calibrated_confidence as any }
+              : {}),
+            ...(submissionData.ai_extras !== undefined
+              ? { ai_extras: submissionData.ai_extras as any }
+              : {}),
           },
         });
 
@@ -329,6 +351,7 @@ export class MySQLSubmissionRepository {
               question_id: a.question_id,
               answer: a.answer ?? null,
               notes: a.notes ?? null,
+              ai_confidence: a.ai_confidence == null ? null : (a.ai_confidence as any),
             })),
           });
         }
@@ -343,6 +366,68 @@ export class MySQLSubmissionRepository {
               value: m.value ?? null,
             })),
           });
+        }
+
+        // Replace linked CRM tickets/tasks. Without this, a draft that gets
+        // re-saved for a different ticket (e.g. a second AI Reviewer manual
+        // run that reuses the same DRAFT row found by getExistingDraft) would
+        // keep the stale ticket linkage from the original save while the
+        // answers/metadata reflect the new ticket — producing a draft whose
+        // header points at one ticket and whose review narrative is about
+        // another. Mirror the answers/metadata replace-all semantics.
+        await tx.submissionTicketTask.deleteMany({ where: { submission_id: submission_id } });
+
+        if (submissionData.ticket_tasks && submissionData.ticket_tasks.length > 0) {
+          for (let i = 0; i < submissionData.ticket_tasks.length; i++) {
+            const ref = submissionData.ticket_tasks[i];
+            await tx.submissionTicketTask.create({
+              data: {
+                submission_id: submission_id,
+                kind: ref.kind,
+                external_id: BigInt(ref.external_id),
+                sort_order: i,
+              },
+            });
+          }
+        }
+
+        // Replace linked calls for the same reason. Reuse the same virtual-call
+        // upsert path from createSubmission so PhoneSystem-only conversations
+        // (negative call_id) still resolve to a real calls row.
+        await tx.submissionCall.deleteMany({ where: { submission_id: submission_id } });
+
+        if (submissionData.call_ids && submissionData.call_ids.length > 0) {
+          for (let i = 0; i < submissionData.call_ids.length; i++) {
+            let call_id = submissionData.call_ids[i];
+
+            if (call_id < 0) {
+              const callData = submissionData.call_data?.[i];
+              if (callData) {
+                const csr_id = submissionData.csr_id ?? submissionData.submitted_by;
+                const upsertedCall = await tx.call.upsert({
+                  where: { call_id: callData.call_id },
+                  create: {
+                    call_id: callData.call_id,
+                    csr_id: csr_id,
+                    department_id: callData.department_id ?? null,
+                    customer_id: null,
+                    call_date: callData.call_date ? new Date(callData.call_date) : new Date(),
+                    duration: callData.duration || 0,
+                    recording_url: callData.recording_url ?? null,
+                    transcript: callData.transcript ?? null,
+                    metadata: callData.metadata ? JSON.stringify(callData.metadata) : null,
+                  },
+                  update: {},
+                });
+
+                call_id = upsertedCall.id;
+              }
+            }
+
+            await tx.submissionCall.create({
+              data: { submission_id: submission_id, call_id: call_id, sort_order: i },
+            });
+          }
         }
       });
     } catch (error) {

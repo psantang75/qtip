@@ -40,6 +40,47 @@ export interface Form {
   user_version?: number;
   user_version_date?: string;
   critical_cap_percent?: number;
+  /**
+   * Per-form opt-in for the AI Reviewer feature. When true, the form is
+   * eligible to be filled in by the AI Reviewer system user via
+   * /api/ai-reviewer/*. The form auto-acquires a free-text "AI Reviewer
+   * Feedback" question (in a new "AI Reviewer" category) at save time so
+   * the AI's narrative always lands in a visible, scoreable slot.
+   */
+  ai_enabled?: boolean;
+
+  /**
+   * Free-text grading rules injected into the AI Reviewer's system prompt
+   * as ADDITIONAL FORM-SPECIFIC GRADING RULES. Lets the form author teach
+   * the AI policies that aren't expressible in the rubric questions
+   * themselves (e.g. "NA is only valid when the agent explicitly notes
+   * the step was unreachable"). Ignored when ai_enabled is false.
+   */
+  ai_review_guidance?: string | null;
+
+  /**
+   * When true, AI Reviewer submissions for this form are saved as DRAFT
+   * (no scoring) so a human can review and promote them to SUBMITTED.
+   * When false (default), AI submissions go straight to SUBMITTED with
+   * scoring, exactly like a human-completed audit. Ignored when
+   * ai_enabled is false.
+   */
+  ai_submit_as_draft?: boolean;
+
+  /**
+   * Trusted-mode sampling: percentage of AI submissions to route into the
+   * QA review inbox (0-100). 10 = ~10% random check. Ignored when
+   * ai_enabled or ai_submit_as_draft mean the submission is already
+   * a DRAFT awaiting human review.
+   */
+  ai_sample_review_pct?: number;
+
+  /**
+   * Trusted-mode sampling: when true, AI submissions whose total_score is
+   * below the form's critical-fail cap are ALWAYS routed to the QA
+   * inbox, in addition to the random sample.
+   */
+  ai_sample_low_score_always?: boolean;
 }
 
 /**
@@ -145,6 +186,11 @@ export interface CreateFormDTO {
   user_version?: number;
   user_version_date?: string;
   critical_cap_percent?: number;
+  ai_enabled?: boolean;
+  ai_review_guidance?: string | null;
+  ai_submit_as_draft?: boolean;
+  ai_sample_review_pct?: number;
+  ai_sample_low_score_always?: boolean;
   categories: CreateFormCategoryDTO[];
   metadata_fields?: CreateFormMetadataFieldDTO[];
 }

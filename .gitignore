@@ -18,6 +18,9 @@ frontend/dist/
 # ── Prisma Generated Client ──────────────────────────────────────────────────
 backend/src/generated/
 
+# ── Backend scratch / debug output ───────────────────────────────────────────
+backend/tmp/
+
 # ── Logs ─────────────────────────────────────────────────────────────────────
 logs/
 *.log

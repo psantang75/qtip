@@ -12,10 +12,17 @@ import logger from '../config/logger';
  * status flips and follow-up notes appear automatically without any
  * cache-invalidation logic.
  *
- * User resolution: numeric CreatedBy / AssignedTo* IDs join to
- * `tblSalesPeople.SalesPersonID` to surface the human name
- * (`SalesPersonName`). When a row's user is missing from that table the
- * UI falls back to "User #<id>" rather than failing.
+ * User resolution: numeric CreatedBy / AssignedTo* IDs in tblAction /
+ * tblTask / tblTicket / tblTicketNote refer to `tblSalesPeople.UserID`
+ * (NOT `SalesPersonID`). One UserID can map to several SalesPeople
+ * "display profiles"; the canonical one is the row with
+ * `isDisplayInCRM = 1`. We match the CRM UI's behaviour by joining on
+ * `sp.UserID = <id> AND sp.isDisplayInCRM = 1` — for example UserID 12
+ * has both `SalesPersonID 0 = "System"` (displayed) and
+ * `SalesPersonID 2 = "Recurring Service"` (hidden) and therefore
+ * resolves to "System" rather than the legacy `Morris Wilson` row at
+ * `SalesPersonID = 12` (which is keyed off the wrong column).
+ * Unresolved IDs fall through and the UI renders "User #<id>".
  *
  * Note parsing caveat:
  *   - Status-after / next-contact-date are encoded inside the note text
@@ -107,7 +114,7 @@ class CRMService {
           FROM tblTask t
           LEFT JOIN tblTaskType     tt ON tt.TaskTypeID   = t.TaskTypeID
           LEFT JOIN tblTaskStatus   ts ON ts.TaskStatusID = t.TaskStatusID
-          LEFT JOIN tblSalesPeople  sp ON sp.SalesPersonID = t.AssignedTo
+          LEFT JOIN tblSalesPeople  sp ON sp.UserID = t.AssignedTo AND sp.isDisplayInCRM = 1
           WHERE t.TaskID = ?
           LIMIT 1
         `,
@@ -161,9 +168,9 @@ class CRMService {
             ts.Title AS StatusAfter
           FROM tblAction a
           LEFT JOIN tblTaskStatus  ts ON ts.TaskStatusID  = a.TaskStatusID
-          LEFT JOIN tblSalesPeople sp ON sp.SalesPersonID = a.CreatedBy
+          LEFT JOIN tblSalesPeople sp ON sp.UserID = a.CreatedBy AND sp.isDisplayInCRM = 1
           WHERE a.TaskID = ?
-          ORDER BY a.CreatedOn ASC, a.ActionID ASC
+          ORDER BY a.CreatedOn DESC, a.ActionID DESC
         `,
         [taskId],
         'crm'
@@ -247,7 +254,7 @@ class CRMService {
           LEFT JOIN tblTicketClassification tc     ON tc.ClassificationID = t.ClassificationID
           LEFT JOIN tblTicketClassification parent ON parent.ClassificationID = tc.ParentID
           LEFT JOIN tblTicketResolution     tr     ON tr.ResolutionID     = t.ResolutionID
-          LEFT JOIN tblSalesPeople          sp     ON sp.SalesPersonID    = t.AssignedToUserID
+          LEFT JOIN tblSalesPeople          sp     ON sp.UserID = t.AssignedToUserID AND sp.isDisplayInCRM = 1
           WHERE t.TicketID = ?
           LIMIT 1
         `,
@@ -310,9 +317,9 @@ class CRMService {
             tn.CreatedBy,
             sp.SalesPersonName AS CreatedByName
           FROM tblTicketNote tn
-          LEFT JOIN tblSalesPeople sp ON sp.SalesPersonID = tn.CreatedBy
+          LEFT JOIN tblSalesPeople sp ON sp.UserID = tn.CreatedBy AND sp.isDisplayInCRM = 1
           WHERE tn.TicketID = ?
-          ORDER BY tn.CreatedOn ASC, tn.TicketNoteID ASC
+          ORDER BY tn.CreatedOn DESC, tn.TicketNoteID DESC
         `,
         [ticketId],
         'crm'
@@ -344,6 +351,60 @@ class CRMService {
     } catch (error) {
       logger.error(`[CRM SERVICE] Failed to fetch ticket notes for ${ticketId}`, { error: (error as Error).message });
       throw new Error(`Failed to retrieve ticket notes for ${ticketId}`);
+    }
+  }
+
+  /**
+   * Returns the active playbook links assigned to a ticket via its
+   * sub-classification (tblTicket.ClassificationID -> tblTicketClassificationPlayBook
+   * -> tblPlayBook -> tblPlayBookLink). Each link is typically a URL into the
+   * BookStack KB pointing at the documented troubleshooting/process page the
+   * agent is supposed to follow on this kind of ticket. Empty array if the
+   * ticket has no classification or its classification has no active playbook.
+   */
+  async getTicketPlaybookLinks(ticketId: number): Promise<{
+    playbook_id: number;
+    playbook_title: string | null;
+    link_title: string | null;
+    link_url: string;
+  }[]> {
+    try {
+      const rows = await executeQuery<{
+        PlayBookID: number;
+        Title: string | null;
+        LinkTitle: string | null;
+        LinkURL: string | null;
+      }>(
+        `
+          SELECT
+            pb.PlayBookID,
+            pb.Title,
+            pbl.LinkTitle,
+            pbl.LinkURL
+          FROM tblTicket t
+          JOIN tblTicketClassificationPlayBook tcpb
+            ON tcpb.ClassificationID = t.ClassificationID AND tcpb.Active = 1
+          JOIN tblPlayBook pb
+            ON pb.PlayBookID = tcpb.PlayBookID AND pb.Active = 1
+          JOIN tblPlayBookLink pbl
+            ON pbl.PlayBookID = pb.PlayBookID AND pbl.Active = 1
+          WHERE t.TicketID = ?
+            AND pbl.LinkURL IS NOT NULL AND pbl.LinkURL <> ''
+        `,
+        [ticketId],
+        'crm'
+      );
+      return rows.map((r) => ({
+        playbook_id: r.PlayBookID,
+        playbook_title: (r.Title ?? '').trim().replace(/^"|"$/g, '') || null,
+        link_title: r.LinkTitle ?? null,
+        link_url: String(r.LinkURL ?? '').trim(),
+      }));
+    } catch (error) {
+      logger.warn(
+        `[CRM SERVICE] Failed to fetch playbook links for ticket ${ticketId}: ${(error as Error).message}`
+      );
+      return [];
     }
   }
 

@@ -27,6 +27,36 @@ import { RowActionButton } from '@/components/common/RowActionButton'
 import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
 import { SUBMISSION_STATUSES, CLIENT_FETCH_LIMIT } from '@/constants/labels'
 
+/**
+ * Small tri-color chip for the AI overall confidence column.
+ *  - null  → em-dash (not an AI submission, or v1 row before backfill)
+ *  -   ≥ 0.85 → emerald
+ *  -   ≥ 0.65 → amber
+ *  -   < 0.65 → rose (these are the rows the low-confidence routing pulls out)
+ */
+function ConfidenceChip({ value }: { value: number | null }) {
+  if (value == null) return <span className="text-slate-300">—</span>
+  const v = Number(value)
+  if (!Number.isFinite(v)) return <span className="text-slate-300">—</span>
+  const pct = Math.round(v * 100)
+  const tone =
+    v >= 0.85
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : v >= 0.65
+        ? 'border-amber-200 bg-amber-50 text-amber-700'
+        : 'border-rose-200 bg-rose-50 text-rose-700'
+  return (
+    <span
+      className={
+        'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-mono tabular-nums ' + tone
+      }
+      title={`AI overall_confidence = ${v.toFixed(2)}`}
+    >
+      {pct}%
+    </span>
+  )
+}
+
 export default function SubmissionsPage() {
   const navigate = useNavigate()
   const { roleId, isAdminOrQA, isManager, isAgent } = useQualityRole()
@@ -189,6 +219,7 @@ export default function SubmissionsPage() {
                 <SortableTableHead field="created_at"      sort={sort} dir={dir} onSort={toggle} className="pl-6">Review Date</SortableTableHead>
                 <SortableTableHead field="interaction_date" sort={sort} dir={dir} onSort={toggle} className="pl-6">Interaction Date</SortableTableHead>
                 <SortableTableHead field="score"           sort={sort} dir={dir} onSort={toggle}>Score</SortableTableHead>
+                <SortableTableHead field="ai_overall_confidence" sort={sort} dir={dir} onSort={toggle}>AI Conf.</SortableTableHead>
                 <TableHead className="w-20" />
               </StandardTableHeaderRow>
             </TableHeader>
@@ -232,6 +263,9 @@ export default function SubmissionsPage() {
                           </TooltipProvider>
                         )}
                       </span>
+                    </TableCell>
+                    <TableCell className="text-[12px]">
+                      <ConfidenceChip value={row.ai_overall_confidence ?? null} />
                     </TableCell>
                     <TableCell className="pl-2">
                       <RowActionButton icon={Eye}

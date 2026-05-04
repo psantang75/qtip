@@ -20,7 +20,21 @@ export function CallDetailsPanel({ calls }: Props) {
   const [activeCallIndex, setActiveCallIndex] = useState(0)
   const [transcriptOpen,  setTranscriptOpen]  = useState(false)
 
-  if (!calls || calls.length === 0) return null
+  // Always render the card so reviewers can see at a glance that the
+  // submission was (or wasn't) linked to a call record. Empty state
+  // mirrors the "No tickets or tasks linked." copy on the sibling panel.
+  if (!calls || calls.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-4 py-3 bg-white border-b border-slate-100">
+          <h3 className="text-[15px] font-semibold text-slate-800">Call Details</h3>
+        </div>
+        <div className="px-4 py-3">
+          <p className="text-[12px] text-slate-400 italic">No call linked.</p>
+        </div>
+      </div>
+    )
+  }
 
   const call = calls[activeCallIndex] ?? calls[0]
 

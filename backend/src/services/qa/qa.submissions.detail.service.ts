@@ -29,6 +29,10 @@ export interface SubmissionDetail {
   critical_fail_count: number
   score_capped: boolean
   critical_cap_percent: number
+  /** AI Reviewer overall confidence (0..1). NULL for human-authored submissions. */
+  ai_overall_confidence: number | null
+  /** AI Reviewer side outputs — { timeline, observations }. NULL for human-authored. */
+  ai_extras: any | null
   form: any
   metadata: any[]
   calls: any[]
@@ -88,6 +92,9 @@ export async function getSubmissionDetail(submissionId: number, includeFullForm:
     critical_fail_count: Number(submission.critical_fail_count ?? 0),
     score_capped:        Boolean(submission.score_capped),
     critical_cap_percent: critPctOrDefault(submission.critical_cap_percent),
+    ai_overall_confidence:
+      submission.ai_overall_confidence == null ? null : Number(submission.ai_overall_confidence),
+    ai_extras: submission.ai_extras ?? null,
     form: {
       id:                   submission.form_id,
       form_name:            submission.form_name,
@@ -125,6 +132,7 @@ async function loadSubmission(submissionId: number): Promise<any | null> {
     SELECT
       s.id, s.form_id, s.submitted_by, s.submitted_at, s.total_score, s.status,
       s.critical_fail_count, s.score_capped,
+      s.ai_overall_confidence, s.ai_extras,
       f.form_name, f.version, f.user_version, f.user_version_date,
       f.interaction_type, f.critical_cap_percent,
       reviewer.username AS reviewer_name,

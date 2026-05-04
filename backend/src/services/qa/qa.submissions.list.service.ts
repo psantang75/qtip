@@ -11,14 +11,18 @@ import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
 import type { CompletedSubmissionsParams, CompletedSubmissionsResult } from './qa.types'
 
-const ALLOWED_STATUSES = new Set(['FINALIZED', 'DISPUTED', 'SUBMITTED'])
+// DRAFT included so AI Reviewer drafts (Calibrating mode) and any
+// human work-in-progress show up alongside Submitted/Disputed/Finalized
+// rows on the Completed Forms list. The frontend status filter still
+// drives what the user sees by default.
+const ALLOWED_STATUSES = new Set(['FINALIZED', 'DISPUTED', 'SUBMITTED', 'DRAFT'])
 
 export async function listCompletedSubmissions(params: CompletedSubmissionsParams): Promise<CompletedSubmissionsResult> {
   const { page, limit, formId, dateStart, dateEnd, status, search } = params
   const offset = (page - 1) * limit
 
   const conditions: Prisma.Sql[] = [
-    Prisma.sql`(s.status = 'FINALIZED' OR s.status = 'DISPUTED' OR s.status = 'SUBMITTED')`,
+    Prisma.sql`s.status IN ('FINALIZED', 'DISPUTED', 'SUBMITTED', 'DRAFT')`,
   ]
 
   if (formId)    conditions.push(Prisma.sql`s.form_id = ${formId}`)
@@ -63,6 +67,7 @@ export async function listCompletedSubmissions(params: CompletedSubmissionsParam
     interaction_date: string | null
     critical_fail_count: number
     score_capped: number
+    ai_overall_confidence: number | null
   }[]>(
     Prisma.sql`
       SELECT
@@ -76,6 +81,7 @@ export async function listCompletedSubmissions(params: CompletedSubmissionsParam
         s.status,
         s.critical_fail_count,
         s.score_capped,
+        s.ai_overall_confidence,
         (
           SELECT sm.value
           FROM submission_metadata sm

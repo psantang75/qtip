@@ -327,14 +327,18 @@ export const getCompletedForms = async (req: Request, res: Response): Promise<vo
       return;
     }
 
+    // DRAFT is included so AI Reviewer drafts (Calibrating mode) and any
+    // human work-in-progress show up alongside Submitted/Disputed/Finalized
+    // rows on the Completed Forms list. The frontend status filter still
+    // drives what the user sees.
     const conditions: Prisma.Sql[] = [
-      Prisma.sql`(s.status = 'FINALIZED' OR s.status = 'DISPUTED' OR s.status = 'SUBMITTED')`
+      Prisma.sql`(s.status = 'FINALIZED' OR s.status = 'DISPUTED' OR s.status = 'SUBMITTED' OR s.status = 'DRAFT')`
     ];
 
     if (form_id) conditions.push(Prisma.sql`s.form_id = ${form_id}`);
     if (dateStart) conditions.push(Prisma.sql`s.submitted_at >= ${`${dateStart} 00:00:00`}`);
     if (dateEnd) conditions.push(Prisma.sql`s.submitted_at <= ${`${dateEnd} 23:59:59`}`);
-    if (status && (status === 'FINALIZED' || status === 'DISPUTED' || status === 'SUBMITTED')) {
+    if (status && (status === 'FINALIZED' || status === 'DISPUTED' || status === 'SUBMITTED' || status === 'DRAFT')) {
       conditions.push(Prisma.sql`s.status = ${status}`);
     }
     if (search) {

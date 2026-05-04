@@ -34,6 +34,8 @@ import listRoutes  from './routes/list.routes';
 import phoneSystemRoutes from './routes/phoneSystem.routes';
 import callRoutes from './routes/calls.routes';
 import crmRoutes from './routes/crm.routes';
+import kbRoutes from './routes/kb.routes';
+import aiReviewerRoutes from './routes/ai-reviewer.routes';
 import writeupRoutes from './routes/writeup.routes';
 import importRoutes from './routes/import.routes';
 import metricRoutes from './routes/metric.routes';
@@ -179,6 +181,8 @@ app.use('/api/list-items', listRoutes);
 app.use('/api/phone-system', phoneSystemRoutes);
 app.use('/api/calls', callRoutes);
 app.use('/api/crm', crmRoutes);
+app.use('/api/kb', kbRoutes);
+app.use('/api/ai-reviewer', aiReviewerRoutes);
 app.use('/api/writeups', writeupRoutes);
 app.use('/api/imports', importRoutes);
 app.use('/api/metrics', metricRoutes);
@@ -200,6 +204,26 @@ const server = app.listen(port, () => {
   logger.info(`📖 API Documentation: http://localhost:${port}/api-docs`);
   logger.info(`💚 Health Check: http://localhost:${port}/health`);
   logger.info(`📊 Metrics: http://localhost:${port}/metrics`);
+  // Smoke signal #1 — make it obvious in stdout which prompt the AI
+  // Reviewer is using on this boot. If this line is missing, the
+  // process is running stale code and a deploy/restart didn't take.
+  logger.info('[AI REVIEWER] system prompt v2.0 active (timeline + observations + confidence)');
+
+  // Run the calibration absorb sweep + golden-set seeder + calibration map
+  // probe on boot so smoke signals appear in stdout immediately. Each call
+  // catches its own errors so a sub-system failure can't block boot.
+  void (async () => {
+    const { runAbsorbSweepOnBoot } = await import('./services/AICalibrationAbsorbSweep');
+    await runAbsorbSweepOnBoot();
+    const { runGoldenSetSeederOnBoot } = await import('./services/AIGoldenSetSeeder');
+    await runGoldenSetSeederOnBoot();
+    const { logCalibratorStateOnBoot } = await import('./services/ConfidenceCalibrator');
+    await logCalibratorStateOnBoot();
+    const { runDriftSweepOnBoot } = await import('./services/AIDriftDetector');
+    await runDriftSweepOnBoot();
+    const { logCostGuardStateOnBoot } = await import('./services/AIReviewerCostGuard');
+    await logCostGuardStateOnBoot();
+  })();
 });
 
 // Graceful shutdown handling

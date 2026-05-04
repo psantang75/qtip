@@ -6,10 +6,42 @@
  * Shared types live in formRenderTypes.ts.
  */
 
-import React from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { cn } from '../../lib/utils';
+import { RichTextDisplay } from '../../components/common/RichTextDisplay';
 import type { QuestionRenderData, CategoryRenderData, FormRenderData } from './formRenderTypes';
 import type { RadioOption } from '../../types/form.types';
+
+/** Canonical title of the auto-managed AI Reviewer feedback question — kept in sync with backend AI_REVIEWER_FEEDBACK_QUESTION_TEXT. */
+const AI_REVIEWER_FEEDBACK_QUESTION_TEXT = 'AI Reviewer Feedback';
+
+/**
+ * Auto-grows the textarea to fit its content so long answers (e.g. the
+ * AI Reviewer Feedback narrative) don't end up trapped in an inner
+ * scrollbar. The outer pane (`overflow-y-auto`) handles scrolling for
+ * the whole form. Falls back gracefully when SSR'd (no `window`).
+ */
+function useAutoGrowTextarea(value: string, minRows: number) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    // 22px line height matches our text-[13px] leading-snug; min height
+    // keeps short fields from collapsing below their normal size.
+    const minHeight = minRows * 22 + 12; // + vertical padding
+    el.style.height = Math.max(minHeight, el.scrollHeight) + 'px';
+  }, [value, minRows]);
+  // Re-measure once on mount in case the initial value is hydrated late.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const minHeight = minRows * 22 + 12;
+    el.style.height = Math.max(minHeight, el.scrollHeight) + 'px';
+  }, [minRows]);
+  return ref;
+}
 
 // ── Shared prop interface ─────────────────────────────────────────────────────
 
@@ -93,12 +125,34 @@ export const ScaleQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
 export const TextQuestion: React.FC<QuestionProps> = ({ question, isDisabled = false, onAnswerChange }) => {
   if (!question.isVisible) return null;
   const { id, text, currentValue } = question;
+  const value = currentValue || '';
+  const ref = useAutoGrowTextarea(value, 2);
+
+  // Auto-managed AI Reviewer Feedback question: the AI is the only writer
+  // (per backend ensureAiReviewerFeedbackQuestion). Render its HTML payload
+  // as rich text with clickable KB links instead of dumping the raw HTML
+  // into a textarea where reviewers see <p>/<a>/&#39; markup.
+  const isAiReviewerFeedback = (text || '').trim() === AI_REVIEWER_FEEDBACK_QUESTION_TEXT;
+  if (isAiReviewerFeedback) {
+    return (
+      <div>
+        <p className="text-[13px] text-slate-800 leading-snug mb-1.5">{text}</p>
+        <div className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 bg-slate-50">
+          <RichTextDisplay html={value} placeholder="(no AI narrative yet)" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <p className="text-[13px] text-slate-800 leading-snug mb-1.5">{text}</p>
-      <textarea rows={2} value={currentValue || ''} disabled={isDisabled}
+      <textarea
+        ref={ref}
+        value={value}
+        disabled={isDisabled}
         onChange={e => onAnswerChange(id, e.target.value, 'text')}
-        className="w-full text-[13px] border border-slate-200 rounded-md px-2.5 py-1.5 resize-none text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#00aeef]"
+        className="w-full text-[13px] border border-slate-200 rounded-md px-2.5 py-1.5 resize-none text-slate-700 leading-snug focus:outline-none focus:ring-1 focus:ring-[#00aeef] overflow-hidden"
       />
     </div>
   );

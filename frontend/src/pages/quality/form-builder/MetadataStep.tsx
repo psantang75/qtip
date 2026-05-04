@@ -8,7 +8,8 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Plus, Trash2 } from 'lucide-react'
+import { GripVertical, Plus, Trash2, Bot, ExternalLink } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import type { Form, FormMetadataField, MetadataFieldType } from '@/types/form.types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -181,14 +182,14 @@ export function MetadataStep({ form, onChange }: { form: Form; onChange: (f: For
   const optionalIds = fields.slice(4).map((_, i) => `field-${i + 4}`)
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="space-y-1.5">
+    <div className="max-w-4xl space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-start">
+        <div className="space-y-1.5 md:col-span-3">
           <Label>Form Name <span className="text-red-500">*</span></Label>
           <Input value={form.form_name} onChange={e => onChange({ ...form, form_name: e.target.value })}
             placeholder="e.g. Customer Service Call Review" className="h-9" />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 md:col-span-1">
           <Label>Form Type</Label>
           <Select value={form.interaction_type || 'CALL'} onValueChange={handleInteractionChange}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
@@ -199,18 +200,12 @@ export function MetadataStep({ form, onChange }: { form: Form; onChange: (f: For
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 md:col-span-1">
           <Label>Version</Label>
-          <div className="relative">
-            <Input value={form.version || 1} disabled className="h-9 bg-slate-50 text-slate-500 pr-28" />
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-slate-200 px-2 py-0.5 rounded text-slate-600">Auto-incremented</span>
-          </div>
+          <Input value={form.version || 1} disabled className="h-9 bg-slate-50 text-slate-500" />
         </div>
-        <div className="space-y-1.5">
-          <Label>
-            Critical Fail Cap %
-            <span className="ml-1 text-xs font-normal text-slate-500">(default 79)</span>
-          </Label>
+        <div className="space-y-1.5 md:col-span-1">
+          <Label>Critical Fail Cap %</Label>
           <Input
             type="number"
             min={0}
@@ -229,9 +224,52 @@ export function MetadataStep({ form, onChange }: { form: Form; onChange: (f: For
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-2.5">
+        <div>
+          <Label className="cursor-pointer text-sm font-medium text-slate-800">Active</Label>
+          <p className="text-[11px] text-slate-500">When off, this form is hidden from new audits but existing submissions are preserved.</p>
+        </div>
         <Switch checked={form.is_active} onCheckedChange={v => onChange({ ...form, is_active: v })} />
-        <Label className="cursor-pointer">Active (available for audits)</Label>
+      </div>
+
+      {/* ── AI Reviewer on/off (all management lives in Quality > AI Reviewer) ── */}
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <div className="flex items-center justify-between gap-4 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Bot className="h-4 w-4 text-primary" />
+            <Label
+              className="cursor-pointer text-sm font-semibold text-slate-900"
+              title="When enabled, the AI Reviewer system user can fill out and submit this form via POST /api/ai-reviewer/ticket/:id. A free-text 'AI Reviewer Feedback' question is auto-added on save so the AI's narrative always has a place to land."
+            >
+              Enable AI Reviewer
+            </Label>
+            <span className="text-[11px] font-normal text-slate-400">
+              (auto-adds an &quot;AI Reviewer Feedback&quot; question on save)
+            </span>
+          </div>
+          <Switch
+            checked={form.ai_enabled === true}
+            onCheckedChange={v => onChange({ ...form, ai_enabled: v })}
+          />
+        </div>
+
+        {form.ai_enabled === true && (
+          <div className="px-4 pb-3 -mt-1 text-[12px] text-slate-600">
+            Save the form to make it available in{' '}
+            {form.id ? (
+              <Link
+                to={`/app/quality/ai-reviewer/${form.id}`}
+                className="text-primary hover:underline inline-flex items-center gap-0.5"
+              >
+                Quality &gt; AI Reviewer
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            ) : (
+              <span className="font-medium text-slate-700">Quality &gt; AI Reviewer</span>
+            )}
+            , where you manage guidance, draft mode, sampling, and calibration without bumping the form version.
+          </div>
+        )}
       </div>
 
       <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-4">

@@ -14,6 +14,7 @@ import {
 } from '../models';
 import { MySQLSubmissionRepository } from '../repositories/MySQLSubmissionRepository';
 import { calculateFormScoreBySubmissionId, recalculateScores, getScoreBreakdown } from '../utils/scoringUtil';
+import prisma from '../config/prisma';
 import logger from '../config/logger';
 
 /**
@@ -73,6 +74,7 @@ export interface ISubmissionService {
   getCallWithForm(call_id: number, form_id: number): Promise<CallWithForm>;
   submitAudit(submissionData: CreateSubmissionDTO, qa_id: number): Promise<{ submission_id: number; total_score: number; message: string }>;
   saveDraft(submissionData: CreateSubmissionDTO, qa_id: number): Promise<{ submission_id: number; message: string }>;
+  promoteDraftToSubmitted(submission_id: number, edits: { answers: CreateSubmissionAnswerDTO[]; metadata?: import('../models').SubmissionMetadataDTO[] }, human_user_id: number): Promise<{ submission_id: number; total_score: number; ai_answers_snapshot: Record<number, string>; human_answers: Record<number, string>; form_id: number; ticket_ids: number[]; message: string }>;
   flagSubmission(flagData: FlagSubmissionDTO, user_id: number): Promise<{ message: string }>;
   recalculateSubmissionScores(submissionIds: number[]): Promise<{ recalculated: Record<number, number>; message: string }>;
 }
@@ -245,6 +247,133 @@ export class SubmissionService implements ISubmissionService {
         500
       );
     }
+  }
+
+  /**
+   * Promotes an existing DRAFT submission (typically created by the AI
+   * Reviewer) to SUBMITTED. Replaces the draft's answers and metadata
+   * with the human's edits, re-attributes ownership to the human user,
+   * runs scoring, and returns the AI's pre-promotion answers as a
+   * snapshot so the caller can record a calibration data point.
+   *
+   * Mirrors the submitAudit scoring path so AI-promoted submissions
+   * behave identically to a human-completed audit going forward.
+   */
+  async promoteDraftToSubmitted(
+    submission_id: number,
+    edits: { answers: CreateSubmissionAnswerDTO[]; metadata?: import('../models').SubmissionMetadataDTO[] },
+    human_user_id: number
+  ): Promise<{
+    submission_id: number;
+    total_score: number;
+    ai_answers_snapshot: Record<number, string>;
+    human_answers: Record<number, string>;
+    form_id: number;
+    ticket_ids: number[];
+    message: string;
+  }> {
+    if (!Number.isInteger(submission_id) || submission_id <= 0) {
+      throw new SubmissionServiceError('Invalid submission ID', 'INVALID_SUBMISSION_ID', 400);
+    }
+    if (!Number.isInteger(human_user_id) || human_user_id <= 0) {
+      throw new SubmissionServiceError('Invalid human user ID', 'INVALID_USER_ID', 400);
+    }
+    if (!edits.answers || edits.answers.length === 0) {
+      throw new SubmissionServiceError('Edits must include at least one answer', 'NO_EDITS', 400);
+    }
+
+    const draft = await prisma.submission.findUnique({
+      where: { id: submission_id },
+      include: {
+        submission_answers: true,
+        submission_ticket_tasks: { where: { kind: 'TICKET' }, select: { external_id: true } },
+      },
+    });
+    if (!draft) {
+      throw new SubmissionServiceError('Submission not found', 'SUBMISSION_NOT_FOUND', 404);
+    }
+    if (draft.status !== 'DRAFT') {
+      throw new SubmissionServiceError(
+        `Submission ${submission_id} is ${draft.status}, not DRAFT — cannot promote.`,
+        'NOT_A_DRAFT',
+        409
+      );
+    }
+
+    // Snapshot the AI's answers BEFORE we overwrite them. This is the
+    // calibration ground truth for "what did the AI originally say".
+    const aiAnswersSnapshot: Record<number, string> = {};
+    for (const a of draft.submission_answers) {
+      aiAnswersSnapshot[a.question_id] = a.answer ?? '';
+    }
+
+    const humanAnswersMap: Record<number, string> = {};
+    for (const a of edits.answers) {
+      humanAnswersMap[a.question_id] = a.answer ?? '';
+    }
+
+    const ticketIds = draft.submission_ticket_tasks.map((t) => Number(t.external_id));
+
+    // Replace answers + metadata + flip status atomically. We do the
+    // status/submitted_by/submitted_at flip + answer-replace inline
+    // rather than calling repository.updateSubmission so we can update
+    // submitted_by in the same transaction (the repo helper doesn't).
+    await prisma.$transaction(async (tx) => {
+      await tx.submission.update({
+        where: { id: submission_id },
+        data: {
+          status: 'SUBMITTED',
+          submitted_at: new Date(),
+          submitted_by: human_user_id,
+        },
+      });
+
+      await tx.submissionAnswer.deleteMany({ where: { submission_id } });
+      if (edits.answers.length > 0) {
+        await tx.submissionAnswer.createMany({
+          data: edits.answers.map((a) => ({
+            submission_id,
+            question_id: a.question_id,
+            answer: a.answer ?? null,
+            notes: a.notes ?? null,
+          })),
+        });
+      }
+
+      if (edits.metadata) {
+        await tx.submissionMetadata.deleteMany({ where: { submission_id } });
+        if (edits.metadata.length > 0) {
+          await tx.submissionMetadata.createMany({
+            data: edits.metadata.map((m) => ({
+              submission_id,
+              field_id: Number(m.field_id),
+              value: m.value ?? null,
+            })),
+          });
+        }
+      }
+    });
+
+    const scoreResult = await calculateFormScoreBySubmissionId(
+      this.submissionRepository.getConnection(),
+      submission_id
+    );
+    await this.submissionRepository.updateSubmissionScore(submission_id, scoreResult.total_score);
+
+    logger.info(
+      `[SUBMISSION SERVICE] Promoted DRAFT submission_id=${submission_id} to SUBMITTED ` +
+        `(scored ${scoreResult.total_score}); attributed to user ${human_user_id}.`
+    );
+
+    return {
+      submission_id,
+      total_score: scoreResult.total_score,
+      ai_answers_snapshot: aiAnswersSnapshot,
+      human_answers: humanAnswersMap,
+      form_id: draft.form_id,
+      ticket_ids: ticketIds,
+      message: 'Draft promoted to SUBMITTED',
+    };
   }
 
   /**

@@ -147,6 +147,15 @@ model Form {
   user_version      Int?
   user_version_date DateTime?           @db.Date
   critical_cap_percent Decimal           @default(79.00) @db.Decimal(5, 2)
+  ai_enabled        Boolean             @default(false) @db.TinyInt
+  ai_review_guidance String?            @db.Text
+  ai_submit_as_draft Boolean            @default(false) @db.TinyInt
+  ai_sample_review_pct       Int        @default(10) @db.UnsignedInt
+  ai_sample_low_score_always Boolean    @default(true) @db.TinyInt
+  ai_sample_low_confidence_threshold Decimal? @db.Decimal(3, 2)
+  ai_calibration_auto_absorb_days  Int?     @default(180)
+  ai_monthly_cost_budget_usd       Decimal? @db.Decimal(8, 2)
+  ai_disagreement_route_threshold  Decimal? @db.Decimal(3, 2)
 
   creator     User   @relation(fields: [created_by], references: [id], onDelete: Cascade)
   parent_form Form?  @relation("FormVersions", fields: [parent_form_id], references: [id], onDelete: SetNull)
@@ -666,6 +675,9 @@ model Submission {
   status       SubmissionStatus @default(DRAFT)
   critical_fail_count Int       @default(0)
   score_capped Boolean          @default(false) @db.TinyInt
+  ai_overall_confidence    Decimal? @db.Decimal(3, 2)
+  ai_calibrated_confidence Decimal? @db.Decimal(3, 2)
+  ai_extras    Json?
 
   form      Form  @relation(fields: [form_id], references: [id], onDelete: Cascade)
   call      Call? @relation(fields: [call_id], references: [id], onDelete: Cascade)
@@ -708,6 +720,7 @@ model SubmissionTicketTask {
 
   @@unique([submission_id, kind, external_id], name: "unique_submission_ticket_task")
   @@index([submission_id])
+  @@index([kind, external_id], map: "idx_stt_external")
   @@map("submission_ticket_tasks")
 }
 
@@ -747,6 +760,7 @@ model SubmissionAnswer {
   question_id   Int
   answer        String? @db.Text
   notes         String? @db.Text
+  ai_confidence Decimal? @db.Decimal(3, 2)
 
   submission        Submission       @relation(fields: [submission_id], references: [id], onDelete: Cascade)
   question          FormQuestion     @relation(fields: [question_id], references: [id], onDelete: Cascade)
@@ -1523,4 +1537,143 @@ enum WriteUpExampleSource {
   MANUAL
   QA_IMPORT
   COACHING_IMPORT
+}
+
+// Audit trail for every LLM call made by the AI Reviewer (Phase 3 of the
+// AI Reviewer Maturity Rollout). Inserts are fire-and-forget — a logging
+// failure must never bubble up into the LLM call path.
+model AiCallLog {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  created_at      DateTime @default(now()) @db.DateTime(3)
+  provider        String   @db.VarChar(32)
+  model           String   @db.VarChar(64)
+  purpose         String   @db.VarChar(64)
+  ticket_id       Int?     @db.UnsignedInt
+  submission_id   Int?     @db.UnsignedInt
+  form_id         Int?     @db.UnsignedInt
+  prompt_hash     String   @db.Char(64)
+  prompt_chars    Int      @db.UnsignedInt
+  response_chars  Int      @db.UnsignedInt
+  tokens_in       Int?     @db.UnsignedInt
+  tokens_out      Int?     @db.UnsignedInt
+  elapsed_ms      Int      @db.UnsignedInt
+  retried         Boolean  @default(false) @db.TinyInt
+  success         Boolean  @db.TinyInt
+  error_code      String?  @db.VarChar(64)
+  error_message   String?  @db.Text
+
+  @@index([ticket_id], map: "idx_ai_call_logs_ticket")
+  @@index([submission_id], map: "idx_ai_call_logs_submit")
+  @@index([created_at], map: "idx_ai_call_logs_created")
+  @@map("ai_call_logs")
+}
+
+// AI Reviewer calibration data points. Each row captures the pair
+// (ai_answers, human_answers) for one ticket on one form so we can compute
+// rolling agreement and per-question drift. See backend/src/services/AICalibrationService.ts.
+model AiCalibrationData {
+  id                   BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  created_at           DateTime @default(now()) @db.DateTime(3)
+  form_id              Int      @db.UnsignedInt
+  ticket_id            Int      @db.UnsignedInt
+  source               String   @db.VarChar(32)
+  ai_submission_id     Int?     @db.UnsignedInt
+  human_submission_id  Int?     @db.UnsignedInt
+  ai_answers           Json?
+  human_answers        Json
+  graded_by            Int?     @db.UnsignedInt
+  in_rolling_set       Boolean  @default(true) @db.TinyInt
+  notes                String?  @db.Text
+  absorbed_at          DateTime? @db.DateTime(3)
+  absorbed_by          Int?      @db.UnsignedInt
+  absorbed_reason      String?   @db.VarChar(255)
+
+  @@index([form_id, created_at], map: "idx_calib_form_created")
+  @@index([ticket_id], map: "idx_calib_ticket")
+  @@index([ai_submission_id], map: "idx_calib_ai_sub")
+  @@index([form_id, absorbed_at], map: "idx_calib_absorbed")
+  @@map("ai_calibration_data")
+}
+
+// Cached embeddings for BookStack pages (Phase 4 of the AI Reviewer
+// Maturity Rollout). Vectors are stored as packed Float32 byte arrays in
+// MEDIUMBLOB so we don't need MySQL 9's VECTOR type. The crawl is
+// idempotent — content_sha skips re-embedding pages whose plaintext is
+// unchanged.
+model KbPageEmbedding {
+  page_id        Int      @id @db.UnsignedInt
+  page_name      String   @db.VarChar(500)
+  page_url       String   @db.VarChar(500)
+  book_slug      String   @db.VarChar(150)
+  content_sha    String   @db.Char(64)
+  embedding      Bytes    @db.MediumBlob
+  embedding_dims Int      @db.UnsignedSmallInt
+  chars          Int      @db.UnsignedInt
+  crawled_at     DateTime @db.DateTime(3)
+
+  @@index([book_slug], map: "idx_kb_book")
+  @@map("kb_page_embeddings")
+}
+
+/// Held-out evaluation set per form (AI Reviewer Industry Parity Phase 3).
+/// Auto-seeded from promoted-and-unchanged AI submissions; humans can
+/// also manually mark a submission as golden via the submission detail UI.
+/// The unique key on submission_id keeps the auto-seeder idempotent.
+/// Soft-archive via archived_at instead of hard delete so historical eval
+/// runs stay reproducible.
+model AiGoldenSet {
+  id            Int       @id @default(autoincrement()) @db.UnsignedInt
+  form_id       Int       @db.UnsignedInt
+  submission_id Int       @db.UnsignedInt
+  source        String    @db.VarChar(16)
+  marked_by     Int?      @db.UnsignedInt
+  marked_at     DateTime  @default(now()) @db.DateTime(3)
+  notes         String?   @db.VarChar(500)
+  archived_at   DateTime? @db.DateTime(3)
+
+  @@unique([submission_id], map: "uk_golden_submission")
+  @@index([form_id, archived_at], map: "idx_golden_form")
+  @@map("ai_golden_set")
+}
+
+/// Per-form, versioned isotonic-regression bins fit by
+/// ConfidenceCalibratorFitter (Phase 4b). Versioned so an admin can
+/// preview the next-version map before flipping `is_active` — and so
+/// historical eval runs can replay against the map active at run time.
+model AiCalibrationMap {
+  id           Int      @id @default(autoincrement()) @db.UnsignedInt
+  form_id      Int      @db.UnsignedInt
+  version      Int      @db.UnsignedInt
+  fitted_at    DateTime @default(now()) @db.DateTime(3)
+  sample_count Int      @db.UnsignedInt
+  bins_json    Json
+  is_active    Boolean  @default(false) @db.TinyInt
+  notes        String?  @db.VarChar(500)
+
+  @@unique([form_id, version], map: "uk_calib_map_form_version")
+  @@index([form_id, is_active], map: "idx_calib_map_active")
+  @@map("ai_calibration_map")
+}
+
+/// One row per execution of the golden-set eval runner (Phase 3c).
+/// Stored centrally (not in a JSON file) so the latest-run card on the
+/// AI Reviewer detail page can show kappa + delta vs. the previous run,
+/// and so a CI gate can compare the current vs. previous run kappa.
+/// prompt_hash + pack_hashes_json pin the exact prompt this run was
+/// evaluating — critical when investigating "why did kappa drop?".
+model AiEvalRun {
+  id                Int      @id @default(autoincrement()) @db.UnsignedInt
+  form_id           Int      @db.UnsignedInt
+  ran_at            DateTime @default(now()) @db.DateTime(3)
+  triggered_by      String   @db.VarChar(32)
+  triggered_by_user Int?     @db.UnsignedInt
+  golden_set_count  Int      @db.UnsignedInt
+  prompt_hash       String   @db.Char(64)
+  pack_hashes_json  Json
+  results_json      Json
+  overall_kappa     Decimal? @db.Decimal(4, 3)
+  pass              Boolean  @db.TinyInt
+
+  @@index([form_id, ran_at], map: "idx_eval_form_ran")
+  @@map("ai_eval_runs")
 }

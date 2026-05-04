@@ -1,0 +1,85 @@
+---
+description: UI design conformance — read docs/design.md, mimic existing components, no raw HTML form elements
+globs: "frontend/**/*.tsx,frontend/**/*.ts"
+alwaysApply: true
+---
+
+# UI Design Conformance
+
+This project has a single source of truth for UI/UX. Drifting from it
+costs the maintainer real review time. Before writing or modifying
+**any** frontend component, follow the checklist below.
+
+## Read these first (every time)
+
+1. [`docs/design.md`](mdc:docs/design.md) — brand colors, typography,
+   spacing scale, component variants, iconography.
+2. [`.cursorrules`](mdc:.cursorrules) — tech-stack mandates (shadcn/ui,
+   Tremor, TanStack, lucide-react, etc.).
+3. **An existing component that does something similar.** Find one
+   before designing a new one. Examples that cover ~95% of UI work:
+   - Audit-form questions / "pick one of N" UIs →
+     [`frontend/src/utils/forms/formRendererComponents.tsx`](mdc:frontend/src/utils/forms/formRendererComponents.tsx)
+     (`YesNoQuestion`, `RadioQuestion`, `MultiSelectQuestion`,
+     `optionCls`).
+   - Page shells / list pages →
+     `frontend/src/components/common/ListPageShell.tsx`,
+     `ListPageHeader.tsx`, `PageSpinner.tsx`.
+   - Card / panel layout → any `<section className="rounded-xl border
+     border-slate-200 bg-white">…</section>` block in
+     `frontend/src/pages/quality/AIReviewerFormDetail.tsx` or
+     `CalibrationMetricsPanel.tsx`.
+   - Toggles → shadcn `Switch` (e.g. AIReviewerFormDetail Settings card).
+   - Modals / drawers → shadcn `Dialog`, `Sheet`.
+
+## Hard rules (non-negotiable)
+
+- **NEVER** write a raw `<input type="radio">`, `<input
+  type="checkbox">`, raw `<select>`, or hand-rolled `<button>` for
+  primary actions. Use:
+  - **Pick one of N (segmented)** → reuse the `optionCls` pill
+    pattern from `formRendererComponents.tsx`. This is the canonical
+    QTIP "radio" style.
+  - **Boolean toggle** → shadcn `Switch`.
+  - **Dropdown** → shadcn `Select`.
+  - **Primary / secondary / destructive button** → shadcn `Button`
+    with the standard variants. Primary buttons are
+    `bg-primary hover:bg-primary/90 text-white`.
+  - **Form input** → shadcn `Input`, `Label`, `textarea` from
+    `components/ui/textarea`.
+- **NEVER** introduce a new color outside the QTIP brand palette
+  defined in `docs/design.md` and `.cursorrules`. The palette is
+  exposed as Tailwind tokens (`bg-primary`, `text-primary`, `bg-success`,
+  `bg-warning`, `bg-destructive`, `bg-surface`, `text-neutral-700`,
+  `text-neutral-900`). Hex values like `#00aeef` are only acceptable
+  when copying an exact existing utility class (e.g.
+  `border-[#00aeef]` from `optionCls`).
+- **NEVER** build a custom data table — use TanStack Table.
+- **NEVER** use `useEffect` + `axios`/`fetch` for server state — use
+  TanStack Query.
+- **NEVER** introduce another icon library or emojis — only
+  `lucide-react`.
+- **NEVER** add custom CSS files. Tailwind utilities only.
+- **NEVER** invent a new spacing scale. Stick to the 8-pt scale
+  documented in `docs/design.md` (2, 4, 8, 12, 16, 24, 32…).
+
+## Workflow before any new UI
+
+```
+1. Read docs/design.md  (or skim if read this session)
+2. Grep for the closest existing component:
+     - Is there already a YES_NO-style picker? → reuse optionCls.
+     - Is there already a list page? → reuse ListPageShell.
+     - Is there already a settings card? → copy AIReviewerFormDetail's pattern.
+3. If a shadcn primitive doesn't exist yet, ASK the user before
+   adding @radix-ui/* packages. Do not silently expand the
+   dependency tree.
+4. Only then write the component, mirroring the closest existing
+   one's class names, spacing, and structure.
+```
+
+## When in doubt
+
+Stop. Show the user the existing component you plan to mimic and
+confirm before writing the new one. It is always cheaper than
+re-doing the design afterward.

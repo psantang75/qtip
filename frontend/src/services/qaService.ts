@@ -121,6 +121,8 @@ export interface Submission {
   critical_fail_count?: number
   score_capped?: boolean
   critical_cap_percent?: number
+  /** AI Reviewer overall confidence (0..1, null for human authored). */
+  ai_overall_confidence?: number | null
 }
 
 export interface AnswerRow {
@@ -200,6 +202,8 @@ export interface FormSummary {
   created_at: string
   category_count?: number
   question_count?: number
+  ai_enabled?: boolean
+  ai_review_guidance?: string | null
 }
 
 export interface FormDetail extends FormSummary {

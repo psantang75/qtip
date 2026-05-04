@@ -13,6 +13,71 @@ import logger from '../config/logger';
 
 const safeParam = <T>(value: T | undefined): T | null => (value === undefined ? null : value);
 
+/** Canonical title for the auto-managed AI Reviewer feedback question. */
+export const AI_REVIEWER_FEEDBACK_QUESTION_TEXT = 'AI Reviewer Feedback';
+/** Canonical category name that wraps the auto-managed AI Reviewer feedback question. */
+export const AI_REVIEWER_CATEGORY_NAME = 'AI Reviewer';
+
+/**
+ * When `formData.ai_enabled` is true and the payload doesn't already include
+ * an AI-Reviewer-Feedback question, append a dedicated category with a single
+ * free-text question for the AI's narrative output. Mutates the passed-in
+ * formData in place so it flows through the existing persistence path
+ * unchanged. Idempotent: a second call is a no-op.
+ *
+ * Uses weight = 0 so the auto-added category does not disturb the existing
+ * "category weights must sum to 1.0" validation. The free-text question is
+ * unscored (weight 0) for the same reason.
+ */
+/**
+ * Trims AI-reviewer guidance and forces it back to NULL when the AI feature
+ * is off, so a stale value can't accidentally influence a future enable.
+ */
+export function normalizeGuidance(guidance: string | null | undefined, aiEnabled: boolean): string | null {
+  if (!aiEnabled) return null;
+  const trimmed = (guidance ?? '').trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/**
+ * Clamps the per-form Trusted-mode sample percentage to 0-100 and falls
+ * back to the column default (10) when the input is missing or invalid.
+ * Returns 0 when the AI feature is off so the column reflects "irrelevant".
+ */
+export function normalizeSamplePct(pct: number | null | undefined, aiEnabled: boolean): number {
+  if (!aiEnabled) return 0;
+  if (pct == null || !Number.isFinite(pct)) return 10;
+  const n = Math.round(pct);
+  if (n < 0) return 0;
+  if (n > 100) return 100;
+  return n;
+}
+
+export function ensureAiReviewerFeedbackQuestion(formData: CreateFormDTO): void {
+  if (!formData.ai_enabled) return;
+  const alreadyHas = formData.categories.some((c) =>
+    c.questions.some((q) => q.question_text?.trim() === AI_REVIEWER_FEEDBACK_QUESTION_TEXT),
+  );
+  if (alreadyHas) return;
+  formData.categories.push({
+    category_name: AI_REVIEWER_CATEGORY_NAME,
+    description: 'Auto-managed by the AI Reviewer feature. Holds the AI-generated narrative feedback for each AI-graded submission.',
+    weight: 0,
+    sort_order: formData.categories.length,
+    questions: [
+      {
+        question_text: AI_REVIEWER_FEEDBACK_QUESTION_TEXT,
+        question_type: 'TEXT',
+        weight: 0,
+        sort_order: 0,
+        is_na_allowed: false,
+        visible_to_csr: true,
+        is_critical: false,
+      },
+    ],
+  });
+}
+
 export class MySQLFormRepository {
 
   constructor(_connectionPool?: any) {
@@ -25,6 +90,8 @@ export class MySQLFormRepository {
 
   async createForm(formData: CreateFormDTO): Promise<number> {
     logger.info('🚨 REPOSITORY createForm called - this is the actual code being executed!');
+
+    ensureAiReviewerFeedbackQuestion(formData);
 
     const form_id = await prisma.$transaction(async (tx) => {
       await tx.form.updateMany({
@@ -41,6 +108,11 @@ export class MySQLFormRepository {
           user_version: formData.user_version ?? null,
           user_version_date: formData.user_version_date ? new Date(formData.user_version_date) : null,
           critical_cap_percent: (formData.critical_cap_percent ?? 79.0) as any,
+          ai_enabled: formData.ai_enabled === true,
+          ai_review_guidance: normalizeGuidance(formData.ai_review_guidance, formData.ai_enabled === true),
+          ai_submit_as_draft: formData.ai_enabled === true && formData.ai_submit_as_draft === true,
+          ai_sample_review_pct: normalizeSamplePct(formData.ai_sample_review_pct, formData.ai_enabled === true),
+          ai_sample_low_score_always: formData.ai_enabled === true ? formData.ai_sample_low_score_always !== false : false,
         },
       });
 
@@ -210,6 +282,11 @@ export class MySQLFormRepository {
       created_by: row.created_by,
       created_at: row.created_at,
       is_active: row.is_active,
+      ai_enabled: (row as any).ai_enabled === true,
+      ai_review_guidance: ((row as any).ai_review_guidance ?? null) as string | null,
+      ai_submit_as_draft: (row as any).ai_submit_as_draft === true,
+      ai_sample_review_pct: Number((row as any).ai_sample_review_pct ?? 10),
+      ai_sample_low_score_always: (row as any).ai_sample_low_score_always === true,
       categories: [],
     })) as FormWithCategories[];
 
@@ -303,6 +380,11 @@ export class MySQLFormRepository {
       created_by: form.created_by,
       created_at: form.created_at,
       is_active: form.is_active,
+      ai_enabled: (form as any).ai_enabled === true,
+      ai_review_guidance: ((form as any).ai_review_guidance ?? null) as string | null,
+      ai_submit_as_draft: (form as any).ai_submit_as_draft === true,
+      ai_sample_review_pct: Number((form as any).ai_sample_review_pct ?? 10),
+      ai_sample_low_score_always: (form as any).ai_sample_low_score_always === true,
       user_version: form.user_version ?? undefined,
       user_version_date: form.user_version_date ? form.user_version_date.toISOString().split('T')[0] : undefined,
       critical_cap_percent: (form as any).critical_cap_percent !== undefined && (form as any).critical_cap_percent !== null
@@ -325,6 +407,8 @@ export class MySQLFormRepository {
 
   async updateForm(form_id: number, formData: CreateFormDTO): Promise<number> {
     logger.info('🚨 REPOSITORY updateForm called - creating new version!');
+
+    ensureAiReviewerFeedbackQuestion(formData);
 
     const currentForm = await prisma.form.findUnique({
       where: { id: form_id },
@@ -350,6 +434,11 @@ export class MySQLFormRepository {
           user_version: formData.user_version ?? null,
           user_version_date: formData.user_version_date ? new Date(formData.user_version_date) : null,
           critical_cap_percent: (formData.critical_cap_percent ?? 79.0) as any,
+          ai_enabled: formData.ai_enabled === true,
+          ai_review_guidance: normalizeGuidance(formData.ai_review_guidance, formData.ai_enabled === true),
+          ai_submit_as_draft: formData.ai_enabled === true && formData.ai_submit_as_draft === true,
+          ai_sample_review_pct: normalizeSamplePct(formData.ai_sample_review_pct, formData.ai_enabled === true),
+          ai_sample_low_score_always: formData.ai_enabled === true ? formData.ai_sample_low_score_always !== false : false,
         },
       });
 

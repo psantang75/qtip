@@ -1,0 +1,27 @@
+{
+  "_doc": "Golden ticket set for AI Reviewer regression evaluation. Each entry is a closed ticket whose 'expected' answers represent the human-judged ground truth for the audit form. Set 'expected' to null until a human has graded the ticket — runEval skips ungraded records (reports them as 'unscored') instead of failing. The four gradeable question_ids on form 99016 are 99125-99128 (all YES_NO).",
+  "form_id": 99016,
+  "form_name": "Tech Ticket Review - Sub-classification, Resolution and Process",
+  "question_legend": {
+    "99125": "Did the selected Subclass accurately reflect the customer's issue?",
+    "99126": "Did the notes accurately reflect the steps taken?",
+    "99127": "Did the notes follow the steps in the KB?",
+    "99128": "Did the resolution selected properly match the outcome?"
+  },
+  "agreement_threshold": 0.85,
+  "tickets": [
+    { "ticket_id": 272233, "subclass": "\"Playback Stopped\"",                                              "resolution": "Customer Updated Network",                  "expected": null },
+    { "ticket_id": 279060, "subclass": "\"Playback Stopped\"",                                              "resolution": "Multiple Attempts - Unable to Follow Up",   "expected": null },
+    { "ticket_id": 279434, "subclass": "\"Playback Stopped\"",                                              "resolution": "Power Cycled Device",                       "expected": null },
+    { "ticket_id": 279178, "subclass": "\"Not Connected to the Internet.\"",                                "resolution": "Multiple Attempts - Unable to Follow Up",   "expected": null },
+    { "ticket_id": 279334, "subclass": "Setup Questions - SXM App",                                          "resolution": "Provided SXM App Setup Instructions",       "expected": null },
+    { "ticket_id": 279227, "subclass": "Music Content Questions - Soundtrack",                               "resolution": "Answered Music Content Questions",          "expected": null },
+    { "ticket_id": 279272, "subclass": "\"PLAY\" - No Sound",                                                "resolution": "Proprietary Audio System - Referred to Certified Vendor", "expected": null },
+    { "ticket_id": 279262, "subclass": "Soundtrack Access Request",                                          "resolution": "Provided Remote Code",                      "expected": null },
+    { "ticket_id": 278647, "subclass": "Startup Failed - Blank Screen, Flashing or Solid Blue Light",        "resolution": "Multiple Attempts - Unable to Follow Up",   "expected": null },
+    { "ticket_id": 278552, "subclass": "Setup Questions - SXM Satellite",                                    "resolution": "Provided SXM Satellite Setup Instructions", "expected": null },
+    { "ticket_id": 278999, "subclass": "E01",                                                                "resolution": "Confirmed Wired Connection",                "expected": null },
+    { "ticket_id": 278741, "subclass": "Music is Skipping or Intermittent - SXM Satellite",                  "resolution": "Re-Aimed Antenna",                          "expected": null },
+    { "ticket_id": 277687, "subclass": "SXBR2 and SXBR3 Login Outage",                                       "resolution": "Outage No Longer in Effect",                "expected": null }
+  ]
+}

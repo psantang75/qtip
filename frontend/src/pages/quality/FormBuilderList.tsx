@@ -115,7 +115,19 @@ export function FormBuilderList() {
                   className="cursor-pointer hover:bg-slate-50/50"
                   onClick={() => navigate(`${FORMS_BASE}/${f.id}/edit`)}
                 >
-                  <TableCell className="text-[13px] text-slate-600">{f.form_name}</TableCell>
+                  <TableCell className="text-[13px] text-slate-600">
+                    <span className="inline-flex items-center gap-2">
+                      {f.form_name}
+                      {f.ai_enabled && (
+                        <span
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 text-violet-700 border border-violet-200"
+                          title="AI Reviewer is enabled on this form"
+                        >
+                          AI
+                        </span>
+                      )}
+                    </span>
+                  </TableCell>
                   <TableCell><StatusBadge status={f.is_active ? 'ACTIVE' : 'INACTIVE'} /></TableCell>
                   <TableCell className="text-[13px] text-slate-600">{f.interaction_type ?? '—'}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">v{f.version ?? 1}</TableCell>

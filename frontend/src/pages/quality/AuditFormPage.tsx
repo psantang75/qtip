@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { getFormById } from '@/services/formService'
 import { normalizeFormMetadata } from '@/pages/quality/form-builder/formBuilderUtils'
 import submissionService from '@/services/submissionService'
+import aiReviewerService from '@/services/aiReviewerService'
 import MultipleCallSelector from '@/components/common/MultipleCallSelector'
 import TicketTaskSelector, { type TicketTaskRef } from '@/components/common/TicketTaskSelector'
 import type { Call } from '@/services/callService'
@@ -22,6 +23,8 @@ import {
 import { validateAnswers } from '@/utils/submissionUtils'
 import { Button } from '@/components/ui/button'
 import { TableErrorState } from '@/components/common/TableErrorState'
+import { TimelinePanel } from '@/components/quality/ai/TimelinePanel'
+import { AdvisoryObservationsPanel, type AdvisoryObservation } from '@/components/quality/ai/AdvisoryObservationsPanel'
 
 interface AnswerType {
   question_id: number
@@ -37,11 +40,105 @@ export default function AuditFormPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  const formId = searchParams.get('formId')
+  const formIdParam = searchParams.get('formId')
   const callId = searchParams.get('callId')
   const agentId = searchParams.get('csrId')
+  // ── AI Reviewer modes ────────────────────────────────────────────────
+  // ?promoteDraft=<aiSubmissionId>            — load AI's DRAFT, edit, promote to SUBMITTED
+  // ?calibrationOverlayFor=<aiSubmissionId>   — load AI's SUBMITTED answers, write a NEW human submission
+  const promoteDraftId = searchParams.get('promoteDraft')
+  const calibrationOverlayId = searchParams.get('calibrationOverlayFor')
+  const aiSubmissionId = promoteDraftId
+    ? Number(promoteDraftId)
+    : calibrationOverlayId
+      ? Number(calibrationOverlayId)
+      : null
+  const aiMode: 'promote' | 'overlay' | null = promoteDraftId
+    ? 'promote'
+    : calibrationOverlayId
+      ? 'overlay'
+      : null
 
   const qc = useQueryClient()
+
+  // When in an AI mode, the formId comes from the AI submission, not the
+  // querystring. We block the form fetch until we resolve it.
+  const {
+    data: aiPrefill,
+    isLoading: aiPrefillLoading,
+    isError: aiPrefillError,
+    error: aiPrefillErrorObj,
+  } = useQuery({
+    queryKey: ['ai-reviewer-prefill', aiMode, aiSubmissionId],
+    queryFn: async () => {
+      if (!aiSubmissionId || !aiMode) return null
+      // Promote-draft uses the dedicated AI Reviewer draft endpoint
+      // (it filters to AI-Reviewer-owned drafts only). Overlay reuses
+      // the standard submission-detail endpoint since the source is
+      // SUBMITTED.
+      if (aiMode === 'promote') {
+        return aiReviewerService.getDraft(aiSubmissionId)
+      }
+      // Lazy import to avoid pulling qaService into pages that don't need it
+      const qaServiceMod = await import('@/services/qaService')
+      const detail = await qaServiceMod.default.getSubmissionDetail(aiSubmissionId)
+      return {
+        submission_id: detail.id,
+        form_id: detail.form_id ?? null,
+        form_name: detail.form_name,
+        submitted_at: null as string | null,
+        answers: (detail.answers ?? [])
+          .filter((a: any) => a.question_id != null)
+          .map((a: any) => ({ question_id: Number(a.question_id), answer: String(a.answer ?? ''), notes: '' })),
+        metadata: [] as Array<{ field_id: number; value: string }>,
+        ticket_tasks: [] as Array<{ kind: 'TICKET' | 'TASK'; external_id: number }>,
+      }
+    },
+    enabled: !!(aiSubmissionId && aiMode),
+    staleTime: 60 * 1000,
+    retry: false, // 403/404/409 from the draft endpoint are deterministic — don't retry
+  })
+
+  // Pull the most useful error detail off an axios error so the
+  // AI-mode error state can show "this submission isn't an AI draft"
+  // instead of a generic "request failed" or — worse — a blank page.
+  const aiPrefillErrorDetail = useMemo(() => {
+    if (!aiPrefillError) return null
+    const e = aiPrefillErrorObj as any
+    const status: number | undefined = e?.response?.status
+    const code: string | undefined = e?.response?.data?.code
+    const serverMsg: string | undefined =
+      typeof e?.response?.data?.error === 'string' ? e.response.data.error : undefined
+    if (status === 403) {
+      return {
+        title: 'This submission is not an AI Reviewer draft',
+        body:
+          serverMsg ??
+          'The AI draft endpoint only exposes drafts owned by the AI Reviewer system user. ' +
+            'This submission was created or already promoted by a human reviewer, so it cannot be promoted again here.',
+      }
+    }
+    if (status === 404) {
+      return {
+        title: `Submission ${aiSubmissionId} not found`,
+        body: serverMsg ?? 'It may have been deleted or the link is stale.',
+      }
+    }
+    if (status === 409 || code === 'NOT_A_DRAFT') {
+      return {
+        title: 'This submission is no longer a draft',
+        body:
+          serverMsg ??
+          'It has already been promoted or submitted. Open the submission detail page to view it.',
+      }
+    }
+    return {
+      title: 'Failed to load the AI draft',
+      body: serverMsg ?? e?.message ?? 'Unknown error.',
+    }
+  }, [aiPrefillError, aiPrefillErrorObj, aiSubmissionId])
+
+  const formId = aiMode && aiPrefill?.form_id ? String(aiPrefill.form_id) : formIdParam
 
   const { data: formRaw, isLoading: loading, isError: formError, refetch: refetchForm } = useQuery({
     queryKey: ['audit-form', formId],
@@ -75,11 +172,42 @@ export default function AuditFormPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [missingQuestions, setMissingQuestions] = useState<number[]>([])
 
+  // "Why are you correcting the AI?" — captured in AI Reviewer modes
+  // (promote OR overlay). Always-visible textbox; passing through as
+  // ai_calibration_data.notes makes the reason available to future
+  // prompt runs as a "Reviewer's reason" bullet.
+  const [correctionReason, setCorrectionReason] = useState<string>('')
+
   const { mutate: doSubmit, isPending: isSubmitting } = useMutation({
-    mutationFn: (payload: any) => submissionService.submitAudit(payload),
+    mutationFn: (payload: any) => {
+      if (aiMode === 'promote' && aiSubmissionId) {
+        return aiReviewerService.promoteDraft(aiSubmissionId, {
+          answers: payload.answers,
+          metadata: payload.metadata,
+          correction_reason: correctionReason.trim() || null,
+        })
+      }
+      if (aiMode === 'overlay' && aiSubmissionId) {
+        return aiReviewerService.recordCalibrationOverlay(aiSubmissionId, {
+          answers: payload.answers,
+          metadata: payload.metadata,
+          correction_reason: correctionReason.trim() || null,
+        })
+      }
+      return submissionService.submitAudit(payload)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['submissions'] })
-      navigate('/app/quality/review-forms', { state: { message: 'Audit submitted successfully!' } })
+      qc.invalidateQueries({ queryKey: ['ai-reviewer-inbox'] })
+      if (aiMode) {
+        const msg =
+          aiMode === 'promote'
+            ? 'AI draft promoted and scored.'
+            : 'Calibration sample recorded.'
+        navigate('/app/quality/ai-inbox', { state: { message: msg } })
+      } else {
+        navigate('/app/quality/review-forms', { state: { message: 'Audit submitted successfully!' } })
+      }
     },
     onError: () => setErrorMessage('Failed to submit. Please try again.'),
   })
@@ -103,22 +231,41 @@ export default function AuditFormPage() {
   }
 
 
-  // Redirect if no formId
+  // Redirect if no formId — AI Reviewer modes resolve the formId via the
+  // AI submission so we wait for that fetch to complete before judging.
   useEffect(() => {
-    if (!formId) navigate('/app/quality/review-forms')
-  }, [formId, navigate])
+    if (formId) return
+    if (aiMode && !aiPrefill) return
+    navigate('/app/quality/review-forms')
+  }, [formId, aiMode, aiPrefill, navigate])
 
-  // Initialize derived state once the form data arrives from useQuery
+  // Initialize derived state once the form data arrives from useQuery.
+  // In AI Reviewer modes (promote / overlay) we hydrate the form with
+  // the AI's answers as the starting point so the human can edit
+  // minimally and promote/submit.
   useEffect(() => {
     if (!form) return
-    const emptyAnswers: Record<number, AnswerType> = {}
-    const emptyStrings: Record<number, string> = {}
-    const initialVisibility = processConditionalLogic(form, emptyStrings)
-    const { totalScore, categoryScores: initCatScores } = calculateFormScore(form, emptyAnswers)
-    setAnswers(emptyAnswers)
+    const seedAnswers: Record<number, AnswerType> = {}
+    if (aiMode && aiPrefill?.answers) {
+      for (const a of aiPrefill.answers) {
+        const qid = Number(a.question_id)
+        let foundQ: any
+        for (const cat of form.categories) {
+          const q = (cat.questions ?? []).find((q: any) => q.id === qid)
+          if (q) { foundQ = q; break }
+        }
+        const qScore = foundQ ? getQuestionScore(foundQ, a.answer) : 0
+        seedAnswers[qid] = { question_id: qid, answer: a.answer, score: qScore, notes: a.notes ?? '' }
+      }
+    }
+    const seedStrings: Record<number, string> = {}
+    Object.entries(seedAnswers).forEach(([qId, a]) => { seedStrings[Number(qId)] = a.answer || '' })
+    const initialVisibility = processConditionalLogic(form, seedStrings)
+    const { totalScore, categoryScores: initCatScores } = calculateFormScore(form, seedAnswers)
+    setAnswers(seedAnswers)
     setVisibilityMap(initialVisibility)
     setScore(totalScore)
-    setFormRenderData(prepareFormForRender(form, emptyAnswers, initialVisibility, initCatScores, totalScore))
+    setFormRenderData(prepareFormForRender(form, seedAnswers, initialVisibility, initCatScores, totalScore))
 
     const today = new Date().toISOString().split('T')[0]
     const initialMeta: Record<string, string> = {}
@@ -131,8 +278,35 @@ export default function AuditFormPage() {
           initialMeta[key] = today
       }
     })
+
+    // In AI Reviewer modes, overlay the AI's saved metadata (Interaction
+    // Date, CSR, etc.) on top of the auto defaults so the human reviewer
+    // sees what the AI captured. Auto fields stay live (current user /
+    // today) — those are the human's stamp, not the AI's.
+    if (aiMode && aiPrefill?.metadata) {
+      const autoFieldKeys = new Set(
+        (form.metadata_fields ?? [])
+          .filter((f: any) => f.field_type === 'AUTO')
+          .map((f: any) => ((f.id && f.id !== 0) ? f.id.toString() : f.field_name))
+      )
+      for (const m of aiPrefill.metadata) {
+        const key = String(m.field_id)
+        if (autoFieldKeys.has(key)) continue
+        if (m.value != null && m.value !== '') initialMeta[key] = String(m.value)
+      }
+    }
     setMetadataValues(initialMeta)
-  }, [form, user])
+
+    // Hydrate the linked ticket(s) / task(s) from the AI submission so
+    // the left-pane TicketTaskSelector shows what's already attached.
+    if (aiMode && aiPrefill?.ticket_tasks?.length) {
+      setLinkedTicketTasks(
+        aiPrefill.ticket_tasks
+          .filter((t: any) => t && (t.kind === 'TICKET' || t.kind === 'TASK') && Number.isFinite(Number(t.external_id)))
+          .map((t: any) => ({ kind: t.kind, external_id: Number(t.external_id) }))
+      )
+    }
+  }, [form, user, aiMode, aiPrefill])
 
   const updateRenderData = (formData: any, currentAnswers: Record<number, AnswerType>) => {
     if (!formData) return
@@ -239,11 +413,45 @@ export default function AuditFormPage() {
     })
   }
 
-  if (loading) {
+  if (loading || (aiMode && aiPrefillLoading)) {
     return (
       <div className="p-6 space-y-4">
         <div className="h-8 bg-slate-100 rounded animate-pulse w-1/3" />
         <div className="h-64 bg-slate-100 rounded-xl animate-pulse" />
+      </div>
+    )
+  }
+
+  if (aiMode && aiPrefillErrorDetail) {
+    return (
+      <div className="p-6">
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}
+          className="mb-4 flex items-center gap-1 text-[11px] text-slate-400 hover:text-primary h-auto px-0">
+          <ArrowLeft className="h-3 w-3" />
+          Back
+        </Button>
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-[14px] font-semibold text-amber-900">{aiPrefillErrorDetail.title}</h3>
+              <p className="text-[13px] text-amber-800 mt-1 leading-relaxed">{aiPrefillErrorDetail.body}</p>
+              {aiSubmissionId != null && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="outline"
+                    className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                    onClick={() => navigate(`/app/quality/submissions/${aiSubmissionId}`)}>
+                    Open submission #{aiSubmissionId}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-amber-900 hover:bg-amber-100"
+                    onClick={() => navigate('/app/quality/ai-inbox')}>
+                    Back to AI Inbox
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
       </div>
     )
   }
@@ -268,20 +476,51 @@ export default function AuditFormPage() {
             Back to Review Forms
           </Button>
           <div className="flex items-start justify-between gap-4">
-            <h1 className="text-2xl font-bold text-slate-900">Review Form</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {aiMode === 'promote'
+                ? 'Promote AI Draft'
+                : aiMode === 'overlay'
+                  ? 'Calibration Re-audit'
+                  : 'Review Form'}
+            </h1>
             <div className="flex items-center gap-3 shrink-0 mt-0.5">
-              <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
-                <Save className="h-4 w-4 mr-1.5" />
-                {isSavingDraft ? 'Saving…' : 'Save Draft'}
-              </Button>
+              {!aiMode && (
+                <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
+                  <Save className="h-4 w-4 mr-1.5" />
+                  {isSavingDraft ? 'Saving…' : 'Save Draft'}
+                </Button>
+              )}
               <Button onClick={handleSubmit} disabled={isSubmitting || isSavingDraft}
                 className="bg-primary hover:bg-primary/90 text-white">
                 <Send className="h-4 w-4 mr-1.5" />
-                {isSubmitting ? 'Submitting…' : 'Submit Review'}
+                {isSubmitting
+                  ? (aiMode === 'promote' ? 'Promoting…' : aiMode === 'overlay' ? 'Recording…' : 'Submitting…')
+                  : (aiMode === 'promote' ? 'Promote to Submitted' : aiMode === 'overlay' ? 'Save Calibration' : 'Submit Review')}
               </Button>
             </div>
           </div>
         </div>
+
+        {aiMode && (
+          <div className="mt-2 mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12px] text-amber-800 flex items-start justify-between gap-3">
+            <div>
+              <span className="font-semibold">
+                {aiMode === 'promote' ? 'Calibrating mode' : 'Trusted-mode sample'}
+              </span>{' '}
+              {aiMode === 'promote'
+                ? 'You are reviewing answers the AI Reviewer drafted. Edit anything that\'s wrong, then promote to make it the system-of-record submission. Your edits will be captured as a calibration data point.'
+                : 'You are re-grading a SUBMITTED AI submission. Your answers will be saved as a separate human submission and recorded as a calibration data point. The AI\'s submission stays in place as the system of record.'}
+            </div>
+            {aiPrefill?.ai_overall_confidence != null && (
+              <span
+                className="shrink-0 inline-flex items-center rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-mono tabular-nums text-amber-800"
+                title="AI overall_confidence on this draft"
+              >
+                AI conf {Math.round(Number(aiPrefill.ai_overall_confidence) * 100)}%
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Form name card — mirrors submission detail's title card */}
         <div className="bg-white rounded-xl border border-slate-200 pl-4 pr-11 py-3 flex items-center justify-between">
@@ -398,6 +637,44 @@ export default function AuditFormPage() {
                 <div className="p-4 text-[13px] text-slate-400 text-center py-8">No form data available.</div>
               )}
             </div>
+
+            {/* AI side outputs — Timeline + Advisory observations.
+                Rendered only in AI modes (promote/overlay) and only when
+                ai_extras has items. Each panel auto-hides on empty. */}
+            {aiMode && aiPrefill?.ai_extras && (
+              <div className="mt-3 space-y-3">
+                <TimelinePanel items={aiPrefill.ai_extras.timeline ?? null} />
+                <AdvisoryObservationsPanel
+                  items={(aiPrefill.ai_extras.observations ?? null) as AdvisoryObservation[] | null}
+                />
+              </div>
+            )}
+
+            {/* "Why are you correcting the AI?" — only in AI Reviewer modes.
+                Always visible (no toggle), so reviewers know the AI will
+                read this as the rationale next time. */}
+            {aiMode && (
+              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4">
+                <label htmlFor="correction-reason" className="text-[13px] font-semibold text-slate-800">
+                  Why are you correcting the AI?
+                  <span className="ml-2 text-[11px] font-normal text-slate-500">
+                    (optional but recommended — shown to the AI on its next run for this form)
+                  </span>
+                </label>
+                <textarea
+                  id="correction-reason"
+                  value={correctionReason}
+                  onChange={(e) => setCorrectionReason(e.target.value)}
+                  rows={3}
+                  placeholder='e.g. "Description was too vague — agent did not restate the customer\u2019s actual symptom in their own words."'
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-800 leading-snug focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Persists to <code>ai_calibration_data.notes</code>. The most recent reason per question is injected into the
+                  next AI run as a &ldquo;Reviewer&rsquo;s reason&rdquo; bullet so the AI can internalize the rule, not just the value.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

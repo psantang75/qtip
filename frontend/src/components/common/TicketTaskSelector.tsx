@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardList, Ticket, Plus, X } from 'lucide-react'
+import { ClipboardList, Ticket, Plus, X, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -10,7 +10,17 @@ import crmService, {
   type TicketHeader,
   type CRMNote,
 } from '@/services/crmService'
-import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
+import { formatCrmDateTime } from '@/utils/dateFormat'
+import { htmlToPlainText } from '@/components/common/RichTextDisplay'
+
+/** Build the deep-link URL into the CRM for a given record. */
+function buildCrmUrl(kind: TicketTaskKind, externalId: number): string {
+  if (kind === 'TASK') {
+    return `https://crm.dm-us.com/TaskManager/AccountsReceivableManager?TaskID=${externalId}`
+  }
+  // Tickets: placeholder until the ticket-detail URL is provided.
+  return `https://crm.dm-us.com/?TicketID=${externalId}`
+}
 
 /**
  * Linked CRM ticket/task selector. Mirrors the structural pattern of
@@ -56,6 +66,7 @@ export default function TicketTaskSelector({
   const [kind,        setKind]        = useState<TicketTaskKind>('TASK')
   const [idText,      setIdText]      = useState('')
   const [error,       setError]       = useState('')
+  const [notesOpen,   setNotesOpen]   = useState(false)
 
   const active = selected[activeIndex] ?? null
 
@@ -170,7 +181,63 @@ export default function TicketTaskSelector({
       {/* Active row detail */}
       {active && (
         <div className="space-y-3 py-3">
-          <ActiveHeader kind={active.kind} headerQuery={headerQuery} />
+          <ActiveHeader kind={active.kind} externalId={active.external_id} headerQuery={headerQuery} />
+
+          {notesQuery.isLoading && (
+            <p className="text-[12px] text-slate-400">Loading notes…</p>
+          )}
+          {notesQuery.isError && (
+            <p className="text-[12px] text-red-600">Failed to load notes.</p>
+          )}
+
+          {notesQuery.data && (() => {
+            const totalNotes = (notesQuery.data ?? []).length
+            if (totalNotes === 0) {
+              return (
+                <p className="text-[12px] text-slate-400">
+                  No notes for this {active.kind === 'TASK' ? 'task' : 'ticket'}.
+                </p>
+              )
+            }
+            return (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setNotesOpen((v) => !v)}
+                  className="w-full flex items-center justify-between py-2 px-3 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-medium text-slate-700">
+                      {notesOpen ? 'Hide' : 'Show'} Notes
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      ({totalNotes} {totalNotes === 1 ? 'note' : 'notes'})
+                    </span>
+                  </div>
+                  {notesOpen
+                    ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                    : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
+                </button>
+
+                {notesOpen && (
+                  <div className="mt-2 space-y-3">
+                    {auditAt ? (
+                      <>
+                        {splitNotes.after.length > 0 && (
+                          <NotesSection title="Activity since audit" notes={splitNotes.after} muted />
+                        )}
+                        {splitNotes.before.length > 0 && (
+                          <NotesSection title="At time of audit" notes={splitNotes.before} />
+                        )}
+                      </>
+                    ) : (
+                      splitNotes.before.length > 0 && <NotesSection notes={splitNotes.before} />
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {!readOnly && (
             <div className="flex justify-end">
@@ -185,37 +252,6 @@ export default function TicketTaskSelector({
                 <X className="h-3 w-3" /> Remove {active.kind === 'TASK' ? 'task' : 'ticket'}
               </Button>
             </div>
-          )}
-
-          {notesQuery.isLoading && (
-            <p className="text-[12px] text-slate-400">Loading notes…</p>
-          )}
-          {notesQuery.isError && (
-            <p className="text-[12px] text-red-600">Failed to load notes.</p>
-          )}
-          {notesQuery.data && (
-            <>
-              {auditAt && splitNotes.before.length === 0 && splitNotes.after.length === 0 && (
-                <p className="text-[12px] text-slate-400">No notes for this {active.kind === 'TASK' ? 'task' : 'ticket'}.</p>
-              )}
-
-              {!auditAt && splitNotes.before.length === 0 && (
-                <p className="text-[12px] text-slate-400">No notes for this {active.kind === 'TASK' ? 'task' : 'ticket'}.</p>
-              )}
-
-              {auditAt ? (
-                <>
-                  {splitNotes.before.length > 0 && (
-                    <NotesSection title="At time of audit" notes={splitNotes.before} />
-                  )}
-                  {splitNotes.after.length > 0 && (
-                    <NotesSection title="Activity since audit" notes={splitNotes.after} muted />
-                  )}
-                </>
-              ) : (
-                splitNotes.before.length > 0 && <NotesSection notes={splitNotes.before} />
-              )}
-            </>
           )}
         </div>
       )}
@@ -308,9 +344,11 @@ export default function TicketTaskSelector({
 
 function ActiveHeader({
   kind,
+  externalId,
   headerQuery,
 }: {
   kind: TicketTaskKind
+  externalId: number
   headerQuery: ReturnType<typeof useQuery<TaskHeader | TicketHeader | null>>
 }) {
   if (headerQuery.isLoading) {
@@ -324,10 +362,24 @@ function ActiveHeader({
     return <p className="text-[12px] text-amber-600">{kind === 'TASK' ? 'Task' : 'Ticket'} no longer exists in CRM.</p>
   }
 
+  const idLabel = kind === 'TASK' ? 'Task #' : 'Ticket #'
+  const idLink = (
+    <a
+      href={buildCrmUrl(kind, externalId)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-[12px] font-medium text-primary hover:text-primary/80 hover:underline break-all"
+    >
+      {externalId}
+      <ExternalLink className="h-3 w-3 shrink-0" />
+    </a>
+  )
+
   if (kind === 'TASK') {
     const t = data as TaskHeader
     return (
-      <div className="grid grid-cols-3 gap-x-6 gap-y-2">
+      <div className="flex flex-wrap gap-x-12 gap-y-3">
+        <FieldNode label={idLabel}>{idLink}</FieldNode>
         <Field label="Task Type"   value={t.task_type} />
         <Field label="Task Status" value={t.task_status} />
         <Field label="Assigned To" value={t.assigned_to_name ?? (t.assigned_to_id ? `User #${t.assigned_to_id}` : null)} />
@@ -336,21 +388,56 @@ function ActiveHeader({
   }
 
   const t = data as TicketHeader
+  // Layout per request:
+  //   1) Ticket # | Assigned To | Status
+  //   2) Description (full width)
+  //   3) Subclass | Resolution
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
-      <Field label="Class"       value={t.class_name} />
-      <Field label="Subclass"    value={t.subclass_name} />
-      <Field label="Status"      value={t.status} />
-      <Field label="Assigned To" value={t.assigned_to_name ?? (t.assigned_to_id ? `User #${t.assigned_to_id}` : null)} />
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-x-12 gap-y-3">
+        <FieldNode label={idLabel}>{idLink}</FieldNode>
+        <Field label="Assigned To" value={t.assigned_to_name ?? (t.assigned_to_id ? `User #${t.assigned_to_id}` : null)} />
+        <Field label="Status"      value={t.status} />
+      </div>
+      <LongField label="Description" value={t.description} />
+      <div className="flex flex-wrap gap-x-12 gap-y-3">
+        <Field      label="Subclass"   value={t.subclass_name} />
+        <LongField  label="Resolution" value={t.resolution} className="flex-1 min-w-[240px]" />
+      </div>
     </div>
   )
 }
 
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="min-w-0">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+    <FieldNode label={label}>
       <p className="text-[12px] font-medium text-slate-700 mt-0.5 break-words">{value ?? '—'}</p>
+    </FieldNode>
+  )
+}
+
+function FieldNode({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 flex-shrink">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap">{label}</p>
+      <div className="mt-0.5">{children}</div>
+    </div>
+  )
+}
+
+/**
+ * Variant of `Field` for long-form text (description, resolution).
+ * Wraps onto its own row, preserves line breaks, and falls back to an
+ * em-dash so empty values still render the label for visual stability.
+ */
+function LongField({ label, value, className }: { label: string; value: string | null; className?: string }) {
+  const clean = (value ?? '').trim()
+  return (
+    <div className={cn('min-w-0', className)}>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-[12px] text-slate-700 mt-0.5 whitespace-pre-wrap break-words leading-snug">
+        {clean ? clean : <span className="text-slate-400">—</span>}
+      </p>
     </div>
   )
 }
@@ -379,33 +466,36 @@ function NotesSection({ title, notes, muted = false }: { title?: string; notes: 
 }
 
 function NoteRow({ note }: { note: CRMNote }) {
+  const cleanBody = useMemo(() => htmlToPlainText(note.note), [note.note])
+  const hasBody = cleanBody.trim().length > 0
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-2.5 text-[12px]">
-      <div className="flex items-center justify-between gap-3 text-[11px] text-slate-500 mb-1">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="font-medium text-slate-700 break-words">
+    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden text-[12px]">
+      <div className="flex items-center justify-between gap-3 px-3 py-2 bg-slate-100 border-b border-slate-200">
+        <div className="flex items-center gap-2 min-w-0 text-[11px] text-slate-600">
+          <span className="font-semibold text-slate-800 break-words">
             {note.created_by_name ?? (note.created_by ? `User #${note.created_by}` : 'Unknown')}
           </span>
-          {note.created_on && <span>· {fmtDate(note.created_on)}</span>}
+          {note.created_on && <span className="text-slate-500">· {formatCrmDateTime(note.created_on)}</span>}
         </div>
-        {(note.status_after || note.next_contact_date) && (
-          <div className="flex items-center gap-2 shrink-0">
-            {note.status_after && (
-              <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-medium">
-                → {note.status_after}
-              </span>
-            )}
-            {note.next_contact_date && (
-              <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">
-                Next: {note.next_contact_date}
-              </span>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {note.status_after && (
+            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-medium">
+              → {note.status_after}
+            </span>
+          )}
+          {note.next_contact_date && (
+            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">
+              Next: {note.next_contact_date}
+            </span>
+          )}
+        </div>
       </div>
-      <div className="text-slate-700 whitespace-pre-wrap break-words leading-snug">
-        {note.note}
-      </div>
+      {hasBody && (
+        <div className="px-3 py-2.5 text-slate-700 whitespace-pre-wrap break-words leading-snug">
+          {cleanBody}
+        </div>
+      )}
     </div>
   )
 }

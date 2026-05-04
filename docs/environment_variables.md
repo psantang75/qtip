@@ -53,6 +53,7 @@ Left unset in dev; set only when the matching feature is turned on.
 | `CRM_DB_HOST` `CRM_DB_USER` `CRM_DB_PASSWORD` `CRM_DB_NAME` `CRM_DB_CONNECTION_LIMIT` | External CRM DB (Phase 2; read-only consumer for ticket data). Same all-or-nothing rule as the phone DB block. |
 | `OPENAI_API_KEY` `OPENAI_DEFAULT_MODEL` `OPENAI_TIMEOUT_MS` `OPENAI_MAX_RETRIES` | Enables the OpenAI client in `services/ai/`. When `OPENAI_API_KEY` is unset, `pingOpenAI()` reports `not_configured` and `getOpenAIClient()` throws. |
 | `ANTHROPIC_API_KEY` `ANTHROPIC_DEFAULT_MODEL` `ANTHROPIC_TIMEOUT_MS` `ANTHROPIC_MAX_RETRIES` | Same pattern for the Anthropic client. The default ping does a key-shape check only; pass `liveCheck: true` when you want to actually round-trip the API. |
+| `BOOKSTACK_BASE_URL` `BOOKSTACK_TOKEN_ID` `BOOKSTACK_TOKEN_SECRET` `BOOKSTACK_TIMEOUT_MS` `BOOKSTACK_MAX_RETRIES` | Read-only client for the internal BookStack KB. All three of base URL + token ID + token secret must be set for the integration to activate; otherwise `/api/kb/*` returns `503 not_configured`. See [`bookstack_kb_integration.md`](./bookstack_kb_integration.md). |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASSWORD` `SMTP_SECURE`     | Outbound email (reserved — not yet consumed).                  |
 | `OFFICE_VIEWER_ALLOWED_ORIGINS`   | CSV of allowed origins for Office-viewer `resource.controller` URLs.       |
 | `QC_CACHE_TTL_MS`                 | TTL for `middleware/qcCache.ts`. Default `60000`.                          |

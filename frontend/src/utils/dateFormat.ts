@@ -71,6 +71,20 @@ export function formatQualityDateTime(value: string | Date | null | undefined): 
 }
 
 /**
+ * CRM-style numeric timestamp with seconds: "4/1/2026 7:40:39 AM".
+ * Mirrors the format used inside the external CRM so audit-form note
+ * timestamps look identical to what auditors see in the source system.
+ */
+export function formatCrmDateTime(value: string | Date | null | undefined): string {
+  if (!value) return '—'
+  const date = typeof value === 'string' ? new Date(value) : value
+  if (isNaN(date.getTime())) return '—'
+  const datePart = date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+  const timePart = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })
+  return `${datePart} ${timePart}`
+}
+
+/**
  * Returns a { start, end } DateRange covering the prior 90 days through 30 days
  * forward (YYYY-MM-DD). Used as the default date range wherever
  * DateRangeFilter appears.

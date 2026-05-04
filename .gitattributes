@@ -1,0 +1,5 @@
+# Force LF line endings on shell scripts so they run on the Linux VMs
+# (qtip-stage / qtip-prod) when checked out from a Windows workstation.
+# Without this, /usr/bin/env bash sees \r\n and dies with
+#   "set: pipefail: invalid option name"  or  "$'\r': command not found"
+*.sh text eol=lf

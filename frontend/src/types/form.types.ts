@@ -136,6 +136,47 @@ export interface BaseForm {
   user_version?: number;
   user_version_date?: string;
   critical_cap_percent?: number; // Score ceiling applied when any critical question is missed (default 79.00)
+  /**
+   * Per-form opt-in for the AI Reviewer feature. When true, this form is
+   * eligible to be filled out by the synthetic AI Reviewer user via
+   * /api/ai-reviewer/*. The form auto-acquires a free-text "AI Reviewer
+   * Feedback" question on save so the AI's narrative always lands in a
+   * visible answer slot. The form-builder shows a single checkbox to
+   * toggle this flag.
+   */
+  ai_enabled?: boolean;
+
+  /**
+   * Free-text grading rules injected into the AI Reviewer's system prompt
+   * as ADDITIONAL FORM-SPECIFIC GRADING RULES. Edited in the Form Builder
+   * when ai_enabled is true; ignored otherwise.
+   */
+  ai_review_guidance?: string | null;
+
+  /**
+   * When true, AI Reviewer submissions for this form are saved as DRAFT
+   * (no scoring) so a human can review and promote them to SUBMITTED.
+   * When false, AI submissions go straight to SUBMITTED + scored, just
+   * like a human-completed audit. Edited in the Form Builder; only
+   * meaningful when ai_enabled is true.
+   */
+  ai_submit_as_draft?: boolean;
+
+  /**
+   * Trusted-mode sampling: percentage (0-100) of AI submissions on this
+   * form that get routed back into the QA Review Inbox for re-audit.
+   * Edited from the Calibration tab; ignored when the form is in
+   * Calibrating mode (ai_submit_as_draft=true) since EVERY draft is
+   * already routed for review.
+   */
+  ai_sample_review_pct?: number;
+
+  /**
+   * Trusted-mode sampling: when true, AI submissions whose total score
+   * falls below the form's critical_cap_percent are ALWAYS routed to
+   * the QA Inbox in addition to the random sample.
+   */
+  ai_sample_low_score_always?: boolean;
 }
 
 /**

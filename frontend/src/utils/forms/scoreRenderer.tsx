@@ -1,6 +1,7 @@
 import React from 'react';
 import { processConditionalLogic } from './formConditions';
 import { getMaxPossibleScore, getQuestionScore } from './scoringEngine';
+import { RichTextDisplay } from '../../components/common/RichTextDisplay';
 
 interface QuestionWithScore {
   id: number;
@@ -56,9 +57,27 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   });
   const visibilityMap = processConditionalLogic(formData, answerStrings);
 
+  // The "AI Reviewer" category is rendered separately (simple feedback card),
+  // not as a row in the breakdown table or as a Q/A scoring grid.
+  const isAiReviewerCat = (c: any) =>
+    String(c?.category_name || c?.name || '').trim().toLowerCase() === 'ai reviewer';
+
+  const aiReviewerCategory = formData.categories.find(isAiReviewerCat);
+  const nonAiCategories    = formData.categories.filter((c: any) => !isAiReviewerCat(c));
+
   const visibleCategories = userRole === 3
-    ? formData.categories.filter((category: any) => (category.weight || 0) > 0)
-    : formData.categories;
+    ? nonAiCategories.filter((category: any) => (category.weight || 0) > 0)
+    : nonAiCategories;
+
+  // Pull the AI Reviewer Feedback answer (always TEXT) for the simplified card.
+  const aiReviewerFeedback = (() => {
+    if (!aiReviewerCategory) return null;
+    const q = (aiReviewerCategory.questions || []).find(
+      (qq: any) => (qq.question_text || '').trim().toLowerCase() === 'ai reviewer feedback'
+    ) || (aiReviewerCategory.questions || []).find((qq: any) => (qq.question_type || '').toLowerCase() === 'text');
+    if (!q) return null;
+    return { questionId: q.id as number, text: String(answers[q.id]?.answer ?? '').trim() };
+  })();
 
   const categoryScores = visibleCategories.map((category: any) => {
     const bd = scoreBreakdown?.categoryBreakdown?.[category.id];
@@ -328,6 +347,27 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               </table>
             </div>
           ))}
+
+          {/* AI Reviewer feedback — rendered without weight/points columns */}
+          {aiReviewerCategory && aiReviewerFeedback && (
+            <div className="rounded-xl border border-violet-200 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-violet-50 border-b border-violet-200">
+                <div className="flex items-center gap-2">
+                  <span className="w-[3px] h-4 rounded-full bg-violet-500 shrink-0" />
+                  <span className="text-[13px] font-bold text-slate-800">AI Reviewer</span>
+                </div>
+                <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-700 border border-violet-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                  Auto-generated
+                </span>
+              </div>
+              <div className="bg-white px-4 py-3">
+                <p className="text-[12px] font-semibold text-slate-500 mb-1">AI Reviewer Feedback</p>
+                {aiReviewerFeedback.text
+                  ? <RichTextDisplay html={aiReviewerFeedback.text} className="whitespace-pre-wrap" />
+                  : <p className="text-[13px] text-slate-300">—</p>}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

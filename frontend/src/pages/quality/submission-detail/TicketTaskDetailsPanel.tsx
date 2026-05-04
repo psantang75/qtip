@@ -16,8 +16,9 @@ interface Props {
 }
 
 export function TicketTaskDetailsPanel({ ticketTasks, auditAt }: Props) {
-  if (!ticketTasks || ticketTasks.length === 0) return null
-
+  // Always render the card so reviewers can see at a glance that the
+  // submission was (or wasn't) linked to a CRM record. Empty state copy
+  // is owned by `TicketTaskSelector` in readOnly mode.
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
       <div className="px-4 py-3 bg-white border-b border-slate-100">

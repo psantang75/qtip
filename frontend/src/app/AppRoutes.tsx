@@ -48,6 +48,9 @@ const DisputesPage          = React.lazy(() => import('../pages/quality/Disputes
 const ReviewFormsPage       = React.lazy(() => import('../pages/quality/ReviewFormsPage'))
 const AuditFormPage         = React.lazy(() => import('../pages/quality/AuditFormPage'))
 const SubmissionDetailPage  = React.lazy(() => import('../pages/quality/SubmissionDetailPage'))
+const AIReviewInbox         = React.lazy(() => import('../pages/quality/AIReviewInbox'))
+const AIReviewerFormsList   = React.lazy(() => import('../pages/quality/AIReviewerFormsList'))
+const AIReviewerFormDetail  = React.lazy(() => import('../pages/quality/AIReviewerFormDetail'))
 
 const CoachingSessionsPage      = React.lazy(() => import('../pages/training/CoachingSessionsPage'))
 const CoachingSessionDetailPage = React.lazy(() => import('../pages/training/CoachingSessionDetailPage'))
@@ -149,6 +152,9 @@ export default function AppRoutes(): React.ReactElement {
             <Route path="analytics"       element={<Navigate to="/app/insights/qc-quality" replace />} />
             <Route path="review-forms"    element={<PageLoader><ReviewFormsPage /></PageLoader>} />
             <Route path="audit"           element={<PageLoader><AuditFormPage /></PageLoader>} />
+            <Route path="ai-inbox"        element={<PageLoader><AIReviewInbox /></PageLoader>} />
+            <Route path="ai-reviewer"            element={<PageLoader><AIReviewerFormsList /></PageLoader>} />
+            <Route path="ai-reviewer/:formId"    element={<PageLoader><AIReviewerFormDetail /></PageLoader>} />
           </Route>
 
           {/* Training */}

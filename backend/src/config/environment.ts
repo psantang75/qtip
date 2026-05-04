@@ -41,6 +41,21 @@ interface EnvironmentConfig {
   ANTHROPIC_TIMEOUT_MS?: number;
   ANTHROPIC_MAX_RETRIES?: number;
 
+  // BookStack KB (read-only consumer; optional. Disabled when TOKEN_ID or
+  // TOKEN_SECRET is blank — same "leave-blank-to-disable" pattern as the
+  // optional database pools above.)
+  BOOKSTACK_BASE_URL?: string;
+  BOOKSTACK_TOKEN_ID?: string;
+  BOOKSTACK_TOKEN_SECRET?: string;
+  BOOKSTACK_TIMEOUT_MS?: number;
+  BOOKSTACK_MAX_RETRIES?: number;
+
+  // AI Reviewer system user id. Optional: when blank, the /api/ai-reviewer/*
+  // endpoints return 503 not_configured. Same "leave-blank-to-disable"
+  // pattern as the other optional integrations above. The user row itself
+  // is created via backend/scripts/seed-ai-reviewer.ts.
+  AI_REVIEWER_USER_ID?: number;
+
   // JWT Configuration
   JWT_SECRET: string;
   JWT_EXPIRES_IN: string;
@@ -209,13 +224,23 @@ export const config: EnvironmentConfig = {
 
   // AI Providers (each provider independently optional; client built only when key set)
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  OPENAI_DEFAULT_MODEL: process.env.OPENAI_DEFAULT_MODEL || 'gpt-4o-mini',
+  OPENAI_DEFAULT_MODEL: process.env.OPENAI_DEFAULT_MODEL || 'gpt-5',
   OPENAI_TIMEOUT_MS: process.env.OPENAI_TIMEOUT_MS ? parseInt(process.env.OPENAI_TIMEOUT_MS, 10) : 30000,
   OPENAI_MAX_RETRIES: process.env.OPENAI_MAX_RETRIES ? parseInt(process.env.OPENAI_MAX_RETRIES, 10) : 2,
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-  ANTHROPIC_DEFAULT_MODEL: process.env.ANTHROPIC_DEFAULT_MODEL || 'claude-3-5-sonnet-latest',
+  ANTHROPIC_DEFAULT_MODEL: process.env.ANTHROPIC_DEFAULT_MODEL || 'claude-opus-4-7',
   ANTHROPIC_TIMEOUT_MS: process.env.ANTHROPIC_TIMEOUT_MS ? parseInt(process.env.ANTHROPIC_TIMEOUT_MS, 10) : 30000,
   ANTHROPIC_MAX_RETRIES: process.env.ANTHROPIC_MAX_RETRIES ? parseInt(process.env.ANTHROPIC_MAX_RETRIES, 10) : 2,
+
+  // BookStack KB (optional; client only constructed when both token halves are present)
+  BOOKSTACK_BASE_URL: process.env.BOOKSTACK_BASE_URL,
+  BOOKSTACK_TOKEN_ID: process.env.BOOKSTACK_TOKEN_ID,
+  BOOKSTACK_TOKEN_SECRET: process.env.BOOKSTACK_TOKEN_SECRET,
+  BOOKSTACK_TIMEOUT_MS: process.env.BOOKSTACK_TIMEOUT_MS ? parseInt(process.env.BOOKSTACK_TIMEOUT_MS, 10) : 15000,
+  BOOKSTACK_MAX_RETRIES: process.env.BOOKSTACK_MAX_RETRIES ? parseInt(process.env.BOOKSTACK_MAX_RETRIES, 10) : 2,
+
+  // AI Reviewer (optional; endpoint guards on this being a positive integer)
+  AI_REVIEWER_USER_ID: process.env.AI_REVIEWER_USER_ID ? parseInt(process.env.AI_REVIEWER_USER_ID, 10) : undefined,
 
   // JWT Configuration — resolved through getJwtSecret/getJwtRefreshSecret so
   // that prod / test fail fast when the env var is missing or still equals a
@@ -335,6 +360,35 @@ export const aiConfig = {
     maxRetries: config.ANTHROPIC_MAX_RETRIES!,
   } : null,
 };
+
+/**
+ * BookStack KB configuration. Same conditional-construction pattern as the
+ * optional database pools and AI providers above: the client is only built
+ * when both halves of the token are present AND the base URL is set, so a
+ * partially-configured environment cleanly degrades to "not configured"
+ * rather than throwing at startup.
+ *
+ * Trailing slashes on the base URL are stripped here so callers can
+ * unconditionally append `/api/...` paths without worrying about doubles.
+ */
+export const bookstackConfig = config.BOOKSTACK_BASE_URL && config.BOOKSTACK_TOKEN_ID && config.BOOKSTACK_TOKEN_SECRET ? {
+  baseUrl: config.BOOKSTACK_BASE_URL.replace(/\/+$/, ''),
+  tokenId: config.BOOKSTACK_TOKEN_ID,
+  tokenSecret: config.BOOKSTACK_TOKEN_SECRET,
+  timeoutMs: config.BOOKSTACK_TIMEOUT_MS!,
+  maxRetries: config.BOOKSTACK_MAX_RETRIES!,
+} : null;
+
+/**
+ * AI Reviewer configuration. Only built when AI_REVIEWER_USER_ID resolves to
+ * a positive integer; otherwise the /api/ai-reviewer/* endpoints answer
+ * `503 not_configured` instead of attempting a half-configured submission.
+ *
+ * The user row this id points at is seeded by backend/scripts/seed-ai-reviewer.ts.
+ */
+export const aiReviewerConfig = config.AI_REVIEWER_USER_ID && config.AI_REVIEWER_USER_ID > 0 ? {
+  userId: config.AI_REVIEWER_USER_ID,
+} : null;
 
 /**
  * JWT configuration object

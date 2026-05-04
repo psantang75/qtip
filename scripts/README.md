@@ -1,9 +1,16 @@
 # QTIP Scripts
 
-Operational PowerShell + SQL scripts for QTIP. Everything in this folder is
-intended to be run **manually** by an operator or invoked from
-`package.json` (`npm run deploy:*`, `npm run db:deploy:*`, etc.) — there are
-no auto-run hooks.
+Operational PowerShell + bash + SQL scripts for QTIP. Everything in this
+folder is intended to be run **manually** by an operator or invoked from
+`package.json` (`npm run deploy:*`, `npm run db:deploy:*`, etc.) — there
+are no auto-run hooks.
+
+The PowerShell (`*.ps1`) scripts are the source-of-truth on Windows hosts
+and dev workstations. The bash (`*.sh`) scripts are functional ports for
+the Linux production VMs (`qtip-stage`, `qtip-prod`) — same flag surface,
+same phases, same exit-code contract. Both consume `backend/.env` and
+delegate migrations to Prisma exactly as `docs/deployment_runbook.md`
+describes.
 
 If a script in this folder no longer corresponds to a current workflow,
 delete it. We removed a batch of one-offs in the pre-production cleanup
@@ -16,6 +23,8 @@ delete it. We removed a batch of one-offs in the pre-production cleanup
 | Script                          | Purpose                                                                  |
 | ------------------------------- | ------------------------------------------------------------------------ |
 | `deploy_application.ps1`        | Deploy frontend + backend to a target env. Wired to `npm run deploy:*`.  |
+| `deploy_application.sh`         | Linux equivalent. Wired to `npm run deploy:linux:*`.                     |
+| `verify_remote.sh`              | SSH-based prerequisite smoke test for `qtip-stage` / `qtip-prod`.        |
 | `prepare_production.ps1`        | Legacy one-off pre-prod cleanup (most targets already pruned via git).   |
 | `start_app.ps1`                 | Bring up the local dev stack (backend + frontend).                       |
 | `kill-dev-servers.ps1`          | Kill processes holding port 3000 (backend) / 5173 (frontend) / 4173.     |
@@ -29,6 +38,7 @@ The scripts below are operator-facing wrappers around `prisma migrate` /
 | Script                              | Purpose                                                              |
 | ----------------------------------- | -------------------------------------------------------------------- |
 | `deploy_database.ps1`               | Apply Prisma migrations to a target env. Wired to `npm run db:deploy:*`. |
+| `deploy_database.sh`                | Linux equivalent. Wired to `npm run db:deploy:linux:*`.                  |
 | `setup_production_database.ps1`     | First-time production DB bring-up.                                   |
 | `setup_users.ps1`                   | Seed local-dev admin + reset all passwords to `pass1234`.            |
 | `seed_performance_goals.ps1`        | Seed performance-goal reference data.                                |

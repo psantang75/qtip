@@ -40,7 +40,7 @@ const CompletedFormRenderer: React.FC<CompletedFormProps> = ({
   // ── Fetch form structure if not included in submission ───────────────────
   const { data: fetchedForm, isLoading: formLoading, isError: formError } = useQuery({
     queryKey: ['form-for-renderer', formIdToFetch],
-    queryFn: () => api.get(`/forms/${formIdToFetch}`).then(r => r.data),
+    queryFn: () => api.get(`/forms/${formIdToFetch}?include_inactive=true`).then(r => r.data),
     enabled: !!formIdToFetch && !rawSubmission?.form,
     staleTime: 10 * 60 * 1000,
   });

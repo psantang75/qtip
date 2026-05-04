@@ -47,7 +47,7 @@ export const STATUS_LABELS: Record<string, string> = {
 
 // ── Quality ──────────────────────────────────────────────────────────────────
 
-export const SUBMISSION_STATUSES = ['SUBMITTED', 'DISPUTED', 'FINALIZED'] as const
+export const SUBMISSION_STATUSES = ['DRAFT', 'SUBMITTED', 'DISPUTED', 'FINALIZED'] as const
 
 export const DISPUTE_STATUSES = ['OPEN', 'UPHELD', 'ADJUSTED'] as const
 

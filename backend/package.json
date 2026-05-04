@@ -13,7 +13,9 @@
     "test:watch": "vitest",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
-    "db:seed": "ts-node prisma/seed.ts"
+    "db:seed": "ts-node prisma/seed.ts",
+    "eval:golden": "ts-node scripts/runGoldenEval.ts",
+    "eval:seed-golden": "ts-node scripts/seedGoldenSet.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

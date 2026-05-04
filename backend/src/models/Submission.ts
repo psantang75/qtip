@@ -99,12 +99,70 @@ export interface CreateSubmissionDTO {
   answers: CreateSubmissionAnswerDTO[];
   status?: SubmissionStatus;
   metadata?: SubmissionMetadataDTO[];
+  /**
+   * AI Reviewer overall confidence (0..1). NULL for human-authored
+   * submissions; populated by AIReviewerService.
+   */
+  ai_overall_confidence?: number | null;
+  /**
+   * Calibrated overall confidence after applying the form's active
+   * ai_calibration_map (Phase 4 — empirical confidence calibration).
+   * Equal to nominal when no active map exists.
+   */
+  ai_calibrated_confidence?: number | null;
+  /**
+   * AI Reviewer side outputs that don't have their own column —
+   * currently `{ timeline: [...], observations: [...] }`. NULL for
+   * human-authored submissions.
+   */
+  ai_extras?: SubmissionAiExtras | null;
 }
 
 export interface CreateSubmissionAnswerDTO {
   question_id: number;
   answer: string;
   notes?: string;
+  /** AI per-answer confidence (0..1). NULL for human-authored answers. */
+  ai_confidence?: number | null;
+}
+
+/**
+ * Side outputs the AI Reviewer emits alongside scored answers.
+ * Persisted as JSON in submissions.ai_extras. Keep this in sync with
+ * the prompt schema in backend/prompts/ai-reviewer/system.v2.md.
+ */
+export interface SubmissionAiExtras {
+  timeline?: AiTimelineItem[];
+  observations?: AiObservation[];
+}
+
+export interface AiTimelineItem {
+  /** Date and time as printed in the source (e.g. "Apr 23 9:14 AM"). */
+  when: string;
+  /** Author name, "Customer", or "Call" — whoever the source attributes the action to. */
+  who: string;
+  /** One short sentence describing what happened. */
+  action: string;
+  /** KB step name when the action maps to a documented step; null when not part of process. */
+  kb_step?: string | null;
+}
+
+export type AiObservationKind =
+  | 'documentation'
+  | 'best_practice'
+  | 'cadence'
+  | 'process_drift'
+  | 'pii'
+  | 'other';
+
+export type AiObservationSeverity = 'info' | 'warn';
+
+export interface AiObservation {
+  kind: AiObservationKind;
+  severity: AiObservationSeverity;
+  message: string;
+  /** Which note date / which field this observation came from. */
+  evidence?: string;
 }
 
 /**

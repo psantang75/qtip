@@ -36,6 +36,8 @@ import { DisputePanel, type ResolutionState } from './submission-detail/DisputeP
 import { CallDetailsPanel } from './submission-detail/CallDetailsPanel'
 import { TicketTaskDetailsPanel } from './submission-detail/TicketTaskDetailsPanel'
 import { ScorePanel } from './submission-detail/ScorePanel'
+import { TimelinePanel } from '@/components/quality/ai/TimelinePanel'
+import { AdvisoryObservationsPanel, type AdvisoryObservation } from '@/components/quality/ai/AdvisoryObservationsPanel'
 
 export default function SubmissionDetailPage() {
   const { id }    = useParams<{ id: string }>()
@@ -304,6 +306,17 @@ export default function SubmissionDetailPage() {
             )}
             <TicketTaskDetailsPanel ticketTasks={ticketTasks} auditAt={auditAt} />
             <CallDetailsPanel calls={calls ?? []} />
+            {/* AI side outputs persisted in submissions.ai_extras. Each
+                panel auto-hides when its array is empty so human-authored
+                submissions stay visually unchanged. */}
+            {(detail as any).ai_extras && (
+              <>
+                <TimelinePanel items={(detail as any).ai_extras.timeline ?? null} />
+                <AdvisoryObservationsPanel
+                  items={((detail as any).ai_extras.observations ?? null) as AdvisoryObservation[] | null}
+                />
+              </>
+            )}
           </div>
         </div>
 

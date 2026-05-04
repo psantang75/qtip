@@ -432,7 +432,11 @@ export class FormService implements IFormService {
       ...formData,
       interaction_type: formData.interaction_type || 'CALL',
       created_by: formData.created_by || user_id,
-      is_active: formData.is_active !== undefined ? formData.is_active : true
+      is_active: formData.is_active !== undefined ? formData.is_active : true,
+      ai_enabled: formData.ai_enabled === true,
+      ai_review_guidance: formData.ai_enabled === true
+        ? (typeof formData.ai_review_guidance === 'string' ? formData.ai_review_guidance.trim() || null : null)
+        : null,
     };
   }
 } 

@@ -5,6 +5,9 @@ import { normalizeStandardMetadataOrder } from '@/utils/formMetadataOrder'
 
 export type Step = 'metadata' | 'categories' | 'questions' | 'preview'
 export const STEPS: Step[] = ['metadata', 'categories', 'questions', 'preview']
+// Calibration is a sibling tab outside the linear save wizard; it only
+// shows after the form has been saved AND ai_enabled is on. Keeping it
+// out of STEPS preserves the existing Next/Back validation flow.
 export const STEP_LABELS: Record<Step, string> = {
   metadata: '1. Details', categories: '2. Categories', questions: '3. Questions', preview: '4. Preview & Save',
 }
@@ -48,7 +51,7 @@ export function freshForm(): Form {
     { field_name: 'Call Conversation ID', field_type: 'TEXT', is_required: true, interaction_type: 'CALL', sort_order: 8 },
     { field_name: 'Call Date',     field_type: 'DATE',     is_required: true,  interaction_type: 'CALL', sort_order: 9 },
   ]
-  return { form_name: '', interaction_type: 'CALL', is_active: true, version: 1, critical_cap_percent: 79, categories: [], metadata_fields: defaultMetadata }
+  return { form_name: '', interaction_type: 'CALL', is_active: true, version: 1, critical_cap_percent: 79, ai_enabled: false, ai_review_guidance: null, ai_submit_as_draft: false, ai_sample_review_pct: 10, ai_sample_low_score_always: true, categories: [], metadata_fields: defaultMetadata }
 }
 
 export function totalCategoryWeight(categories: FormCategory[]): number {
