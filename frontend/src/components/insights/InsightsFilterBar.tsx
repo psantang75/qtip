@@ -6,8 +6,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/Select'
-import { Input } from '@/components/ui/Input'
+} from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { StickyFilterBar, StickyFilterField } from '@/components/common/StickyFilterBar'
 

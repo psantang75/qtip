@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { Input } from '@/components/ui/Input'
+import { Input } from '@/components/ui/input'
 
 export interface DateRange {
   start: string

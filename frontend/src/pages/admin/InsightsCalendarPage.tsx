@@ -14,7 +14,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/Select'
+} from '@/components/ui/select'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { useCalendar, useUpdateCalendarDay, useSaveMonthDefaults } from '@/hooks/useInsightsCalendar'
 import type { CalendarDayEntry, BusinessDayType } from '@/services/insightsService'

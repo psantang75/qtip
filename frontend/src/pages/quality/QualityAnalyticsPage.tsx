@@ -10,7 +10,7 @@ import { TableErrorState } from '@/components/common/TableErrorState'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Input } from '@/components/ui/Input'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { TrendsChart, AveragesChart, RawScoresTable, type ChartData } from './analytics/AnalyticsCharts'
