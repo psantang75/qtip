@@ -70,8 +70,8 @@ export default function AdminUsersPage() {
     if (statusFilter === 'inactive') list = list.filter(u => !u.is_active)
     if (sortField) {
       list = [...list].sort((a, b) => {
-        const av = (a as Record<string, unknown>)[sortField] ?? ''
-        const bv = (b as Record<string, unknown>)[sortField] ?? ''
+        const av = (a as unknown as Record<string, unknown>)[sortField] ?? ''
+        const bv = (b as unknown as Record<string, unknown>)[sortField] ?? ''
         const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true })
         return sortDir === 'asc' ? cmp : -cmp
       })

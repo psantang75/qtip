@@ -1,5 +1,5 @@
 import { InsightsSection, StatusBadge, KpiTile, ExpandableRow } from '@/components/insights'
-import { resolveThresholds } from '@/hooks/useKpiConfig'
+import { resolveThresholds, type KpiConfig } from '@/hooks/useKpiConfig'
 
 interface QuizAgent {
   userId: number
@@ -16,13 +16,13 @@ interface QuizRow {
   attempts: number
   passed: number
   passRate: number
-  agents: QuizAgent[]
+  agents?: QuizAgent[]
 }
 
 interface Props {
   cur: Record<string, number | null>
   prv: Record<string, number | undefined>
-  kpiConfig: unknown
+  kpiConfig: KpiConfig | undefined
   sortedQuizzes: QuizRow[]
   visibleQuizzes: QuizRow[]
   maxQuizAttempts: number

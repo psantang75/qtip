@@ -53,7 +53,7 @@ export const createForm = async (formData: Form): Promise<{ message: string; for
       headers: { 'Content-Type': 'application/json' },
     });
     return response.data;
-  } catch (error: unknown) {
+  } catch (error: any) {
     if (error.response) {
       const { status, data } = error.response;
       if (status === 404) throw new Error('Form endpoint not found. Please check if the server is running correctly.');
@@ -78,7 +78,7 @@ export const updateForm = async (formId: number, formData: Form): Promise<{ mess
       headers: { 'Content-Type': 'application/json' },
     });
     return response.data;
-  } catch (error: unknown) {
+  } catch (error: any) {
     if (error.response) {
       const { status, data } = error.response;
       if (status === 404) throw new Error(`Form with ID ${formId} not found. Please check if the form exists.`);

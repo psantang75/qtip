@@ -4,7 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import KpiInfoCard from './KpiInfoCard'
 
 interface InsightsSectionProps {
-  title: string
+  title?: string
   description?: string
   /**
    * KPI codes whose `KpiInfoCard` should be rendered inside the info popover (description,
@@ -28,9 +28,9 @@ export default function InsightsSection({
 
   return (
     <div className={cn('bg-white border border-slate-200 rounded-xl p-5 mb-4', className)}>
-      <div className="mb-3">
+      {(title || description) && <div className="mb-3">
         <div className="flex items-center gap-1.5">
-          <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+          {title && <h3 className="text-sm font-semibold text-slate-800">{title}</h3>}
           {hasInfo && (
             <Popover>
               <PopoverTrigger asChild>
@@ -65,7 +65,7 @@ export default function InsightsSection({
         {description && (
           <p className="text-xs text-slate-500 mt-0.5">{description}</p>
         )}
-      </div>
+      </div>}
       {children}
     </div>
   )

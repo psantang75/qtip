@@ -179,7 +179,7 @@ function SortableCategoryWrapper(props: Omit<Parameters<typeof CategoryBlock>[0]
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(isDragging && 'opacity-60 shadow-xl z-50 scale-[1.02] transition-transform')}>
-      <CategoryBlock {...props} dragHandleProps={{ ...attributes, ...listeners }} />
+      <CategoryBlock {...props} dragHandleProps={{ ...attributes, ...listeners } as DraggableAttributes & SyntheticListenerMap} />
     </div>
   )
 }

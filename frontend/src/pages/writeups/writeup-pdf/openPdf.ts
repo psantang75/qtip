@@ -5,7 +5,7 @@ import type { WriteUpDetail } from '@/services/writeupService'
 
 export async function openWriteUpPdf(writeup: WriteUpDetail) {
   const doc = createElement(WriteUpPdfDocument, { writeup })
-  const blob = await pdf(doc).toBlob()
+  const blob = await pdf(doc as any).toBlob()
   const url = URL.createObjectURL(blob)
   window.open(url, '_blank')
 }

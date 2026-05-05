@@ -144,7 +144,7 @@ export default function SubmissionDetailPage() {
       })
     : Object.entries(detail.metadata ?? {}).map(([k, v]) => {
         const val = typeof v === 'object' ? String((v as { value?: string }).value ?? '') : String(v)
-        return { field_name: k, value: fmtMetaValue(k, val) }
+        return { field_name: k, value: fmtMetaValue(k, val), field_type: undefined as string | undefined }
       })
 
   const metaValueMap = new Map(metaRows.map(r => [r.field_name.toLowerCase(), r.value] as [string, string]))

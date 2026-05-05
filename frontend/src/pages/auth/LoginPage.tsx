@@ -40,7 +40,7 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginFormValues) => {
     setApiError(null)
     try {
-      await login(values)
+      await login({ email: values.email, password: values.password })
       navigate('/')
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } }; message?: string }

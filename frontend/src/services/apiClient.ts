@@ -34,9 +34,9 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
-const originalRequest = apiClient.request.bind(apiClient);
+const originalRequest: typeof apiClient.request = apiClient.request.bind(apiClient);
 
-apiClient.request = function <T = unknown>(config: DedupConfig) {
+apiClient.request = (function <T = unknown>(config: DedupConfig) {
   const method = (config.method || 'get').toLowerCase();
   const isGet = method === 'get';
   const skipDedup = config.skipDedup === true;
@@ -67,7 +67,7 @@ apiClient.request = function <T = unknown>(config: DedupConfig) {
   }
 
   return originalRequest<T>(config);
-};
+}) as typeof apiClient.request;
 
 apiClient.interceptors.request.use(
   (config) => {

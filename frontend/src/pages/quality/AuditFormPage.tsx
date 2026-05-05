@@ -87,6 +87,8 @@ export default function AuditFormPage() {
         form_id: detail.form_id ?? null,
         form_name: detail.form_name,
         submitted_at: null as string | null,
+        ai_overall_confidence: null as number | null,
+        ai_extras: null as import('@/services/aiReviewerService').AiExtras | null,
         answers: (detail.answers ?? [])
           .filter((a: any) => a.question_id != null)
           .map((a: any) => ({ question_id: Number(a.question_id), answer: String(a.answer ?? ''), notes: '' })),

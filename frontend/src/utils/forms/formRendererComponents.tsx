@@ -169,7 +169,7 @@ export const RadioQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
     <div>
       <p className="text-[13px] text-slate-800 leading-snug mb-2">{text}</p>
       <div className="flex flex-wrap gap-1.5">
-        {radioOptions.map((option: RadioOption) => {
+        {radioOptions.map((option: RadioOption & { value?: string; label?: string }) => {
           const val = String(option.option_value || option.value || '');
           return (
             <button key={val} type="button" disabled={isDisabled}
@@ -203,7 +203,7 @@ export const MultiSelectQuestion: React.FC<QuestionProps> = ({ question, isDisab
     <div>
       <p className="text-[13px] text-slate-800 leading-snug mb-2">{text}</p>
       <div className="flex flex-wrap gap-1.5">
-        {options.map((option: RadioOption) => {
+        {options.map((option: RadioOption & { value?: string; label?: string }) => {
           const val = String(option.option_value || option.value || '');
           return (
             <button key={val} type="button" disabled={isDisabled} onClick={() => handleToggle(val)}

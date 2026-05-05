@@ -70,13 +70,13 @@ export default function TicketTaskSelector({
 
   const active = selected[activeIndex] ?? null
 
-  const headerQuery = useQuery({
+  const headerQuery = useQuery<TaskHeader | TicketHeader | null>({
     queryKey: ['crm-header', active?.kind, active?.external_id],
     enabled: !!active,
-    queryFn: () =>
+    queryFn: async (): Promise<TaskHeader | TicketHeader | null> =>
       active!.kind === 'TASK'
-        ? crmService.getTaskHeader(active!.external_id)
-        : crmService.getTicketHeader(active!.external_id),
+        ? await crmService.getTaskHeader(active!.external_id)
+        : await crmService.getTicketHeader(active!.external_id),
   })
 
   const notesQuery = useQuery({

@@ -92,7 +92,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
       const [type, idStr] = key.split(':')
       const id = Number(idStr)
       const refType = type as 'write_up' | 'coaching_session'
-      const item = refType === 'write_up'
+      const item: any = refType === 'write_up'
         ? (data?.write_ups ?? []).find((w: any) => Number(w.id) === id)
         : (data?.coaching_sessions ?? []).find((c: any) => Number(c.id) === id)
 

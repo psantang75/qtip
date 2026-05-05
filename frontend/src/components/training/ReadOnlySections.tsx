@@ -64,7 +64,7 @@ interface Quiz {
 
 interface QuizAttempt {
   id: number
-  quiz_id: number
+  quiz_id?: number
   score: number | string
   passed: boolean
   submitted_at: string

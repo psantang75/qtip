@@ -100,6 +100,7 @@ interface RawManagerActivityRow {
   disputes_week?: number
   disputes_month?: number
   disputes?: number
+  last_audit_date?: string
   [key: string]: unknown
 }
 

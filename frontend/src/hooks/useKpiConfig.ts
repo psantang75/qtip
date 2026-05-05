@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { getKpiConfig } from '@/services/insightsService'
-import { KPI_DEFS } from '@/constants/kpiDefs'
+import { KPI_DEFS, type KpiDef, type KpiDirection } from '@/constants/kpiDefs'
 import type { KpiConfig, KpiConfigEntry } from '@/services/insightsService'
 
 export type { KpiConfig, KpiConfigEntry }
@@ -25,13 +25,13 @@ export function useKpiConfig() {
 export function resolveThresholds(
   code: string,
   liveConfig: KpiConfig | undefined,
-): { goal: number | null; warn: number | null; crit: number | null; direction: string } {
-  const live   = liveConfig?.[code]
+): Pick<KpiDef, 'direction' | 'goal' | 'warn' | 'crit'> {
+  const live     = liveConfig?.[code]
   const fallback = KPI_DEFS[code]
   return {
-    goal:      live?.goal      ?? fallback?.goal      ?? null,
-    warn:      live?.warn      ?? fallback?.warn      ?? null,
-    crit:      live?.crit      ?? fallback?.crit      ?? null,
-    direction: live?.direction ?? fallback?.direction ?? 'NEUTRAL',
+    goal:      live?.goal      ?? fallback?.goal,
+    warn:      live?.warn      ?? fallback?.warn,
+    crit:      live?.crit      ?? fallback?.crit,
+    direction: (live?.direction as KpiDirection | undefined) ?? fallback?.direction ?? 'NEUTRAL',
   }
 }

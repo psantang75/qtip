@@ -47,7 +47,7 @@ export const getDefaultMetadataFields = (interactionType: string): FormMetadataF
   ];
   
   // Add type-specific fields
-  let typeFields: Partial<MetadataField>[] = [];
+  let typeFields: Partial<FormMetadataField>[] = [];
   
   switch (interactionType) {
     case 'call':
@@ -211,7 +211,7 @@ export const updateQuestion = (
   form: Form,
   categoryId: number,
   questionId: number,
-  updates: Partial<Question>
+  updates: Partial<FormQuestion>
 ): Form => {
   // Find the category
   const categoryIndex = form.categories.findIndex(c => c.id === categoryId);

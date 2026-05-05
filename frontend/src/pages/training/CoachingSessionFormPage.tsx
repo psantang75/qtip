@@ -43,7 +43,7 @@ export default function CoachingSessionFormPage() {
   ) as CoachingFormErrors
 
   const update = useCallback(<K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => {
-    setValue(k, v)
+    setValue(k, v as never)
     clearErrors(k)
   }, [setValue, clearErrors])
 

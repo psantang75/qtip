@@ -4,8 +4,8 @@ import { cn } from '@/lib/utils'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
-function Bone({ className }: { className?: string }) {
-  return <div className={cn('bg-slate-200 animate-pulse rounded', className)} />
+function Bone({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={cn('bg-slate-200 animate-pulse rounded', className)} style={style} />
 }
 
 // ── Exported building blocks ──────────────────────────────────────────────────

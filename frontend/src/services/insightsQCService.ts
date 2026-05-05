@@ -13,7 +13,7 @@ export interface QCParams {
 // ── Response types ────────────────────────────────────────────────────────────
 
 export type KpiValues = Record<string, number | null>
-export interface KpiMeta       { businessDays: number; paceTarget: number | null }
+export interface KpiMeta       { businessDays: number; paceTarget: number | null; startDate?: string; endDate?: string }
 export interface QCKpiResponse { current: KpiValues; prior: KpiValues; meta: KpiMeta; priorMeta: KpiMeta }
 export interface TrendRow {
   label: string
