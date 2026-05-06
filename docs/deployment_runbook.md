@@ -77,6 +77,52 @@ Prisma applies migrations in lexicographic order of the folder name. See
 [`backend/prisma/migrations/README.md`](../backend/prisma/migrations/README.md)
 for the duplicate-timestamp tolerance rule.
 
+### 3.4a AI Reviewer system user (once per env)
+
+The AI Reviewer subsystem submits AI-graded audits through the same
+`SubmissionService.submitAudit` pipeline that humans use, which means every
+submission needs a real `users.id` for `submitted_by` (FK + audit trail +
+inbox filtering + dispute attribution). That id lives in `.env` as
+`AI_REVIEWER_USER_ID` and is read at boot by
+`backend/src/config/environment.ts → aiReviewerConfig`. When unset, every
+`/api/ai-reviewer/*` endpoint answers `503 NOT_CONFIGURED` — the rest of the
+app is unaffected.
+
+This is a **per-environment** setup step. Each env's `users` table assigned
+its own auto-increment id when the row was created, so the value differs
+between dev / stage / prod and **must be re-resolved** any time you:
+
+- Stand up a brand-new environment (test sandbox, prod first deploy, DR cut-over).
+- Restore the DB from a backup taken **before** the row was seeded.
+- Re-seed the env from scratch (e.g. wipe + reload data for a regression run).
+
+Run this on the target host (one-time, idempotent):
+
+```bash
+cd /opt/qtip/backend
+npx ts-node scripts/seed-ai-reviewer.ts
+# Prints either "Created user: id=<N> ..." or "User already exists: id=<N> ..."
+# followed by a copy-pasteable line:
+#   AI_REVIEWER_USER_ID=<N>
+```
+
+Then append (or update) that line in the host's `/opt/qtip/backend/.env`
+and reload the API so the new value is read:
+
+```bash
+pm2 restart qtip-backend --update-env
+```
+
+Verification: `curl -sS -o /dev/null -w '%{http_code}\n'
+http://localhost:5000/api/ai-reviewer/inbox` should return `401`
+(authentication required) — **not** `503`. A 503 means `AI_REVIEWER_USER_ID`
+is still missing or pointing at a row that doesn't exist.
+
+> **Promotion to prod:** prod's `users` table will assign a different
+> auto-increment id than stage's. Do **not** copy stage's `AI_REVIEWER_USER_ID`
+> into prod's `.env` — re-run the seed against the prod DB and use the id
+> the script prints there.
+
 ### 3.4 Stop workers (so they don't race the new schema)
 
 ```powershell
