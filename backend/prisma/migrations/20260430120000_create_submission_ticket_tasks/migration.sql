@@ -21,7 +21,10 @@ CREATE TABLE `submission_ticket_tasks` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_submission_ticket_task` (`submission_id`, `kind`, `external_id`),
   INDEX `submission_ticket_tasks_submission_id_idx` (`submission_id`),
-  CONSTRAINT `submission_ticket_tasks_submission_id_fkey`
+  -- FK name + action match the dev DB (`fk_stt_submission`, ON DELETE
+  -- CASCADE only). Naming this with Prisma's default would diverge from
+  -- dev and from any restored backup that captured the dev convention.
+  CONSTRAINT `fk_stt_submission`
     FOREIGN KEY (`submission_id`) REFERENCES `submissions` (`id`)
-    ON DELETE CASCADE ON UPDATE CASCADE
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

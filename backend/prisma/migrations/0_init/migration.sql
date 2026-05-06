@@ -226,10 +226,10 @@ CREATE TABLE `coaching_session_topics` (
   UNIQUE KEY `coaching_session_topics_coaching_session_id_topic_id_key` (`coaching_session_id`,`topic_id`),
   KEY `coaching_session_topics_coaching_session_id_idx` (`coaching_session_id`),
   KEY `coaching_session_topics_topic_id_idx` (`topic_id`),
-  -- topic_id targets `list_items` (training_topic rows there).
-  -- The dev schema dropped the `topics` table; this FK was retargeted out of band.
-  CONSTRAINT `coaching_session_topics_coaching_session_id_fkey` FOREIGN KEY (`coaching_session_id`) REFERENCES `coaching_sessions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `coaching_session_topics_topic_id_fkey` FOREIGN KEY (`topic_id`) REFERENCES `list_items` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  -- Dev intentionally has no FK on `topic_id` (the original FK targeted
+  -- the now-dropped `topics` table and was never re-added against
+  -- `list_items`). Application code is the integrity guard for this column.
+  CONSTRAINT `coaching_session_topics_coaching_session_id_fkey` FOREIGN KEY (`coaching_session_id`) REFERENCES `coaching_sessions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=137 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -253,6 +253,7 @@ CREATE TABLE `coaching_sessions` (
   `csr_root_cause` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `csr_support_needed` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `delivered_at` datetime DEFAULT NULL,
+  `closed_at` datetime DEFAULT NULL,
   `follow_up_date` datetime DEFAULT NULL,
   `follow_up_notes` text COLLATE utf8mb4_unicode_ci,
   `internal_notes` text COLLATE utf8mb4_unicode_ci,
