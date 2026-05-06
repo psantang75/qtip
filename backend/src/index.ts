@@ -1,5 +1,14 @@
-import express from 'express';
 import dotenv from 'dotenv';
+import path from 'path';
+// Load .env BEFORE any module that reads process.env at import time
+// (notably ./config/environment which fail-fasts on missing DB_PASSWORD when
+// NODE_ENV=production). Path is resolved relative to the compiled file so it
+// works regardless of PM2/Node cwd:
+//   dev   : <repo>/backend/src/index.ts -> <repo>/backend/.env
+//   prod  : /opt/qtip/backend/dist/index.js -> /opt/qtip/backend/.env
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+import express from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import cookieParser from 'cookie-parser';
@@ -61,9 +70,6 @@ function normalizePort(val: string | number): string | number | false {
   return false;
 }
 
-
-// Load environment variables
-dotenv.config();
 
 // Create Express server
 const app = express();
