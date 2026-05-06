@@ -28,10 +28,14 @@ export const getIngestionLog = async (req: Request, res: Response): Promise<void
         limit = Math.min(500, Math.max(1, n));
       }
     }
-    params.push(limit);
 
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT * FROM ie_ingestion_log WHERE ${conditions.join(' AND ')} ORDER BY run_started_at DESC LIMIT ?`,
+    // NOTE: `limit` is inlined (it's already clamped to 1..500 above) and we
+    // use `pool.query` rather than `pool.execute` because mysql2's prepared
+    // statement protocol can't bind a JS number into `LIMIT ?` on MySQL 8 —
+    // the server returns ER_WRONG_ARGUMENTS (1210). The other admin/insights
+    // controllers use `pool.query` for the same reason.
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT * FROM ie_ingestion_log WHERE ${conditions.join(' AND ')} ORDER BY run_started_at DESC LIMIT ${limit}`,
       params
     );
     res.json(rows);

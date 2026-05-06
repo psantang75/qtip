@@ -83,7 +83,7 @@ CREATE TABLE `ai_golden_set` (
   `archived_at`   DATETIME(3) NULL,
   UNIQUE KEY `uk_golden_submission` (`submission_id`),
   KEY `idx_golden_form` (`form_id`, `archived_at`)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- ---------------------------------------------------------------------
 -- 5) Calibration map (per-form, versioned)
@@ -104,7 +104,7 @@ CREATE TABLE `ai_calibration_map` (
   `notes`        VARCHAR(500) NULL,
   UNIQUE KEY `uk_calib_map_form_version` (`form_id`, `version`),
   KEY `idx_calib_map_active` (`form_id`, `is_active`)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- ---------------------------------------------------------------------
 -- 6) Eval run history
@@ -130,4 +130,4 @@ CREATE TABLE `ai_eval_runs` (
   `overall_kappa`      DECIMAL(4, 3) NULL,
   `pass`               TINYINT(1) NOT NULL,
   KEY `idx_eval_form_ran` (`form_id`, `ran_at`)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

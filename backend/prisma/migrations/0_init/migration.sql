@@ -226,8 +226,10 @@ CREATE TABLE `coaching_session_topics` (
   UNIQUE KEY `coaching_session_topics_coaching_session_id_topic_id_key` (`coaching_session_id`,`topic_id`),
   KEY `coaching_session_topics_coaching_session_id_idx` (`coaching_session_id`),
   KEY `coaching_session_topics_topic_id_idx` (`topic_id`),
+  -- topic_id targets `list_items` (training_topic rows there).
+  -- The dev schema dropped the `topics` table; this FK was retargeted out of band.
   CONSTRAINT `coaching_session_topics_coaching_session_id_fkey` FOREIGN KEY (`coaching_session_id`) REFERENCES `coaching_sessions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `coaching_session_topics_topic_id_fkey` FOREIGN KEY (`topic_id`) REFERENCES `topics` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `coaching_session_topics_topic_id_fkey` FOREIGN KEY (`topic_id`) REFERENCES `list_items` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=137 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -784,25 +786,27 @@ CREATE TABLE `quiz_topics` (
   `topic_id` int NOT NULL,
   PRIMARY KEY (`quiz_id`,`topic_id`),
   KEY `quiz_topics_topic_id_idx` (`topic_id`),
+  -- See coaching_session_topics: `topic_id` targets `list_items`, not the
+  -- dropped `topics` table.
   CONSTRAINT `quiz_topics_quiz_id_fkey` FOREIGN KEY (`quiz_id`) REFERENCES `quizzes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `quiz_topics_topic_id_fkey` FOREIGN KEY (`topic_id`) REFERENCES `topics` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `quiz_topics_topic_id_fkey` FOREIGN KEY (`topic_id`) REFERENCES `list_items` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
+-- `quizzes.topic_id` was removed in dev (quizzes link to topics through
+-- the `quiz_topics` join table instead). The column + its FK to the
+-- now-dropped `topics` table are not present in the live schema.
 CREATE TABLE `quizzes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `course_id` int NOT NULL,
   `quiz_title` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `pass_score` decimal(5,2) NOT NULL,
-  `topic_id` int DEFAULT NULL,
   `is_active` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
   KEY `quizzes_course_id_fkey` (`course_id`),
-  KEY `quizzes_topic_id_fkey` (`topic_id`),
   KEY `quizzes_is_active_idx` (`is_active`),
-  CONSTRAINT `quizzes_course_id_fkey` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `quizzes_topic_id_fkey` FOREIGN KEY (`topic_id`) REFERENCES `topics` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+  CONSTRAINT `quizzes_course_id_fkey` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -1003,22 +1007,11 @@ CREATE TABLE `ticket_task_raw` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `topics` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `topic_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `is_active` tinyint(1) NOT NULL DEFAULT '1',
-  `sort_order` int NOT NULL DEFAULT '0',
-  `category` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `topics_topic_name_key` (`topic_name`),
-  KEY `topics_is_active_idx` (`is_active`),
-  KEY `topics_sort_order_idx` (`sort_order`)
-) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
+-- The `topics` table was dropped in dev: training topics now live in
+-- `list_items` (list_type = 'training_topic') and the join tables
+-- (coaching_session_topics, quiz_topics, resource_topics) reference
+-- list_items directly. Removed from the baseline so a fresh install
+-- doesn't recreate it.
 CREATE TABLE `training_logs` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int NOT NULL,
@@ -1061,13 +1054,17 @@ CREATE TABLE `training_paths` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `training_resource_topics` (
+-- NOTE: matches the actual table name (`resource_topics`) used by
+-- backend/src/controllers/resource.controller.ts and by the dev DB.
+-- The topic_id FK targets `list_items` (training topics live there as
+-- list_type='training_topic') — there is no `topics` table.
+CREATE TABLE `resource_topics` (
   `resource_id` int NOT NULL,
   `topic_id` int NOT NULL,
   PRIMARY KEY (`resource_id`,`topic_id`),
-  KEY `training_resource_topics_topic_id_idx` (`topic_id`),
-  CONSTRAINT `training_resource_topics_resource_id_fkey` FOREIGN KEY (`resource_id`) REFERENCES `training_resources` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `training_resource_topics_topic_id_fkey` FOREIGN KEY (`topic_id`) REFERENCES `topics` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  KEY `resource_topics_topic_id_idx` (`topic_id`),
+  CONSTRAINT `resource_topics_resource_id_fkey` FOREIGN KEY (`resource_id`) REFERENCES `training_resources` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `resource_topics_topic_id_fkey` FOREIGN KEY (`topic_id`) REFERENCES `list_items` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -1228,6 +1225,7 @@ CREATE TABLE `write_ups` (
   `follow_up_completed_at` datetime DEFAULT NULL,
   `signed_at` datetime DEFAULT NULL,
   `signature_data` text,
+  `signed_ip` varchar(45) DEFAULT NULL,
   `acknowledged_at` datetime DEFAULT NULL,
   `created_by` int NOT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
