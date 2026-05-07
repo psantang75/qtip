@@ -70,11 +70,15 @@ export default function AdminEmailTemplatesPage() {
 
   return (
     <ListPageShell>
-      <ListPageHeader title="Email Templates" subtitle="Edit copy, cadence, and recipient cadence per notification.">
-        <Button variant="outline" size="sm" onClick={() => setTab('health')}>
-          <Activity size={14} className="mr-1.5" /> System Health
-        </Button>
-      </ListPageHeader>
+      <ListPageHeader
+        title="Email Templates"
+        subtitle="Edit copy, cadence, and recipient cadence per notification."
+        actions={
+          <Button variant="outline" size="sm" onClick={() => setTab('health')}>
+            <Activity size={14} className="mr-1.5" /> System Health
+          </Button>
+        }
+      />
 
       {tab === 'health' && (
         <SystemHealthCard onClose={() => setTab('editor')} />
