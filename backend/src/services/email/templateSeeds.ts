@@ -50,6 +50,12 @@ export interface SeedSpec {
   fixed_roles?: RoleToken[];
   /** Set to false to remove Daily/Weekly options from the editor. */
   digest_eligible?: boolean;
+  /**
+   * Human-readable description of where `{{deepLinkPath}}` resolves to in
+   * this template's CTA. Surfaced in the admin editor next to the variable
+   * chip so editors know what the button actually opens.
+   */
+  deep_link_target?: string;
 }
 
 /**
@@ -80,7 +86,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['self'],
     default_recipient_roles: ['self'],
     fixed_roles: ['self'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Login page (/login). The CTA button uses {{resetUrl}} for the actual set-password link.' },
 
   { template_key: 'auth.password_reset', category: 'Auth', name: 'Password reset — link',
     description: 'Sent when a user requests a password reset.',
@@ -90,7 +97,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['self'],
     default_recipient_roles: ['self'],
     fixed_roles: ['self'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Login page (/login). The CTA button uses {{resetUrl}} for the actual reset link.' },
 
   { template_key: 'auth.password_changed', category: 'Auth', name: 'Password changed — confirmation',
     description: 'Sent after a successful password change or reset.',
@@ -100,7 +108,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['self'],
     default_recipient_roles: ['self'],
     fixed_roles: ['self'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Login page (/login).' },
 
   { template_key: 'auth.account_locked', category: 'Auth', name: 'Account locked — user notice',
     description: 'Sent to the user whose account was just locked after repeated failed sign-ins.',
@@ -110,7 +119,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['self'],
     default_recipient_roles: ['self'],
     fixed_roles: ['self'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Forgot-password page (/forgot-password).' },
 
   { template_key: 'auth.account_locked_admin', category: 'Auth', name: 'Account locked — admin alert',
     description: 'Sent to admins when a user account was just locked.',
@@ -119,7 +129,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['user', 'lockedAt', 'unlocksAt', 'failedAttempts', 'lastFailedIp', 'recipient', 'deepLinkPath'],
     available_roles: ['admins'],
     default_recipient_roles: ['admins'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Admin user management for the locked user (/app/admin/users/{userId}).' },
 
   // ── Submissions ────────────────────────────────────────────────────
   { template_key: 'submission.audit_finalized_by_qa', category: 'Submissions', name: 'QA review finalized',
@@ -129,7 +140,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['form', 'submission', 'csr', 'reviewer', 'passLabel', 'recipient', 'deepLinkPath'],
     available_roles: ['agent', 'direct_manager', 'department_director'],
     default_recipient_roles: ['agent', 'direct_manager'],
-    digest_eligible: true },
+    digest_eligible: true,
+    deep_link_target: 'Submission detail page (/app/quality/submissions/{id}).' },
 
   { template_key: 'submission.audit_finalized_by_ai', category: 'Submissions', name: 'AI review finalized',
     description: 'An AI-generated review was finalized. Defaults to a daily digest to prevent inbox flooding.',
@@ -138,7 +150,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['form', 'submission', 'csr', 'reviewer', 'passLabel', 'recipient', 'deepLinkPath'],
     available_roles: ['agent', 'direct_manager', 'department_director'],
     default_recipient_roles: ['agent', 'direct_manager'],
-    digest_eligible: true },
+    digest_eligible: true,
+    deep_link_target: 'Submission detail page (/app/quality/submissions/{id}).' },
 
   { template_key: 'submission.critical_fail_by_qa', category: 'Submissions', name: 'Critical fail — QA-graded',
     description: 'A human QA finalized a submission with a critical fail.',
@@ -147,7 +160,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['form', 'submission', 'csr', 'reviewer', 'reviewerKind', 'criticalFailQuestions', 'recipient', 'deepLinkPath'],
     available_roles: ['agent', 'direct_manager', 'department_director'],
     default_recipient_roles: ['agent', 'direct_manager', 'department_director'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Submission detail page (/app/quality/submissions/{id}).' },
 
   { template_key: 'submission.critical_fail_by_ai', category: 'Submissions', name: 'Critical fail — AI-graded',
     description: 'An AI-generated review surfaced a critical fail.',
@@ -156,7 +170,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['form', 'submission', 'csr', 'reviewer', 'reviewerKind', 'criticalFailQuestions', 'recipient', 'deepLinkPath'],
     available_roles: ['agent', 'direct_manager', 'department_director'],
     default_recipient_roles: ['agent', 'direct_manager', 'department_director'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Submission detail page (/app/quality/submissions/{id}).' },
 
   // ── AI Routing ─────────────────────────────────────────────────────
   { template_key: 'ai.review_low_confidence', category: 'AI Routing', name: 'AI review — low confidence',
@@ -166,7 +181,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['form', 'submission', 'csr', 'recipient', 'deepLinkPath'],
     available_roles: ['qa_pool'],
     default_recipient_roles: ['qa_pool'],
-    digest_eligible: true },
+    digest_eligible: true,
+    deep_link_target: 'AI Reviewer inbox, draft for this submission (/app/quality/audit?promoteDraft={submissionId}).' },
 
   { template_key: 'ai.review_routed_to_qa', category: 'AI Routing', name: 'AI review — routed to QA',
     description: 'AI submission routed for human review (sampling, score-driven, or admin override).',
@@ -175,7 +191,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['form', 'submission', 'csr', 'routingReason', 'routingReasonLabel', 'recipient', 'deepLinkPath'],
     available_roles: ['qa_pool'],
     default_recipient_roles: ['qa_pool'],
-    digest_eligible: true },
+    digest_eligible: true,
+    deep_link_target: 'AI Reviewer inbox, draft for this submission (/app/quality/audit?promoteDraft={submissionId}).' },
 
   // ── Disputes ───────────────────────────────────────────────────────
   { template_key: 'dispute.opened', category: 'Disputes', name: 'Dispute opened',
@@ -185,7 +202,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['form', 'submission', 'csr', 'dispute', 'originalScore', 'recipient', 'deepLinkPath'],
     available_roles: ['original_qa', 'direct_manager'],
     default_recipient_roles: ['original_qa', 'direct_manager'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Dispute review page (/app/quality/disputes/{disputeId}).' },
 
   { template_key: 'dispute.resolved', category: 'Disputes', name: 'Dispute resolved',
     description: 'Sent to the disputant when their dispute is decided.',
@@ -195,7 +213,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['self'],
     default_recipient_roles: ['self'],
     fixed_roles: ['self'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Submission detail page with dispute outcome (/app/quality/submissions/{id}).' },
 
   // ── Coaching ───────────────────────────────────────────────────────
   { template_key: 'coaching.scheduled', category: 'Coaching', name: 'Coaching scheduled',
@@ -206,7 +225,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['agent'],
     default_recipient_roles: ['agent'],
     fixed_roles: ['agent'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Coaching session detail page (/app/training/coaching/{sessionId}).' },
 
   { template_key: 'coaching.awaiting_csr_action', category: 'Coaching', name: 'Coaching — action required',
     description: 'CSR action (acknowledgment / action plan) is required.',
@@ -216,7 +236,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['agent'],
     default_recipient_roles: ['agent'],
     fixed_roles: ['agent'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Coaching session detail page where CSR can acknowledge (/app/training/coaching/{sessionId}).' },
 
   { template_key: 'coaching.quiz_pending', category: 'Coaching', name: 'Coaching — quiz pending',
     description: 'A required quiz on a coaching session is waiting on the CSR.',
@@ -226,7 +247,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['agent'],
     default_recipient_roles: ['agent'],
     fixed_roles: ['agent'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Quiz page for the coaching session (/app/training/coaching/{sessionId}/quiz).' },
 
   { template_key: 'coaching.completed', category: 'Coaching', name: 'Coaching completed',
     description: 'A coaching session was marked complete.',
@@ -235,7 +257,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['session', 'csr', 'coach', 'recipient', 'deepLinkPath'],
     available_roles: ['agent', 'creator'],
     default_recipient_roles: ['agent', 'creator'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Coaching session detail page (/app/training/coaching/{sessionId}).' },
 
   { template_key: 'coaching.canceled', category: 'Coaching', name: 'Coaching canceled',
     description: 'A coaching session was canceled.',
@@ -245,7 +268,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['agent'],
     default_recipient_roles: ['agent'],
     fixed_roles: ['agent'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Coaching session detail page (/app/training/coaching/{sessionId}).' },
 
   // ── Write-ups ──────────────────────────────────────────────────────
   { template_key: 'writeup.scheduled', category: 'Write-ups', name: 'Write-up — meeting scheduled',
@@ -255,7 +279,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['writeup', 'csr', 'manager', 'hr_witness', 'employeeRightsReminder', 'recipient', 'deepLinkPath'],
     available_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     default_recipient_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Write-up detail page (/app/writeups/{writeupId}).' },
 
   { template_key: 'writeup.awaiting_signature', category: 'Write-ups', name: 'Write-up — awaiting signature',
     description: 'Write-up document is awaiting agent acknowledgment.',
@@ -264,7 +289,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['writeup', 'csr', 'manager', 'hr_witness', 'recipient', 'deepLinkPath'],
     available_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     default_recipient_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Write-up document for signing (/app/writeups/{writeupId}).' },
 
   { template_key: 'writeup.signed', category: 'Write-ups', name: 'Write-up — signed',
     description: 'Write-up document was signed.',
@@ -273,7 +299,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['writeup', 'csr', 'manager', 'hr_witness', 'recipient', 'deepLinkPath'],
     available_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     default_recipient_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Write-up detail page (/app/writeups/{writeupId}).' },
 
   { template_key: 'writeup.refused', category: 'Write-ups', name: 'Write-up — signature refused',
     description: 'Agent refused to sign the write-up.',
@@ -282,7 +309,8 @@ const SEEDS: SeedSpec[] = [
     allowed_variables: ['writeup', 'csr', 'manager', 'hr_witness', 'witnessSlaDays', 'recipient', 'deepLinkPath'],
     available_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     default_recipient_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Write-up detail page (/app/writeups/{writeupId}).' },
 
   { template_key: 'writeup.followup_pending', category: 'Write-ups', name: 'Write-up — follow-up pending',
     description: 'A write-up follow-up is assigned.',
@@ -292,7 +320,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['assignee'],
     default_recipient_roles: ['assignee'],
     fixed_roles: ['assignee'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Write-up follow-up task (/app/writeups/{writeupId}/followup).' },
 
   // ── Digests ────────────────────────────────────────────────────────
   { template_key: 'digest.csr_daily', category: 'Digests', name: 'Daily CSR digest',
@@ -306,7 +335,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['agent'],
     default_recipient_roles: ['agent'],
     fixed_roles: ['agent'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'CSR personal dashboard (/app/dashboard).' },
 
   { template_key: 'digest.manager_weekly', category: 'Digests', name: 'Weekly manager digest',
     description: 'Team-wide AI review rollup, delivered Mondays at 8am ET.',
@@ -320,7 +350,8 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['direct_manager'],
     default_recipient_roles: ['direct_manager'],
     fixed_roles: ['direct_manager'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Manager team dashboard (/app/manager/dashboard).' },
 
   // ── System ─────────────────────────────────────────────────────────
   { template_key: 'system.circuit_tripped', category: 'System', name: 'Email circuit-breaker tripped',
@@ -333,7 +364,8 @@ const SEEDS: SeedSpec[] = [
     ],
     available_roles: ['admins'],
     default_recipient_roles: ['admins'],
-    digest_eligible: false },
+    digest_eligible: false,
+    deep_link_target: 'Admin email templates page (/app/admin/email-templates).' },
 ];
 
 export async function seedEmailTemplates(): Promise<{ inserted: number; updated: number; skipped: number }> {

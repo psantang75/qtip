@@ -38,6 +38,8 @@ export interface EmailTemplate {
   role_labels?: Record<RoleToken, string>
   fixed_roles?: RoleToken[]
   digest_eligible?: boolean
+  /** Human description of where {{deepLinkPath}} routes for this template. */
+  deep_link_target?: string | null
 }
 
 export interface EmailTemplateVersion {

@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Mail, AlertCircle, CheckCircle2, Lock, Loader2, Send, RotateCcw, History,
-  Inbox, Activity, List, ChevronRight, ChevronDown,
+  AlertCircle, CheckCircle2, Lock, Loader2, Send, History,
+  Inbox, Activity, List, ChevronRight, ChevronDown, Settings2,
 } from 'lucide-react'
 import { ListPageShell } from '@/components/common/ListPageShell'
 import { ListPageHeader } from '@/components/common/ListPageHeader'
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -46,11 +47,10 @@ export default function AdminEmailTemplatesPage() {
   })
 
   useEffect(() => {
-    if (selectedId === null && templates.length > 0) {
-      setSelectedId(templates[0].id)
+    if (openCategory === null && templates.length > 0) {
       setOpenCategory(templates[0].category)
     }
-  }, [selectedId, templates])
+  }, [openCategory, templates])
 
   const grouped = useMemo(() => {
     const filtered = search
@@ -102,7 +102,14 @@ export default function AdminEmailTemplatesPage() {
                     <button type="button"
                       onClick={() => {
                         if (isSearching) return
-                        setOpenCategory(prev => prev === category ? null : category)
+                        setOpenCategory(prev => {
+                          const next = prev === category ? null : category
+                          // Clear the selected template when switching categories
+                          // so the right pane shows the category overview, mirroring
+                          // List Management's behavior.
+                          if (next !== prev) setSelectedId(null)
+                          return next
+                        })
                       }}
                       className={cn(
                         'w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-[13px] font-semibold transition-colors',
@@ -158,10 +165,11 @@ export default function AdminEmailTemplatesPage() {
 
           <main className="col-span-12 md:col-span-8 lg:col-span-9">
             {selectedId == null ? (
-              <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
-                <Mail size={32} className="mx-auto mb-3 opacity-40" />
-                <p className="text-sm">Select a template to begin editing.</p>
-              </div>
+              <CategoryOverview
+                category={openCategory}
+                templates={openCategory ? grouped[openCategory] ?? [] : []}
+                onPick={(id) => { setSelectedId(id); setTab('editor') }}
+              />
             ) : (
               <TemplateEditor
                 templateId={selectedId}
@@ -177,6 +185,53 @@ export default function AdminEmailTemplatesPage() {
 }
 
 // ── Editor card ────────────────────────────────────────────────────────────
+
+function CategoryOverview({
+  category, templates, onPick,
+}: {
+  category: string | null
+  templates: EmailTemplate[]
+  onPick: (id: number) => void
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <h2 className="text-base font-semibold text-slate-800 mb-1">
+        {category ?? 'Email Templates'}
+      </h2>
+      <p className="text-[13px] text-slate-500 mb-5">
+        Select a template to manage its copy, cadence, and recipients.
+      </p>
+      {templates.length === 0 ? (
+        <div className="text-[13px] text-slate-400 text-center py-8">
+          No templates in this category.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {templates.map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onPick(t.id)}
+              className="w-full text-left flex items-start justify-between gap-4 p-4 rounded-lg border border-slate-200 hover:border-primary/40 hover:bg-slate-50 transition-colors group"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-[13px] font-semibold text-slate-800 truncate">{t.name}</p>
+                  {t.is_locked && <Lock size={11} className="text-slate-400 shrink-0" />}
+                  {!t.is_enabled && (
+                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 shrink-0">off</Badge>
+                  )}
+                </div>
+                <p className="text-[12px] text-slate-500 leading-snug">{t.description}</p>
+              </div>
+              <Settings2 className="h-4 w-4 text-slate-300 group-hover:text-primary shrink-0 mt-0.5 transition-colors" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function TemplateEditor({
   templateId, tab, onTabChange,
@@ -207,16 +262,23 @@ function TemplateEditor({
     is_enabled: true,
     recipient_roles: [],
   })
+  // Tracks which templateId the draft was last hydrated from. Used to
+  // suppress a render of stale/empty draft state during the gap between
+  // `data` arriving and the hydrating useEffect firing.
+  const [draftForId, setDraftForId] = useState<number | null>(null)
   useEffect(() => {
-    if (data) setDraft({
-      subject: data.template.subject,
-      body_html: data.template.body_html,
-      cadence: data.template.cadence,
-      digest_filter: data.template.digest_filter,
-      is_enabled: data.template.is_enabled,
-      recipient_roles: data.template.recipient_roles ?? [],
-    })
-  }, [data])
+    if (data && data.template.id === templateId) {
+      setDraft({
+        subject: data.template.subject,
+        body_html: data.template.body_html,
+        cadence: data.template.cadence,
+        digest_filter: data.template.digest_filter,
+        is_enabled: data.template.is_enabled,
+        recipient_roles: data.template.recipient_roles ?? [],
+      })
+      setDraftForId(templateId)
+    }
+  }, [data, templateId])
 
   const [previewHtml, setPreviewHtml] = useState<string>('')
   const [previewSubject, setPreviewSubject] = useState<string>('')
@@ -253,14 +315,6 @@ function TemplateEditor({
     },
   })
 
-  const resetMut = useMutation({
-    mutationFn: () => emailTemplatesService.reset(templateId),
-    onSuccess: () => {
-      toast({ title: 'Reset to default' })
-      void queryClient.invalidateQueries({ queryKey: ['emailTemplate', templateId] })
-    },
-  })
-
   const rollbackMut = useMutation({
     mutationFn: (versionId: number) => emailTemplatesService.rollback(templateId, versionId),
     onSuccess: () => {
@@ -269,7 +323,7 @@ function TemplateEditor({
     },
   })
 
-  if (isLoading || !data) {
+  if (isLoading || !data || draftForId !== templateId) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
         <Loader2 size={20} className="animate-spin mx-auto" />
@@ -319,14 +373,9 @@ function TemplateEditor({
         <TabsContent value="editor" className="p-5 space-y-5 m-0">
           <div className="grid grid-cols-12 gap-4">
             <div className="col-span-12 md:col-span-4 space-y-4">
-              <DeliveryCard
-                cadence={draft.cadence}
-                digestFilter={draft.digest_filter}
+              <EnabledCard
                 isEnabled={draft.is_enabled}
                 isLocked={tpl.is_locked}
-                digestEligible={tpl.digest_eligible !== false}
-                onCadenceChange={c => setDraft({ ...draft, cadence: c })}
-                onDigestFilterChange={f => setDraft({ ...draft, digest_filter: f })}
                 onEnabledChange={c => setDraft({ ...draft, is_enabled: c })}
               />
 
@@ -338,6 +387,14 @@ function TemplateEditor({
                 onChange={(roles) => setDraft({ ...draft, recipient_roles: roles })}
               />
 
+              <DeliveryCard
+                cadence={draft.cadence}
+                digestFilter={draft.digest_filter}
+                digestEligible={tpl.digest_eligible !== false}
+                onCadenceChange={c => setDraft({ ...draft, cadence: c })}
+                onDigestFilterChange={f => setDraft({ ...draft, digest_filter: f })}
+              />
+
               <div className="rounded-md border border-slate-200 p-3 text-[11px] text-slate-500 space-y-2">
                 <div className="space-y-1">
                   <p className="font-medium text-slate-700">Available variables</p>
@@ -347,19 +404,19 @@ function TemplateEditor({
                     ))}
                   </div>
                 </div>
+                {tpl.allowed_variables.includes('deepLinkPath') && tpl.deep_link_target && (
+                  <div className="pt-2 border-t border-slate-100 space-y-1">
+                    <p className="font-medium text-slate-700">Link destination</p>
+                    <code className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">{`{{deepLinkPath}}`}</code>
+                    <p className="text-[11px] text-slate-500 leading-snug">{tpl.deep_link_target}</p>
+                  </div>
+                )}
                 <div className="pt-2 border-t border-slate-100">
                   <p className="font-medium text-slate-700 mb-1">Template key</p>
                   <code className="text-[11px] text-slate-500">{tpl.template_key}</code>
                 </div>
               </div>
 
-              <Button
-                size="sm" variant="outline" className="w-full"
-                onClick={() => resetMut.mutate()}
-                disabled={resetMut.isPending}
-              >
-                <RotateCcw size={13} className="mr-1.5" /> Reset to default
-              </Button>
             </div>
 
             <div className="col-span-12 md:col-span-8 space-y-4">
@@ -601,18 +658,35 @@ const optionCls = (active: boolean, disabled: boolean) =>
       : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700',
   )
 
+function EnabledCard({
+  isEnabled, isLocked, onEnabledChange,
+}: {
+  isEnabled: boolean
+  isLocked: boolean
+  onEnabledChange: (e: boolean) => void
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 flex items-center justify-between">
+      <div>
+        <Label className="text-[12px] font-semibold text-slate-700 block">Enabled</Label>
+        <p className="text-[11px] text-slate-400">
+          {isLocked ? 'Locked — cannot disable.' : 'Disable to suppress this notification entirely.'}
+        </p>
+      </div>
+      <Switch checked={isEnabled} disabled={isLocked} onCheckedChange={onEnabledChange} />
+    </div>
+  )
+}
+
 function DeliveryCard({
-  cadence, digestFilter, isEnabled, isLocked, digestEligible,
-  onCadenceChange, onDigestFilterChange, onEnabledChange,
+  cadence, digestFilter, digestEligible,
+  onCadenceChange, onDigestFilterChange,
 }: {
   cadence: EmailTemplate['cadence']
   digestFilter: EmailTemplate['digest_filter']
-  isEnabled: boolean
-  isLocked: boolean
   digestEligible: boolean
   onCadenceChange: (c: EmailTemplate['cadence']) => void
   onDigestFilterChange: (f: EmailTemplate['digest_filter']) => void
-  onEnabledChange: (e: boolean) => void
 }) {
   const cadenceOptions: Array<{ value: EmailTemplate['cadence']; label: string; hint?: string }> = [
     { value: 'IMMEDIATE', label: 'Immediately when the event happens' },
@@ -683,16 +757,6 @@ function DeliveryCard({
           </div>
         </div>
       )}
-
-      <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
-        <div>
-          <Label className="text-[12px] block">Enabled</Label>
-          <p className="text-[11px] text-slate-400">
-            {isLocked ? 'Locked — cannot disable.' : 'Disable to suppress this notification entirely.'}
-          </p>
-        </div>
-        <Switch checked={isEnabled} disabled={isLocked} onCheckedChange={onEnabledChange} />
-      </div>
     </div>
   )
 }
@@ -708,8 +772,23 @@ function RecipientsCard({
   selected: RoleToken[]
   onChange: (roles: RoleToken[]) => void
 }) {
+  // When there's only one available recipient, treat it as locked: there's
+  // no meaningful "off" state — disabling it would leave the template with
+  // zero recipients.
+  const soleOption = availableRoles.length === 1 ? availableRoles[0] : null
+  const isLocked = (role: RoleToken) =>
+    fixedRoles.includes(role) || soleOption === role
+
+  // Make sure the sole-option role is persisted in the saved recipient_roles
+  // array, so the backend actually fans out to it on send.
+  useEffect(() => {
+    if (soleOption && !selected.includes(soleOption)) {
+      onChange([...selected, soleOption])
+    }
+  }, [soleOption, selected, onChange])
+
   const toggle = (role: RoleToken) => {
-    if (fixedRoles.includes(role)) return
+    if (isLocked(role)) return
     if (selected.includes(role)) onChange(selected.filter(r => r !== role))
     else onChange([...selected, role])
   }
@@ -730,31 +809,35 @@ function RecipientsCard({
       </div>
       <div className="space-y-1">
         {availableRoles.map(role => {
-          const fixed = fixedRoles.includes(role)
-          const checked = selected.includes(role) || fixed
+          const locked = isLocked(role)
+          const checked = selected.includes(role) || locked
+          const id = `role-${role}`
+          const lockedReason = fixedRoles.includes(role)
+            ? 'Locked — required for this template'
+            : 'Locked — only available recipient'
           return (
             <label
               key={role}
+              htmlFor={id}
               className={cn(
                 'flex items-start gap-2 px-2 py-2 rounded-md border text-[13px] cursor-pointer',
-                fixed
+                locked
                   ? 'border-slate-200 bg-slate-50 cursor-not-allowed text-slate-500'
                   : checked
                     ? 'border-[#00aeef] bg-[#00aeef]/5 text-slate-900'
                     : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700',
               )}
-              onClick={(e) => { e.preventDefault(); toggle(role) }}
             >
-              <input
-                type="checkbox"
+              <Checkbox
+                id={id}
                 checked={checked}
-                disabled={fixed}
-                onChange={() => toggle(role)}
-                className="mt-[3px] accent-[#00aeef]"
+                disabled={locked}
+                onCheckedChange={() => toggle(role)}
+                className="mt-[2px]"
               />
               <span className="flex-1">
                 <span className="block">{roleLabels[role] ?? role}</span>
-                {fixed && <span className="block text-[10px] text-slate-400">Locked — required for this template</span>}
+                {locked && <span className="block text-[10px] text-slate-400">{lockedReason}</span>}
               </span>
             </label>
           )

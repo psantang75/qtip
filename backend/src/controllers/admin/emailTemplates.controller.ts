@@ -40,6 +40,7 @@ function decorateTemplate(tpl: any) {
     role_labels: ROLE_LABELS,
     fixed_roles: spec?.fixed_roles ?? [],
     digest_eligible: spec?.digest_eligible ?? true,
+    deep_link_target: spec?.deep_link_target ?? null,
   };
 }
 
