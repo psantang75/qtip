@@ -15,7 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import emailTemplatesService, {
@@ -496,14 +496,18 @@ function TemplateEditor({
 
       <Dialog open={showTestDialog} onOpenChange={setShowTestDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Send test email</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Send test email</DialogTitle>
+            <DialogDescription>
+              Sends a live test message using sample data. The subject will be prefixed with [TEST] so you can spot it in your inbox.
+            </DialogDescription>
+          </DialogHeader>
           <div className="space-y-2">
             <Label className="text-[12px]">Recipient</Label>
             <Input
               type="email" placeholder="you@dm-us.com"
               value={testTo} onChange={e => setTestTo(e.target.value)}
             />
-            <p className="text-[11px] text-slate-400">Subject will be prefixed with [TEST]. Sample data is used.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTestDialog(false)}>Cancel</Button>

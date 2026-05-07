@@ -1,7 +1,7 @@
 <h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">AI review complete</h2>
 <p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
 {{#if (eq recipient.matchedRole "agent")}}
-<p style="margin:0 0 16px 0;">An AI-generated review of your <strong>{{form.form_name}}</strong> call has been finalized.</p>
+<p style="margin:0 0 16px 0;">An AI-generated review of your <strong>{{form.form_name}}</strong> has been finalized.</p>
 {{else}}
 <p style="margin:0 0 16px 0;">An AI-generated review for <strong>{{csr.username}}</strong> on <strong>{{form.form_name}}</strong> has been finalized.</p>
 {{/if}}

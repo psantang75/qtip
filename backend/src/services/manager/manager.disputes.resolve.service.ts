@@ -203,6 +203,9 @@ export async function resolveManagerDispute(
       where: { id: submissionId },
       include: { form: { select: { id: true, form_name: true } } },
     })
+    // The QA who originally graded the submission. Optional recipient on
+    // dispute.resolved so they can close the loop on their own work.
+    const originalQaId = submission?.submitted_by ?? null
     const csr = await prisma.user.findUnique({
       where: { id: Number(dispute.disputed_by) },
       select: { id: true, username: true, email: true },
@@ -230,6 +233,7 @@ export async function resolveManagerDispute(
         csr,
         disputantId: csr?.id ?? null,
         resolver,
+        originalQaId,
         originalScore,
         disputeDenied: String(finalStatus).toUpperCase() === 'DENIED',
       },

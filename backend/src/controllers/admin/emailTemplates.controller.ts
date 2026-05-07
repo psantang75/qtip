@@ -169,6 +169,9 @@ export const testSendTemplate = async (req: Request, res: Response) => {
     to, subject: `[TEST] ${rendered.subject}`,
     html: rendered.html,
     templateKey: `${tpl.template_key}:test`,
+    // Test sends always bypass DRY_RUN — the whole point is to confirm
+    // the SMTP path works end-to-end before flipping the global flag in prod.
+    forceLive: true,
   });
   await logEmail({
     templateKey: tpl.template_key, toEmail: to, toUserId: req.user?.user_id ?? null,

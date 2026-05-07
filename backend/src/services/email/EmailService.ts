@@ -35,6 +35,13 @@ export interface EmailSendInput {
   /** Headers we attach for debugging / inbox filtering. */
   templateKey: string;
   entityRef?: { type: string; id: number | string };
+  /**
+   * When true, bypass the global EMAIL_DRY_RUN flag and actually deliver
+   * the message through SMTP. Used by the admin "Send Test" action so
+   * deliverability can be verified before flipping dry-run off in prod.
+   * Has no effect when the transport itself is not configured.
+   */
+  forceLive?: boolean;
 }
 
 export interface EmailSendResult {
@@ -149,7 +156,7 @@ class EmailService {
       return { ok: false, error: 'not_configured' };
     }
 
-    if (mailConfig.dryRun) {
+    if (mailConfig.dryRun && !input.forceLive) {
       logger.info('[EmailService][DRY_RUN] would send', {
         templateKey: input.templateKey,
         to,
@@ -158,6 +165,12 @@ class EmailService {
         bodyPreview: text.slice(0, 240),
       });
       return { ok: true, messageId };
+    }
+
+    if (mailConfig.dryRun && input.forceLive) {
+      logger.warn('[EmailService][FORCE_LIVE] bypassing DRY_RUN for test send', {
+        templateKey: input.templateKey, to, subject,
+      });
     }
 
     return await this.sendWithRetry(mailOptions, messageId, input.templateKey);

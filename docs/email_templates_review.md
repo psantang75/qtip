@@ -1,424 +1,367 @@
-# QTIP Email Templates — Copy Review
+# QTIP Email Templates — Review Copy
 
-> **Status:** all 26 templates are **live in the system** as of this
-> writing. Categories, the new `recipient_roles` column, the editable
-> Recipients toggles, the new Delivery radio UI, the new
-> `auth.account_locked_admin` row, the new footer, and all derived
-> variables (passLabel, routingReasonLabel, criticalFailQuestions,
-> requestedAt, requestIp, originalScore, etc.) are all wired and
-> running.
->
-> This file is **only the email copy** so you can review what each
-> recipient will actually see. Edit anything inline; when you hand the
-> file back I'll do a single pass to push your edits into the
-> filesystem `.hbs` templates and the DB rows.
->
-> **Conventions in this doc**
-> - `{{var}}` substitutions are shown as-is.
-> - Where a body changes per recipient, the `agent`/`manager` blocks
->   are shown explicitly.
-> - The shared header and footer wrap every email — only body copy is
->   shown here. The footer auto-appends:
->   *"You're receiving this because you're &lt;your role&gt; on this
->   &lt;submission/coaching session/etc.&gt;"*
-> - Templates marked **Locked** can have their copy edited but cannot
->   be disabled by an admin.
+This doc contains the **subject** and **body** for every email template in
+QTIP, written for review. The HTML wrapper, header, footer, and CTA-button
+markup are added by the system at render time — only the wording shown
+below changes per template.
 
----
+**How to use this doc**
 
-## Table of contents
+- Read each template in plain English. `{{variable}}` placeholders are
+  filled at send time.
+- Edit anything you want changed. Tell me which templates to apply and
+  I'll push the wording back into the `.hbs` files and DB.
+- Conditional copy is shown as `[ROLE: agent]` / `[ROLE: manager / others]`
+  blocks where the email reads differently for the agent vs. their manager.
 
-1.  [Auth (5 templates)](#1-auth)
-2.  [Submissions (4 templates)](#2-submissions)
-3.  [AI Routing (2 templates)](#3-ai-routing)
-4.  [Disputes (2 templates)](#4-disputes)
-5.  [Coaching (5 templates)](#5-coaching)
-6.  [Write-ups (5 templates)](#6-write-ups)
-7.  [Digests (2 templates)](#7-digests)
-8.  [System (1 template)](#8-system)
+**Industry-standard conventions used throughout**
+
+- One clear primary CTA per email (button label is shown in **bold**).
+- Subjects are short, action-first, include one identifier when useful
+  (name, score, form, date). No all-caps except true escalations
+  (refusal, system breach).
+- Security/auth emails always carry a "if this wasn't you" paragraph and
+  state the link expiry.
+- AI-generated reviews mention AI explicitly and make the QA safety net
+  visible to the agent.
+- Manager copy is informational ("here's what your team did") and never
+  duplicates an action the agent has already been asked to take.
 
 ---
 
-## 1. Auth
+## Auth
 
-### 1.1 `auth.welcome` — *Locked, Immediate*
+### `auth.welcome` — Welcome — set password
 
-**Recipients:** the new user (fixed)
+**Subject:** Your QTIP Account Is Ready — Set Your Password
 
-**Subject**
+**Body:**
 
-> Your QTIP account is ready — set your password
-
-**Body**
-
-> # Welcome to QTIP
+> **Welcome to QTIP**
 >
 > Hi {{user.username}},
 >
 > Your manager has set up an account for you in **QTIP** (Quality
 > Training Insights Platform). QTIP is where you'll see your reviews,
-> coaching sessions, and training materials.
+> coaching sessions, and performance metrics.
 >
-> To get started, set your password using the link below. **This link
+> To get started, set your password using the button below. **This link
 > expires in 24 hours.**
 >
-> [ Set Your Password ]
+> **[Set Your Password]**
 >
-> Your sign-in email is **{{user.email}}**.
+> Your sign-in email is **{{user.email}}**. Once you sign in, the areas
+> of QTIP available to you depend on your role — if anything looks off,
+> ask your manager.
 >
-> Once you sign in, the areas of QTIP available to you will depend on
-> your role. If anything looks off, ask your manager.
->
-> If you weren't expecting this email, please don't click the link —
-> contact your administrator instead.
+> *If you weren't expecting this email, please don't click the link —
+> contact your administrator instead.*
 
 ---
 
-### 1.2 `auth.password_reset` — *Locked, Immediate*
+### `auth.password_reset` — Password reset — link
 
-**Recipients:** the requesting user (fixed)
+**Subject:** Reset Your QTIP Password
 
-**Subject**
+**Body:**
 
-> Reset your QTIP password
-
-**Body**
-
-> # Reset your password
+> **Reset your password**
 >
 > Hi {{user.username}},
 >
 > We received a request to reset your QTIP password. Click the button
 > below to choose a new one. **This link expires in 30 minutes.**
 >
-> [ Reset Password ]
+> **[Reset Password]**
 >
-> Requested at {{formatDateTime requestedAt}} from IP **{{requestIp}}**.
+> Requested at {{requestedAt}}{{#if requestIp}} from IP **{{requestIp}}**{{/if}}.
 >
-> **Didn't request this?**
->
-> Your password is unchanged. You can safely ignore this email. If you
-> see repeated requests you didn't make, contact your administrator —
-> someone may know your sign-in email.
+> **Didn't request this?** Your password is unchanged — you can safely
+> ignore this email. If you see repeated requests you didn't make,
+> contact your administrator; someone may know your sign-in email.
 
 ---
 
-### 1.3 `auth.password_changed` — *Locked, Immediate*
+### `auth.password_changed` — Password changed — confirmation
 
-**Recipients:** the user (fixed)
+**Subject:** Your QTIP Password Was Changed
 
-**Subject**
+**Body:**
 
-> Your QTIP password was changed
-
-**Body**
-
-> # Your password was changed
+> **Your password was changed**
 >
 > Hi {{user.username}},
 >
-> Your QTIP password was changed on {{formatDateTime changedAt}}.
+> Your QTIP password was changed on {{changedAt}}.
 >
-> **If this was you**
-> No further action is needed.
+> **If this was you** — no further action is needed.
 >
-> **If this wasn't you**
-> Contact your administrator immediately so they can lock your account
-> and review recent activity.
+> **If this wasn't you** — contact your administrator immediately so
+> they can lock your account and review recent activity.
 
 ---
 
-### 1.4 `auth.account_locked` — *Locked, Immediate (user notice)*
+### `auth.account_locked` — Account locked — user notice
 
-**Recipients:** the locked user (fixed)
+**Subject:** Your QTIP Account Is Temporarily Locked
 
-**Subject**
+**Body:**
 
-> Your QTIP account is temporarily locked
-
-**Body**
-
-> # Your account is temporarily locked
+> **Your account is temporarily locked**
 >
 > Hi {{user.username}},
 >
-> Your QTIP account was locked at {{formatDateTime lockedAt}} after
-> several failed sign-in attempts.
+> Your QTIP account was locked at {{lockedAt}} after several failed
+> sign-in attempts.
 >
-> **It will unlock automatically at {{formatDateTime unlocksAt}}.**
+> {{#if unlocksAt}}**It will unlock automatically at {{unlocksAt}}.**{{/if}}
 >
-> If you need to sign in sooner, your administrator can unlock it for
-> you.
+> If you need to sign in sooner, your administrator can unlock it for you.
 >
-> If you didn't try to sign in, notify your administrator — someone
-> may know your sign-in email.
+> *If you didn't try to sign in, notify your administrator — someone may
+> know your sign-in email.*
 
 ---
 
-### 1.5 `auth.account_locked_admin` — *Locked, Immediate (admin alert)*
+### `auth.account_locked_admin` — Account locked — admin alert
 
-**Recipients:** all active admins (default)
+**Subject:** [QTIP] {{user.username}} Account Locked
 
-**Subject**
+**Body:**
 
-> [QTIP] {{user.username}} account locked
-
-**Body**
-
-> # A user account has been locked
+> **A user account has been locked**
 >
 > A QTIP user account has been locked.
 >
 > | | |
 > |---|---|
-> | User | {{user.username}} |
+> | User | **{{user.username}}** |
 > | Email | {{user.email}} |
-> | Locked at | {{formatDateTime lockedAt}} |
-> | Failed attempts | {{failedAttempts}} |
+> | Locked at | {{lockedAt}} |
+> | Failed attempts | **{{failedAttempts}}** |
 > | Last attempt IP | {{lastFailedIp}} |
-> | Auto-unlocks at | {{formatDateTime unlocksAt}} |
+> | Auto-unlocks at | {{unlocksAt}} |
 >
-> [ Unlock Account ]
+> **[Unlock Account]**
 >
 > The user has been notified separately.
 
 ---
 
-## 2. Submissions
+## Submissions
 
-### 2.1 `submission.audit_finalized_by_qa` — *Immediate (Daily/Weekly available)*
+### `submission.audit_finalized_by_qa` — QA review finalized
 
-**Recipients (default):** agent, direct manager
-**Available:** agent, direct manager, department director
+**Subject:** QA Review Complete: {{form.form_name}} — {{submission.total_score}}%
 
-**Subject**
+**Body:**
 
-> QA review complete: {{form.form_name}} — {{submission.total_score}}%
-
-**Body — agent sees**
-
-> # QA review complete
+> **QA review complete**
 >
 > Hi {{recipient.username}},
 >
+> [ROLE: agent]
 > {{reviewer.username}} finalized your **{{form.form_name}}** review.
+>
+> [ROLE: manager / director]
+> {{reviewer.username}} finalized a QA review for **{{csr.username}}**
+> on **{{form.form_name}}**.
 >
 > | | |
 > |---|---|
 > | Score | **{{submission.total_score}}%** — {{passLabel}} |
-> | Reviewed | {{formatDateTime submission.submitted_at}} |
+> | Reviewed | {{submission.submitted_at}} |
 >
-> [ View Submission ]
+> **[View Submission]**
 >
-> If you believe the score is incorrect, you can open a dispute within
-> the dispute window.
-
-**Body — manager sees**
-
-> Same fact table; opening line reads:
-> "{{reviewer.username}} finalized a QA review for **{{csr.username}}**
-> on **{{form.form_name}}**."
-
-> *`passLabel` is auto-derived in the renderer from the form's pass
-> threshold and the score: `passed` / `needs review` / `failed`.*
+> [ROLE: agent]
+> *If you believe the score is incorrect, you can open a dispute within
+> the dispute window. Open the submission to see comments and any
+> flagged items.*
 
 ---
 
-### 2.2 `submission.audit_finalized_by_ai` — *Daily digest by default*
+### `submission.audit_finalized_by_ai` — AI review finalized
 
-**Recipients (default):** agent, direct manager
-**Available:** agent, direct manager, department director
+**Subject:** AI Review Complete: {{form.form_name}} — {{submission.total_score}}%
 
-**Subject**
+**Body:**
 
-> AI review complete: {{form.form_name}} — {{submission.total_score}}%
-
-**Body — agent sees**
-
-> # AI review complete
+> **AI review complete**
 >
 > Hi {{recipient.username}},
 >
-> An AI-generated review of your **{{form.form_name}}** call has been
+> [ROLE: agent]
+> An AI-generated review of your **{{form.form_name}}** has been
 > finalized.
+>
+> [ROLE: manager / director]
+> An AI-generated review for **{{csr.username}}** on **{{form.form_name}}**
+> has been finalized.
 >
 > | | |
 > |---|---|
 > | Score | **{{submission.total_score}}%** — {{passLabel}} |
 > | AI confidence | {{submission.ai_overall_confidence}} |
-> | Reviewed | {{formatDateTime submission.submitted_at}} |
+> | Reviewed | {{submission.submitted_at}} |
 >
-> [ View Submission ]
+> **[View Submission]**
 >
-> If the AI's confidence on this one is low, a QA reviewer will
-> double-check it before it counts.
-
-**Body — manager sees**
-
-> Same fact table; opening line reads:
-> "An AI-generated review for **{{csr.username}}** on
-> **{{form.form_name}}** has been finalized."
+> [ROLE: agent]
+> *If the AI's confidence on this one is low, a QA reviewer will
+> double-check it before it counts.*
 
 ---
 
-### 2.3 `submission.critical_fail_by_qa` — *Immediate (Daily/Weekly disabled)*
+### `submission.critical_fail_by_qa` — Critical fail — QA-graded
 
-**Recipients (default):** agent, direct manager, department director
+**Subject:** Critical Fail — {{csr.username}} on {{form.form_name}}
 
-**Subject**
+**Body:**
 
-> Critical fail — {{csr.username}} on {{form.form_name}}
-
-**Body — agent sees**
-
-> # Critical fail
+> **Critical fail**
 >
 > Hi {{recipient.username}},
 >
-> Your **{{form.form_name}}** review on
-> {{formatDateTime submission.submitted_at}} has been finalized with a
-> **critical fail**.
+> [ROLE: agent]
+> Your **{{form.form_name}}** review on {{submission.submitted_at}}
+> has been finalized with a **critical fail**.
+>
+> [ROLE: manager / director]
+> A QA review for **{{csr.username}}** on **{{form.form_name}}**
+> finalized with a **critical fail**.
 >
 > | | |
 > |---|---|
 > | Score after cap | **{{submission.total_score}}%** |
 > | Critical questions failed | **{{submission.critical_fail_count}}** |
 > | Reviewer | {{reviewer.username}} |
+> | Reviewed | {{submission.submitted_at}} |
 >
-> **Failed critical questions**
-> - *(auto-loaded list of failed critical questions)*
+> {{#if criticalFailQuestions.length}}
+> **Failed critical items**
+> - {{this.text}}   *(per question)*
+> {{/if}}
 >
-> [ Review Submission ]
+> **[Review Submission]**
 >
-> Your manager will follow up with coaching. If you believe the score
-> is wrong, you can open a dispute from the submission page.
-
-**Body — manager / director sees**
-
-> Same fact table + failed-question list; opening line reads:
-> "A QA review for **{{csr.username}}** on **{{form.form_name}}**
-> finalized with a **critical fail**."
+> [ROLE: agent]
+> *Critical questions cap the score regardless of how the rest of the
+> form went. Talk through this one with your manager — and if you
+> believe it's incorrect, open a dispute from the submission page.*
+>
+> [ROLE: manager / director]
+> *Plan a coaching session to walk through the failed items. Document
+> any corrective action in the agent's record.*
 
 ---
 
-### 2.4 `submission.critical_fail_by_ai` — *Immediate (Daily/Weekly disabled)*
+### `submission.critical_fail_by_ai` — Critical fail — AI-graded
 
-**Recipients (default):** agent, direct manager, department director
+**Subject:** Critical Fail (AI) — {{csr.username}} on {{form.form_name}}
 
-**Subject**
+**Body:**
 
-> [AI] Critical fail — {{csr.username}} on {{form.form_name}}
-
-**Body — agent sees**
-
-> # AI flagged a critical fail
+> **Critical fail (AI-graded)**
 >
 > Hi {{recipient.username}},
 >
-> An **AI-generated** review of your **{{form.form_name}}** call
-> surfaced a critical fail.
+> [ROLE: agent]
+> An AI-generated review of your **{{form.form_name}}** has been
+> finalized with a **critical fail**.
+>
+> [ROLE: manager / director]
+> An AI review for **{{csr.username}}** on **{{form.form_name}}**
+> finalized with a **critical fail**.
 >
 > | | |
 > |---|---|
 > | Score after cap | **{{submission.total_score}}%** |
 > | Critical questions failed | **{{submission.critical_fail_count}}** |
 > | AI confidence | {{submission.ai_overall_confidence}} |
+> | Reviewed | {{submission.submitted_at}} |
 >
-> **Failed critical questions**
-> - *(auto-loaded list)*
+> {{#if criticalFailQuestions.length}}
+> **Failed critical items**
+> - {{this.text}}   *(per question)*
+> {{/if}}
 >
-> [ Review Submission ]
+> **[Review Submission]**
 >
-> A QA reviewer will double-check this AI result before any coaching
-> is assigned. You'll receive a follow-up email once it's been
-> confirmed.
-
-**Body — manager / director sees**
-
-> Closes with: "Per policy, this AI result is also being routed to QA
-> for a human double-check before any coaching is initiated."
+> [ROLE: agent]
+> *Because this was a critical fail, a QA reviewer will sign off on it
+> before any disciplinary action is taken. If you'd like to add context,
+> open a dispute from the submission page.*
+>
+> [ROLE: manager / director]
+> *AI critical fails are routed for QA confirmation by default. Hold off
+> on disciplinary action until QA signs off.*
 
 ---
 
-## 3. AI Routing
+## AI Routing
 
-### 3.1 `ai.review_routed_to_qa` — *Immediate (Daily available)*
+### `ai.review_low_confidence` — AI review — low confidence
 
-**Recipients (default):** department QA pool
+**Subject:** Low-Confidence AI Review Needs Your Eyes — {{csr.username}}
 
-**Subject**
+**Body:**
 
-> QA needed: AI review of {{csr.username}} on {{form.form_name}}
-
-**Body**
-
-> # AI review needs your sign-off
+> **AI review needs human sign-off**
 >
 > Hi {{recipient.username}},
 >
-> An AI-finalized review needs your sign-off because **{{routingReasonLabel}}**.
+> An AI-generated review for **{{csr.username}}** on **{{form.form_name}}**
+> came in below this form's confidence threshold and is sitting in your
+> QA inbox as a draft.
 >
 > | | |
 > |---|---|
-> | Form | **{{form.form_name}}** |
-> | Agent | {{csr.username}} |
-> | AI score | {{submission.total_score}}% |
-> | Routed | {{formatDateTime submission.submitted_at}} |
+> | Form | {{form.form_name}} |
+> | Submission | #{{submission.id}} |
+> | AI confidence | {{submission.ai_overall_confidence}} |
 >
-> [ Open in QA Inbox ]
+> **[Open in QA Inbox]**
 >
-> *Tip: open the QA Inbox to see all AI reviews waiting on you.*
-
-> *`routingReasonLabel` is mapped from the enum:* `low_confidence` →
-> "AI confidence was below the form threshold", etc.
+> *The agent has not been notified. Take a look, adjust if needed, and
+> promote the draft when you're satisfied.*
 
 ---
 
-### 3.2 `ai.review_low_confidence` — *Immediate*
+### `ai.review_routed_to_qa` — AI review — routed to QA
 
-**Recipients (default):** department QA pool *(deliberately not the agent)*
+**Subject:** AI Review Routed to QA — {{csr.username}}
 
-**Subject**
+**Body:**
 
-> Low-confidence AI review — {{csr.username}} on {{form.form_name}}
-
-**Body**
-
-> # Low-confidence AI review needs human eyes
+> **AI review routed for human review**
 >
 > Hi {{recipient.username}},
 >
-> An AI-generated review came in below the form's confidence threshold
-> and needs human eyes.
+> An AI review for **{{csr.username}}** on **{{form.form_name}}** has
+> been routed to QA — {{routingReasonLabel}}.
 >
 > | | |
 > |---|---|
-> | Form | **{{form.form_name}}** |
-> | Agent | {{csr.username}} |
-> | AI confidence | **{{submission.ai_overall_confidence}}** |
-> | Threshold | {{form.ai_sample_low_confidence_threshold}} |
-> | AI score | {{submission.total_score}}% |
+> | Form | {{form.form_name}} |
+> | Submission | #{{submission.id}} |
+> | Routing reason | {{routingReasonLabel}} |
 >
-> [ Open in QA Inbox ]
+> **[Open in QA Inbox]**
 >
-> Please re-grade. The agent has not been notified about this review
-> yet — they'll see the result once it's finalized.
+> *The agent has not been notified. Promote the draft when you're done.*
 
 ---
 
-## 4. Disputes
+## Disputes
 
-### 4.1 `dispute.opened` — *Immediate*
+### `dispute.opened` — Dispute opened
 
-**Recipients (default):** the original QA + the agent's direct manager
+**Subject:** Dispute Opened — {{csr.username}} on {{form.form_name}}
 
-**Subject**
+**Body:**
 
-> Dispute opened — {{csr.username}} on {{form.form_name}}
-
-**Body**
-
-> # Dispute opened
+> **Dispute opened**
 >
 > Hi {{recipient.username}},
 >
@@ -429,363 +372,305 @@
 > | Form | **{{form.form_name}}** |
 > | Submission | #{{submission.id}} |
 > | Original score | {{originalScore}}% |
-> | Opened | {{formatDateTime dispute.created_at}} |
+> | Opened | {{dispute.created_at}} |
 >
+> {{#if dispute.reason}}
 > **Reason from {{csr.username}}**
 > > {{dispute.reason}}
+> {{/if}}
 >
-> [ Review Dispute ]
+> **[Review Dispute]**
 >
-> Please review and resolve this dispute as soon as possible. The
-> agent is waiting on the outcome.
+> *Please review and resolve as soon as possible — the agent is waiting
+> on the outcome.*
 
 ---
 
-### 4.2 `dispute.resolved` — *Immediate*
+### `dispute.resolved` — Dispute resolved
 
-**Recipients (default):** the disputant CSR (fixed)
+**Subject:** Dispute Resolved — {{form.form_name}} ({{#if disputeDenied}}Upheld{{else}}Adjusted{{/if}})
 
-**Subject — when upheld**
+**Body:**
 
-> Dispute upheld — {{form.form_name}} score updated to {{submission.total_score}}%
-
-**Subject — when denied**
-
-> Dispute decision: original score stands ({{submission.total_score}}%)
-
-**Body**
-
-> # Your dispute has been resolved
+> **Dispute resolved**
 >
 > Hi {{recipient.username}},
 >
-> Your dispute on submission **#{{submission.id}}** has been
-> **{{dispute.status}}** by {{resolver.username}} on
-> {{formatDateTime dispute.resolved_at}}.
+> {{resolver.username}} has resolved your dispute on **{{form.form_name}}**.
 >
 > | | |
 > |---|---|
-> | Form | **{{form.form_name}}** |
-> | Score change | {{originalScore}}% → **{{submission.total_score}}%** |
+> | Original score | {{originalScore}}% |
+> | Final score | **{{submission.total_score}}%** |
+> | Outcome | {{#if disputeDenied}}Original score upheld{{else}}Score adjusted{{/if}} |
+> | Resolved | {{dispute.resolved_at}} |
 >
+> {{#if dispute.resolution_notes}}
 > **Resolution notes**
 > > {{dispute.resolution_notes}}
+> {{/if}}
 >
-> [ View Submission ]
+> **[View Submission]**
 >
-> *(when denied:)* If you disagree with this resolution, please discuss
-> directly with your manager.
+> *This decision is final. If you have questions, follow up with your
+> manager or QA directly.*
 
 ---
 
-## 5. Coaching
+## Coaching
 
-### 5.1 `coaching.scheduled` — *Immediate*
+### `coaching.scheduled` — Coaching scheduled
 
-**Recipients:** the agent (fixed)
+**Subject:** Coaching Scheduled — {{session.topic}} on {{formatDate session.scheduled_at}}
 
-**Subject**
+**Body:**
 
-> {{session.coaching_purpose}} coaching with {{coach.username}} —
-> {{formatDateTime session.session_date}}
-
-**Body**
-
-> # Coaching session scheduled
+> **Coaching session scheduled**
 >
 > Hi {{recipient.username}},
 >
-> A coaching session has been scheduled for you.
+> {{coach.username}} has scheduled a coaching session with you.
 >
 > | | |
 > |---|---|
-> | When | **{{formatDateTime session.session_date}}** |
-> | Duration | {{session.duration_minutes}} minutes |
-> | Format | {{session.coaching_format}} |
-> | Where | {{session.location}} |
+> | Topic | **{{session.topic}}** |
+> | When | {{formatDateTime session.scheduled_at}} |
 > | Coach | {{coach.username}} |
-> | Purpose | {{session.coaching_purpose}} |
 >
-> [ View Session ]
+> **[View Session]**
 >
-> *(if preparation_notes set:)* **To prepare:** {{session.preparation_notes}}
+> *Please be on time and ready to discuss the topic above. If you need
+> to reschedule, reach out to {{coach.username}} directly.*
 
 ---
 
-### 5.2 `coaching.awaiting_csr_action` — *Immediate*
+### `coaching.awaiting_csr_action` — Coaching — action required
 
-**Recipients:** the agent (fixed)
+**Subject:** Action Needed: Acknowledge Your Coaching on {{session.topic}}
 
-**Subject**
+**Body:**
 
-> Action required on your coaching session — by {{formatDate session.action_due_date}}
-
-**Body**
-
-> # Coaching session needs your acknowledgment
+> **Action required on your coaching session**
 >
 > Hi {{recipient.username}},
 >
-> Your **{{session.coaching_purpose}}** coaching session with
-> {{coach.username}} on {{formatDate session.session_date}} needs your
-> acknowledgment{{#if require_action_plan}} and an action plan{{/if}}.
+> Your coaching session on **{{session.topic}}** with
+> {{coach.username}} is waiting on you to acknowledge it and (if
+> applicable) submit your action plan.
 >
-> **Please respond by {{formatDate session.action_due_date}}.**
+> **[Open Session]**
 >
-> [ Open Session ]
+> *Sessions stay open until you acknowledge them. The sooner this is
+> wrapped up, the cleaner your record looks.*
 
 ---
 
-### 5.3 `coaching.quiz_pending` — *Immediate*
+### `coaching.quiz_pending` — Coaching — quiz pending
 
-**Recipients:** the agent (fixed)
+**Subject:** Quiz Pending — {{session.topic}}
 
-**Subject**
+**Body:**
 
-> Quiz pending: {{quiz.title}} — {{quiz.question_count}} questions
-
-**Body**
-
-> # A quiz is waiting for you
+> **Quiz pending on your coaching session**
 >
 > Hi {{recipient.username}},
 >
-> A required quiz is waiting for you on your
-> **{{session.coaching_purpose}}** coaching session.
+> Your coaching session on **{{session.topic}}** has a follow-up quiz
+> waiting for you{{#if quiz.due_at}}, due **{{formatDate quiz.due_at}}**{{/if}}.
 >
-> | | |
-> |---|---|
-> | Quiz | **{{quiz.title}}** |
-> | Questions | {{quiz.question_count}} |
-> | Estimated time | {{quiz.estimated_minutes}} min |
-> | Due | {{formatDate quiz.due_date}} |
+> **[Take Quiz]**
 >
-> [ Take Quiz ]
+> *The session won't be marked complete until the quiz is submitted.*
 
 ---
 
-### 5.4 `coaching.completed` — *Immediate*
+### `coaching.completed` — Coaching completed
 
-**Recipients (default):** agent + creator
+**Subject:** Coaching Completed — {{session.topic}}
 
-**Subject**
+**Body:**
 
-> {{session.coaching_purpose}} coaching with {{coach.username}} marked complete
-
-**Body — agent sees**
-
-> # Coaching session complete
+> **Coaching session completed**
 >
 > Hi {{recipient.username}},
 >
-> Your **{{session.coaching_purpose}}** coaching session with
-> {{coach.username}} on {{formatDate session.session_date}} is
-> complete.
+> [ROLE: agent]
+> Your coaching session on **{{session.topic}}** with {{coach.username}}
+> is now complete.
 >
-> *(if outcome_summary set:)*
-> **Outcome notes**
-> > {{session.outcome_summary}}
+> [ROLE: creator]
+> A coaching session you initiated for {{csr.username}} on
+> **{{session.topic}}** has been marked complete by {{coach.username}}.
 >
-> [ View Session ]
-
-**Body — creator sees**
-
-> "The **{{session.coaching_purpose}}** coaching session you scheduled
-> for {{csr.username}} on {{formatDate session.session_date}} has been
-> marked complete by {{coach.username}}."
+> **[View Session]**
+>
+> *Notes, action items, and any quiz results are available on the
+> session page for your records.*
 
 ---
 
-### 5.5 `coaching.canceled` — *Immediate*
+### `coaching.canceled` — Coaching canceled
 
-**Recipients:** the agent (fixed)
+**Subject:** Coaching Canceled — {{session.topic}}
 
-**Subject**
+**Body:**
 
-> Coaching session for {{formatDate session.session_date}} was canceled
-
-**Body**
-
-> # Coaching session canceled
+> **Coaching session canceled**
 >
 > Hi {{recipient.username}},
 >
-> Your coaching session originally scheduled for
-> {{formatDateTime session.session_date}} has been canceled.
+> Your coaching session on **{{session.topic}}** has been canceled.
 >
-> *(if cancel_reason set:)*
-> **Reason**
-> {{session.cancel_reason}}
+> **[View Coaching]**
 >
-> [ View Coaching ]
->
-> Your manager or coach will be in touch to reschedule if needed.
+> *If a replacement is needed, your manager or coach will reach out.*
 
 ---
 
-## 6. Write-ups
+## Write-ups
 
-> **HR / legal review recommended on the wording in this section.**
-> The current copy is honest and minimal — refine the
-> `employeeRightsReminder` line and the witness-SLA line as
-> appropriate.
+### `writeup.scheduled` — Write-up — meeting scheduled
 
-### 6.1 `writeup.scheduled` — *Immediate (Daily/Weekly disabled)*
+**Subject:** {{writeup.document_type}} Meeting — {{formatDateTime writeup.meeting_at}}
 
-**Recipients (default):** agent, direct manager, creator, HR witness
+**Body:**
 
-**Subject — agent**
-
-> Meeting scheduled: {{writeup.document_type}} on {{formatDate writeup.meeting_date}}
-
-**Subject — manager / creator / HR**
-
-> [HR] {{writeup.document_type}} meeting for {{csr.username}} —
-> {{formatDate writeup.meeting_date}}
-
-**Body — agent sees**
-
-> # {{writeup.document_type}} meeting scheduled
+> **{{writeup.document_type}} meeting scheduled**
 >
 > Hi {{recipient.username}},
 >
-> A meeting has been scheduled with your manager to discuss a
+> [ROLE: agent]
+> A meeting has been scheduled with you regarding a
 > **{{writeup.document_type}}**.
 >
+> [ROLE: manager / creator / HR witness]
+> A **{{writeup.document_type}}** meeting has been scheduled with
+> {{csr.username}}.
+>
 > | | |
 > |---|---|
-> | When | **{{formatDateTime writeup.meeting_date}}** |
-> | Duration | {{writeup.duration_minutes}} minutes |
-> | Where | {{writeup.location}} |
+> | When | **{{formatDateTime writeup.meeting_at}}** |
 > | Manager | {{manager.username}} |
 > | HR witness | {{hr_witness.username}} |
 >
-> [ View Write-up ]
+> **[View Write-up]**
 >
-> *What to expect:* the meeting will cover the points described in the
-> document linked above. You may bring written notes.
-> {{employeeRightsReminder}}
-
-**Body — manager / creator / HR sees**
-
-> Same fact table (with `Agent` row added); no "what to expect"
-> footer.
+> [ROLE: agent]
+> {{#if employeeRightsReminder}}*{{employeeRightsReminder}}*{{else}}*You
+> may bring a written response or notes. The meeting will be
+> documented.*{{/if}}
+>
+> [ROLE: manager / creator / HR witness]
+> *Please review the document beforehand and arrive on time. The
+> witness's role is to observe and confirm the meeting took place
+> as documented.*
 
 ---
 
-### 6.2 `writeup.awaiting_signature` — *Immediate*
+### `writeup.awaiting_signature` — Write-up — awaiting signature
 
-**Recipients (default):** agent, direct manager, creator, HR witness
+**Subject:** Signature Required — {{writeup.document_type}}
 
-**Subject — agent**
+**Body:**
 
-> Signature required: {{writeup.document_type}} by {{formatDate writeup.signature_due_date}}
-
-**Subject — manager / creator / HR**
-
-> [HR] {{csr.username}} — {{writeup.document_type}} awaiting signature
-
-**Body — agent sees**
-
-> # {{writeup.document_type}} awaiting signature
+> **{{writeup.document_type}} awaiting signature**
 >
 > Hi {{recipient.username}},
 >
-> A **{{writeup.document_type}}** document is ready for your review
-> and acknowledgment.
+> [ROLE: agent]
+> The **{{writeup.document_type}}** discussed in your meeting is ready
+> for your acknowledgment.
 >
-> **Please review and acknowledge by
-> {{formatDate writeup.signature_due_date}}.**
+> [ROLE: manager / creator / HR witness]
+> {{csr.username}}'s **{{writeup.document_type}}** is awaiting
+> signature.
 >
-> [ Open Document ]
+> **[Open Document]**
 >
-> Signing acknowledges receipt of this document, **not agreement**
-> with its contents. You may add written comments before signing.
-
-**Body — manager / creator / HR sees**
-
-> "{{csr.username}} has a **{{writeup.document_type}}** awaiting their
-> signature, due {{formatDate writeup.signature_due_date}}."
-> "The agent has been notified and will be reminded automatically.
-> Escalate if there is no response by the due date."
+> [ROLE: agent]
+> *Signing acknowledges that you've read the document — it does not
+> mean you agree with everything in it. You can add written comments
+> from the same page.*
+>
+> [ROLE: manager / creator / HR witness]
+> *The agent has been asked to sign. They will be reminded
+> automatically until the document is acknowledged or refused.*
 
 ---
 
-### 6.3 `writeup.signed` — *Immediate*
+### `writeup.signed` — Write-up — signed
 
-**Recipients (default):** agent, direct manager, creator, HR witness
+**Subject:** {{writeup.document_type}} Signed — {{csr.username}}
 
-**Subject**
+**Body:**
 
-> {{writeup.document_type}} signed — {{csr.username}}
-
-**Body — agent sees**
-
-> "You signed the **{{writeup.document_type}}** on
+> **{{writeup.document_type}} signed**
+>
+> Hi {{recipient.username}},
+>
+> [ROLE: agent]
+> You signed the **{{writeup.document_type}}** on
 > {{formatDateTime writeup.signed_at}}. A copy has been retained in
-> your employee record."
-> [ View Write-up ]
-
-**Body — manager / creator / HR sees**
-
-> "{{csr.username}} signed the **{{writeup.document_type}}** on
+> your employee record.
+>
+> [ROLE: manager / creator / HR witness]
+> {{csr.username}} signed the **{{writeup.document_type}}** on
 > {{formatDateTime writeup.signed_at}}. A copy has been retained for
-> HR records."
-> [ View Write-up ]
+> HR records.
+>
+> **[View Write-up]**
 
 ---
 
-### 6.4 `writeup.refused` — *Immediate*
+### `writeup.refused` — Write-up — signature refused
 
-**Recipients (default):** agent, direct manager, creator, HR witness
+**Subject:** Signature Refused — {{writeup.document_type}} for {{csr.username}}
 
-**Subject**
+**Body:**
 
-> SIGNATURE REFUSED — {{writeup.document_type}} for {{csr.username}}
-
-**Body — agent sees**
-
-> # Signature refused
+> **Signature refused**
 >
-> "You declined to sign the **{{writeup.document_type}}** on
-> {{formatDateTime writeup.refused_at}}."
+> Hi {{recipient.username}},
 >
-> *(if refusal_reason set:)* **Reason on file** > {{writeup.refusal_reason}}
+> [ROLE: agent]
+> You declined to sign the **{{writeup.document_type}}** on
+> {{formatDateTime writeup.refused_at}}.
 >
-> [ Open Write-up ]
+> [ROLE: manager / creator / HR witness]
+> {{csr.username}} refused to sign the **{{writeup.document_type}}** on
+> {{formatDateTime writeup.refused_at}}.
 >
-> "Per policy, this document is filed in your employee record
+> {{#if writeup.refusal_reason}}
+> [ROLE: agent]
+> **Reason on file**
+> > {{writeup.refusal_reason}}
+>
+> [ROLE: manager / creator / HR witness]
+> **Reason from agent**
+> > {{writeup.refusal_reason}}
+> {{/if}}
+>
+> **[Open Write-up]**
+>
+> [ROLE: agent]
+> *Per policy, this document is filed in your employee record
 > regardless of signature. If you'd like to add written comments, you
-> can do so from the link above."
-
-**Body — manager / creator / HR sees**
-
-> "{{csr.username}} refused to sign the **{{writeup.document_type}}**
-> on {{formatDateTime writeup.refused_at}}."
+> can do so from the link above.*
 >
-> *(if refusal_reason set:)* **Reason from agent** > {{writeup.refusal_reason}}
->
-> **Next steps**
-> "Per policy, document the witness's observation in the employee
-> record within {{witnessSlaDays}} business days. The document will be
-> filed regardless of signature."
-
-> *`witnessSlaDays` defaults to **3** in the template; tell me to make
-> it editable elsewhere if HR/legal wants a different number.*
+> [ROLE: manager / creator / HR witness]
+> **Next steps** — Per policy, document the witness's observation in
+> the employee record within {{#if witnessSlaDays}}{{witnessSlaDays}}{{else}}3{{/if}}
+> business days. The document will be filed regardless of signature.
 
 ---
 
-### 6.5 `writeup.followup_pending` — *Immediate*
+### `writeup.followup_pending` — Write-up — follow-up pending
 
-**Recipients:** the assignee (fixed)
+**Subject:** Follow-Up Due {{formatDate writeup.follow_up_date}} — {{csr.username}}
 
-**Subject**
+**Body:**
 
-> Follow-up due {{formatDate writeup.follow_up_date}}: {{writeup.followup_type}} with {{csr.username}}
-
-**Body**
-
-> # Write-up follow-up assigned to you
+> **Write-up follow-up assigned to you**
 >
 > Hi {{recipient.username}},
 >
@@ -793,26 +678,22 @@
 > {{csr.username}}'s **{{writeup.document_type}}**, due
 > **{{formatDate writeup.follow_up_date}}**.
 >
-> [ Open Follow-up ]
+> **[Open Follow-up]**
 >
-> When you've completed the follow-up, mark it complete from the link
-> above so it's recorded in the employee file.
+> *When you've completed the follow-up, mark it complete from the link
+> above so it's recorded in the employee file.*
 
 ---
 
-## 7. Digests
+## Digests
 
-### 7.1 `digest.csr_daily` — *Daily summary at 5pm ET*
+### `digest.csr_daily` — Daily CSR digest
 
-**Recipients:** the agent (fixed)
+**Subject:** QTIP Daily Summary — {{itemCount}} Reviews{{#if avgScore}}, Avg {{avgScore}}%{{/if}}
 
-**Subject**
+**Body:**
 
-> QTIP daily summary — {{itemCount}} reviews, avg {{avgScore}}%
-
-**Body**
-
-> # Today's AI reviews on your work
+> **Today's AI reviews on your work**
 >
 > Hi {{recipient.username}},
 >
@@ -823,102 +704,70 @@
 > | Critical fails | **{{criticalFailCount}}** |
 > | vs your 30-day avg | {{trendLabel}} |
 >
+> **Reviews today**
+>
 > | Form | Score | Status |
-> |---|---|---|
-> | Phone QA | 92% | passed |
-> | Ticket QA | 78% | needs review |
-> | Email QA | 88% | passed |
+> |---|---:|---|
+> | {{this.formName}} | {{this.score}}% | {{this.status}} | *(per item)* |
 >
-> *(table rendered from the `items` array.)*
+> {{#if hasMore}}*Showing the first {{itemCount}} of today's reviews.*{{/if}}
 >
-> [ View All in QTIP ]
-
-> *Note:* `avgScore`, `criticalFailCount`, `trendLabel` are placeholders
-> that the digest scheduler will compute when it lands. The template is
-> already built to render them.
+> **[View All in QTIP]**
 
 ---
 
-### 7.2 `digest.manager_weekly` — *Weekly summary Monday 8am ET*
+### `digest.manager_weekly` — Weekly manager digest
 
-**Recipients:** the direct manager (fixed)
+**Subject:** Weekly QC — Team Avg {{teamAvg}}% ({{deltaLabel}}), {{itemCount}} Reviews
 
-**Subject**
+**Body:**
 
-> Weekly QC — team avg {{teamAvg}}% ({{deltaLabel}}), {{itemCount}} reviews
-
-**Body**
-
-> # Your team's AI reviews this week
+> **Your team's AI reviews this week**
 >
 > Hi {{recipient.username}},
 >
 > | | |
 > |---|---|
 > | Team average | **{{teamAvg}}%** ({{deltaLabel}} vs prior week) |
-> | Reviews | {{itemCount}} |
+> | Reviews | **{{itemCount}}** |
 > | Critical fails | **{{criticalFailCount}}** |
 > | Disputes opened | {{disputesOpenedCount}} |
 >
 > **Top performers**
-> - {{csrName}} — {{avg}}% ({{reviews}} reviews)
-> - …
+> - {{this.csrName}} — {{this.avg}}% ({{this.reviews}} reviews)   *(per item)*
 >
 > **Needs attention**
-> - {{csrName}} — {{avg}}% ({{reviews}} reviews, {{criticalFails}} critical)
-> - …
+> - {{this.csrName}} — {{this.avg}}% ({{this.reviews}} reviews{{#if this.criticalFails}}, {{this.criticalFails}} critical{{/if}})   *(per item)*
 >
-> [ Open Team Dashboard ]
+> **[Open Team Dashboard]**
 
 ---
 
-## 8. System
+## System
 
-### 8.1 `system.circuit_tripped` — *Locked, Immediate*
+### `system.circuit_tripped` — Email circuit-breaker tripped
 
-**Recipients:** all active admins (default)
+**Subject:** [QTIP] Email Circuit-Breaker Tripped
 
-**Subject**
+**Body:**
 
-> [QTIP] Email circuit-breaker tripped
-
-**Body**
-
-> # Email circuit-breaker tripped
+> **Email circuit-breaker tripped**
 >
 > The QTIP email circuit-breaker has tripped.
 >
 > QTIP sent more than {{threshold}} emails in a 5-minute window. To
 > protect users from a notification flood, **non-critical templates
-> have been paused.** Critical templates (auth, system) continue to
-> send.
+> have been paused.** Critical templates (auth, system) continue to send.
 >
 > | | |
 > |---|---|
 > | Sends in window | **{{count}}** |
 > | Top template | `{{topTemplate.key}}` ({{topTemplate.count}} sends) |
-> | Tripped at | {{formatDateTime trippedAt}} |
-> | Auto-resets at | {{formatDateTime resetsAt}} |
+> | Tripped at | {{trippedAt}} |
+> | Auto-resets at | {{resetsAt}} |
 >
-> [ Review Templates ]
+> **[Review Templates]**
 >
-> Investigate the top template above for an unintended loop or trigger
+> *Investigate the top template above for an unintended loop or trigger
 > spike. Once the cause is fixed, the breaker will auto-reset; or you
-> can manually clear it from the Email Templates → System Health tab.
-
----
-
-## How to give feedback
-
-Two easy options:
-
-1. **Edit this file inline** and hand it back. I'll do a single pass
-   across the `.hbs` files and DB rows. Strikethroughs, full
-   rewrites, "swap this with that" — whatever's easiest. Just leave
-   the section headings (e.g. `### 2.1 ...`) intact so I can match
-   each template.
-2. **Edit live in the UI.** Each template's copy can be edited at
-   `/app/admin/email-templates`; "Reset to default" reverts to the
-   filesystem version. Recipients are toggled in the new
-   **Recipients** card; cadence is selected via the new **Delivery**
-   radio buttons.
+> can manually clear it from the Email Templates → System Health tab.*
