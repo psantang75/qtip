@@ -15,6 +15,8 @@ import { Request } from 'express';
 import { User } from '../models/User';
 import { tokenBlacklistService } from './TokenBlacklistService';
 import { getJwtSecret, getJwtRefreshSecret } from '../config/environment';
+import prisma from '../config/prisma';
+import notificationService from './notifications/NotificationService';
 
 // Authentication-specific repository interface (simplified for auth needs)
 interface IAuthRepository {
@@ -132,6 +134,9 @@ export class AuthenticationService {
       if (!isPasswordValid) {
         logger.info(`[NEW AUTH] AuthenticationService: Invalid password for email: ${email}`);
         await this.repository.logAuthAttempt(email, false, clientIp);
+        await this.maybeNotifyLockout(email, user.id, clientIp).catch(err =>
+          logger.warn('[NEW AUTH] lockout notify failed', { error: err?.message }),
+        );
         throw new AuthenticationError('Invalid credentials', 'INVALID_CREDENTIALS');
       }
 
@@ -429,6 +434,46 @@ export class AuthenticationService {
     };
     const options: SignOptions = { expiresIn: this.REFRESH_TOKEN_EXPIRES_IN as any };
     return jwt.sign(payload, this.JWT_SECRET, options);
+  }
+
+  /**
+   * Fires `auth.account_locked` (user) + `auth.account_locked_admin`
+   * (admins) once per lockout — the moment failed attempts cross the
+   * threshold (currently 5 in 15min, set in AuthRepository.isAccountLocked).
+   *
+   * Uses `count == LOCK_THRESHOLD` rather than `>=` so we don't spam an
+   * email on every subsequent failed attempt while the account is
+   * already locked.
+   */
+  private async maybeNotifyLockout(email: string, userId: number, clientIp: string): Promise<void> {
+    const LOCK_THRESHOLD = 5;
+    const LOCK_WINDOW_MS = 15 * 60 * 1000;
+    const since = new Date(Date.now() - LOCK_WINDOW_MS);
+    const failed = await prisma.authLog.count({
+      where: { email, success: false, attempted_at: { gt: since } },
+    });
+    if (failed !== LOCK_THRESHOLD) return;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, email: true },
+    });
+    if (!user) return;
+
+    const lockedAt = new Date();
+    const unlocksAt = new Date(lockedAt.getTime() + LOCK_WINDOW_MS);
+    const ctx = { entityType: 'user' as const, entityId: user.id };
+
+    await Promise.all([
+      notificationService.notify('auth.account_locked', {
+        user, lockedAt, unlocksAt,
+      }, ctx),
+      notificationService.notify('auth.account_locked_admin', {
+        user, lockedAt, unlocksAt,
+        failedAttempts: failed,
+        lastFailedIp: clientIp,
+      }, { ...ctx, deepLinkPath: `/admin/users/${user.id}` }),
+    ]);
   }
 
   /**

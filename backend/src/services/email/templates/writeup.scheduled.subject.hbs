@@ -1,0 +1,1 @@
+{{#if (eq recipient.matchedRole "agent")}}Meeting scheduled: {{writeup.document_type}} on {{formatDate writeup.meeting_date}}{{else}}[HR] {{writeup.document_type}} meeting for {{csr.username}} — {{formatDate writeup.meeting_date}}{{/if}}

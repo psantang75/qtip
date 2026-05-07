@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import { AuthenticationService } from '../services/AuthenticationService';
 import { AuthRepository } from '../repositories/AuthRepository';
+import {
+  requestReset, validateResetToken, consumeReset,
+} from '../services/PasswordResetService';
+import { ResetPasswordSchema, ResetPasswordConfirmSchema } from '../validation/user.validation';
 import logger from '../config/logger';
 
 // Initialize authentication service
@@ -176,4 +180,75 @@ export const getSessionStatus = async (req: Request, res: Response) => {
       timestamp: new Date().toISOString()
     });
   }
-}; 
+};
+
+/**
+ * Forgot-password: always returns 200 to avoid email enumeration. The
+ * service drops the request silently if the email doesn't exist.
+ * @route POST /api/auth/forgot-password
+ */
+export const forgotPassword = async (req: Request, res: Response) => {
+  logger.info('[AUTH CONTROLLER] Forgot-password request received');
+  try {
+    const parsed = ResetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(200).json({
+        message: 'If that email exists, a reset link has been sent.',
+      });
+    }
+    const ip = req.ip || req.connection?.remoteAddress || undefined;
+    await requestReset(parsed.data.email, ip);
+    return res.status(200).json({
+      message: 'If that email exists, a reset link has been sent.',
+    });
+  } catch (error: any) {
+    logger.error('[AUTH CONTROLLER] forgot-password error', error);
+    return res.status(200).json({
+      message: 'If that email exists, a reset link has been sent.',
+    });
+  }
+};
+
+/**
+ * Validate a reset token (so the UI can show "expired" before the
+ * user types a new password).
+ * @route GET /api/auth/reset-password/validate?token=...
+ */
+export const validateResetTokenEndpoint = async (req: Request, res: Response) => {
+  const token = String(req.query.token || '').trim();
+  if (!token) return res.status(400).json({ valid: false, reason: 'invalid' });
+  const result = await validateResetToken(token);
+  return res.status(result.valid ? 200 : 400).json(result);
+};
+
+/**
+ * Consume a reset token and set a new password.
+ * @route POST /api/auth/reset-password
+ */
+export const resetPassword = async (req: Request, res: Response) => {
+  logger.info('[AUTH CONTROLLER] reset-password request received');
+  try {
+    const parsed = ResetPasswordConfirmSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        ok: false,
+        message: parsed.error.errors[0]?.message || 'Invalid input',
+      });
+    }
+    const result = await consumeReset(parsed.data.token, parsed.data.newPassword);
+    if (!result.ok) {
+      return res.status(400).json({
+        ok: false,
+        message: result.reason === 'expired'
+          ? 'This reset link has expired. Request a new one.'
+          : result.reason === 'used'
+          ? 'This reset link has already been used.'
+          : 'Invalid reset link.',
+      });
+    }
+    return res.status(200).json({ ok: true, message: 'Password updated. You can now sign in.' });
+  } catch (error: any) {
+    logger.error('[AUTH CONTROLLER] reset-password error', error);
+    return res.status(500).json({ ok: false, message: 'Password reset failed.' });
+  }
+};

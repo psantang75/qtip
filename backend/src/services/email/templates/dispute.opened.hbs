@@ -1,0 +1,15 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">Dispute opened</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+<p style="margin:0 0 16px 0;"><strong>{{csr.username}}</strong> has opened a dispute on a finalized submission.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:160px;">Form</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{form.form_name}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Submission</td><td style="padding:6px 0;font-size:13px;">#{{submission.id}}</td></tr>
+  {{#if originalScore}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Original score</td><td style="padding:6px 0;font-size:13px;">{{originalScore}}%</td></tr>{{/if}}
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Opened</td><td style="padding:6px 0;font-size:13px;">{{formatDateTime dispute.created_at}}</td></tr>
+</table>
+{{#if dispute.reason}}
+<p style="margin:0 0 6px 0;font-size:13px;color:#0f172a;font-weight:600;">Reason from {{csr.username}}</p>
+<blockquote style="margin:0 0 16px 0;padding:8px 14px;border-left:3px solid #cbd5e1;background:#f8fafc;font-size:13px;color:#0f172a;">{{dispute.reason}}</blockquote>
+{{/if}}
+{{> button url=(appUrl deepLinkPath) label="Review Dispute" }}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">Please review and resolve this dispute as soon as possible. The agent is waiting on the outcome.</p>

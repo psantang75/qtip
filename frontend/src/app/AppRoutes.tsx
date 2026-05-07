@@ -9,7 +9,9 @@ import AdminLayout from '../components/shell/AdminLayout'
 import ProtectedRoute from '../components/shell/ProtectedRoute'
 
 // Auth pages — NOT lazy
-import LoginPage from '../pages/auth/LoginPage'
+import LoginPage          from '../pages/auth/LoginPage'
+import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage'
+import ResetPasswordPage  from '../pages/auth/ResetPasswordPage'
 
 // Admin pages — NOT lazy (small, load immediately)
 import AdminUsersPage       from '../pages/admin/AdminUsersPage'
@@ -21,6 +23,7 @@ import InsightsKpiManagementPage  from '../pages/admin/InsightsKpiManagementPage
 import InsightsPageManagementPage from '../pages/admin/InsightsPageManagementPage'
 import InsightsIngestionLogPage   from '../pages/admin/InsightsIngestionLogPage'
 import InsightsCalendarPage       from '../pages/admin/InsightsCalendarPage'
+import AdminEmailTemplatesPage    from '../pages/admin/AdminEmailTemplatesPage'
 
 import {
   InsightsIndexRedirect,
@@ -109,7 +112,9 @@ export default function AppRoutes(): React.ReactElement {
     <Routes>
 
       {/* Public */}
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login"            element={<LoginPage />} />
+      <Route path="/forgot-password"  element={<ForgotPasswordPage />} />
+      <Route path="/reset-password"   element={<ResetPasswordPage />} />
 
       {/* Protected shell */}
       <Route element={<ProtectedRoute />}>
@@ -124,6 +129,7 @@ export default function AppRoutes(): React.ReactElement {
           <Route path="departments"      element={<AdminDepartmentsPage />} />
           <Route path="roles"            element={<AdminRolesPage />} />
           <Route path="list-management"  element={<ListManagementPage />} />
+          <Route path="email-templates"  element={<AdminEmailTemplatesPage />} />
           <Route path="insights/kpis"       element={<InsightsKpiManagementPage />} />
           <Route path="insights/pages"      element={<InsightsPageManagementPage />} />
           <Route path="insights/calendar"   element={<InsightsCalendarPage />} />

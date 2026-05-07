@@ -1,0 +1,5 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">Write-up follow-up assigned to you</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+<p style="margin:0 0 16px 0;">A <strong>{{#if writeup.followup_type}}{{writeup.followup_type}}{{else}}follow-up{{/if}}</strong> has been assigned to you for {{csr.username}}'s <strong>{{writeup.document_type}}</strong>{{#if writeup.follow_up_date}}, due <strong>{{formatDate writeup.follow_up_date}}</strong>{{/if}}.</p>
+{{> button url=(appUrl deepLinkPath) label="Open Follow-up" }}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">When you've completed the follow-up, mark it complete from the link above so it's recorded in the employee file.</p>

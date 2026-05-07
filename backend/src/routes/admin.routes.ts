@@ -201,4 +201,23 @@ router.get('/csrs',
   getAdminCSRs as unknown as RequestHandler
 );
 
-export default router; 
+// Email templates admin endpoints. All require Admin.
+import emailTemplatesController from '../controllers/admin/emailTemplates.controller';
+
+const adminAuth = [
+  authenticate as unknown as RequestHandler,
+  authorizeAdmin as unknown as RequestHandler,
+];
+
+router.get('/email-templates',                ...adminAuth, emailTemplatesController.listTemplates    as unknown as RequestHandler);
+router.get('/email-templates/_health',        ...adminAuth, emailTemplatesController.getEmailHealth   as unknown as RequestHandler);
+router.get('/email-templates/_recent-sends',  ...adminAuth, emailTemplatesController.getRecentSends   as unknown as RequestHandler);
+router.post('/email-templates/_resend/:logId',...adminAuth, emailTemplatesController.resendLogged     as unknown as RequestHandler);
+router.get('/email-templates/:id',            ...adminAuth, emailTemplatesController.getTemplate      as unknown as RequestHandler);
+router.put('/email-templates/:id',            ...adminAuth, emailTemplatesController.updateTemplate   as unknown as RequestHandler);
+router.post('/email-templates/:id/preview',   ...adminAuth, emailTemplatesController.previewTemplate  as unknown as RequestHandler);
+router.post('/email-templates/:id/test-send', ...adminAuth, emailTemplatesController.testSendTemplate as unknown as RequestHandler);
+router.post('/email-templates/:id/reset',     ...adminAuth, emailTemplatesController.resetTemplate    as unknown as RequestHandler);
+router.post('/email-templates/:id/rollback',  ...adminAuth, emailTemplatesController.rollbackTemplate as unknown as RequestHandler);
+
+export default router;

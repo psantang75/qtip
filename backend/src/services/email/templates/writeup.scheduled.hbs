@@ -1,0 +1,19 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">{{writeup.document_type}} meeting scheduled</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:0 0 16px 0;">A meeting has been scheduled with your manager to discuss a <strong>{{writeup.document_type}}</strong>.</p>
+{{else}}
+<p style="margin:0 0 16px 0;">A {{writeup.document_type}} meeting has been scheduled.</p>
+{{/if}}
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  {{#unless (eq recipient.matchedRole "agent")}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:140px;">Agent</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{csr.username}}</td></tr>{{/unless}}
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:140px;">When</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{formatDateTime writeup.meeting_date}}</td></tr>
+  {{#if writeup.duration_minutes}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Duration</td><td style="padding:6px 0;font-size:13px;">{{writeup.duration_minutes}} minutes</td></tr>{{/if}}
+  {{#if writeup.location}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Where</td><td style="padding:6px 0;font-size:13px;">{{writeup.location}}</td></tr>{{/if}}
+  {{#if manager}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Manager</td><td style="padding:6px 0;font-size:13px;">{{manager.username}}</td></tr>{{/if}}
+  {{#if hr_witness}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">HR witness</td><td style="padding:6px 0;font-size:13px;">{{hr_witness.username}}</td></tr>{{/if}}
+</table>
+{{> button url=(appUrl deepLinkPath) label="View Write-up" }}
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;"><em>What to expect:</em> the meeting will cover the points described in the document linked above. You may bring written notes.{{#if employeeRightsReminder}} {{employeeRightsReminder}}{{/if}}</p>
+{{/if}}

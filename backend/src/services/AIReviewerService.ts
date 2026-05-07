@@ -683,6 +683,42 @@ export class AIReviewerService {
           `for form_id=${form.id} ${adapter.kind.toLowerCase()}_id=${adapter.formatId(sourceId)} ` +
           `(awaiting human review).`
       );
+
+      // Route-to-QA notification (always fires for AI drafts) + low-confidence
+      // notification (only when below threshold). Both go to QAs, never CSR.
+      try {
+        const csrId = (payload as any).csr_id ?? (payload as any).agent_user_id ?? null;
+        const csr = csrId
+          ? await prisma.user.findUnique({ where: { id: Number(csrId) }, select: { id: true, username: true } })
+          : null;
+        const threshold = (form as any).ai_sample_low_confidence_threshold;
+        const isLowConfidence =
+          overallConfidence != null && threshold != null && Number(overallConfidence) < Number(threshold);
+        const { default: notificationService } = await import('./notifications/NotificationService');
+        const ctx = {
+          entityType: 'submission' as const,
+          entityId: draftResult.submission_id,
+          deepLinkPath: `/app/quality/ai-inbox`,
+        };
+        const basePayload = {
+          form: { id: form.id, form_name: form.form_name, ai_sample_low_confidence_threshold: threshold },
+          submission: {
+            id: draftResult.submission_id,
+            ai_overall_confidence: overallConfidence,
+            total_score: 0,
+          },
+          csr,
+          csrId: csr?.id ?? null,
+          routingReason: isLowConfidence ? 'low_confidence' : 'ai_draft_review',
+        };
+        await notificationService.notify('ai.review_routed_to_qa', basePayload, ctx);
+        if (isLowConfidence) {
+          await notificationService.notify('ai.review_low_confidence', basePayload, ctx);
+        }
+      } catch (mailErr) {
+        logger.warn('[AI REVIEWER] notify failed (draft still saved)', mailErr);
+      }
+
       return {
         submission_id: draftResult.submission_id,
         total_score: 0,

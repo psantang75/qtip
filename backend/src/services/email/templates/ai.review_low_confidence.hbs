@@ -1,0 +1,12 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">Low-confidence AI review needs human eyes</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+<p style="margin:0 0 16px 0;">An AI-generated review came in below the form's confidence threshold and needs human eyes.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:160px;">Form</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{form.form_name}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Agent</td><td style="padding:6px 0;font-size:13px;">{{csr.username}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">AI confidence</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{submission.ai_overall_confidence}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Threshold</td><td style="padding:6px 0;font-size:13px;">{{form.ai_sample_low_confidence_threshold}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">AI score</td><td style="padding:6px 0;font-size:13px;">{{submission.total_score}}%</td></tr>
+</table>
+{{> button url=(appUrl deepLinkPath) label="Open in QA Inbox" }}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">Please re-grade. The agent has not been notified about this review yet — they'll see the result once it's finalized.</p>

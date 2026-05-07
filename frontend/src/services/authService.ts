@@ -36,8 +36,12 @@ export { api };
 
 api.interceptors.request.use(
   (config) => {
+    const url = config.url ?? '';
     const isPublicAuthEndpoint =
-      config.url?.includes('/auth/login') || config.url?.includes('/csrf-token');
+      url.includes('/auth/login') ||
+      url.includes('/csrf-token') ||
+      url.includes('/auth/forgot-password') ||
+      url.includes('/auth/reset-password');
 
     if (!isPublicAuthEndpoint) {
       const token = localStorage.getItem('token');
@@ -161,6 +165,47 @@ const authService = {
   },
 
   getToken: (): string | null => localStorage.getItem('token'),
+
+  /** POST /api/auth/forgot-password — always resolves; never leaks account existence. */
+  forgotPassword: async (email: string): Promise<{ message: string }> => {
+    const response = await api.post<{ message: string }>('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  /** GET /api/auth/reset-password/validate?token= — used to show "expired/invalid" before form. */
+  validateResetToken: async (token: string): Promise<{
+    valid: boolean; reason?: 'invalid' | 'expired' | 'used';
+  }> => {
+    try {
+      const response = await api.get<{ valid: boolean; reason?: 'invalid' | 'expired' | 'used' }>(
+        `/auth/reset-password/validate`, { params: { token } },
+      );
+      return response.data;
+    } catch (err: any) {
+      const data = err?.response?.data;
+      return { valid: false, reason: data?.reason ?? 'invalid' };
+    }
+  },
+
+  /** POST /api/auth/reset-password — consumes the token and sets a new password. */
+  resetPassword: async (
+    token: string,
+    newPassword: string,
+    confirmPassword: string,
+  ): Promise<{ ok: boolean; message: string }> => {
+    try {
+      const response = await api.post<{ ok: boolean; message: string }>(
+        '/auth/reset-password', { token, newPassword, confirmPassword },
+      );
+      return response.data;
+    } catch (err: any) {
+      const data = err?.response?.data;
+      return {
+        ok: false,
+        message: data?.message ?? 'Password reset failed.',
+      };
+    }
+  },
 };
 
 export default authService;

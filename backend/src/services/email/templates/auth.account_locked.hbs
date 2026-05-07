@@ -1,0 +1,8 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">Your account is temporarily locked</h2>
+<p style="margin:0 0 16px 0;">Hi {{user.username}},</p>
+<p style="margin:0 0 16px 0;">Your QTIP account was locked at {{formatDateTime lockedAt}} after several failed sign-in attempts.</p>
+{{#if unlocksAt}}
+<p style="margin:0 0 16px 0;"><strong>It will unlock automatically at {{formatDateTime unlocksAt}}.</strong></p>
+{{/if}}
+<p style="margin:0 0 16px 0;font-size:13px;color:#64748b;">If you need to sign in sooner, your administrator can unlock it for you.</p>
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">If you didn't try to sign in, notify your administrator — someone may know your sign-in email.</p>

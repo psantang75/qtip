@@ -1,0 +1,15 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">Your dispute has been resolved</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+<p style="margin:0 0 16px 0;">Your dispute on submission <strong>#{{submission.id}}</strong> has been <strong>{{dispute.status}}</strong> by {{resolver.username}} on {{formatDateTime dispute.resolved_at}}.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:160px;">Form</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{form.form_name}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Score change</td><td style="padding:6px 0;font-size:13px;">{{#if originalScore}}{{originalScore}}% → {{/if}}<strong>{{submission.total_score}}%</strong></td></tr>
+</table>
+{{#if dispute.resolution_notes}}
+<p style="margin:0 0 6px 0;font-size:13px;color:#0f172a;font-weight:600;">Resolution notes</p>
+<blockquote style="margin:0 0 16px 0;padding:8px 14px;border-left:3px solid #cbd5e1;background:#f8fafc;font-size:13px;color:#0f172a;">{{dispute.resolution_notes}}</blockquote>
+{{/if}}
+{{> button url=(appUrl deepLinkPath) label="View Submission" }}
+{{#if disputeDenied}}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">If you disagree with this resolution, please discuss directly with your manager.</p>
+{{/if}}

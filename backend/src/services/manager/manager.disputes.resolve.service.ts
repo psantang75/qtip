@@ -197,5 +197,47 @@ export async function resolveManagerDispute(
     })
   }
 
+  // Notify the disputant. Wrapped — never blocks resolution if mail fails.
+  try {
+    const submission = await prisma.submission.findUnique({
+      where: { id: submissionId },
+      include: { form: { select: { id: true, form_name: true } } },
+    })
+    const csr = await prisma.user.findUnique({
+      where: { id: Number(dispute.disputed_by) },
+      select: { id: true, username: true, email: true },
+    })
+    const resolver = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true },
+    })
+    const { default: notificationService } = await import('../notifications/NotificationService')
+    // Capture the pre-resolution score so the email can show the change.
+    const originalScore = (dispute as any)?.previous_score
+      ?? (dispute as any)?.original_score
+      ?? submission?.total_score
+      ?? null
+    await notificationService.notify(
+      'dispute.resolved',
+      {
+        form: submission?.form ?? null,
+        submission: { id: submissionId, total_score: new_score ?? submission?.total_score ?? null },
+        dispute: {
+          status: finalStatus,
+          resolution_notes,
+          resolved_at: new Date(),
+        },
+        csr,
+        disputantId: csr?.id ?? null,
+        resolver,
+        originalScore,
+        disputeDenied: String(finalStatus).toUpperCase() === 'DENIED',
+      },
+      { entityType: 'dispute', entityId: Number(disputeId), deepLinkPath: `/app/quality/disputes` },
+    )
+  } catch (mailErr) {
+    // intentionally swallow
+  }
+
   return { dispute_id: disputeId, status: finalStatus }
 }

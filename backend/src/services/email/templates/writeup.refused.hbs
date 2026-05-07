@@ -1,0 +1,18 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#dc2626;">Signature refused</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:0 0 16px 0;">You declined to sign the <strong>{{writeup.document_type}}</strong> on {{formatDateTime writeup.refused_at}}.</p>
+{{else}}
+<p style="margin:0 0 16px 0;">{{csr.username}} refused to sign the <strong>{{writeup.document_type}}</strong> on {{formatDateTime writeup.refused_at}}.</p>
+{{/if}}
+{{#if writeup.refusal_reason}}
+<p style="margin:0 0 6px 0;font-size:13px;color:#0f172a;font-weight:600;">{{#if (eq recipient.matchedRole "agent")}}Reason on file{{else}}Reason from agent{{/if}}</p>
+<blockquote style="margin:0 0 16px 0;padding:8px 14px;border-left:3px solid #cbd5e1;background:#f8fafc;font-size:13px;color:#0f172a;">{{writeup.refusal_reason}}</blockquote>
+{{/if}}
+{{> button url=(appUrl deepLinkPath) label="Open Write-up" }}
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">Per policy, this document is filed in your employee record regardless of signature. If you'd like to add written comments, you can do so from the link above.</p>
+{{else}}
+<p style="margin:16px 0 6px 0;font-size:13px;color:#0f172a;font-weight:600;">Next steps</p>
+<p style="margin:0 0 0 0;font-size:13px;color:#64748b;">Per policy, document the witness's observation in the employee record within {{#if witnessSlaDays}}{{witnessSlaDays}}{{else}}3{{/if}} business days. The document will be filed regardless of signature.</p>
+{{/if}}

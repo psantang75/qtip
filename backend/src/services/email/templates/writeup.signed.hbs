@@ -1,0 +1,8 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">{{writeup.document_type}} signed</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:0 0 16px 0;">You signed the <strong>{{writeup.document_type}}</strong> on {{formatDateTime writeup.signed_at}}. A copy has been retained in your employee record.</p>
+{{else}}
+<p style="margin:0 0 16px 0;">{{csr.username}} signed the <strong>{{writeup.document_type}}</strong> on {{formatDateTime writeup.signed_at}}. A copy has been retained for HR records.</p>
+{{/if}}
+{{> button url=(appUrl deepLinkPath) label="View Write-up" }}

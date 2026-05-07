@@ -1,0 +1,14 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">{{writeup.document_type}} awaiting signature</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:0 0 16px 0;">A <strong>{{writeup.document_type}}</strong> document is ready for your review and acknowledgment.</p>
+{{#if writeup.signature_due_date}}
+<p style="margin:0 0 16px 0;"><strong>Please review and acknowledge by {{formatDate writeup.signature_due_date}}.</strong></p>
+{{/if}}
+{{> button url=(appUrl deepLinkPath) label="Open Document" }}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">Signing acknowledges receipt of this document, <strong>not agreement</strong> with its contents. You may add written comments before signing.</p>
+{{else}}
+<p style="margin:0 0 16px 0;">{{csr.username}} has a <strong>{{writeup.document_type}}</strong> awaiting their signature{{#if writeup.signature_due_date}}, due {{formatDate writeup.signature_due_date}}{{/if}}.</p>
+{{> button url=(appUrl deepLinkPath) label="Open Document" }}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">The agent has been notified and will be reminded automatically. Escalate if there is no response by the due date.</p>
+{{/if}}

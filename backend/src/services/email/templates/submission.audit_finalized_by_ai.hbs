@@ -1,0 +1,16 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">AI review complete</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:0 0 16px 0;">An AI-generated review of your <strong>{{form.form_name}}</strong> call has been finalized.</p>
+{{else}}
+<p style="margin:0 0 16px 0;">An AI-generated review for <strong>{{csr.username}}</strong> on <strong>{{form.form_name}}</strong> has been finalized.</p>
+{{/if}}
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:140px;">Score</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{submission.total_score}}%{{#if passLabel}} — <span style="color:#475569;">{{passLabel}}</span>{{/if}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">AI confidence</td><td style="padding:6px 0;font-size:13px;">{{submission.ai_overall_confidence}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Reviewed</td><td style="padding:6px 0;font-size:13px;">{{formatDateTime submission.submitted_at}}</td></tr>
+</table>
+{{> button url=(appUrl deepLinkPath) label="View Submission" }}
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">If the AI's confidence on this one is low, a QA reviewer will double-check it before it counts.</p>
+{{/if}}

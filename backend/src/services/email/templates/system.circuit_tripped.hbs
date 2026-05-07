@@ -1,0 +1,11 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#dc2626;">Email circuit-breaker tripped</h2>
+<p style="margin:0 0 16px 0;">The QTIP email circuit-breaker has tripped.</p>
+<p style="margin:0 0 16px 0;">QTIP sent more than {{threshold}} emails in a 5-minute window. To protect users from a notification flood, <strong>non-critical templates have been paused.</strong> Critical templates (auth, system) continue to send.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:200px;">Sends in window</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{count}}</td></tr>
+  {{#if topTemplate}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Top template</td><td style="padding:6px 0;font-size:13px;"><code>{{topTemplate.key}}</code> ({{topTemplate.count}} sends)</td></tr>{{/if}}
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Tripped at</td><td style="padding:6px 0;font-size:13px;">{{formatDateTime trippedAt}}</td></tr>
+  {{#if resetsAt}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Auto-resets at</td><td style="padding:6px 0;font-size:13px;">{{formatDateTime resetsAt}}</td></tr>{{/if}}
+</table>
+{{> button url=(appUrl deepLinkPath) label="Review Templates" }}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">Investigate the top template above for an unintended loop or trigger spike. Once the cause is fixed, the breaker will auto-reset; or you can manually clear it from the Email Templates → System Health tab.</p>

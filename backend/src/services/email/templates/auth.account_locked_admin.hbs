@@ -1,0 +1,12 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">A user account has been locked</h2>
+<p style="margin:0 0 16px 0;">A QTIP user account has been locked.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:160px;">User</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{user.username}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Email</td><td style="padding:6px 0;font-size:13px;">{{user.email}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Locked at</td><td style="padding:6px 0;font-size:13px;">{{formatDateTime lockedAt}}</td></tr>
+  {{#if failedAttempts}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Failed attempts</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{failedAttempts}}</td></tr>{{/if}}
+  {{#if lastFailedIp}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Last attempt IP</td><td style="padding:6px 0;font-size:13px;">{{lastFailedIp}}</td></tr>{{/if}}
+  {{#if unlocksAt}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Auto-unlocks at</td><td style="padding:6px 0;font-size:13px;">{{formatDateTime unlocksAt}}</td></tr>{{/if}}
+</table>
+{{> button url=(appUrl deepLinkPath) label="Unlock Account" }}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">The user has been notified separately.</p>

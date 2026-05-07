@@ -201,6 +201,32 @@ export const submitDispute = async (req: Request, res: Response): Promise<void> 
       return newDispute;
     });
 
+    // Notify QA + manager. Wrapped so a mail failure can't break the dispute.
+    try {
+      const submissionFull = await prisma.submission.findUnique({
+        where: { id: submission_id },
+        include: { form: { select: { form_name: true, id: true } } },
+      });
+      const csr = await prisma.user.findUnique({
+        where: { id: user_id }, select: { id: true, username: true, email: true },
+      });
+      const { default: notificationService } = await import('../services/notifications/NotificationService');
+      await notificationService.notify(
+        'dispute.opened',
+        {
+          form: submissionFull?.form ?? null,
+          submission: { id: submission_id, total_score: previousScore },
+          dispute: { reason, status: 'OPEN', created_at: new Date() },
+          csr,
+          originalScore: previousScore,
+          originalQaId: submissionFull?.submitted_by ?? 0,
+        },
+        { entityType: 'dispute', entityId: dispute.id, deepLinkPath: `/app/quality/disputes` },
+      );
+    } catch (mailErr) {
+      logger.warn('[dispute.opened] notify failed (dispute still saved)', mailErr);
+    }
+
     res.status(201).json({
       message: 'Dispute submitted successfully',
       dispute_id: dispute.id

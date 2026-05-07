@@ -100,7 +100,38 @@ export async function completeManagerCoachingSession(
             ${JSON.stringify({ csr_name: current.csr_name })})
   `)
 
+  await notifyCoachingStateChange('coaching.completed', params.sessionId, params.userId)
+
   return fetchUpdatedSession(params.sessionId)
+}
+
+async function notifyCoachingStateChange(
+  event: 'coaching.scheduled' | 'coaching.completed' | 'coaching.canceled' | 'coaching.awaiting_csr_action' | 'coaching.quiz_pending',
+  sessionId: number,
+  actorUserId: number,
+): Promise<void> {
+  try {
+    const session = await prisma.coachingSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true, csr_id: true, created_by: true, session_date: true,
+        coaching_format: true, coaching_purpose: true, status: true,
+      },
+    })
+    if (!session) return
+    const [csr, coach] = await Promise.all([
+      prisma.user.findUnique({ where: { id: session.csr_id }, select: { id: true, username: true } }),
+      prisma.user.findUnique({ where: { id: actorUserId }, select: { id: true, username: true } }),
+    ])
+    const { default: notificationService } = await import('../notifications/NotificationService')
+    await notificationService.notify(
+      event,
+      { session, csr, coach, csrId: session.csr_id },
+      { entityType: 'coaching', entityId: sessionId, deepLinkPath: `/app/training/coaching/${sessionId}` },
+    )
+  } catch {
+    // Best-effort; never block coaching transitions.
+  }
 }
 
 export async function reopenManagerCoachingSession(

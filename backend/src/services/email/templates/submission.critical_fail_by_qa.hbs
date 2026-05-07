@@ -1,0 +1,22 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#dc2626;">Critical fail</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:0 0 16px 0;">Your <strong>{{form.form_name}}</strong> review on {{formatDateTime submission.submitted_at}} has been finalized with a <strong>critical fail</strong>.</p>
+{{else}}
+<p style="margin:0 0 16px 0;">A QA review for <strong>{{csr.username}}</strong> on <strong>{{form.form_name}}</strong> finalized with a <strong>critical fail</strong>.</p>
+{{/if}}
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:180px;">Score after cap</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{submission.total_score}}%</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Critical questions failed</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{submission.critical_fail_count}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Reviewer</td><td style="padding:6px 0;font-size:13px;">{{reviewer.username}}</td></tr>
+</table>
+{{#if criticalFailQuestions.length}}
+<p style="margin:0 0 6px 0;font-size:13px;color:#0f172a;font-weight:600;">Failed critical questions</p>
+<ul style="margin:0 0 16px 18px;padding:0;font-size:13px;color:#0f172a;">
+  {{#each criticalFailQuestions}}<li style="margin:2px 0;">{{this.text}}</li>{{/each}}
+</ul>
+{{/if}}
+{{> button url=(appUrl deepLinkPath) label="Review Submission" }}
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">Your manager will follow up with coaching. If you believe the score is wrong, you can open a dispute from the submission page.</p>
+{{/if}}

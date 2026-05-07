@@ -1,0 +1,9 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">Coaching session canceled</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+<p style="margin:0 0 16px 0;">Your coaching session originally scheduled for {{formatDateTime session.session_date}} has been canceled.</p>
+{{#if session.cancel_reason}}
+<p style="margin:0 0 6px 0;font-size:13px;color:#0f172a;font-weight:600;">Reason</p>
+<p style="margin:0 0 16px 0;font-size:13px;color:#0f172a;">{{session.cancel_reason}}</p>
+{{/if}}
+{{> button url=(appUrl deepLinkPath) label="View Coaching" }}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">Your manager or coach will be in touch to reschedule if needed.</p>

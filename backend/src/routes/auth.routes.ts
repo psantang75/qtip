@@ -1,5 +1,8 @@
 import express, { RequestHandler } from 'express';
-import { login, validateToken, refreshToken, logout, getSessionStatus } from '../controllers/auth.controller';
+import {
+  login, validateToken, refreshToken, logout, getSessionStatus,
+  forgotPassword, validateResetTokenEndpoint, resetPassword,
+} from '../controllers/auth.controller';
 
 const router = express.Router();
 
@@ -12,4 +15,9 @@ router.post('/validate-token', validateToken as unknown as RequestHandler);
 router.post('/refresh-token', refreshToken as unknown as RequestHandler);
 router.get('/session-status', getSessionStatus as unknown as RequestHandler);
 
-export default router; 
+// Password reset (public; rate-limited at app level via authLimiter)
+router.post('/forgot-password', forgotPassword as unknown as RequestHandler);
+router.get('/reset-password/validate', validateResetTokenEndpoint as unknown as RequestHandler);
+router.post('/reset-password', resetPassword as unknown as RequestHandler);
+
+export default router;

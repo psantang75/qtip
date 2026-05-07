@@ -1,0 +1,7 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">Coaching session needs your acknowledgment</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+<p style="margin:0 0 16px 0;">Your <strong>{{session.coaching_purpose}}</strong> coaching session{{#if coach}} with {{coach.username}}{{/if}} on {{formatDate session.session_date}} needs your acknowledgment{{#if session.require_action_plan}} and an action plan{{/if}}.</p>
+{{#if session.action_due_date}}
+<p style="margin:0 0 16px 0;"><strong>Please respond by {{formatDate session.action_due_date}}.</strong></p>
+{{/if}}
+{{> button url=(appUrl deepLinkPath) label="Open Session" }}

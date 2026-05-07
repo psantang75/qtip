@@ -229,6 +229,20 @@ const server = app.listen(port, () => {
     await runDriftSweepOnBoot();
     const { logCostGuardStateOnBoot } = await import('./services/AIReviewerCostGuard');
     await logCostGuardStateOnBoot();
+
+    // Email / Notification system: seed default templates (idempotent),
+    // verify SMTP, and start the digest scheduler.
+    try {
+      const { seedEmailTemplates } = await import('./services/email/templateSeeds');
+      await seedEmailTemplates();
+      const { default: emailService } = await import('./services/email/EmailService');
+      const verify = await emailService.verify();
+      logger.info(`[EMAIL] transport ${emailService.isConfigured() ? 'configured' : 'not_configured'}, dryRun=${emailService.isDryRun()}, verify=${verify.ok ? 'ok' : verify.error}`);
+      const { startDigestScheduler } = await import('./services/notifications/DigestScheduler');
+      startDigestScheduler();
+    } catch (err) {
+      logger.error('[EMAIL] startup failed', err);
+    }
   })();
 });
 

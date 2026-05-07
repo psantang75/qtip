@@ -1,0 +1,15 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">QA review complete</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:0 0 16px 0;">{{reviewer.username}} finalized your <strong>{{form.form_name}}</strong> review.</p>
+{{else}}
+<p style="margin:0 0 16px 0;">{{reviewer.username}} finalized a QA review for <strong>{{csr.username}}</strong> on <strong>{{form.form_name}}</strong>.</p>
+{{/if}}
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:140px;">Score</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{submission.total_score}}%{{#if passLabel}} — <span style="color:#475569;">{{passLabel}}</span>{{/if}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Reviewed</td><td style="padding:6px 0;font-size:13px;">{{formatDateTime submission.submitted_at}}</td></tr>
+</table>
+{{> button url=(appUrl deepLinkPath) label="View Submission" }}
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">If you believe the score is incorrect, you can open a dispute within the dispute window. Open the submission to see comments and any flagged items.</p>
+{{/if}}

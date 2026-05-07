@@ -1,0 +1,11 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">AI review needs your sign-off</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+<p style="margin:0 0 16px 0;">An AI-finalized review needs your sign-off because <strong>{{routingReasonLabel}}</strong>.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:140px;">Form</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{form.form_name}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Agent</td><td style="padding:6px 0;font-size:13px;">{{csr.username}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">AI score</td><td style="padding:6px 0;font-size:13px;">{{submission.total_score}}%</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Routed</td><td style="padding:6px 0;font-size:13px;">{{formatDateTime submission.submitted_at}}</td></tr>
+</table>
+{{> button url=(appUrl deepLinkPath) label="Open in QA Inbox" }}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;"><em>Tip:</em> open the QA Inbox to see all AI reviews waiting on you.</p>

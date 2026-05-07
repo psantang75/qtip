@@ -1,0 +1,12 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">Coaching session complete</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:0 0 16px 0;">Your <strong>{{session.coaching_purpose}}</strong> coaching session with {{coach.username}} on {{formatDate session.session_date}} is complete.</p>
+{{else}}
+<p style="margin:0 0 16px 0;">The <strong>{{session.coaching_purpose}}</strong> coaching session you scheduled for {{csr.username}} on {{formatDate session.session_date}} has been marked complete by {{coach.username}}.</p>
+{{/if}}
+{{#if session.outcome_summary}}
+<p style="margin:0 0 6px 0;font-size:13px;color:#0f172a;font-weight:600;">Outcome notes</p>
+<blockquote style="margin:0 0 16px 0;padding:8px 14px;border-left:3px solid #cbd5e1;background:#f8fafc;font-size:13px;color:#0f172a;">{{session.outcome_summary}}</blockquote>
+{{/if}}
+{{> button url=(appUrl deepLinkPath) label="View Session" }}

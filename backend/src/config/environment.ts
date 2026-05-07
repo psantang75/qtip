@@ -72,11 +72,24 @@ interface EnvironmentConfig {
   MAX_FILE_SIZE: number;
   UPLOAD_DIR: string;
   
-  // Email Configuration (for future use)
+  // Email / Notification Configuration. SMTP_HOST blank => not_configured
+  // (same leave-blank-to-disable pattern as the optional integrations above).
+  // Internal relay (yukon.dm.local) does not require auth; SMTP_USER /
+  // SMTP_PASSWORD remain optional.
   SMTP_HOST?: string;
   SMTP_PORT?: number;
   SMTP_USER?: string;
   SMTP_PASSWORD?: string;
+  MAIL_FROM_ADDRESS?: string;
+  MAIL_FROM_NAME?: string;
+  MAIL_DEV_DRY_RUN?: boolean;
+  MAIL_OVERRIDE_RECIPIENT?: string;
+  MAIL_QUIET_HOURS?: string;        // "23-06" => quiet from 23:00 to 06:00 local
+  MAIL_GLOBAL_RATE_LIMIT?: number;  // emails per 5-min window before circuit-breaker trips
+  MAIL_TIMEZONE?: string;           // IANA tz used to render dates and digest windows
+
+  APP_BASE_URL?: string;            // used for deep links in emails
+
   
   // Logging Configuration
   LOG_LEVEL: 'error' | 'warn' | 'info' | 'debug';
@@ -260,11 +273,25 @@ export const config: EnvironmentConfig = {
   MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE || '5242880', 10), // 5MB
   UPLOAD_DIR: process.env.UPLOAD_DIR || './uploads',
   
-  // Email Configuration
+  // Email / Notification Configuration
   SMTP_HOST: process.env.SMTP_HOST,
   SMTP_PORT: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : undefined,
   SMTP_USER: process.env.SMTP_USER,
   SMTP_PASSWORD: process.env.SMTP_PASSWORD,
+  MAIL_FROM_ADDRESS: process.env.MAIL_FROM_ADDRESS,
+  MAIL_FROM_NAME: process.env.MAIL_FROM_NAME,
+  MAIL_DEV_DRY_RUN: process.env.MAIL_DEV_DRY_RUN
+    ? /^(1|true|yes)$/i.test(process.env.MAIL_DEV_DRY_RUN)
+    : undefined,
+  MAIL_OVERRIDE_RECIPIENT: process.env.MAIL_OVERRIDE_RECIPIENT,
+  MAIL_QUIET_HOURS: process.env.MAIL_QUIET_HOURS,
+  MAIL_GLOBAL_RATE_LIMIT: process.env.MAIL_GLOBAL_RATE_LIMIT
+    ? parseInt(process.env.MAIL_GLOBAL_RATE_LIMIT, 10)
+    : undefined,
+  MAIL_TIMEZONE: process.env.MAIL_TIMEZONE,
+
+  APP_BASE_URL: process.env.APP_BASE_URL,
+
   
   // Logging Configuration
   LOG_LEVEL: (process.env.LOG_LEVEL as 'error' | 'warn' | 'info' | 'debug') || 'info',
@@ -389,6 +416,35 @@ export const bookstackConfig = config.BOOKSTACK_BASE_URL && config.BOOKSTACK_TOK
 export const aiReviewerConfig = config.AI_REVIEWER_USER_ID && config.AI_REVIEWER_USER_ID > 0 ? {
   userId: config.AI_REVIEWER_USER_ID,
 } : null;
+
+/**
+ * Email / notification configuration. Same leave-blank-to-disable pattern
+ * as the optional integrations above: when SMTP_HOST is missing the
+ * EmailService reports `not_configured` and every send becomes a logged
+ * no-op. We never want a half-configured mail relay to silently drop
+ * password-reset emails in production.
+ *
+ * `dryRun` forces console-only output regardless of SMTP_HOST — used in
+ * dev/test so a misconfigured developer machine never spams real users.
+ *
+ * `overrideRecipient`, when set, rewrites every outbound `To/Cc/Bcc` to a
+ * single inbox. Industry-standard "envelope rewrite" for staging.
+ */
+export const mailConfig = {
+  enabled: !!config.SMTP_HOST,
+  host: config.SMTP_HOST,
+  port: config.SMTP_PORT ?? 25,
+  user: config.SMTP_USER || undefined,
+  password: config.SMTP_PASSWORD || undefined,
+  fromAddress: config.MAIL_FROM_ADDRESS || 'noreply.qtip@dm-us.com',
+  fromName: config.MAIL_FROM_NAME || 'QTIP Notifications',
+  appBaseUrl: (config.APP_BASE_URL || 'http://localhost:5173').replace(/\/+$/, ''),
+  dryRun: config.MAIL_DEV_DRY_RUN ?? config.NODE_ENV !== 'production',
+  overrideRecipient: config.MAIL_OVERRIDE_RECIPIENT || undefined,
+  quietHours: config.MAIL_QUIET_HOURS || '',
+  globalRateLimit: config.MAIL_GLOBAL_RATE_LIMIT ?? 1000,
+  timezone: config.MAIL_TIMEZONE || 'America/New_York',
+};
 
 /**
  * JWT configuration object

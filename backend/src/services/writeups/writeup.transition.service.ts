@@ -15,6 +15,7 @@
 import prisma from '../../config/prisma'
 import { assertTransition } from './writeup.permissions'
 import { WriteUpServiceError } from './writeup.types'
+import logger from '../../config/logger'
 
 export interface TransitionStatusInput {
   status: string
@@ -77,6 +78,8 @@ export async function transitionStatus(
     data:  updateData as any,
   })
 
+  await notifyWriteUpStateChange(writeUpId, resolvedStatus)
+
   return { status: resolvedStatus }
 }
 
@@ -118,6 +121,8 @@ export async function signWriteUp(
     },
   })
 
+  await notifyWriteUpStateChange(writeUpId, nextStatus)
+
   return { status: nextStatus }
 }
 
@@ -139,6 +144,8 @@ export async function setFollowUp(writeUpId: number, input: SetFollowUpInput): P
       follow_up_checklist:   input.follow_up_checklist ?? null,
     },
   })
+
+  await notifyWriteUpStateChange(writeUpId, 'FOLLOW_UP_PENDING')
 }
 
 // ── internal helpers ─────────────────────────────────────────────────────
@@ -217,4 +224,61 @@ function buildTransitionUpdate(
   }
 
   return updateData
+}
+
+/**
+ * Maps the resolved write-up status to the matching email template key
+ * and fires NotificationService.notify(). Always wrapped — a mail failure
+ * never blocks the state-machine update.
+ *
+ * Recipients are resolved by RoleResolver via the template's
+ * `recipient_roles` column (defaults: CSR, direct manager, creator,
+ * HR witness — admins can toggle any of these in the editor).
+ */
+const STATUS_TO_EVENT: Record<string, string> = {
+  SCHEDULED: 'writeup.scheduled',
+  AWAITING_SIGNATURE: 'writeup.awaiting_signature',
+  SIGNED: 'writeup.signed',
+  SIGNATURE_REFUSED: 'writeup.refused',
+  FOLLOW_UP_PENDING: 'writeup.followup_pending',
+}
+
+async function notifyWriteUpStateChange(writeUpId: number, status: string): Promise<void> {
+  const event = STATUS_TO_EVENT[status]
+  if (!event) return
+  try {
+    const w = await prisma.writeUp.findUnique({
+      where: { id: writeUpId },
+      select: {
+        id: true, csr_id: true, created_by: true, manager_id: true, hr_witness_id: true,
+        document_type: true, meeting_date: true, signed_at: true, refused_at: true,
+        refusal_reason: true, follow_up_date: true, follow_up_assigned_to: true,
+      },
+    })
+    if (!w) return
+    const [csr, manager, creator, witness, assignee] = await Promise.all([
+      prisma.user.findUnique({ where: { id: w.csr_id }, select: { id: true, username: true } }),
+      w.manager_id ? prisma.user.findUnique({ where: { id: w.manager_id }, select: { id: true, username: true } }) : null,
+      prisma.user.findUnique({ where: { id: w.created_by }, select: { id: true, username: true } }),
+      w.hr_witness_id ? prisma.user.findUnique({ where: { id: w.hr_witness_id }, select: { id: true, username: true } }) : null,
+      w.follow_up_assigned_to
+        ? prisma.user.findUnique({ where: { id: w.follow_up_assigned_to }, select: { id: true, username: true } })
+        : null,
+    ])
+    const { default: notificationService } = await import('../notifications/NotificationService')
+    await notificationService.notify(event, {
+      writeup: w,
+      csr, csrId: w.csr_id,
+      manager, managerId: w.manager_id ?? null,
+      creator, createdBy: w.created_by,
+      hr_witness: witness, hrWitnessId: w.hr_witness_id ?? null,
+      assignee, assigneeId: w.follow_up_assigned_to ?? null,
+    }, {
+      entityType: 'writeup',
+      entityId: writeUpId,
+      deepLinkPath: `/app/performancewarnings/${writeUpId}`,
+    })
+  } catch (err) {
+    logger.warn('[writeup.transition] notify failed (write-up still updated)', err)
+  }
 }

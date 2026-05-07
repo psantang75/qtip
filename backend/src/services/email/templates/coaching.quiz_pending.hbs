@@ -1,0 +1,10 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">A quiz is waiting for you</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+<p style="margin:0 0 16px 0;">A required quiz is waiting for you on your <strong>{{session.coaching_purpose}}</strong> coaching session.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:160px;">Quiz</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{quiz.title}}</td></tr>
+  {{#if quiz.question_count}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Questions</td><td style="padding:6px 0;font-size:13px;">{{quiz.question_count}}</td></tr>{{/if}}
+  {{#if quiz.estimated_minutes}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Estimated time</td><td style="padding:6px 0;font-size:13px;">{{quiz.estimated_minutes}} min</td></tr>{{/if}}
+  {{#if quiz.due_date}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Due</td><td style="padding:6px 0;font-size:13px;">{{formatDate quiz.due_date}}</td></tr>{{/if}}
+</table>
+{{> button url=(appUrl deepLinkPath) label="Take Quiz" }}

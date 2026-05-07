@@ -162,6 +162,23 @@ export class UserService {
       const newUser = await this.repository.create(userToCreate, created_by);
       
       logger.info(`[NEW USER] UserService: User created successfully with ID: ${newUser.id}`);
+
+      // Send welcome email with a 24h password-set link. Failure here
+      // never blocks user creation — admins can resend from the email
+      // log if the relay is down.
+      try {
+        const { createWelcomeToken } = await import('./PasswordResetService');
+        const { default: notificationService } = await import('./notifications/NotificationService');
+        const { resetUrl } = await createWelcomeToken(newUser.id);
+        await notificationService.notify(
+          'auth.welcome',
+          { user: newUser, resetUrl },
+          { entityType: 'user', entityId: newUser.id, deepLinkPath: '/login' },
+        );
+      } catch (mailErr) {
+        logger.warn('[NEW USER] welcome email failed (user still created)', mailErr);
+      }
+
       return newUser;
     } catch (error) {
       if (error instanceof UserServiceError) {
