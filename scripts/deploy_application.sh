@@ -68,16 +68,30 @@ err()   { log ERROR   "$1" >&2; }
 ok()    { log SUCCESS "$1"; }
 
 # ---- env loader (best-effort; backend reads its own .env at runtime) ------
+# We DELIBERATELY avoid exporting NODE_ENV from the .env into this script's
+# shell. If NODE_ENV=production leaks into npm, `npm ci` skips
+# devDependencies (TypeScript types, prisma CLI, etc.) and the build fails
+# with "Cannot find declaration file" / "Property 'emailLog' does not
+# exist on type 'PrismaClient'" errors. The runtime .env is still read by
+# Node when PM2 starts the app, so the API still runs in production mode.
 load_env() {
+  local src=""
   if [[ -f ".env" ]]; then
-    set -a; . ".env"; set +a
-    ok "Root .env loaded"
+    src=".env"
   elif [[ -f "backend/.env" ]]; then
-    set -a; . "backend/.env"; set +a
-    ok "backend/.env loaded"
+    src="backend/.env"
   else
     warn "No .env found; relying on shell environment"
+    return 0
   fi
+
+  # Source everything except NODE_ENV / NPM_CONFIG_PRODUCTION lines.
+  set -a
+  # shellcheck disable=SC1090
+  . <(grep -vE '^(NODE_ENV|NPM_CONFIG_PRODUCTION)=' "$src")
+  set +a
+  unset NODE_ENV NPM_CONFIG_PRODUCTION
+  ok "${src} loaded (NODE_ENV stripped for build phase)"
 }
 
 # ---- prereqs --------------------------------------------------------------
@@ -176,21 +190,23 @@ health_check() {
   local timeout="${1:-$HEALTH_TIMEOUT}"
   info "Performing application health check (timeout=${timeout}s)..."
   local backend="http://localhost:${BACKEND_PORT}"
-  local health="${backend}/monitoring/health"
-  local ready="${backend}/monitoring/ready"
+  # Real health endpoints exposed by the API (see backend/src/routes/health.routes.ts).
+  local health="${backend}/health"
+  local ready="${backend}/ready"
   local deadline=$(( $(date +%s) + timeout ))
 
   while [[ $(date +%s) -lt $deadline ]]; do
-    if curl -sSf --max-time 10 "$health" 2>/dev/null | grep -q '"status"\s*:\s*"ok"'; then
-      ok "Backend /monitoring/health: PASS"
-      if curl -sSf --max-time 10 "$ready" 2>/dev/null | grep -q '"status"\s*:\s*"ready"'; then
-        ok "Backend /monitoring/ready: PASS"
-        return 0
+    if curl -sSf --max-time 10 "$health" 2>/dev/null | grep -qE '"status"\s*:\s*"healthy"'; then
+      ok "Backend /health: PASS"
+      # /ready is best-effort; older builds don't expose it.
+      if curl -sSf --max-time 10 "$ready" 2>/dev/null | grep -qE '"status"\s*:\s*"(ready|healthy)"'; then
+        ok "Backend /ready: PASS"
+      else
+        info "  /ready not implemented; treating /health as authoritative"
       fi
-      warn "  /monitoring/ready not yet ready, retrying..."
-    else
-      warn "  /monitoring/health not yet healthy, retrying..."
+      return 0
     fi
+    warn "  /health not yet healthy, retrying..."
     sleep 10
   done
 

@@ -6,8 +6,9 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "build": "tsc",
+    "build": "tsc && npm run copy:assets",
     "build:clean": "rimraf dist && npm run build",
+    "copy:assets": "node scripts/copy_email_templates.js",
     "prod": "npm run build && npm start",
     "test": "vitest run",
     "test:watch": "vitest",

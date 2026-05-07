@@ -21,6 +21,9 @@ backend/src/generated/
 # ── Backend scratch / debug output ───────────────────────────────────────────
 backend/tmp/
 
+# ── Deploy scratch (one-shot bash payloads we pipe over SSH) ─────────────────
+.deploy_tmp/
+
 # ── Logs ─────────────────────────────────────────────────────────────────────
 logs/
 *.log
