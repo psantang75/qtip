@@ -1,0 +1,32 @@
+﻿*************************** 1. row ***************************
+question_id: 99277
+  rubric_md: This is a category ROLL-UP ? the only scored question in this category. Answer LAST, after every visible detail in this category. Apply these rules in order:
+1. If ANY visible detail is NO, this roll-up is NO.
+2. If every visible detail you graded is YES (some details may be N/A), this roll-up is YES.
+3. If EVERY visible detail is N/A (you couldn't grade any of them from the evidence available), this roll-up is N/A ? defer the entire category to human review.
+4. If no details are visible at all (the category's gate questions ruled them all out), this roll-up is YES ? nothing applicable to fail.
+
+For evidence_quote: cite the detail that drove a NO; for YES, "all visible details verified"; for N/A, "category requires evidence not available in transcript / data sources".
+
+CRITICAL ? a NO on this roll-up caps the final score at 60. CRM/KB usage is non-negotiable.
+*************************** 2. row ***************************
+question_id: 99282
+  rubric_md: Refer to the assigned playbook page (or top KB hit from classification text). YES if the agent's steps in transcript/notes match the documented steps for this issue, applying the Resolution-Stop rule (don't penalize for stopping after the issue resolved). NO if the agent skipped foundational steps or contradicted KB guidance. N/A only if no KB article covers this topic ? also emit a `documentation` observation flagging the KB gap.
+*************************** 3. row ***************************
+question_id: 99285
+  rubric_md: This is a category ROLL-UP ? the only scored question in this category. Answer LAST, after every visible detail in this category. Apply these rules in order:
+1. If ANY visible detail is NO, this roll-up is NO.
+2. If every visible detail you graded is YES (some details may be N/A), this roll-up is YES.
+3. If EVERY visible detail is N/A (you couldn't grade any of them from the evidence available), this roll-up is N/A ? defer the entire category to human review.
+4. If no details are visible at all (the category's gate questions ruled them all out), this roll-up is YES ? nothing applicable to fail.
+
+For evidence_quote: cite the detail that drove a NO; for YES, "all visible details verified"; for N/A, "category requires evidence not available in transcript / data sources".
+*************************** 4. row ***************************
+question_id: 99290
+  rubric_md: Walk the transcript. List each customer question. YES if every question received a direct answer before call close. NO if any open question was left unanswered. Quote the unanswered question if NO.
+*************************** 5. row ***************************
+question_id: 99293
+  rubric_md: YES if the agent asked at least one diagnostic question between hearing the symptom and proposing a fix. Quote the question. NO if the agent immediately jumped to a solution without any diagnostic exchange.
+*************************** 6. row ***************************
+question_id: 99294
+  rubric_md: YES if the agent either (a) resolved the issue on the call, or (b) created a specific ticket/task with an owner and committed to a follow-up. NO if the agent told the customer "you'll need to contact X" without a warm handoff, or ended the call with the customer unsure who owns the next step. Quote the closing exchange.

@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Save, Send, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Save, Send, AlertCircle, Calculator } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getFormById } from '@/services/formService'
 import { normalizeFormMetadata } from '@/pages/quality/form-builder/formBuilderUtils'
 import submissionService from '@/services/submissionService'
 import aiReviewerService from '@/services/aiReviewerService'
 import MultipleCallSelector from '@/components/common/MultipleCallSelector'
+import { CallDetailsPanel } from './submission-detail/CallDetailsPanel'
 import TicketTaskSelector, { type TicketTaskRef } from '@/components/common/TicketTaskSelector'
 import type { Call } from '@/services/callService'
 import FormMetadataDisplay from '@/components/common/FormMetadataDisplay'
@@ -22,6 +23,8 @@ import {
 } from '@/utils/forms'
 import { validateAnswers } from '@/utils/submissionUtils'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ScoreBreakdownTables } from '@/components/quality/ScoreBreakdownTables'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { TimelinePanel } from '@/components/quality/ai/TimelinePanel'
 import { AdvisoryObservationsPanel, type AdvisoryObservation } from '@/components/quality/ai/AdvisoryObservationsPanel'
@@ -142,9 +145,17 @@ export default function AuditFormPage() {
 
   const formId = aiMode && aiPrefill?.form_id ? String(aiPrefill.form_id) : formIdParam
 
+  // includeInactive=true: a submission is always tied to a specific
+  // form_id, and the form may have been deactivated AFTER the
+  // submission was created (e.g. an AI-pilot form whose `is_active`
+  // gets flipped off once the pilot ends). Auditors still need to be
+  // able to grade and review prior submissions on those forms — the
+  // `is_active` flag is a "show in pickers" filter, not a permission
+  // gate. Mirrors what SubmissionDetailPage and AIReviewerFormDetail
+  // already do for the same reason.
   const { data: formRaw, isLoading: loading, isError: formError, refetch: refetchForm } = useQuery({
     queryKey: ['audit-form', formId],
-    queryFn: () => getFormById(Number(formId)),
+    queryFn: () => getFormById(Number(formId), true),
     enabled: !!formId,
     staleTime: 60 * 1000,
   })
@@ -168,6 +179,12 @@ export default function AuditFormPage() {
   )
 
   const [score, setScore] = useState(0)
+  // Toggles the Score Breakdown modal — re-uses the same `ScoreRenderer`
+  // that powers the Form Builder Preview step and the post-submit
+  // SubmissionDetailPage's Score panel, so reviewers see the SAME
+  // category breakdown / per-question math the system uses everywhere
+  // else. Live-updated via `score` state on every answer edit.
+  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false)
   const [answers, setAnswers] = useState<Record<number, AnswerType>>({})
   const [visibilityMap, setVisibilityMap] = useState<Record<number, boolean>>({})
   const [formRenderData, setFormRenderData] = useState<FormRenderData | null>(null)
@@ -306,6 +323,28 @@ export default function AuditFormPage() {
         aiPrefill.ticket_tasks
           .filter((t: any) => t && (t.kind === 'TICKET' || t.kind === 'TASK') && Number.isFinite(Number(t.external_id)))
           .map((t: any) => ({ kind: t.kind, external_id: Number(t.external_id) }))
+      )
+    }
+
+    // Hydrate the linked call(s) from the AI submission (Phase C
+    // multi-source). Without this, a draft whose primary source was a
+    // CALL (or that has an attached CALL) re-opens in the audit page
+    // showing only the ticket and silently drops the call — the user
+    // sees no transcript / recording context to grade against.
+    if (aiMode && aiPrefill?.calls?.length) {
+      setSelectedCalls(
+        aiPrefill.calls
+          .filter((c: any) => c && Number.isFinite(Number(c.id)) && typeof c.call_id === 'string')
+          .map((c: any) => ({
+            id: Number(c.id),
+            call_id: String(c.call_id),
+            csr_id: Number(c.csr_id),
+            customer_id: c.customer_id ?? null,
+            call_date: String(c.call_date),
+            duration: Number(c.duration ?? 0),
+            recording_url: c.recording_url ?? null,
+            transcript: c.transcript ?? null,
+          }))
       )
     }
   }, [form, user, aiMode, aiPrefill])
@@ -513,14 +552,30 @@ export default function AuditFormPage() {
                 ? 'You are reviewing answers the AI Reviewer drafted. Edit anything that\'s wrong, then promote to make it the system-of-record submission. Your edits will be captured as a calibration data point.'
                 : 'You are re-grading a SUBMITTED AI submission. Your answers will be saved as a separate human submission and recorded as a calibration data point. The AI\'s submission stays in place as the system of record.'}
             </div>
-            {aiPrefill?.ai_overall_confidence != null && (
-              <span
-                className="shrink-0 inline-flex items-center rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-mono tabular-nums text-amber-800"
-                title="AI overall_confidence on this draft"
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Live score chip — recalculated on every answer edit by
+                  the same `calculateFormScore` call that drives the
+                  Score Summary card lower in the layout. Click to open
+                  the full per-category / per-question breakdown
+                  (ScoreRenderer modal). */}
+              <button
+                type="button"
+                onClick={() => setShowScoreBreakdown(true)}
+                className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-mono tabular-nums text-amber-800 hover:bg-amber-100 hover:border-amber-400 transition-colors cursor-pointer"
+                title="Click to see how this score is calculated"
               >
-                AI conf {Math.round(Number(aiPrefill.ai_overall_confidence) * 100)}%
-              </span>
-            )}
+                <Calculator className="h-3 w-3" />
+                Score {score.toFixed(1)}%
+              </button>
+              {aiPrefill?.ai_overall_confidence != null && (
+                <span
+                  className="inline-flex items-center rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-mono tabular-nums text-amber-800"
+                  title="AI overall_confidence on this draft"
+                >
+                  AI conf {Math.round(Number(aiPrefill.ai_overall_confidence) * 100)}%
+                </span>
+              )}
+            </div>
           </div>
         )}
 
@@ -535,6 +590,32 @@ export default function AuditFormPage() {
             )}
           </span>
         </div>
+
+        {/* Score Summary card — same shape as CompletedFormRenderer
+            so the AI-draft view and the post-submit view feel like
+            the same document. AI mode only: regular Review Form
+            workflow has never shown a live score and we don't want
+            to change that pattern in this change. Click anywhere on
+            the card to open the full breakdown modal. */}
+        {aiMode && (
+          <button
+            type="button"
+            onClick={() => setShowScoreBreakdown(true)}
+            className="w-full mt-2 bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between hover:border-primary/40 hover:bg-primary/[0.02] transition-colors group text-left cursor-pointer"
+            title="Click to see how this score is calculated"
+          >
+            <div className="flex items-center gap-2">
+              <h3 className="text-[15px] font-semibold text-slate-800">Score Summary</h3>
+              <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 group-hover:text-primary transition-colors">
+                <Calculator className="h-3 w-3" />
+                Show breakdown
+              </span>
+            </div>
+            <div className="text-[28px] font-bold text-slate-900 leading-none tabular-nums">
+              {score.toFixed(1)}%
+            </div>
+          </button>
+        )}
       </div>
 
       {/* ── Error banner ───────────────────────────────────────────────────── */}
@@ -607,19 +688,38 @@ export default function AuditFormPage() {
               </div>
             </div>
 
-            {/* Call selector */}
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-100">
-                <span className="text-[13px] font-semibold text-slate-800">Call Details</span>
+            {/* Call details.
+                In AI Reviewer modes (promote / overlay) the attached call(s)
+                are part of the AI's case identity — the reviewer is grading
+                what the AI graded, not re-picking sources. We render the
+                canonical read-only CallDetailsPanel (same component used on
+                /app/quality/submissions/:id) so the transcript / recording /
+                metadata are presented identically across the two screens.
+                In the plain human audit flow we keep the search-and-attach
+                MultipleCallSelector. */}
+            {aiMode ? (
+              <CallDetailsPanel
+                calls={selectedCalls.map((c) => ({
+                  call_id: c.call_id,
+                  call_date: c.call_date,
+                  recording_url: c.recording_url,
+                  transcript: c.transcript,
+                }))}
+              />
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100">
+                  <span className="text-[13px] font-semibold text-slate-800">Call Details</span>
+                </div>
+                <div className="px-4 py-3">
+                  <MultipleCallSelector
+                    selectedCalls={selectedCalls}
+                    onCallsChange={(calls: Call[]) => { setSelectedCalls(calls) }}
+                    disabled={isSubmitting || isSavingDraft}
+                  />
+                </div>
               </div>
-              <div className="px-4 py-3">
-                <MultipleCallSelector
-                  selectedCalls={selectedCalls}
-                  onCallsChange={(calls: Call[]) => { setSelectedCalls(calls) }}
-                  disabled={isSubmitting || isSavingDraft}
-                />
-              </div>
-            </div>
+            )}
 
           </div>
         </div>
@@ -681,6 +781,39 @@ export default function AuditFormPage() {
         </div>
 
       </div>
+
+      {/* Score breakdown modal — wraps the same `ScoreRenderer` used by
+          the form-builder Preview step and the post-submit Submission
+          Detail page, so reviewers see the SAME category breakdown +
+          per-question math the system uses everywhere else. The
+          renderer reads from local `answers` state, so it updates live
+          if the modal is reopened after edits. */}
+      <Dialog open={showScoreBreakdown} onOpenChange={setShowScoreBreakdown}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-0">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-slate-200 sticky top-0 bg-white z-10">
+            <DialogTitle className="flex items-center gap-2 text-[15px]">
+              <Calculator className="h-4 w-4 text-primary" />
+              Score Breakdown
+              <span className="ml-2 text-[13px] font-normal text-slate-500">
+                Total: <span className="font-mono tabular-nums font-bold text-slate-900">{score.toFixed(1)}%</span>
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          {form && formRenderData ? (
+            <div className="p-4">
+              <ScoreBreakdownTables
+                form={form}
+                formRenderData={formRenderData}
+                answers={answers}
+                visibilityMap={visibilityMap}
+                finalScoreOverride={score}
+              />
+            </div>
+          ) : (
+            <div className="p-6 text-[13px] text-slate-400 text-center">No form data available.</div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

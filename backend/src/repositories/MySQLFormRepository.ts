@@ -410,13 +410,38 @@ export class MySQLFormRepository {
 
     ensureAiReviewerFeedbackQuestion(formData);
 
+    // Load the previous version's full row + categories/questions so we can
+    // 1) inherit AI form-level columns when the UI didn't override them and
+    // 2) build a (category_name, sort_order) -> oldQuestionId map for
+    // cloning per-question artifacts (rubrics) onto the new form.
     const currentForm = await prisma.form.findUnique({
       where: { id: form_id },
-      select: { form_name: true, version: true },
+      include: {
+        form_categories: {
+          include: { form_questions: true },
+        },
+      },
     });
 
     const currentFormName = currentForm?.form_name || formData.form_name;
     const newVersion = (currentForm?.version || 1) + 1;
+
+    // (category_name -> (sort_order -> oldQuestionId)) for cross-version
+    // question matching. Question IDs are auto-increment per row so we
+    // can't carry them; the structural key is the only stable join.
+    const oldQidByCatSort = new Map<string, Map<number, number>>();
+    if (currentForm) {
+      for (const cat of currentForm.form_categories) {
+        const inner = new Map<number, number>();
+        for (const q of cat.form_questions) inner.set(q.sort_order, q.id);
+        oldQidByCatSort.set(cat.category_name, inner);
+      }
+    }
+
+    const newAiEnabled =
+      formData.ai_enabled !== undefined
+        ? formData.ai_enabled === true
+        : ((currentForm as any)?.ai_enabled === true);
 
     const newFormId = await prisma.$transaction(async (tx) => {
       await tx.form.updateMany({
@@ -431,18 +456,79 @@ export class MySQLFormRepository {
           version: newVersion,
           created_by: formData.created_by,
           is_active: formData.is_active !== undefined ? formData.is_active : true,
+          // Versioning lineage: every new save points back to the form it
+          // superseded so we can walk parent_form_id to recover prior
+          // rubrics/calibration history if a future bug orphans rows again.
+          parent_form_id: form_id,
           user_version: formData.user_version ?? null,
           user_version_date: formData.user_version_date ? new Date(formData.user_version_date) : null,
-          critical_cap_percent: (formData.critical_cap_percent ?? 79.0) as any,
-          ai_enabled: formData.ai_enabled === true,
-          ai_review_guidance: normalizeGuidance(formData.ai_review_guidance, formData.ai_enabled === true),
-          ai_submit_as_draft: formData.ai_enabled === true && formData.ai_submit_as_draft === true,
-          ai_sample_review_pct: normalizeSamplePct(formData.ai_sample_review_pct, formData.ai_enabled === true),
-          ai_sample_low_score_always: formData.ai_enabled === true ? formData.ai_sample_low_score_always !== false : false,
+          // Inheritance rule for every AI form-level column: UI override
+          // wins, otherwise carry forward the previous version's value,
+          // otherwise fall back to the schema default. Prevents silent
+          // resets (e.g. critical_cap_percent reverting to 79 on every
+          // save when the form actually runs at 60).
+          critical_cap_percent: (formData.critical_cap_percent
+            ?? (currentForm as any)?.critical_cap_percent
+            ?? 79.0) as any,
+          ai_enabled: newAiEnabled,
+          ai_review_guidance: normalizeGuidance(
+            formData.ai_review_guidance !== undefined
+              ? formData.ai_review_guidance
+              : (currentForm as any)?.ai_review_guidance,
+            newAiEnabled,
+          ),
+          ai_submit_as_draft: newAiEnabled && (
+            formData.ai_submit_as_draft !== undefined
+              ? formData.ai_submit_as_draft === true
+              : (currentForm as any)?.ai_submit_as_draft === true
+          ),
+          ai_sample_review_pct: normalizeSamplePct(
+            formData.ai_sample_review_pct !== undefined
+              ? formData.ai_sample_review_pct
+              : (currentForm as any)?.ai_sample_review_pct,
+            newAiEnabled,
+          ),
+          ai_sample_low_score_always: newAiEnabled
+            ? (formData.ai_sample_low_score_always !== undefined
+                ? formData.ai_sample_low_score_always !== false
+                : (currentForm as any)?.ai_sample_low_score_always !== false)
+            : false,
+          ai_sample_low_confidence_threshold:
+            ((formData as any).ai_sample_low_confidence_threshold
+              ?? (currentForm as any)?.ai_sample_low_confidence_threshold
+              ?? null) as any,
+          ai_calibration_auto_absorb_days:
+            ((formData as any).ai_calibration_auto_absorb_days
+              ?? (currentForm as any)?.ai_calibration_auto_absorb_days
+              ?? 180),
+          ai_monthly_cost_budget_usd:
+            ((formData as any).ai_monthly_cost_budget_usd
+              ?? (currentForm as any)?.ai_monthly_cost_budget_usd
+              ?? null) as any,
+          ai_disagreement_route_threshold:
+            ((formData as any).ai_disagreement_route_threshold
+              ?? (currentForm as any)?.ai_disagreement_route_threshold
+              ?? null) as any,
+          ai_max_attached_sources:
+            ((formData as any).ai_max_attached_sources
+              ?? (currentForm as any)?.ai_max_attached_sources
+              ?? 3),
+          ai_base_prompt_id:
+            ((formData as any).ai_base_prompt_id
+              ?? (currentForm as any)?.ai_base_prompt_id
+              ?? null),
+          ai_model_provider:
+            ((formData as any).ai_model_provider
+              ?? (currentForm as any)?.ai_model_provider
+              ?? 'anthropic'),
         },
       });
 
       const questionIdMap = new Map<string, number>();
+      // oldQid -> newQid for cloning per-question artifacts (rubrics)
+      // below. Populated as new questions are created using the
+      // (category_name, sort_order) pre-built lookup.
+      const oldToNewQid = new Map<number, number>();
 
       for (let ci = 0; ci < formData.categories.length; ci++) {
         const category = formData.categories[ci];
@@ -456,6 +542,8 @@ export class MySQLFormRepository {
             sort_order: ci,
           },
         });
+
+        const oldQidsForCat = oldQidByCatSort.get(category.category_name);
 
         for (let qi = 0; qi < category.questions.length; qi++) {
           const question = category.questions[qi];
@@ -479,6 +567,8 @@ export class MySQLFormRepository {
           });
 
           questionIdMap.set(`${ci}-${qi}`, q.id);
+          const oldQid = oldQidsForCat?.get(qi);
+          if (oldQid !== undefined) oldToNewQid.set(oldQid, q.id);
 
           if (question.radio_options) {
             await tx.radioOption.createMany({
@@ -536,6 +626,88 @@ export class MySQLFormRepository {
               interaction_type: (field.interaction_type || formData.interaction_type) as FormMetadataInteractionType,
               dropdown_source: field.dropdown_source ?? null,
               sort_order: field.sort_order ?? 0,
+            },
+          });
+        }
+      }
+
+      // Carry forward AI-overlay artifacts that were keyed against the
+      // prior version's form_id (and per-question rubrics also keyed
+      // against the prior question_ids). Without this block, every form
+      // save silently wiped rubrics, rule-pack assignments, and
+      // calibration history — which is exactly what happened between
+      // form 99018 (v1) and 99019 (v2). Cloning here keeps "Save" a
+      // safe, lossless operation; explicit edits via the dedicated
+      // rubric / rule-pack / calibration endpoints continue to write
+      // against the new form_id and naturally override the inherited
+      // rows on next read.
+      if (currentForm) {
+        const prevRubrics = await tx.aiFormQuestionRubric.findMany({
+          where: { form_id: form_id },
+        });
+        for (const r of prevRubrics) {
+          const newQid = oldToNewQid.get(r.question_id);
+          if (newQid === undefined) continue; // question removed in this version
+          await tx.aiFormQuestionRubric.create({
+            data: {
+              form_id: form.id,
+              question_id: newQid,
+              rubric_md: r.rubric_md,
+              updated_by: r.updated_by ?? null,
+            },
+          });
+        }
+
+        const prevRulePacks = await tx.aiFormRulePackAssignment.findMany({
+          where: { form_id: form_id },
+        });
+        for (const rp of prevRulePacks) {
+          await tx.aiFormRulePackAssignment.create({
+            data: {
+              form_id: form.id,
+              rule_pack_id: rp.rule_pack_id,
+              sort_order: rp.sort_order,
+              updated_by: rp.updated_by ?? null,
+            },
+          });
+        }
+
+        const prevCalibMaps = await tx.aiCalibrationMap.findMany({
+          where: { form_id: form_id },
+        });
+        for (const cm of prevCalibMaps) {
+          await tx.aiCalibrationMap.create({
+            data: {
+              form_id: form.id,
+              version: cm.version,
+              sample_count: cm.sample_count,
+              bins_json: cm.bins_json as any,
+              is_active: cm.is_active,
+              notes: cm.notes ?? null,
+            },
+          });
+        }
+
+        const prevCalibData = await tx.aiCalibrationData.findMany({
+          where: { form_id: form_id },
+        });
+        for (const cd of prevCalibData) {
+          await tx.aiCalibrationData.create({
+            data: {
+              form_id: form.id,
+              ticket_id: cd.ticket_id,
+              source: cd.source,
+              source_kind: cd.source_kind,
+              ai_submission_id: cd.ai_submission_id ?? null,
+              human_submission_id: cd.human_submission_id ?? null,
+              ai_answers: cd.ai_answers as any,
+              human_answers: cd.human_answers as any,
+              graded_by: cd.graded_by ?? null,
+              in_rolling_set: cd.in_rolling_set,
+              notes: cd.notes ?? null,
+              absorbed_at: cd.absorbed_at ?? null,
+              absorbed_by: cd.absorbed_by ?? null,
+              absorbed_reason: cd.absorbed_reason ?? null,
             },
           });
         }

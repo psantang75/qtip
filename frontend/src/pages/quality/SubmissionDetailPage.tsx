@@ -28,6 +28,38 @@ type SubmissionDetailWithForm = SubmissionDetail & {
   ticket_tasks?: Array<{ kind: 'TICKET' | 'TASK'; external_id: number; sort_order: number }>
   submitted_at?: string | Date
 }
+
+/**
+ * Phase C (C6): pull the per-answer evidence_source / evidence_quote
+ * pairs out of submissions.ai_extras.answer_evidence and zip them with
+ * the question text from formData so the AnswerEvidencePanel can show
+ * the question alongside its supporting quote. Returns [] when neither
+ * data source is present.
+ */
+function buildAnswerEvidenceEntries(detail: SubmissionDetailWithForm): AnswerEvidenceEntry[] {
+  const evidence = (detail as any).ai_extras?.answer_evidence as
+    | Record<string, { evidence_source?: string; evidence_quote?: string }>
+    | undefined
+  if (!evidence) return []
+  const qText = new Map<number, string>()
+  for (const cat of detail.formData?.categories ?? []) {
+    for (const q of (cat as any).questions ?? []) {
+      if (q?.id != null) qText.set(Number(q.id), String(q.question_text ?? q.text ?? ''))
+    }
+  }
+  const out: AnswerEvidenceEntry[] = []
+  for (const [qid, val] of Object.entries(evidence)) {
+    const id = Number(qid)
+    if (!Number.isInteger(id)) continue
+    out.push({
+      question_id: id,
+      question_text: qText.get(id) ?? null,
+      evidence_source: val?.evidence_source ?? null,
+      evidence_quote: val?.evidence_quote ?? null,
+    })
+  }
+  return out
+}
 import { useToast } from '@/hooks/use-toast'
 import { DisputeForm } from './submission-detail/DisputeForms'
 import { SubmissionHeader } from './submission-detail/SubmissionHeader'
@@ -38,6 +70,8 @@ import { TicketTaskDetailsPanel } from './submission-detail/TicketTaskDetailsPan
 import { ScorePanel } from './submission-detail/ScorePanel'
 import { TimelinePanel } from '@/components/quality/ai/TimelinePanel'
 import { AdvisoryObservationsPanel, type AdvisoryObservation } from '@/components/quality/ai/AdvisoryObservationsPanel'
+import { AnswerEvidencePanel, type AnswerEvidenceEntry } from '@/components/quality/ai/AnswerEvidencePanel'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 export default function SubmissionDetailPage() {
   const { id }    = useParams<{ id: string }>()
@@ -304,8 +338,32 @@ export default function SubmissionDetailPage() {
                 formData={formData}
               />
             )}
-            <TicketTaskDetailsPanel ticketTasks={ticketTasks} auditAt={auditAt} />
-            <CallDetailsPanel calls={calls ?? []} />
+            {/* Phase C (C6): when a multi-source case has both a ticket
+                and a call, present them as tabs so the reviewer can
+                flip between sources without losing screen real estate.
+                Single-source submissions keep the legacy stacked
+                layout. */}
+            {ticketTasks.length > 0 && (calls?.length ?? 0) > 0 ? (
+              <Tabs defaultValue="ticket" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="ticket">
+                    Ticket / Task ({ticketTasks.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="call">Call ({calls?.length ?? 0})</TabsTrigger>
+                </TabsList>
+                <TabsContent value="ticket" className="mt-2">
+                  <TicketTaskDetailsPanel ticketTasks={ticketTasks} auditAt={auditAt} />
+                </TabsContent>
+                <TabsContent value="call" className="mt-2">
+                  <CallDetailsPanel calls={calls ?? []} />
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <>
+                <TicketTaskDetailsPanel ticketTasks={ticketTasks} auditAt={auditAt} />
+                <CallDetailsPanel calls={calls ?? []} />
+              </>
+            )}
             {/* AI side outputs persisted in submissions.ai_extras. Each
                 panel auto-hides when its array is empty so human-authored
                 submissions stay visually unchanged. */}
@@ -315,6 +373,7 @@ export default function SubmissionDetailPage() {
                 <AdvisoryObservationsPanel
                   items={((detail as any).ai_extras.observations ?? null) as AdvisoryObservation[] | null}
                 />
+                <AnswerEvidencePanel items={buildAnswerEvidenceEntries(detail)} />
               </>
             )}
           </div>

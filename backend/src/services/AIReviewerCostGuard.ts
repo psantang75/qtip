@@ -39,6 +39,48 @@ import { estimateUsdCost } from './aiCostEstimator';
 const CACHE_TTL_MS = 60 * 1000;
 const SOFT_WARN_RATIO = 0.8;
 
+/**
+ * Phase C (C5): rough average per-pass token usage. Used to predict
+ * the cost of the *next* run before we make the LLM calls so we can
+ * deny multi-source cases that would push us over the cap, instead of
+ * only catching them post-hoc on the next request.
+ *
+ * These are deliberately conservative (skewed slightly high) so the
+ * predicted cost is an upper bound on the typical case and we err on
+ * the side of denying borderline runs rather than overshooting the
+ * configured budget. Numbers come from the median of recent
+ * `ai_call_logs` rows for each pass; revisit when prompt sizes change
+ * meaningfully (e.g. a major KB expansion).
+ */
+const PASS_COST_ASSUMPTIONS = {
+  /** Per-source trace pass (Sonnet). One per attached source. */
+  trace: { model: 'claude-sonnet-4-6', inTokens: 9000, outTokens: 1500 },
+  /** Cross-source synthesis pass (Opus). Always exactly one. */
+  synthesis: { model: 'claude-opus-4-7', inTokens: 6000, outTokens: 1500 },
+  /** Optional self-consistency verification (Opus). At most one. */
+  verification: { model: 'claude-opus-4-7', inTokens: 4000, outTokens: 800 },
+  /** Mini-LLM call topic classifier on call-only reviews (Sonnet). */
+  classification: { model: 'claude-sonnet-4-6', inTokens: 1500, outTokens: 200 },
+} as const;
+
+export interface CostGuardCaseShape {
+  /**
+   * Number of attached sources (tickets/calls/tasks) that will be
+   * traced individually before synthesis. Always >= 1. Capped against
+   * the form's `ai_max_attached_sources` setting by the caller.
+   */
+  sourceCount: number;
+  /** True when a Sonnet-based topic classifier will run first. */
+  willClassify: boolean;
+  /**
+   * True when we expect to run the verification pass. AIReviewerService
+   * only fires verification on low confidence / self-consistency
+   * warnings, so callers can pass `true` when they want a worst-case
+   * estimate or `false` for a typical-case estimate.
+   */
+  expectVerification: boolean;
+}
+
 interface CacheEntry {
   mtdUsd: number;
   fetchedAt: number;
@@ -97,20 +139,77 @@ async function getCachedMtd(formId: number): Promise<number> {
 }
 
 /**
+ * Phase C (C5): predict the USD cost of the next AI Reviewer run for
+ * a given case shape. Multi-source cases pay for N Sonnet traces +
+ * 1 Opus synthesis (+ optional verification + optional classifier);
+ * single-source cases collapse to the legacy 1-pass cost. The N here
+ * is already capped by the caller against `ai_max_attached_sources`.
+ *
+ * Returns 0 when sourceCount <= 0, which lets callers safely call this
+ * before they know the case shape.
+ */
+export function estimateNextCaseUsd(shape: CostGuardCaseShape): number {
+  const n = Math.max(0, Math.floor(shape.sourceCount));
+  if (n <= 0) return 0;
+  let total = 0;
+  if (shape.willClassify) {
+    const c = PASS_COST_ASSUMPTIONS.classification;
+    const est = estimateUsdCost(c.model, c.inTokens, c.outTokens);
+    if (est) total += est.usd;
+  }
+  for (let i = 0; i < n; i++) {
+    const t = PASS_COST_ASSUMPTIONS.trace;
+    const est = estimateUsdCost(t.model, t.inTokens, t.outTokens);
+    if (est) total += est.usd;
+  }
+  const s = PASS_COST_ASSUMPTIONS.synthesis;
+  const synthEst = estimateUsdCost(s.model, s.inTokens, s.outTokens);
+  if (synthEst) total += synthEst.usd;
+  if (shape.expectVerification) {
+    const v = PASS_COST_ASSUMPTIONS.verification;
+    const vEst = estimateUsdCost(v.model, v.inTokens, v.outTokens);
+    if (vEst) total += vEst.usd;
+  }
+  return total;
+}
+
+/**
  * Pre-flight check: returns `allowed=true` when the form is under
  * budget, `allowed=false` when the cap has been hit. Caller is
  * responsible for short-circuiting on `allowed=false` (typically by
  * routing the submission to a human reviewer with a "BUDGET_EXCEEDED"
  * note).
+ *
+ * Phase C (C5): when `caseShape` is supplied, the projected cost of
+ * the next run (N Sonnet traces + 1 Opus synthesis + optional passes)
+ * is added to MTD before comparing to the cap. Without a caseShape we
+ * fall back to the legacy MTD-only check used by the settings UI.
  */
-export async function checkBudget(formId: number): Promise<CostGuardDecision> {
+export async function checkBudget(
+  formId: number,
+  caseShape?: CostGuardCaseShape
+): Promise<CostGuardDecision> {
   const form = await prisma.form.findUnique({
     where: { id: formId },
-    select: { ai_monthly_cost_budget_usd: true },
+    select: { ai_monthly_cost_budget_usd: true, ai_max_attached_sources: true },
   });
   const budgetUsd =
     form?.ai_monthly_cost_budget_usd != null ? Number(form.ai_monthly_cost_budget_usd) : null;
   const mtdUsd = await getCachedMtd(formId);
+
+  // Cap predicted source count against the form's hard cap. Without a
+  // shape we don't know the next run's profile, so projected = 0.
+  const cappedShape = caseShape
+    ? {
+        ...caseShape,
+        sourceCount: Math.min(
+          Math.max(1, caseShape.sourceCount || 1),
+          Number(form?.ai_max_attached_sources ?? caseShape.sourceCount ?? 1)
+        ),
+      }
+    : undefined;
+  const projectedUsd = cappedShape ? estimateNextCaseUsd(cappedShape) : 0;
+  const totalUsd = mtdUsd + projectedUsd;
 
   if (budgetUsd == null || !Number.isFinite(budgetUsd) || budgetUsd <= 0) {
     return {
@@ -122,16 +221,17 @@ export async function checkBudget(formId: number): Promise<CostGuardDecision> {
     };
   }
 
-  if (mtdUsd >= budgetUsd) {
+  if (totalUsd >= budgetUsd) {
+    const projectedHint = projectedUsd > 0 ? ` + projected $${projectedUsd.toFixed(2)}` : '';
     return {
       allowed: false,
       warn: true,
       mtdUsd,
       budgetUsd,
-      reason: `Monthly AI cost budget exhausted ($${mtdUsd.toFixed(2)} of $${budgetUsd.toFixed(2)}). Submission routed for human review.`,
+      reason: `Monthly AI cost budget exhausted ($${mtdUsd.toFixed(2)}${projectedHint} of $${budgetUsd.toFixed(2)}). Submission routed for human review.`,
     };
   }
-  if (mtdUsd >= budgetUsd * SOFT_WARN_RATIO) {
+  if (totalUsd >= budgetUsd * SOFT_WARN_RATIO) {
     return {
       allowed: true,
       warn: true,

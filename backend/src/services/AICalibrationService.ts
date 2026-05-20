@@ -26,10 +26,19 @@
 import prisma from '../config/prisma';
 import logger from '../config/logger';
 import { computeCohensKappa, type RaterPair } from './agreementMath';
+import kbIndexService, { KbIndexService } from './KbIndexService';
 
 export type CalibrationSource =
   | 'qa_promoted_draft'
   | 'qa_sample_review';
+
+/**
+ * Phase B (B4): kind of external source the calibration row applies to.
+ * 'TICKET' is the historical default (every existing row was a CRM
+ * ticket). 'CALL' was added so the call-only adapter can record
+ * corrections without faking a ticket id.
+ */
+export type CalibrationSourceKind = 'TICKET' | 'CALL';
 
 export type AnswerMap = Record<number, string>;
 
@@ -38,6 +47,8 @@ export interface CalibrationDataPoint {
   created_at: Date;
   form_id: number;
   ticket_id: number;
+  /** Phase B: 'TICKET' (default) or 'CALL'. */
+  source_kind: CalibrationSourceKind;
   source: CalibrationSource;
   ai_submission_id: number | null;
   human_submission_id: number | null;
@@ -102,6 +113,8 @@ export interface CalibrationCorrection {
   /** What the human corrected it to (normalized). */
   human_value: string;
   ticket_id: number;
+  /** Phase B (B4): kind of external source `ticket_id` refers to. */
+  source_kind: CalibrationSourceKind;
   source: CalibrationSource;
   created_at: Date;
   /** Calibration row id, surfaced so the UI preview can deep-link. */
@@ -125,6 +138,21 @@ export interface RecentCorrectionsOpts {
   tokenBudgetChars?: number;
   /** Drop corrections older than this. Defaults to 365 days. */
   maxAgeDays?: number;
+  /**
+   * Phase A: when provided, corrections are re-ranked by embedding-cosine
+   * similarity against this string (typically the current ticket's
+   * classification text). The top-5 most relevant corrections survive
+   * the cap before the char-budget greedy fill. Falls back to recency
+   * ordering when the embedding service is unavailable or returns no
+   * vectors. Empty / undefined → recency-only behaviour preserved.
+   */
+  classificationText?: string;
+  /**
+   * Phase A: cap on the similarity-ranked corrections before the char
+   * budget kicks in. Default 5 — enough variety without ballooning the
+   * prompt. Ignored when `classificationText` is empty.
+   */
+  similarityTopK?: number;
 }
 
 export type ModeReadinessRecommendation =
@@ -210,6 +238,12 @@ class AICalibrationService {
   async recordPromotedDraft(args: {
     formId: number;
     ticketId: number;
+    /**
+     * Phase B (B4): kind of external id `ticketId` refers to. Defaults to
+     * 'TICKET' so existing call-sites don't have to change. The CALL
+     * adapter passes 'CALL' with a Genesys conversation id.
+     */
+    sourceKind?: CalibrationSourceKind;
     submissionId: number;
     aiAnswers: AnswerMap;
     humanAnswers: AnswerMap;
@@ -220,6 +254,7 @@ class AICalibrationService {
     return this.insertRow({
       formId: args.formId,
       ticketId: args.ticketId,
+      sourceKind: args.sourceKind ?? 'TICKET',
       source: 'qa_promoted_draft',
       aiSubmissionId: args.submissionId,
       humanSubmissionId: args.submissionId,
@@ -239,6 +274,8 @@ class AICalibrationService {
   async recordSampleReview(args: {
     formId: number;
     ticketId: number;
+    /** Phase B (B4): 'TICKET' (default) or 'CALL'. */
+    sourceKind?: CalibrationSourceKind;
     aiSubmissionId: number;
     humanSubmissionId: number;
     aiAnswers: AnswerMap;
@@ -250,6 +287,7 @@ class AICalibrationService {
     return this.insertRow({
       formId: args.formId,
       ticketId: args.ticketId,
+      sourceKind: args.sourceKind ?? 'TICKET',
       source: 'qa_sample_review',
       aiSubmissionId: args.aiSubmissionId,
       humanSubmissionId: args.humanSubmissionId,
@@ -430,6 +468,7 @@ class AICalibrationService {
           ai_value: aiVal,
           human_value: humanVal,
           ticket_id: row.ticket_id,
+          source_kind: normalizeSourceKind((row as { source_kind?: string | null }).source_kind),
           source: row.source as CalibrationSource,
           created_at: row.created_at,
           data_point_id: Number(row.id),
@@ -450,12 +489,54 @@ class AICalibrationService {
       c.question_text = textById.get(c.question_id) ?? `(question #${c.question_id})`;
     }
 
+    // Phase A: when a classification text is supplied AND embeddings are
+    // available, re-rank candidates by cosine similarity of the rendered
+    // correction text vs the classification text. This mirrors the
+    // "lessons most relevant to THIS ticket" pattern from autorubric/
+    // promptfoo — recency-only ranking surfaces flapping rules from
+    // unrelated tickets and dilutes the prompt.
+    const classificationText = (opts.classificationText ?? '').trim();
+    const similarityTopK = Math.max(1, opts.similarityTopK ?? 5);
+    let ordered = candidates;
+    if (classificationText) {
+      const corrTexts = candidates.map((c) =>
+        [c.question_text, c.ai_value, c.human_value, c.correction_reason ?? ''].join(' | ')
+      );
+      const vectors = await kbIndexService.embedQueryVectors([classificationText, ...corrTexts]);
+      if (vectors && vectors[0]) {
+        const queryVec = vectors[0];
+        const scored = candidates.map((c, i) => {
+          const v = vectors[i + 1];
+          // Missing vector → push to bottom (preserves recency order
+          // for that subset via the secondary sort key).
+          const score = v ? KbIndexService.cosineSimilarity(queryVec, v) : -Infinity;
+          return { c, score, idx: i };
+        });
+        scored.sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          // Recency tie-break: earlier idx == newer (candidates is
+          // built newest-first by the loop above).
+          return a.idx - b.idx;
+        });
+        ordered = scored.slice(0, similarityTopK).map((s) => s.c);
+        logger.info(
+          `[AI CALIBRATION] similarity-ranked ${candidates.length} corrections → top-${ordered.length} for form_id=${formId}`
+        );
+      } else {
+        // Embeddings unavailable → recency fallback. Logged once per call
+        // so operators can spot persistent failures (e.g. OpenAI outage).
+        logger.info(
+          `[AI CALIBRATION] similarity ranking unavailable; falling back to recency for form_id=${formId}`
+        );
+      }
+    }
+
     // Greedy-fill the char budget using the rendered length of each
     // correction block. We keep the rendering identical to what the
     // prompt builder will emit so the budget reflects real prompt cost.
     const out: CalibrationCorrection[] = [];
     let usedChars = 0;
-    for (const c of candidates) {
+    for (const c of ordered) {
       const block = renderCorrectionForBudget(c);
       if (usedChars + block.length > tokenBudgetChars && out.length > 0) break;
       out.push(c);
@@ -637,6 +718,7 @@ class AICalibrationService {
       ai: string;
       human: string;
       ticket_id: number;
+      source_kind: CalibrationSourceKind;
       source: CalibrationSource;
       created_at: Date;
       data_point_id: number;
@@ -661,6 +743,7 @@ class AICalibrationService {
           ai: aiVal,
           human: humanVal,
           ticket_id: row.ticket_id,
+          source_kind: normalizeSourceKind((row as { source_kind?: string | null }).source_kind),
           source: row.source as CalibrationSource,
           created_at: row.created_at,
           data_point_id: Number(row.id),
@@ -683,6 +766,7 @@ class AICalibrationService {
       ai_value: p.ai,
       human_value: p.human,
       ticket_id: p.ticket_id,
+      source_kind: p.source_kind,
       source: p.source,
       created_at: p.created_at,
       data_point_id: p.data_point_id,
@@ -814,6 +898,8 @@ class AICalibrationService {
   private async insertRow(args: {
     formId: number;
     ticketId: number;
+    /** Phase B (B4): 'TICKET' (default) or 'CALL'. */
+    sourceKind?: CalibrationSourceKind;
     source: CalibrationSource;
     aiSubmissionId: number | null;
     humanSubmissionId: number | null;
@@ -832,11 +918,13 @@ class AICalibrationService {
       throw new AICalibrationServiceError('humanAnswers cannot be empty', 'EMPTY_HUMAN_ANSWERS', 400);
     }
 
+    const sourceKind: CalibrationSourceKind = args.sourceKind ?? 'TICKET';
     try {
       const created = await prisma.aiCalibrationData.create({
         data: {
           form_id: args.formId,
           ticket_id: args.ticketId,
+          source_kind: sourceKind,
           source: args.source,
           ai_submission_id: args.aiSubmissionId ?? null,
           human_submission_id: args.humanSubmissionId ?? null,
@@ -849,7 +937,7 @@ class AICalibrationService {
       });
       const id = Number(created.id);
       logger.info(
-        `[AI CALIBRATION] recorded source=${args.source} form_id=${args.formId} ticket_id=${args.ticketId} id=${id}`
+        `[AI CALIBRATION] recorded source=${args.source} source_kind=${sourceKind} form_id=${args.formId} external_id=${args.ticketId} id=${id}`
       );
       return id;
     } catch (err) {
@@ -892,7 +980,11 @@ function renderCorrectionForBudget(c: CalibrationCorrection): string {
   if (c.correction_reason) {
     lines.push(`  Reviewer's reason: ${c.correction_reason}`);
   }
-  lines.push(`  Source: ticket #${c.ticket_id}`);
+  // Phase B (B4): label by kind so the AI knows whether the lesson came
+  // from a ticket review or a call review. Lower-cases the kind so it
+  // reads naturally in prose.
+  const kindLabel = c.source_kind === 'CALL' ? 'call' : 'ticket';
+  lines.push(`  Source: ${kindLabel} #${c.ticket_id}`);
   lines.push('');
   return lines.join('\n');
 }
@@ -922,6 +1014,7 @@ function rowToDataPoint(row: {
   created_at: Date;
   form_id: number;
   ticket_id: number;
+  source_kind?: string | null;
   source: string;
   ai_submission_id: number | null;
   human_submission_id: number | null;
@@ -936,6 +1029,7 @@ function rowToDataPoint(row: {
     created_at: row.created_at,
     form_id: row.form_id,
     ticket_id: row.ticket_id,
+    source_kind: normalizeSourceKind(row.source_kind),
     source: row.source as CalibrationSource,
     ai_submission_id: row.ai_submission_id,
     human_submission_id: row.human_submission_id,
@@ -945,6 +1039,16 @@ function rowToDataPoint(row: {
     in_rolling_set: row.in_rolling_set === true,
     notes: row.notes ?? null,
   };
+}
+
+/**
+ * Phase B (B4): coerce a row's `source_kind` value into our typed
+ * union. Defaults to 'TICKET' for legacy rows persisted before the
+ * column existed (the migration backfilled NOT NULL with 'TICKET' but
+ * we still defensively normalize when reading).
+ */
+function normalizeSourceKind(raw: string | null | undefined): CalibrationSourceKind {
+  return raw === 'CALL' ? 'CALL' : 'TICKET';
 }
 
 const aiCalibrationService = new AICalibrationService();

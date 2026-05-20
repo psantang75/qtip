@@ -34,6 +34,46 @@ export interface CallWithForm {
   existingSubmission?: any;
 }
 
+/**
+ * Phase C (C4): build a `<KIND>:<external_id>` case id from the link
+ * payload of a submission about to be inserted. Mirrors the SQL
+ * backfill so historical and new submissions share the same key.
+ *
+ * Order:
+ *   1. ticket_tasks[0] → "TICKET:<id>" or "TASK:<id>"
+ *   2. call_ids[0] / call_id → "CALL:<conversation_id>" (preferred)
+ *      or "CALL:<internal_id>" if the Genesys id can't be looked up.
+ */
+async function deriveCaseId(
+  tx: Prisma.TransactionClient,
+  submissionData: CreateSubmissionDTO & { submitted_by: number }
+): Promise<string | null> {
+  const ticketRef = submissionData.ticket_tasks?.[0];
+  if (ticketRef) {
+    const kind = ticketRef.kind === 'TASK' ? 'TASK' : 'TICKET';
+    return `${kind}:${ticketRef.external_id}`;
+  }
+
+  const internalCallId =
+    submissionData.call_ids?.find((id) => id > 0) ?? submissionData.call_id ?? null;
+  if (internalCallId && internalCallId > 0) {
+    const call = await tx.call.findUnique({
+      where: { id: internalCallId },
+      select: { call_id: true },
+    });
+    return `CALL:${call?.call_id ?? internalCallId}`;
+  }
+
+  // New call upserts (negative ids) carry the Genesys conversation id
+  // in call_data. Use that directly so the case_id matches the upsert.
+  const newCall = submissionData.call_data?.find((c) => c?.call_id);
+  if (newCall?.call_id) {
+    return `CALL:${newCall.call_id}`;
+  }
+
+  return null;
+}
+
 export class MySQLSubmissionRepository {
 
   constructor(_connectionPool?: any) {
@@ -171,10 +211,19 @@ export class MySQLSubmissionRepository {
   ): Promise<number> {
     try {
       const submission_id = await prisma.$transaction(async (tx) => {
+        // Phase C (C4): derive a case_id from the link payload so the
+        // inbox / calibration code can group multi-source submissions.
+        // Format mirrors the backfill in
+        // 20260507120000_add_submission_case_id: prefer TICKET, then
+        // TASK, then CALL (Genesys conversation id when available, else
+        // the internal calls.id).
+        const derivedCaseId = await deriveCaseId(tx, submissionData);
+
         const submission = await tx.submission.create({
           data: {
             form_id: submissionData.form_id,
             call_id: submissionData.call_id ?? null,
+            case_id: submissionData.case_id ?? derivedCaseId,
             submitted_by: submissionData.submitted_by,
             status: submissionData.status as PrismaSubmissionStatus,
             submitted_at: submissionData.submitted_at ?? undefined,
@@ -299,16 +348,33 @@ export class MySQLSubmissionRepository {
     }
   }
 
-  async getExistingDraft(call_id: number | null, form_id: number, submitted_by: number): Promise<Submission | null> {
+  async getExistingDraft(
+    call_id: number | null,
+    form_id: number,
+    submitted_by: number,
+    case_id?: string | null
+  ): Promise<Submission | null> {
     try {
-      const sub = await prisma.submission.findFirst({
-        where: {
-          call_id: call_id ?? null,
-          form_id: form_id,
-          submitted_by: submitted_by,
-          status: 'DRAFT',
-        },
-      });
+      // When a case_id is provided we MUST key dedup off the case (not just
+      // call_id), otherwise multi-source runs (which leave the legacy call_id
+      // column null and instead link via submission_calls/submission_ticket_tasks)
+      // silently clobber an unrelated stale DRAFT row that happens to share
+      // (form_id, submitted_by, call_id IS NULL). See AIReviewerService.reviewCase.
+      const where: Prisma.SubmissionWhereInput =
+        case_id !== undefined && case_id !== null && case_id !== ''
+          ? {
+              form_id,
+              submitted_by,
+              status: 'DRAFT',
+              case_id,
+            }
+          : {
+              form_id,
+              submitted_by,
+              status: 'DRAFT',
+              call_id: call_id ?? null,
+            };
+      const sub = await prisma.submission.findFirst({ where });
       return sub as unknown as Submission | null;
     } catch (error) {
       logger.error('Error fetching existing draft:', error);

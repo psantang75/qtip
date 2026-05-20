@@ -10,14 +10,24 @@
  */
 
 import express, { Request, Response } from 'express';
-import { authenticate } from '../middleware/auth';
-import aiReviewerService, { AIReviewerServiceError } from '../services/AIReviewerService';
+import { authenticate, authorizeAdmin } from '../middleware/auth';
+import aiReviewerService, {
+  AIReviewerServiceError,
+  loadCase,
+  type CaseSourceRef,
+} from '../services/AIReviewerService';
 import { SubmissionService, SubmissionServiceError } from '../services/SubmissionService';
 import { MySQLSubmissionRepository } from '../repositories/MySQLSubmissionRepository';
 import aiCalibrationService from '../services/AICalibrationService';
 import rulePackService, { RulePackError } from '../services/RulePackService';
+import basePromptService, { BasePromptError, type PromptKind } from '../services/BasePromptService';
 import { normalizeGuidance } from '../repositories/MySQLFormRepository';
-import { previewSystemPrompt } from '../services/aiReviewerPrompt';
+import {
+  previewSystemPrompt,
+  listQuestionRubricsForForm,
+  upsertQuestionRubric,
+  deleteQuestionRubric,
+} from '../services/aiReviewerPrompt';
 import aiGoldenSetService, { AIGoldenSetServiceError } from '../services/AIGoldenSetService';
 import { runGoldenEval, getLatestEvalRun } from '../services/AIGoldenEvalRunner';
 import {
@@ -27,6 +37,7 @@ import {
   previewFit as previewCalibrationFit,
 } from '../services/ConfidenceCalibratorFitter';
 import { getActiveMapForForm } from '../services/ConfidenceCalibrator';
+import { aggregateKbCoverage } from '../services/KbCoverageAggregator';
 import { getDriftStatusForForm } from '../services/AIDriftDetector';
 import { getCostStatusForForm } from '../services/AIReviewerCostGuard';
 import prisma from '../config/prisma';
@@ -52,6 +63,62 @@ function parsePositiveInt(raw: unknown): number | null {
   return n;
 }
 
+/**
+ * Validate the optional `attached_sources[]` body field for `POST /run`.
+ *
+ * Returns either `{ refs }` (a normalized list of `CaseSourceRef`) or
+ * `{ error }` (the human-readable message the route returns as a 400).
+ *
+ * Each entry is `{ kind: 'TICKET'|'TASK'|'CONVERSATION', external_id }`.
+ * - TICKET / TASK → coerced to `{ kind, external_id: number }`.
+ * - CONVERSATION  → coerced to `{ kind: 'CALL', external_id: string }`
+ *   (the route layer's user-facing label is CONVERSATION; the service
+ *   layer's adapter contract is CALL — the kind is renamed here so the
+ *   rest of the dispatch path doesn't need to know about both).
+ *
+ * Exported so the route's input contract has unit-test coverage without
+ * spinning up Express. Pure function — no I/O.
+ */
+export function parseAttachedSources(
+  raw: unknown
+): { refs: CaseSourceRef[] } | { error: string } {
+  if (raw === undefined || raw === null) return { refs: [] };
+  if (!Array.isArray(raw)) {
+    return { error: "Body field 'attached_sources' must be an array when provided." };
+  }
+  const refs: CaseSourceRef[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const entry = raw[i];
+    if (!entry || typeof entry !== 'object') {
+      return { error: `attached_sources[${i}] must be an object { kind, external_id }.` };
+    }
+    const aKindRaw = (entry as { kind?: unknown }).kind;
+    if (aKindRaw !== 'TICKET' && aKindRaw !== 'TASK' && aKindRaw !== 'CONVERSATION') {
+      return { error: `attached_sources[${i}].kind must be one of: TICKET, TASK, CONVERSATION.` };
+    }
+    const aId = (entry as { external_id?: unknown }).external_id;
+    if (aId == null || (typeof aId !== 'string' && typeof aId !== 'number')) {
+      return { error: `attached_sources[${i}].external_id is required (string or number).` };
+    }
+    const aIdStr = String(aId).trim();
+    if (!aIdStr) {
+      return { error: `attached_sources[${i}].external_id must not be empty.` };
+    }
+    if (aKindRaw === 'CONVERSATION') {
+      refs.push({ kind: 'CALL', external_id: aIdStr });
+    } else {
+      const numId = Number(aIdStr);
+      if (!Number.isInteger(numId) || numId <= 0) {
+        return {
+          error: `attached_sources[${i}].external_id must be a positive integer for ${aKindRaw}.`,
+        };
+      }
+      refs.push({ kind: aKindRaw, external_id: numId });
+    }
+  }
+  return { refs };
+}
+
 router.get('/health', (_req: Request, res: Response) => {
   res.json({
     configured: aiReviewerService.isConfigured(),
@@ -74,6 +141,54 @@ function deterministicSampleBucket(submissionId: number): number {
     h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   }
   return Math.abs(h) % 100;
+}
+
+/**
+ * Phase C (C4): collapse multiple submissions belonging to the same
+ * `case_id` (multi-source review of one ticket+call pair) into a single
+ * inbox row. The freshest submission wins on submitted_at. Submissions
+ * with no case_id (legacy or null payload) pass through one-per-row.
+ *
+ * The optional `seen` set lets callers share state across calls so the
+ * same case isn't materialized into more than one of {drafts, samples}
+ * sections of the response.
+ */
+function dedupByCaseId<T extends { id: number; case_id: string | null; submitted_at: Date | null }>(
+  rows: T[],
+  seen?: Set<string>
+): T[] {
+  const localSeen = seen ?? new Set<string>();
+  const out: T[] = [];
+  for (const r of rows) {
+    if (!r.case_id) {
+      out.push(r);
+      continue;
+    }
+    if (localSeen.has(r.case_id)) continue;
+    localSeen.add(r.case_id);
+    out.push(r);
+  }
+  return out;
+}
+
+/**
+ * Phase C (C4): turn a `<KIND>:<external_id>` case_id into the short
+ * label the inbox UI shows ("Ticket #123", "Call abc-…", "Task #45").
+ * Falls back to ticket external id for legacy rows that pre-date C4.
+ */
+function caseIdToSourceLabel(caseId: string | null, ticketExternalId: bigint | undefined): string {
+  if (caseId) {
+    const idx = caseId.indexOf(':');
+    if (idx > 0) {
+      const kind = caseId.slice(0, idx);
+      const id = caseId.slice(idx + 1);
+      if (kind === 'TICKET') return `Ticket #${id}`;
+      if (kind === 'TASK') return `Task #${id}`;
+      if (kind === 'CALL') return `Call ${id}`;
+    }
+  }
+  if (ticketExternalId != null) return `Ticket #${ticketExternalId.toString()}`;
+  return '—';
 }
 
 /**
@@ -112,11 +227,17 @@ router.get('/inbox', async (_req: Request, res: Response) => {
       take: 200,
     });
 
-    const draftItems = drafts.map((d) => ({
+    // Phase C (C4): de-duplicate inbox rows by case_id so multi-source
+    // reviews (ticket + linked call) collapse into a single row instead
+    // of one per side. Submissions without a case_id (legacy / null
+    // payload) keep one row per submission keyed on submission_id.
+    const draftItems = dedupByCaseId(drafts).map((d) => ({
       submission_id: d.id,
       form_id: d.form_id,
       form_name: d.form?.form_name ?? `Form ${d.form_id}`,
+      case_id: d.case_id ?? null,
       ticket_id: d.submission_ticket_tasks[0] ? Number(d.submission_ticket_tasks[0].external_id) : null,
+      source_label: caseIdToSourceLabel(d.case_id, d.submission_ticket_tasks[0]?.external_id),
       created_at: d.submitted_at,
       total_score: null as number | null,
     }));
@@ -165,7 +286,9 @@ router.get('/inbox', async (_req: Request, res: Response) => {
       submission_id: number;
       form_id: number;
       form_name: string;
+      case_id: string | null;
       ticket_id: number | null;
+      source_label: string;
       created_at: Date | null;
       total_score: number | null;
       ai_overall_confidence: number | null;
@@ -184,7 +307,10 @@ router.get('/inbox', async (_req: Request, res: Response) => {
     // (Phase 4 — empirical confidence calibration). Falls back to nominal
     // when no active calibration map exists for the form, which is the
     // identity case (calibrated === nominal) anyway.
-    for (const s of submitted) {
+    // Same case-id collapse as drafts above so a single review covers
+    // every submission in the case.
+    const seenCases = new Set<string>();
+    for (const s of dedupByCaseId(submitted, seenCases)) {
       if (reviewedSet.has(s.id)) continue;
       const cap = s.form?.critical_cap_percent != null ? Number(s.form.critical_cap_percent) : null;
       const score = s.total_score != null ? Number(s.total_score) : null;
@@ -241,7 +367,9 @@ router.get('/inbox', async (_req: Request, res: Response) => {
         submission_id: s.id,
         form_id: s.form_id,
         form_name: s.form?.form_name ?? `Form ${s.form_id}`,
+        case_id: s.case_id ?? null,
         ticket_id: s.submission_ticket_tasks[0] ? Number(s.submission_ticket_tasks[0].external_id) : null,
+        source_label: caseIdToSourceLabel(s.case_id, s.submission_ticket_tasks[0]?.external_id),
         created_at: s.submitted_at,
         total_score: score,
         ai_overall_confidence: overallConf,
@@ -316,6 +444,21 @@ router.post('/run', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Body must include { form_id: <positive integer> }.' });
   }
 
+  // Optional per-call provider override. Lets the compare-models UI
+  // fire two parallel runs (one Anthropic, one OpenAI) without
+  // mutating the form's persisted `ai_model_provider`. When omitted,
+  // the service falls back to the form column (defaults 'anthropic').
+  const rawProviderOverride = req.body?.provider;
+  let providerOverride: 'anthropic' | 'openai' | undefined;
+  if (rawProviderOverride != null) {
+    if (rawProviderOverride !== 'anthropic' && rawProviderOverride !== 'openai') {
+      return res
+        .status(400)
+        .json({ error: "Body field 'provider' must be one of: anthropic, openai." });
+    }
+    providerOverride = rawProviderOverride;
+  }
+
   const rawKind = req.body?.kind;
   const kind: 'TICKET' | 'TASK' | 'CONVERSATION' | null =
     rawKind === 'TICKET' || rawKind === 'TASK' || rawKind === 'CONVERSATION' ? rawKind : null;
@@ -332,10 +475,23 @@ router.post('/run', async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Body field 'external_id' must not be empty." });
   }
 
+  // Phase C (C6): optional `attached_sources[]` lets a manual run grade
+  // a multi-source case. See `parseAttachedSources` below.
+  const parsedAttached = parseAttachedSources(req.body?.attached_sources);
+  if ('error' in parsedAttached) {
+    return res.status(400).json({ error: parsedAttached.error });
+  }
+  const attachedRefs = parsedAttached.refs;
+
   try {
     const form = await prisma.form.findUnique({
       where: { id: formId },
-      select: { id: true, form_name: true, interaction_type: true, ai_enabled: true },
+      select: {
+        id: true,
+        form_name: true,
+        ai_enabled: true,
+        ai_max_attached_sources: true,
+      },
     });
     if (!form) {
       return res.status(404).json({ error: `Form ${formId} not found.` });
@@ -347,41 +503,99 @@ router.post('/run', async (req: Request, res: Response) => {
       });
     }
 
-    // Form-type vs run-kind: log a warning when they don't line up but
-    // still proceed — matches the existing behavior of
-    // `loadFormForReview()` in AIReviewerService, which also warns
-    // instead of refusing. This lets QA admins reuse a form across
-    // interaction types during calibration without manually flipping
-    // `interaction_type` to UNIVERSAL first.
-    const ft = form.interaction_type;
-    const naturalKind: 'TICKET' | 'TASK' | 'CONVERSATION' | null =
-      ft === 'TICKET' ? 'TICKET' : ft === 'CALL' ? 'CONVERSATION' : null;
-    if (ft !== 'UNIVERSAL' && naturalKind !== null && naturalKind !== kind) {
-      logger.warn(
-        `[AI REVIEWER ROUTE] form_id=${formId} interaction_type=${ft} run with kind=${kind}; proceeding anyway. ` +
-          `Set the form to UNIVERSAL (or to ${kind}) to silence this warning.`
-      );
+    // NOTE: We intentionally do NOT consult form.interaction_type here.
+    // Per product direction, `interaction_type` on a form is informational
+    // metadata only — the actual review path is dictated by what's
+    // attached to the run (ticket / task / conversation). A form can be
+    // used for any source kind without "matching" its tag.
+
+    // Cap enforcement: `ai_max_attached_sources` is the form-level cap on
+    // *attached* refs (the primary doesn't count). The service-layer
+    // `loadCase` also caps via its own default, but we surface the form's
+    // limit here as a 400 so the UI can show a clear error before we
+    // burn a Claude call on a doomed run.
+    if (attachedRefs.length > 0) {
+      const cap = Math.max(0, Math.min(10, Number(form.ai_max_attached_sources ?? 3)));
+      if (attachedRefs.length > cap) {
+        return res.status(400).json({
+          error: `Too many attached sources (${attachedRefs.length}); this form caps attachments at ${cap}.`,
+          code: 'TOO_MANY_ATTACHED_SOURCES',
+        });
+      }
     }
 
+    // Capture wall-clock latency on every manual run so the compare-models
+    // UI can render "Claude 92s vs ChatGPT 64s" without re-querying the
+    // ai_call_logs aggregator. Includes load + trace + synthesis +
+    // verification + persistence — i.e. what the user actually waits for.
+    const runStartedAt = Date.now();
+
     let result;
-    if (kind === 'TICKET' || kind === 'TASK') {
-      const numericId = Number(externalIdStr);
-      if (!Number.isInteger(numericId) || numericId <= 0) {
-        return res.status(400).json({ error: `${kind} external_id must be a positive integer.` });
+    if (attachedRefs.length === 0) {
+      // Single-source path: keep the legacy dispatch (one Claude call).
+      // The single-source path is Anthropic-only today (callClaude is
+      // hard-coded); the provider override only affects multi-source
+      // chunked synthesis. Reject loudly so the compare UI never
+      // silently returns identical results on a single-source run.
+      if (providerOverride === 'openai') {
+        return res.status(400).json({
+          error:
+            "Provider override 'openai' is only supported for multi-source cases (attached_sources must be present). " +
+            'The single-source synthesis path is currently Anthropic-only.',
+          code: 'PROVIDER_UNSUPPORTED_SINGLE_SOURCE',
+        });
       }
-      result =
-        kind === 'TICKET'
-          ? await aiReviewerService.reviewClosedTicket(numericId, { formId })
-          : await aiReviewerService.reviewClosedTask(numericId, { formId });
+      if (kind === 'TICKET' || kind === 'TASK') {
+        const numericId = Number(externalIdStr);
+        if (!Number.isInteger(numericId) || numericId <= 0) {
+          return res.status(400).json({ error: `${kind} external_id must be a positive integer.` });
+        }
+        result =
+          kind === 'TICKET'
+            ? await aiReviewerService.reviewClosedTicket(numericId, { formId })
+            : await aiReviewerService.reviewClosedTask(numericId, { formId });
+      } else {
+        result = await aiReviewerService.reviewClosedConversation(externalIdStr, { formId });
+      }
     } else {
-      result = await aiReviewerService.reviewClosedConversation(externalIdStr, { formId });
+      // Multi-source path: build a Case (primary + caller-supplied
+      // attachments) and dispatch to reviewCase. CALL maps to the
+      // service-layer `kind: 'CALL'`; the inbound `kind` value is the
+      // route-layer label only.
+      let primary: CaseSourceRef;
+      if (kind === 'CONVERSATION') {
+        primary = { kind: 'CALL', external_id: externalIdStr };
+      } else {
+        const numericId = Number(externalIdStr);
+        if (!Number.isInteger(numericId) || numericId <= 0) {
+          return res.status(400).json({ error: `${kind} external_id must be a positive integer.` });
+        }
+        primary = { kind, external_id: numericId };
+      }
+      const c = await loadCase(primary, {
+        explicitAttached: attachedRefs,
+        maxAttachedSources: Math.max(0, Math.min(10, Number(form.ai_max_attached_sources ?? 3))),
+      });
+      result = await aiReviewerService.reviewCase(c, { formId, provider: providerOverride });
     }
+
+    const elapsedMs = Date.now() - runStartedAt;
+    // Resolved provider: explicit override > form column > 'anthropic'
+    // default. Surface in the response so the compare UI knows which
+    // side a given submission belongs to without re-querying the form.
+    const formRow = await prisma.form.findUnique({
+      where: { id: formId },
+      select: { ai_model_provider: true },
+    });
+    const resolvedProvider =
+      providerOverride ?? (formRow?.ai_model_provider === 'openai' ? 'openai' : 'anthropic');
 
     logger.info(
       `[AI REVIEWER ROUTE] manual run by user ${req.user?.user_id ?? 'unknown'}: ` +
-        `form_id=${formId} kind=${kind} external_id=${externalIdStr} → submission_id=${result.submission_id} status=${result.status}`
+        `form_id=${formId} kind=${kind} external_id=${externalIdStr} attached=${attachedRefs.length} ` +
+        `provider=${resolvedProvider} elapsed_ms=${elapsedMs} → submission_id=${result.submission_id} status=${result.status}`
     );
-    return res.status(201).json(result);
+    return res.status(201).json({ ...result, provider: resolvedProvider, elapsed_ms: elapsedMs });
   } catch (err) {
     if (err instanceof AIReviewerServiceError) {
       logger.warn(`[AI REVIEWER ROUTE] /run ${err.code}: ${err.message}`);
@@ -422,6 +636,12 @@ router.get('/draft/:submissionId', async (req: Request, res: Response) => {
         submission_answers: true,
         submission_metadata: true,
         submission_ticket_tasks: true,
+        // Phase C (multi-source review): attached calls live on
+        // submission_calls. We MUST hydrate them on draft fetch so the
+        // promote-draft audit page can re-render the same set the AI saw
+        // (otherwise the UI shows only the attached ticket and silently
+        // drops the call — exactly the bug the user hit).
+        submission_calls: { include: { call: true } },
       },
     });
     if (!submission) {
@@ -459,6 +679,21 @@ router.get('/draft/:submissionId', async (req: Request, res: Response) => {
         kind: t.kind,
         external_id: Number(t.external_id),
       })),
+      // Mirrors the Call shape the audit page already uses
+      // (frontend/src/services/callService.ts → interface Call).
+      calls: submission.submission_calls
+        .map((sc) => sc.call)
+        .filter((c): c is NonNullable<typeof c> => c != null)
+        .map((c) => ({
+          id: c.id,
+          call_id: c.call_id,
+          csr_id: c.csr_id,
+          customer_id: c.customer_id ?? null,
+          call_date: c.call_date instanceof Date ? c.call_date.toISOString() : String(c.call_date),
+          duration: c.duration,
+          recording_url: c.recording_url ?? null,
+          transcript: c.transcript ?? null,
+        })),
     });
   } catch (err) {
     logger.error('[AI REVIEWER ROUTE] draft fetch failed', { error: (err as Error).message });
@@ -503,11 +738,28 @@ router.post('/promote-draft/:submissionId', async (req: Request, res: Response) 
       userId
     );
 
+    // Phase B (B4): a promoted submission can be tied to a ticket, a call,
+    // or both. We pick whichever external id is present (preferring ticket
+    // when both exist for combined ticket+call reviews — the ticket is the
+    // anchor of record per the user requirement) and tag the calibration
+    // row with the correct source_kind. Only when neither side has any
+    // external id do we skip — that genuinely means "nothing to learn
+    // against" and is logged so QA can investigate.
+    let calibrationExternalId: number | null = null;
+    let calibrationSourceKind: 'TICKET' | 'CALL' = 'TICKET';
     if (result.ticket_ids.length > 0) {
+      calibrationExternalId = result.ticket_ids[0];
+      calibrationSourceKind = 'TICKET';
+    } else if (result.call_ids.length > 0) {
+      calibrationExternalId = result.call_ids[0];
+      calibrationSourceKind = 'CALL';
+    }
+    if (calibrationExternalId != null) {
       try {
         await aiCalibrationService.recordPromotedDraft({
           formId: result.form_id,
-          ticketId: result.ticket_ids[0],
+          ticketId: calibrationExternalId,
+          sourceKind: calibrationSourceKind,
           submissionId: result.submission_id,
           aiAnswers: result.ai_answers_snapshot,
           humanAnswers: result.human_answers,
@@ -520,7 +772,7 @@ router.post('/promote-draft/:submissionId', async (req: Request, res: Response) 
         logger.warn(`[AI REVIEWER ROUTE] Promotion succeeded but calibration record failed: ${(calErr as Error).message}`);
       }
     } else {
-      logger.warn(`[AI REVIEWER ROUTE] Promoted submission ${submissionId} has no linked ticket; skipping calibration record.`);
+      logger.warn(`[AI REVIEWER ROUTE] Promoted submission ${submissionId} has no linked ticket OR call; skipping calibration record.`);
     }
 
     return res.status(200).json({
@@ -735,7 +987,7 @@ router.get('/calibration/forms/:formId/recent', async (req: Request, res: Respon
  * `forms.version` — these settings change the AI lifecycle without
  * altering the rubric.
  */
-router.patch('/calibration/forms/:formId/settings', async (req: Request, res: Response) => {
+router.patch('/calibration/forms/:formId/settings', authorizeAdmin, async (req: Request, res: Response) => {
   const formId = parsePositiveInt(req.params.formId);
   if (formId === null) {
     return res.status(400).json({ error: 'Invalid form id; must be a positive integer.' });
@@ -822,6 +1074,21 @@ router.patch('/calibration/forms/:formId/settings', async (req: Request, res: Re
     // aiEnabled=true here because this route already enforces ai_enabled below.
     updates.ai_review_guidance = normalizeGuidance(raw, true);
   }
+  // ai_model_provider: enum of supported LLM providers. Lets the form
+  // author A/B Claude vs ChatGPT and pin the winner without code changes.
+  // Whitelist enforced here so a typo in the body can't write garbage
+  // ("claude", "gpt", etc.) that would crash the synthesis pipeline at run
+  // time. New providers (e.g. "gemini") get added here when wired in.
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'ai_model_provider')) {
+    const raw = req.body.ai_model_provider;
+    const allowed = new Set(['anthropic', 'openai']);
+    if (typeof raw !== 'string' || !allowed.has(raw)) {
+      return res
+        .status(400)
+        .json({ error: `ai_model_provider must be one of: ${[...allowed].join(', ')}.` });
+    }
+    updates.ai_model_provider = raw;
+  }
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'Body must include at least one calibration setting.' });
   }
@@ -851,6 +1118,7 @@ router.patch('/calibration/forms/:formId/settings', async (req: Request, res: Re
         ai_sample_low_confidence_threshold: true,
         ai_disagreement_route_threshold: true,
         ai_monthly_cost_budget_usd: true,
+        ai_model_provider: true,
       },
     });
     logger.info(`[AI REVIEWER ROUTE] calibration settings updated for form ${formId}`, updates);
@@ -886,15 +1154,16 @@ router.patch('/calibration/forms/:formId/settings', async (req: Request, res: Re
  * AI Reviewer management list needs: form metadata, mode flag, and a
  * rolling-agreement summary (overall, sample count, last 30d count).
  *
- * Inactive form versions are excluded so the list shows only forms a
- * QA admin can actually manage today. Calibration data points still
- * exist for inactive versions and are reachable from the per-form
- * page if you navigate to one directly.
+ * Includes inactive form versions on purpose — admins still need to be
+ * able to inspect and manage AI guidance / calibration history for a
+ * form whose live version has been turned off. The `version` column
+ * disambiguates when multiple AI-enabled versions of the same form
+ * exist.
  */
 router.get('/forms', async (_req: Request, res: Response) => {
   try {
     const forms = await prisma.form.findMany({
-      where: { ai_enabled: true, is_active: true },
+      where: { ai_enabled: true },
       orderBy: [{ form_name: 'asc' }, { version: 'desc' }],
       select: {
         id: true,
@@ -909,6 +1178,7 @@ router.get('/forms', async (_req: Request, res: Response) => {
         ai_sample_low_confidence_threshold: true,
         ai_disagreement_route_threshold: true,
         ai_monthly_cost_budget_usd: true,
+        ai_model_provider: true,
       },
     });
 
@@ -988,7 +1258,7 @@ router.get('/rule-packs', (_req: Request, res: Response) => {
  * GET /api/ai-reviewer/forms/:formId/rule-packs
  *
  * Returns the rule pack keys currently assigned to a form (read from
- * backend/config/ai-form-rule-packs.json).
+ * the `ai_form_rule_pack_assignment` table via RulePackService cache).
  */
 router.get('/forms/:formId/rule-packs', (req: Request, res: Response) => {
   const formId = parsePositiveInt(req.params.formId);
@@ -1014,7 +1284,7 @@ router.get('/forms/:formId/rule-packs', (req: Request, res: Response) => {
  * Replaces the rule pack assignment for a form. Validates every key
  * exists in the library before persisting.
  */
-router.put('/forms/:formId/rule-packs', (req: Request, res: Response) => {
+router.put('/forms/:formId/rule-packs', authorizeAdmin, async (req: Request, res: Response) => {
   const formId = parsePositiveInt(req.params.formId);
   if (formId === null) {
     return res.status(400).json({ error: 'formId must be a positive integer' });
@@ -1025,7 +1295,7 @@ router.put('/forms/:formId/rule-packs', (req: Request, res: Response) => {
   }
   const userId = req.user?.user_id ?? null;
   try {
-    const saved = rulePackService.setPackKeysForForm(formId, keys);
+    const saved = await rulePackService.setPackKeysForForm(formId, keys, userId);
     // Fire-and-forget regression eval so a content change immediately
     // produces an ai_eval_runs row. Don't block the response on it (eval
     // can take minutes); errors only log.
@@ -1276,6 +1546,42 @@ router.get('/forms/:formId/eval/latest', async (req: Request, res: Response) => 
 });
 
 // ── Confidence calibration map (Phase 4) ──────────────────────────────
+/**
+ * GET /api/ai-reviewer/forms/:formId/kb-coverage?window=30
+ *
+ * Tier-2 Item 4 — KB Coverage dashboard. Reads recent AI submissions
+ * for a form, walks each `ai_extras.pivots` array, and returns a
+ * per-pivot rollup (cases, avg_kb_hits, gap flag). Pivots flagged as
+ * `gap: true` are content gaps the Knowledge team can act on.
+ *
+ * Window defaults to 30 days; capped at 365 to keep the read cheap.
+ */
+router.get('/forms/:formId/kb-coverage', async (req: Request, res: Response) => {
+  const formId = parsePositiveInt(req.params.formId);
+  if (formId === null) return res.status(400).json({ error: 'formId must be a positive integer' });
+  const windowRaw = parsePositiveInt(req.query.window);
+  const windowDays = Math.min(365, windowRaw ?? 30);
+  const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+  try {
+    const submissions = await prisma.submission.findMany({
+      where: {
+        form_id: formId,
+        submitted_at: { gte: cutoff },
+        // Submissions without ai_extras (e.g. human-only or pre-pivot
+        // historical rows) contribute nothing to the rollup, so filter
+        // them out at the DB layer to keep the read narrow.
+        NOT: { ai_extras: { equals: null as any } },
+      },
+      select: { ai_extras: true },
+    });
+    const report = aggregateKbCoverage(formId, windowDays, submissions as { ai_extras?: unknown }[]);
+    return res.json(report);
+  } catch (err) {
+    logger.error('[AI REVIEWER ROUTE] kb-coverage fetch failed', { error: (err as Error).message, formId });
+    return res.status(500).json({ error: 'Failed to load KB coverage report' });
+  }
+});
+
 router.get('/forms/:formId/calibration-map', async (req: Request, res: Response) => {
   const formId = parsePositiveInt(req.params.formId);
   if (formId === null) return res.status(400).json({ error: 'formId must be a positive integer' });
@@ -1405,8 +1711,22 @@ router.get('/forms/:formId/preview-prompt', async (req: Request, res: Response) 
 
     return res.json({
       form_id: formId,
+      // The assembled prompt is the single-source variant: Base body +
+      // SINGLE_SOURCE_ADDENDUM (input shape + output schema). The same
+      // Base body is used by the multi-source synthesis pass at runtime;
+      // we don't preview that here because the user prompt for synthesis
+      // (a list of per-source traces) is materially different and the
+      // value of the preview is to show admins what THEY are authoring,
+      // not the runtime envelope.
+      assembled_for: 'single_source' as const,
       sections: {
-        system_base: { chars: preview.systemBase.chars },
+        // The assembled Base text (Base body + SINGLE_SOURCE_ADDENDUM) is
+        // shipped so the AI Prompt tab can show the actual prompt without
+        // an extra round-trip. Other sections stay text-less because their
+        // content is already editable via dedicated surfaces (rule packs,
+        // guidance editor, corrections panel) and bloating this payload
+        // would defeat the prompt-bloat diagnostic.
+        system_base: { chars: preview.systemBase.chars, text: preview.systemBase.text },
         rule_packs: { chars: preview.packs.chars },
         per_form_guidance: { chars: preview.guidance.chars },
         learned_corrections: { chars: preview.corrections.chars, items: corrections.length },
@@ -1452,6 +1772,43 @@ router.get('/forms/:formId/cost-status', async (req: Request, res: Response) => 
       formId,
     });
     return res.status(500).json({ error: 'Failed to load cost status' });
+  }
+});
+
+/**
+ * GET /api/ai-reviewer/cost-rollup
+ *
+ * Cross-cutting (X1): observability rollups over `ai_call_logs`.
+ *   - byPass[]:   per-pass volume / cost / latency over the window.
+ *   - topCases[]: most expensive multi-source cases over the window.
+ *
+ * Optional query params:
+ *   ?formId=...     scope to one form (defaults to all AI-enabled forms)
+ *   ?days=30        window in days (default 30, capped at 180)
+ *   ?caseLimit=25   how many top cases to return (default 25, max 200)
+ */
+router.get('/cost-rollup', async (req: Request, res: Response) => {
+  const formId = parsePositiveInt(req.query.formId);
+  const daysRaw = Number(req.query.days);
+  const caseLimitRaw = Number(req.query.caseLimit);
+  const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(180, Math.floor(daysRaw)) : 30;
+  const caseLimit = Number.isFinite(caseLimitRaw) && caseLimitRaw > 0 ? Math.min(200, Math.floor(caseLimitRaw)) : 25;
+  try {
+    const { getPassRollup, getCaseRollup } = await import('../services/AICostObservability');
+    const since = new Date(Date.now() - days * 24 * 3600 * 1000);
+    const [byPass, topCases] = await Promise.all([
+      getPassRollup({ formId, since }),
+      getCaseRollup({ formId, since, caseLimit }),
+    ]);
+    return res.json({
+      window_days: days,
+      since: since.toISOString(),
+      by_pass: byPass,
+      top_cases: topCases,
+    });
+  } catch (err) {
+    logger.error('[AI REVIEWER ROUTE] cost rollup failed', { error: (err as Error).message });
+    return res.status(500).json({ error: 'Failed to load cost rollup' });
   }
 });
 
@@ -1547,5 +1904,452 @@ router.get('/forms/:formId/drift', async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to load drift status' });
   }
 });
+
+// =====================================================================
+// Per-question rubrics — backed by `ai_form_question_rubric` (added in
+// migration 20260513100000). The Question Rubrics card on the AI Reviewer
+// Form Detail page calls these to author per-(form, question) grading
+// bars that get rendered into the synthesis prompt by `renderFormSpec`.
+// =====================================================================
+
+/**
+ * GET /api/ai-reviewer/forms/:formId/rubrics
+ *
+ * All authored rubrics for a form. Empty list is a normal state — most
+ * questions don't have a rubric.
+ */
+router.get('/forms/:formId/rubrics', async (req: Request, res: Response) => {
+  const formId = parsePositiveInt(req.params.formId);
+  if (formId === null) {
+    return res.status(400).json({ error: 'formId must be a positive integer' });
+  }
+  try {
+    const rubrics = await listQuestionRubricsForForm(formId);
+    return res.json({ form_id: formId, rubrics });
+  } catch (err) {
+    logger.error('[AI REVIEWER ROUTE] list rubrics failed', { error: (err as Error).message, formId });
+    return res.status(500).json({ error: 'Failed to list rubrics' });
+  }
+});
+
+/**
+ * PUT /api/ai-reviewer/forms/:formId/rubrics/:questionId
+ * Body: { rubric_md: string }
+ *
+ * Upsert a rubric. Empty / whitespace-only `rubric_md` deletes the
+ * rubric (rubrics are optional).
+ */
+router.put('/forms/:formId/rubrics/:questionId', authorizeAdmin, async (req: Request, res: Response) => {
+  const formId = parsePositiveInt(req.params.formId);
+  const questionId = parsePositiveInt(req.params.questionId);
+  if (formId === null || questionId === null) {
+    return res.status(400).json({ error: 'formId and questionId must be positive integers' });
+  }
+  const rubricMd = typeof req.body?.rubric_md === 'string' ? req.body.rubric_md : null;
+  if (rubricMd === null) {
+    return res.status(400).json({ error: 'Body must include { rubric_md: string }.' });
+  }
+  const userId = req.user?.user_id ?? null;
+  try {
+    await upsertQuestionRubric(formId, questionId, rubricMd, userId);
+    const rubrics = await listQuestionRubricsForForm(formId);
+    return res.json({ form_id: formId, rubrics });
+  } catch (err) {
+    logger.error('[AI REVIEWER ROUTE] upsert rubric failed', {
+      error: (err as Error).message,
+      formId,
+      questionId,
+    });
+    return res.status(500).json({ error: 'Failed to save rubric' });
+  }
+});
+
+/**
+ * DELETE /api/ai-reviewer/forms/:formId/rubrics/:questionId
+ *
+ * Remove the rubric for one question. Idempotent (no-op when absent).
+ */
+router.delete('/forms/:formId/rubrics/:questionId', authorizeAdmin, async (req: Request, res: Response) => {
+  const formId = parsePositiveInt(req.params.formId);
+  const questionId = parsePositiveInt(req.params.questionId);
+  if (formId === null || questionId === null) {
+    return res.status(400).json({ error: 'formId and questionId must be positive integers' });
+  }
+  try {
+    await deleteQuestionRubric(formId, questionId);
+    return res.json({ form_id: formId, question_id: questionId, deleted: true });
+  } catch (err) {
+    logger.error('[AI REVIEWER ROUTE] delete rubric failed', {
+      error: (err as Error).message,
+      formId,
+      questionId,
+    });
+    return res.status(500).json({ error: 'Failed to delete rubric' });
+  }
+});
+
+// =====================================================================
+// Rule pack library CRUD — backed by `ai_rule_pack` (added in migration
+// 20260513100000). The Rule Pack Library page (`RulePackLibrary.tsx`)
+// calls these to author pack bodies. The chip picker on the form
+// detail page lists active packs via the existing `GET /rule-packs`
+// summary endpoint above.
+// =====================================================================
+
+/**
+ * GET /api/ai-reviewer/rule-packs/all?include_archived=1
+ *
+ * Full pack rows (including body_md + always_include_urls) for the
+ * library page. Different from the existing `/rule-packs` summary
+ * endpoint that only returns the slim shape needed by the chip picker.
+ */
+router.get('/rule-packs/all', async (req: Request, res: Response) => {
+  const includeArchived = req.query.include_archived === '1' || req.query.include_archived === 'true';
+  try {
+    const items = await rulePackService.listAllPacks(includeArchived);
+    return res.json({ items });
+  } catch (err) {
+    logger.error('[AI REVIEWER ROUTE] rule-pack library list failed', { error: (err as Error).message });
+    return res.status(500).json({ error: 'Failed to list rule packs' });
+  }
+});
+
+/**
+ * GET /api/ai-reviewer/rule-packs/:id
+ *
+ * One pack by id, for the editor drawer.
+ */
+router.get('/rule-packs/:id', async (req: Request, res: Response) => {
+  const id = parsePositiveInt(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'id must be a positive integer' });
+  }
+  try {
+    const pack = await rulePackService.getPackById(id);
+    if (!pack) return res.status(404).json({ error: 'Rule pack not found' });
+    return res.json(pack);
+  } catch (err) {
+    logger.error('[AI REVIEWER ROUTE] rule-pack get failed', { error: (err as Error).message, id });
+    return res.status(500).json({ error: 'Failed to load rule pack' });
+  }
+});
+
+/**
+ * POST /api/ai-reviewer/rule-packs
+ * Body: { key, name, owner_dept, body_md, always_include_urls }
+ *
+ * Create a new rule pack. `key` must be unique and slug-safe.
+ */
+router.post('/rule-packs', authorizeAdmin, async (req: Request, res: Response) => {
+  const userId = req.user?.user_id ?? null;
+  try {
+    const pack = await rulePackService.upsertPack({
+      key: req.body?.key,
+      name: req.body?.name,
+      owner_dept: req.body?.owner_dept,
+      body_md: req.body?.body_md,
+      always_include_urls: req.body?.always_include_urls ?? [],
+      updated_by: userId,
+    });
+    return res.status(201).json(pack);
+  } catch (err) {
+    if (err instanceof RulePackError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
+    logger.error('[AI REVIEWER ROUTE] rule-pack create failed', { error: (err as Error).message });
+    return res.status(500).json({ error: 'Failed to create rule pack' });
+  }
+});
+
+/**
+ * PUT /api/ai-reviewer/rule-packs/:id
+ * Body: { name?, owner_dept?, body_md?, always_include_urls? }
+ *
+ * Update a pack's content. `key` is immutable post-creation (it's the
+ * stable identifier referenced by chip-picker assignments and historic
+ * eval-run pack hashes).
+ */
+router.put('/rule-packs/:id', authorizeAdmin, async (req: Request, res: Response) => {
+  const id = parsePositiveInt(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'id must be a positive integer' });
+  }
+  const userId = req.user?.user_id ?? null;
+  try {
+    const existing = await rulePackService.getPackById(id);
+    if (!existing) return res.status(404).json({ error: 'Rule pack not found' });
+    const pack = await rulePackService.upsertPack({
+      key: existing.key,
+      name: req.body?.name ?? existing.name,
+      owner_dept: req.body?.owner_dept ?? existing.owner_dept,
+      body_md: req.body?.body_md ?? existing.body,
+      always_include_urls: req.body?.always_include_urls ?? existing.always_include_urls,
+      updated_by: userId,
+    });
+    return res.json(pack);
+  } catch (err) {
+    if (err instanceof RulePackError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
+    logger.error('[AI REVIEWER ROUTE] rule-pack update failed', { error: (err as Error).message, id });
+    return res.status(500).json({ error: 'Failed to update rule pack' });
+  }
+});
+
+/**
+ * DELETE /api/ai-reviewer/rule-packs/:id
+ *
+ * Soft-delete (sets is_archived=true). Form assignments referencing
+ * this pack are silently skipped on read until they're re-pointed via
+ * the chip picker.
+ */
+router.delete('/rule-packs/:id', authorizeAdmin, async (req: Request, res: Response) => {
+  const id = parsePositiveInt(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'id must be a positive integer' });
+  }
+  const userId = req.user?.user_id ?? null;
+  try {
+    const pack = await rulePackService.archivePack(id, userId);
+    return res.json(pack);
+  } catch (err) {
+    if (err instanceof RulePackError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
+    logger.error('[AI REVIEWER ROUTE] rule-pack archive failed', { error: (err as Error).message, id });
+    return res.status(500).json({ error: 'Failed to archive rule pack' });
+  }
+});
+
+/**
+ * POST /api/ai-reviewer/rule-packs/:id/restore
+ *
+ * Un-archive (clears is_archived). Used when an admin archives by
+ * mistake; not exposed as a destructive method to keep the API
+ * intent-explicit.
+ */
+router.post('/rule-packs/:id/restore', authorizeAdmin, async (req: Request, res: Response) => {
+  const id = parsePositiveInt(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'id must be a positive integer' });
+  }
+  const userId = req.user?.user_id ?? null;
+  try {
+    const pack = await rulePackService.unarchivePack(id, userId);
+    return res.json(pack);
+  } catch (err) {
+    if (err instanceof RulePackError) {
+      return res.status(err.statusCode).json({ error: err.message, code: err.code });
+    }
+    logger.error('[AI REVIEWER ROUTE] rule-pack restore failed', { error: (err as Error).message, id });
+    return res.status(500).json({ error: 'Failed to restore rule pack' });
+  }
+});
+
+// =====================================================================
+// Base Prompt Library — DB-managed `ai_base_prompt` + `ai_base_prompt_version`
+// (added in 20260515080000). The Base Prompt Library page authors body
+// content for the universal base layer of the 4-layer prompt model.
+// All write endpoints are Admin-only; reads are open to any authenticated
+// user so QA can preview the resolved prompt for any form.
+// =====================================================================
+
+const VALID_PROMPT_KINDS = new Set<PromptKind>(['base', 'trace']);
+
+function parsePromptKind(raw: unknown): PromptKind | null {
+  if (typeof raw !== 'string') return null;
+  return VALID_PROMPT_KINDS.has(raw as PromptKind) ? (raw as PromptKind) : null;
+}
+
+function handleBasePromptError(res: Response, err: unknown, fallback: string, ctx?: Record<string, unknown>): Response {
+  if (err instanceof BasePromptError) {
+    return res.status(err.statusCode).json({ error: err.message, code: err.code });
+  }
+  logger.error(`[AI REVIEWER ROUTE] ${fallback}`, { error: (err as Error).message, ...(ctx ?? {}) });
+  return res.status(500).json({ error: fallback });
+}
+
+/**
+ * GET /api/ai-reviewer/base-prompts?kind=base&include_archived=1
+ *
+ * Lists base prompts for the Library page. Defaults to `kind=base` (the
+ * single admin-editable Base prompt) when no kind is supplied; engineers
+ * can pass `?kind=trace` to inspect the infrastructure trace prompt.
+ * Legacy single_source / synthesis kinds are no longer issuable; archived
+ * rows of those kinds are filtered out by `is_archived`.
+ */
+router.get('/base-prompts', async (req: Request, res: Response) => {
+  const kind = req.query.kind ? parsePromptKind(req.query.kind) : ('base' as PromptKind);
+  if (req.query.kind && !kind) {
+    return res.status(400).json({ error: 'kind must be one of base | trace' });
+  }
+  const includeArchived = req.query.include_archived === '1' || req.query.include_archived === 'true';
+  try {
+    const items = await basePromptService.listBases({ kind: kind ?? undefined, includeArchived });
+    return res.json({ items });
+  } catch (err) {
+    return handleBasePromptError(res, err, 'Failed to list base prompts');
+  }
+});
+
+/**
+ * GET /api/ai-reviewer/base-prompts/:id
+ *
+ * Full row including the current version body. Used by both the per-form
+ * UniversalBaseCard preview and the library editor.
+ */
+router.get('/base-prompts/:id', async (req: Request, res: Response) => {
+  const id = parsePositiveInt(req.params.id);
+  if (id === null) return res.status(400).json({ error: 'id must be a positive integer' });
+  try {
+    const base = await basePromptService.getBaseById(id);
+    if (!base) return res.status(404).json({ error: 'Base prompt not found' });
+    return res.json(base);
+  } catch (err) {
+    return handleBasePromptError(res, err, 'Failed to load base prompt', { id });
+  }
+});
+
+/**
+ * GET /api/ai-reviewer/base-prompts/:id/history?limit=20
+ *
+ * Version history for the rollback drawer. Newest first.
+ */
+router.get('/base-prompts/:id/history', async (req: Request, res: Response) => {
+  const id = parsePositiveInt(req.params.id);
+  if (id === null) return res.status(400).json({ error: 'id must be a positive integer' });
+  const limit = parsePositiveInt(req.query.limit) ?? 20;
+  try {
+    const items = await basePromptService.getBaseHistory(id, limit);
+    return res.json({ items });
+  } catch (err) {
+    return handleBasePromptError(res, err, 'Failed to load base prompt history', { id });
+  }
+});
+
+/**
+ * POST /api/ai-reviewer/base-prompts (Admin)
+ * Body: { key, name, description?, prompt_kind, body_md, change_note?, set_as_default? }
+ *
+ * Create a new base. New rows are NEVER set as default unless the body
+ * explicitly opts in via `set_as_default: true` — surprise-default flips
+ * would invalidate every form's prompt_hash.
+ */
+router.post('/base-prompts', authorizeAdmin, async (req: Request, res: Response) => {
+  const userId = req.user?.user_id ?? null;
+  const promptKind = parsePromptKind(req.body?.prompt_kind);
+  if (!promptKind) {
+    return res.status(400).json({ error: 'prompt_kind must be one of base | trace' });
+  }
+  try {
+    const base = await basePromptService.upsertBase({
+      key: req.body?.key,
+      name: req.body?.name,
+      description: req.body?.description,
+      prompt_kind: promptKind,
+      body_md: req.body?.body_md,
+      change_note: req.body?.change_note,
+      set_as_default: req.body?.set_as_default === true,
+      updated_by: userId,
+    });
+    return res.status(201).json(base);
+  } catch (err) {
+    return handleBasePromptError(res, err, 'Failed to create base prompt');
+  }
+});
+
+/**
+ * PUT /api/ai-reviewer/base-prompts/:id (Admin)
+ * Body: { name?, description?, body_md, change_note?, set_as_default? }
+ *
+ * Edit an existing base. ALWAYS creates a new version row — history is
+ * forward-only, edits never overwrite. `key` and `prompt_kind` are
+ * immutable post-creation (they're stable identifiers downstream).
+ */
+router.put('/base-prompts/:id', authorizeAdmin, async (req: Request, res: Response) => {
+  const id = parsePositiveInt(req.params.id);
+  if (id === null) return res.status(400).json({ error: 'id must be a positive integer' });
+  const userId = req.user?.user_id ?? null;
+  try {
+    const existing = await basePromptService.getBaseById(id);
+    if (!existing) return res.status(404).json({ error: 'Base prompt not found' });
+    const base = await basePromptService.upsertBase({
+      id,
+      key: existing.key,
+      name: req.body?.name ?? existing.name,
+      description: req.body?.description !== undefined ? req.body.description : existing.description,
+      prompt_kind: existing.prompt_kind,
+      body_md: req.body?.body_md ?? existing.body,
+      change_note: req.body?.change_note ?? null,
+      set_as_default: req.body?.set_as_default === true,
+      updated_by: userId,
+    });
+    return res.json(base);
+  } catch (err) {
+    return handleBasePromptError(res, err, 'Failed to update base prompt', { id });
+  }
+});
+
+/**
+ * POST /api/ai-reviewer/base-prompts/:id/archive (Admin)
+ *
+ * Soft-delete. The default base for its kind cannot be archived; flip
+ * the default to another base first.
+ */
+router.post('/base-prompts/:id/archive', authorizeAdmin, async (req: Request, res: Response) => {
+  const id = parsePositiveInt(req.params.id);
+  if (id === null) return res.status(400).json({ error: 'id must be a positive integer' });
+  const userId = req.user?.user_id ?? null;
+  try {
+    const base = await basePromptService.archiveBase(id, userId);
+    if (!base) return res.status(404).json({ error: 'Base prompt not found' });
+    return res.json(base);
+  } catch (err) {
+    return handleBasePromptError(res, err, 'Failed to archive base prompt', { id });
+  }
+});
+
+/**
+ * POST /api/ai-reviewer/base-prompts/:id/rollback/:versionId (Admin)
+ *
+ * Restore an older version's body as a NEW current version. Forward-only
+ * history — the original old row is preserved; the new row is a copy of
+ * its body with `change_note: "Rollback to v<n>"`.
+ */
+router.post('/base-prompts/:id/rollback/:versionId', authorizeAdmin, async (req: Request, res: Response) => {
+  const id = parsePositiveInt(req.params.id);
+  const versionId = parsePositiveInt(req.params.versionId);
+  if (id === null || versionId === null) {
+    return res.status(400).json({ error: 'id and versionId must be positive integers' });
+  }
+  const userId = req.user?.user_id ?? null;
+  try {
+    const base = await basePromptService.rollbackToVersion(id, versionId, userId);
+    return res.json(base);
+  } catch (err) {
+    return handleBasePromptError(res, err, 'Failed to roll back base prompt', { id, versionId });
+  }
+});
+
+/**
+ * POST /api/ai-reviewer/base-prompts/:id/set-default (Admin)
+ *
+ * Atomically marks this base as THE default for its prompt_kind, clearing
+ * the previous default in the same transaction.
+ */
+router.post('/base-prompts/:id/set-default', authorizeAdmin, async (req: Request, res: Response) => {
+  const id = parsePositiveInt(req.params.id);
+  if (id === null) return res.status(400).json({ error: 'id must be a positive integer' });
+  const userId = req.user?.user_id ?? null;
+  try {
+    const base = await basePromptService.setDefaultForKind(id, userId);
+    return res.json(base);
+  } catch (err) {
+    return handleBasePromptError(res, err, 'Failed to set default base prompt', { id });
+  }
+});
+
+// PUT /forms/:formId/base-prompt was retired in migration 20260515090000:
+// the Base prompt is universal; forms cannot override it.
 
 export default router;

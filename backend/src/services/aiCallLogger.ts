@@ -19,6 +19,32 @@
 import { createHash } from 'crypto';
 import prisma from '../config/prisma';
 import logger from '../config/logger';
+import { estimateUsdCost, type CostEstimate } from './aiCostEstimator';
+
+export type CallLogPass =
+  | 'classification'
+  | 'pivot_detection'
+  | 'trace'
+  | 'synthesis'
+  // Chunked synthesis pipeline (large forms, >= AI_REVIEWER_CHUNKED_SYNTHESIS_THRESHOLD
+  // gradeable questions): the legacy 'synthesis' pass is split into a
+  // reasoning-only pass on Opus and N parallel answer-chunk passes on
+  // Sonnet (one per form category). Both kinds are still logically
+  // "synthesis" — separate buckets only exist so cost rollups can
+  // attribute spend correctly across the two model tiers.
+  //
+  // Length note: `ai_call_logs.pass` is VARCHAR(16). 'syn_reasoning' is
+  // 13 chars, 'syn_answers' is 11 chars, 'syn_reconcile' is 13 chars —
+  // all safely fit. The longer 'synthesis_*' spelling overflowed the
+  // column at runtime.
+  | 'syn_reasoning'
+  | 'syn_answers'
+  // Per-question reconciliation pass — fires only when the chunk
+  // pass flags `dissent: true` on a draft verdict (W1.3 of the
+  // consistency refactor). Zero calls on healthy runs.
+  | 'syn_reconcile'
+  | 'verification'
+  | 'single_pass';
 
 export interface CallLogMeta {
   /** 'anthropic' | 'openai' (or future providers). */
@@ -28,6 +54,30 @@ export interface CallLogMeta {
   ticketId?: number | null;
   formId?: number | null;
   submissionId?: number | null;
+  /**
+   * Cross-cutting (X1): which two-pass stage produced this call. The
+   * X1 dashboard query groups by (pass, case_id) so cost and latency
+   * can be attributed to the actual orchestration stage. Defaults to
+   * 'single_pass' for the legacy one-call path so the existing fleet
+   * keeps a stable bucket without needing a backfill.
+   */
+  pass?: CallLogPass;
+  /** Cross-cutting (X1): submissions.case_id for multi-source cases. */
+  caseId?: string | null;
+  /**
+   * Optional per-call USD cost sink. When provided, `withCallLog`
+   * computes `estimateUsdCost(model, tokensIn, tokensOut)` after the
+   * wrapped call succeeds and invokes this callback once with the
+   * result (null if no usable token counts came back). Callers that
+   * orchestrate multiple LLM passes per logical run (e.g. the
+   * `reviewCase` two-pass orchestrator: classifier + N x trace +
+   * synthesis + optional verification) use this to sum the *total*
+   * cost across passes — historically only the synthesis call's cost
+   * was reported back to the UI, which under-counted multi-source
+   * runs by 30-50%. Best-effort: any throw in the callback is caught
+   * and warn-logged so a buggy sink can never derail the LLM call.
+   */
+  onCost?: (cost: CostEstimate | null) => void;
 }
 
 export interface CallLogResult<T> {
@@ -76,14 +126,28 @@ export async function withCallLog<T>(
   try {
     const out = await fn();
     const elapsed = Date.now() - started;
-    // Fire-and-forget: don't await on the happy path to keep latency tight.
+    // Per-call cost sink (best-effort). Computed once per success so
+    // callers like `reviewCase` can sum costs across an entire
+    // orchestrated run without each pass re-implementing pricing.
+    if (meta.onCost) {
+      try {
+        const cost = estimateUsdCost(out.model, out.tokensIn, out.tokensOut);
+        meta.onCost(cost);
+      } catch (sinkErr) {
+        logger.warn(
+          `[ai-call-logger] onCost sink threw (non-fatal): ${(sinkErr as Error).message}`
+        );
+      }
+    }
     void persist({
       provider: meta.provider,
       model: out.model,
       purpose: meta.purpose,
+      pass: meta.pass ?? 'single_pass',
       ticket_id: meta.ticketId ?? null,
       submission_id: meta.submissionId ?? null,
       form_id: meta.formId ?? null,
+      case_id: meta.caseId ?? null,
       prompt_hash: promptHash,
       prompt_chars: promptChars,
       response_chars: out.rawResponse.length,
@@ -103,9 +167,11 @@ export async function withCallLog<T>(
       provider: meta.provider,
       model: 'unknown',
       purpose: meta.purpose,
+      pass: meta.pass ?? 'single_pass',
       ticket_id: meta.ticketId ?? null,
       submission_id: meta.submissionId ?? null,
       form_id: meta.formId ?? null,
+      case_id: meta.caseId ?? null,
       prompt_hash: promptHash,
       prompt_chars: promptChars,
       response_chars: 0,

@@ -74,7 +74,7 @@ export interface ISubmissionService {
   getCallWithForm(call_id: number, form_id: number): Promise<CallWithForm>;
   submitAudit(submissionData: CreateSubmissionDTO, qa_id: number): Promise<{ submission_id: number; total_score: number; message: string }>;
   saveDraft(submissionData: CreateSubmissionDTO, qa_id: number): Promise<{ submission_id: number; message: string }>;
-  promoteDraftToSubmitted(submission_id: number, edits: { answers: CreateSubmissionAnswerDTO[]; metadata?: import('../models').SubmissionMetadataDTO[] }, human_user_id: number): Promise<{ submission_id: number; total_score: number; ai_answers_snapshot: Record<number, string>; human_answers: Record<number, string>; form_id: number; ticket_ids: number[]; message: string }>;
+  promoteDraftToSubmitted(submission_id: number, edits: { answers: CreateSubmissionAnswerDTO[]; metadata?: import('../models').SubmissionMetadataDTO[] }, human_user_id: number): Promise<{ submission_id: number; total_score: number; ai_answers_snapshot: Record<number, string>; human_answers: Record<number, string>; form_id: number; ticket_ids: number[]; call_ids: number[]; message: string }>;
   flagSubmission(flagData: FlagSubmissionDTO, user_id: number): Promise<{ message: string }>;
   recalculateSubmissionScores(submissionIds: number[]): Promise<{ recalculated: Record<number, number>; message: string }>;
 }
@@ -270,6 +270,7 @@ export class SubmissionService implements ISubmissionService {
     human_answers: Record<number, string>;
     form_id: number;
     ticket_ids: number[];
+    call_ids: number[];
     message: string;
   }> {
     if (!Number.isInteger(submission_id) || submission_id <= 0) {
@@ -287,6 +288,9 @@ export class SubmissionService implements ISubmissionService {
       include: {
         submission_answers: true,
         submission_ticket_tasks: { where: { kind: 'TICKET' }, select: { external_id: true } },
+        // Phase B (B4): pull attached call ids so call-only promotions
+        // can be recorded in ai_calibration_data with source_kind='CALL'.
+        submission_calls: { select: { call_id: true } },
       },
     });
     if (!draft) {
@@ -313,6 +317,14 @@ export class SubmissionService implements ISubmissionService {
     }
 
     const ticketIds = draft.submission_ticket_tasks.map((t) => Number(t.external_id));
+    // Phase B (B4): the AI Reviewer's call-only adapter inserts a single
+    // virtual row into submission_calls (call_id = -1) when the source is
+    // a Genesys conversation rather than a CRM call record. We surface
+    // every attached call_id so the calibration writer can pick the right
+    // one regardless of mode.
+    const callIds = draft.submission_calls
+      .map((c) => Number(c.call_id))
+      .filter((n) => Number.isFinite(n) && n > 0);
 
     // Replace answers + metadata + flip status atomically. We do the
     // status/submitted_by/submitted_at flip + answer-replace inline
@@ -372,6 +384,7 @@ export class SubmissionService implements ISubmissionService {
       human_answers: humanAnswersMap,
       form_id: draft.form_id,
       ticket_ids: ticketIds,
+      call_ids: callIds,
       message: 'Draft promoted to SUBMITTED',
     };
   }
@@ -392,22 +405,16 @@ export class SubmissionService implements ISubmissionService {
         submitted_at: null
       };
 
-      // Check if draft already exists (only if call_id is provided)
-      let existingDraft = null;
-      if (submissionData.call_id !== undefined && submissionData.call_id !== null) {
-        existingDraft = await this.submissionRepository.getExistingDraft(
-          submissionData.call_id,
-          submissionData.form_id,
-          qa_id
-        );
-      } else {
-        // Check for drafts without call_id
-        existingDraft = await this.submissionRepository.getExistingDraft(
-          null,
-          submissionData.form_id,
-          qa_id
-        );
-      }
+      // Check if draft already exists. When a case_id is supplied, key dedup
+      // off the case so multi-source / ticket-only / call-only runs each get
+      // their own DRAFT row instead of clobbering unrelated stale drafts that
+      // share (form_id, submitted_by, call_id IS NULL).
+      const existingDraft = await this.submissionRepository.getExistingDraft(
+        submissionData.call_id ?? null,
+        submissionData.form_id,
+        qa_id,
+        submissionData.case_id ?? null
+      );
 
       let submission_id: number;
 

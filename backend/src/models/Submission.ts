@@ -75,6 +75,13 @@ export interface TicketTaskRefDTO {
 
 export interface CreateSubmissionDTO {
   form_id: number;
+  /**
+   * Phase C (C4): multi-source case id (`<KIND>:<external_id>`) the
+   * submission belongs to. When omitted, `MySQLSubmissionRepository`
+   * derives it from the linked tickets/tasks/calls so callers don't
+   * need to know the encoding.
+   */
+  case_id?: string | null;
   call_id?: number | null;
   call_ids?: number[];
   call_data?: Array<{
@@ -129,11 +136,117 @@ export interface CreateSubmissionAnswerDTO {
 /**
  * Side outputs the AI Reviewer emits alongside scored answers.
  * Persisted as JSON in submissions.ai_extras. Keep this in sync with
- * the prompt schema in backend/prompts/ai-reviewer/system.v2.md.
+ * the prompt schema in backend/prompts/ai-reviewer/system.v3.md.
  */
 export interface SubmissionAiExtras {
   timeline?: AiTimelineItem[];
   observations?: AiObservation[];
+  /** Phase A: explicit per-step playbook walk emitted before answers. */
+  playbook_steps?: AiPlaybookStep[];
+  /** Phase A: SPIN-style coaching block separate from the audit-chain narrative. */
+  coaching?: AiCoaching;
+  /**
+   * Phase A: per-answer evidence keyed by question_id. The `evidence_source`
+   * tells the reviewer where the AI looked (note date, transcript timestamp,
+   * header field). The `evidence_quote` is the verbatim snippet (<= 240
+   * chars). Either field may be empty when no quote was found.
+   */
+  answer_evidence?: Record<number, { evidence_source?: string; evidence_quote?: string }>;
+  /**
+   * Phase A: optional verification-pass output. Populated only when the
+   * orchestrator triggered a follow-up Claude call (overall_confidence
+   * < 0.6 or self-consistency violation). `warnings` may be empty if the
+   * verifier found nothing to flag — we still record the trigger so QA
+   * can audit how often verification fires.
+   */
+  verification?: AiVerification;
+  /**
+   * Phase A: self-consistency warnings raised at parse time (before any
+   * verification call). e.g. "answer says steps not followed but
+   * playbook_steps[] has no row with status=missing".
+   */
+  self_consistency_warnings?: string[];
+  /**
+   * Phase D (D1): cross-source faithfulness rubric emitted by the
+   * synthesis pass. Single-source reviews get coverage=accuracy=
+   * pii_discipline=1 and an empty discrepancies array; multi-source
+   * reviews populate per-pair findings tying ticket notes to the call
+   * transcript.
+   */
+  faithfulness?: AiFaithfulness;
+}
+
+export interface AiFaithfulnessDiscrepancy {
+  /** What kind of mismatch the synthesizer found across sources. */
+  kind: 'missing_in_notes' | 'contradiction' | 'embellishment' | 'pii_leak';
+  /** The two sources the discrepancy spans, in `[A, B]` order. */
+  between: Array<'TICKET' | 'TASK' | 'CALL'>;
+  /** One-sentence summary the UI displays. */
+  summary: string;
+  /** Pass-1 trace claim ids when applicable; null when not from a claim. */
+  claim_id_a?: number | null;
+  claim_id_b?: number | null;
+  severity: 'info' | 'warn' | 'critical';
+}
+
+export interface AiFaithfulness {
+  /** Of the call's claims, fraction echoed in the ticket notes (0..1). */
+  coverage: number;
+  /** Of claims appearing in both sources, fraction that agree (0..1). */
+  accuracy: number;
+  /** 1.0 when no PII was captured; lower as severity grows (0..1). */
+  pii_discipline: number;
+  discrepancies: AiFaithfulnessDiscrepancy[];
+}
+
+export interface AiPlaybookStep {
+  /** KB step name verbatim (do not paraphrase). */
+  step: string;
+  /**
+   * Date of the note / transcript line / attachment that documents this step,
+   * or null when status is `missing` or `not_applicable`.
+   */
+  evidence_note_date?: string | null;
+  /**
+   * - `done`: documented in a narrative note, transcript line, or attachment.
+   * - `missing`: should have happened on the agent's actual path but no evidence.
+   * - `out_of_order`: happened later than a step that should have followed it.
+   * - `not_applicable`: legitimately skipped — issue resolved at an earlier
+   *   step, or the step lay on a bypassed branch (alternate-path / decision-flow gate).
+   */
+  status: 'done' | 'missing' | 'out_of_order' | 'not_applicable';
+}
+
+export interface AiCoaching {
+  /** Short kudos for the agent — what they did well that should be repeated. */
+  wins: string[];
+  /** QA-actionable gaps — process drift, missed best-practice, missing documentation. */
+  gaps: string[];
+  /** Concrete drills or follow-up actions tied to gaps where possible. */
+  next_actions: string[];
+}
+
+export interface AiVerification {
+  /** Why verification ran: 'low_confidence' | 'self_consistency' (or both, joined). */
+  trigger: string;
+  /** Per-answer warnings the verifier produced. Empty array means no issues found. */
+  warnings: string[];
+  /** Threshold used for low_confidence trigger (typically 0.6). */
+  threshold: number;
+  /**
+   * Tier-1 (Item 2): asymmetric overall-confidence delta the verifier
+   * applied to `ai_overall_confidence`. Bounded `[-0.20, +0.10]` —
+   * verifier should mostly catch problems, not validate. Optional /
+   * absent on legacy submissions persisted before deltas existed.
+   */
+  overall_delta?: number;
+  /**
+   * Tier-1 (Item 2): per-answer confidence deltas the verifier
+   * applied. Map from `question_id` to delta in `[-0.20, +0.05]`.
+   * Same anti-gaming bias as `overall_delta`. Absent / empty when
+   * the verifier did not adjust any specific answer.
+   */
+  per_answer_deltas?: Record<number, number>;
 }
 
 export interface AiTimelineItem {
@@ -145,6 +258,14 @@ export interface AiTimelineItem {
   action: string;
   /** KB step name when the action maps to a documented step; null when not part of process. */
   kb_step?: string | null;
+  /**
+   * Phase C (C3/C6): which source this row originated from in a
+   * multi-source case. Synthesis pass populates these so the UI can
+   * color-code rows by ticket vs. call. Optional for back-compat with
+   * single-source ai_extras emitted before C3.
+   */
+  evidence_source_kind?: 'TICKET' | 'TASK' | 'CALL' | null;
+  evidence_source_id?: string | number | null;
 }
 
 export type AiObservationKind =

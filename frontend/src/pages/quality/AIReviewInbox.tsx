@@ -90,7 +90,7 @@ export default function AIReviewInbox() {
                 <TableRow>
                   <TableHead>Submission</TableHead>
                   <TableHead>Form</TableHead>
-                  <TableHead>Ticket</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead>Age</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
@@ -108,7 +108,7 @@ export default function AIReviewInbox() {
                     <TableRow key={d.submission_id}>
                       <TableCell className="font-mono text-[12px]">#{d.submission_id}</TableCell>
                       <TableCell className="text-[13px]">{d.form_name}</TableCell>
-                      <TableCell className="font-mono text-[12px]">{d.ticket_id ?? '—'}</TableCell>
+                      <TableCell className="font-mono text-[12px]">{d.source_label || '—'}</TableCell>
                       <TableCell className="text-[12px] text-slate-500">{relativeAge(d.created_at)}</TableCell>
                       <TableCell className="text-right">
                         <Button size="sm" onClick={() => goPromote(d)} className="bg-primary hover:bg-primary/90 text-white">
@@ -136,7 +136,7 @@ export default function AIReviewInbox() {
                 <TableRow>
                   <TableHead>Submission</TableHead>
                   <TableHead>Form</TableHead>
-                  <TableHead>Ticket</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead>Score</TableHead>
                   <TableHead>Reason</TableHead>
                   <TableHead>Age</TableHead>
@@ -156,7 +156,7 @@ export default function AIReviewInbox() {
                     <TableRow key={s.submission_id}>
                       <TableCell className="font-mono text-[12px]">#{s.submission_id}</TableCell>
                       <TableCell className="text-[13px]">{s.form_name}</TableCell>
-                      <TableCell className="font-mono text-[12px]">{s.ticket_id ?? '—'}</TableCell>
+                      <TableCell className="font-mono text-[12px]">{s.source_label || '—'}</TableCell>
                       <TableCell className="font-mono text-[12px]">{s.total_score ?? '—'}</TableCell>
                       <TableCell>
                         {s.routing_reason === 'low_score' ? (

@@ -19,11 +19,13 @@
  *   That is: at most a 3-point regression is tolerated. Tighten via
  *   AI_GOLDEN_DELTA_THRESHOLD env var.
  *
- * The runner intentionally only handles TICKET-source golden
- * submissions today. TASK and CONVERSATION sources are skipped with
- * a `reason: 'unsupported_source'` entry in the result, so the
- * surrounding kappa math is computed only on what we can actually
- * replay.
+ * Phase B (B5): the runner now handles BOTH ticket-source and
+ * call-source (CONVERSATION) golden submissions. Ticket goldens are
+ * dispatched to {@link aiReviewerService.analyzeTicket}; call goldens
+ * to {@link aiReviewerService.analyzeConversation}. TASK source is
+ * still skipped because we do not yet have a stable analyze() entry
+ * point for tasks. Per-submission results carry a `kind` field so the
+ * UI can render call vs ticket evals distinctly.
  */
 
 import { createHash } from 'crypto';
@@ -31,8 +33,8 @@ import prisma from '../config/prisma';
 import logger from '../config/logger';
 import aiReviewerService from './AIReviewerService';
 import rulePackService from './RulePackService';
-import { loadPrompt } from './promptLoader';
-import { computeCohensKappa, type RaterPair } from './agreementMath';
+import basePromptService from './BasePromptService';
+import { computeCohensKappa, computeWeightedKappa, type RaterPair } from './agreementMath';
 import { applyCalibration } from './ConfidenceCalibrator';
 
 /** Pass/fail tolerance vs. the previous run's overall_kappa. */
@@ -54,6 +56,18 @@ export interface EvalRunOptions {
 export interface PerSubmissionEvalResult {
   submission_id: number;
   ticket_id: number | null;
+  /**
+   * Phase B (B5): 'TICKET' for ticket-source goldens, 'CALL' for
+   * conversation-source goldens, null when the submission was skipped
+   * because the source could not be resolved. Surfaced so the eval
+   * trace UI can group/filter by kind.
+   */
+  kind: 'TICKET' | 'CALL' | null;
+  /**
+   * Phase B (B5): Genesys conversation id (calls.call_id string) when
+   * `kind === 'CALL'`. Null for TICKET goldens.
+   */
+  conversation_id?: string | null;
   status: 'evaluated' | 'skipped';
   reason?: string;
   /** Cohen's kappa across the questions evaluated on this single submission. */
@@ -90,9 +104,22 @@ export interface EvalRunResult {
   golden_set_count: number;
   evaluated_count: number;
   overall_kappa: number | null;
+  /**
+   * Phase D (D4): Quadratic-weighted Cohen's kappa over the SCALE-typed
+   * pairs in this run. Penalizes large ordinal disagreements more
+   * heavily than off-by-one. NULL when the golden set has no SCALE
+   * questions (or no evaluated submissions). Stored in
+   * results_json.overall_qwk; the pass gate uses it alongside Cohen's
+   * kappa: `pass = min(kappa, qwk) >= prev - delta_threshold` so a
+   * model that flips 1↔5 on an ordinal scale can't sneak by because
+   * its nominal agreement is unchanged.
+   */
+  overall_qwk: number | null;
   pass: boolean;
   prev_overall_kappa: number | null;
+  prev_overall_qwk: number | null;
   delta_vs_prev: number | null;
+  delta_qwk_vs_prev: number | null;
   per_submission: PerSubmissionEvalResult[];
 }
 
@@ -102,7 +129,11 @@ export interface EvalRunResult {
  * (so a kappa drop can be diagnosed against the prompt that caused it).
  */
 async function computePromptHash(formId: number): Promise<{ promptHash: string; packHashes: Record<string, string> }> {
-  const systemBase = loadPrompt('ai-reviewer/system.v2');
+  // Hash the assembled single-source system prompt — Base body + the
+  // single-source addendum — which matches what real runs send to the
+  // model. A Base body edit OR an addendum change naturally bumps the
+  // hash and the eval-runs ledger captures the before/after kappa diff.
+  const systemBase = basePromptService.getAssembledPrompt('single_source').body;
   const packs = rulePackService.getPacksForForm(formId);
   const form = await prisma.form.findUnique({
     where: { id: formId },
@@ -122,14 +153,29 @@ async function computePromptHash(formId: number): Promise<{ promptHash: string; 
   return { promptHash: composite.digest('hex'), packHashes };
 }
 
-async function getPreviousRun(formId: number): Promise<{ overall_kappa: number | null; ran_at: Date } | null> {
+async function getPreviousRun(
+  formId: number
+): Promise<{ overall_kappa: number | null; overall_qwk: number | null; ran_at: Date } | null> {
   const prev = await prisma.aiEvalRun.findFirst({
     where: { form_id: formId },
     orderBy: { ran_at: 'desc' },
-    select: { overall_kappa: true, ran_at: true },
+    select: { overall_kappa: true, ran_at: true, results_json: true },
   });
   if (!prev) return null;
-  return { overall_kappa: prev.overall_kappa != null ? Number(prev.overall_kappa) : null, ran_at: prev.ran_at };
+  // overall_qwk lives in results_json (Phase D added it without a
+  // schema change so we don't carry a migration just to track a second
+  // metric on the eval run row).
+  let overallQwk: number | null = null;
+  const results = prev.results_json as { overall_qwk?: unknown } | null;
+  const raw = results?.overall_qwk;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    overallQwk = raw;
+  }
+  return {
+    overall_kappa: prev.overall_kappa != null ? Number(prev.overall_kappa) : null,
+    overall_qwk: overallQwk,
+    ran_at: prev.ran_at,
+  };
 }
 
 /**
@@ -155,6 +201,11 @@ export async function runGoldenEval(opts: EvalRunOptions): Promise<EvalRunResult
 
   const perSubmission: PerSubmissionEvalResult[] = [];
   const allPairs: RaterPair[] = [];
+  // Phase D (D4): SCALE-typed pairs collected separately so we can
+  // compute quadratic-weighted kappa over an actual ordinal axis.
+  // Pairs whose values aren't both integers are silently skipped — a
+  // SCALE answer that someone typed as text can't be ordered safely.
+  const scalePairs: RaterPair[] = [];
 
   if (goldenCount === 0) {
     // Persist a "no data" run so the UI shows we tried.
@@ -179,19 +230,28 @@ export async function runGoldenEval(opts: EvalRunOptions): Promise<EvalRunResult
       golden_set_count: 0,
       evaluated_count: 0,
       overall_kappa: null,
+      overall_qwk: null,
       pass: true,
       prev_overall_kappa: prevRun?.overall_kappa ?? null,
+      prev_overall_qwk: prevRun?.overall_qwk ?? null,
       delta_vs_prev: null,
+      delta_qwk_vs_prev: null,
       per_submission: [],
     };
   }
 
-  // Resolve each golden submission to its TICKET id (today's only supported source).
+  // Phase B (B5): resolve each golden submission to a TICKET ticket_id
+  // OR to a CALL conversation_id. We pull both relations in one query
+  // and dispatch on whichever side is populated. Ticket wins when both
+  // exist (combined ticket+call goldens are evaluated as ticket-source
+  // until Phase C delivers the Case loader; the call side comes back
+  // automatically once the two-pass synthesis lands).
   const submissionIds = goldenRows.map((g) => g.submission_id);
   const submissions = await prisma.submission.findMany({
     where: { id: { in: submissionIds } },
     include: {
       submission_ticket_tasks: true,
+      submission_calls: { include: { call: { select: { call_id: true } } } },
       submission_answers: { include: { question: { select: { id: true, question_text: true, question_type: true } } } },
     },
   });
@@ -200,33 +260,71 @@ export async function runGoldenEval(opts: EvalRunOptions): Promise<EvalRunResult
   for (const g of goldenRows) {
     const sub = byId.get(g.submission_id);
     if (!sub) {
-      perSubmission.push({ submission_id: g.submission_id, ticket_id: null, status: 'skipped', reason: 'submission_missing' });
-      continue;
-    }
-    const ticketLink = sub.submission_ticket_tasks.find((t) => t.kind === 'TICKET');
-    if (!ticketLink) {
       perSubmission.push({
         submission_id: g.submission_id,
         ticket_id: null,
+        kind: null,
         status: 'skipped',
-        reason: 'unsupported_source (only TICKET is supported)',
+        reason: 'submission_missing',
       });
       continue;
     }
-    const ticketId = Number(ticketLink.external_id);
+    const ticketLink = sub.submission_ticket_tasks.find((t) => t.kind === 'TICKET');
+    // Filter out the virtual call_id = -1 placeholder used by the
+    // Conversation adapter when no real `calls` row exists. We need a
+    // genuine `calls.call_id` (Genesys conversation id) to drive
+    // analyzeConversation; without it we cannot replay.
+    const callLink = sub.submission_calls.find(
+      (sc) => sc.call?.call_id && sc.call.call_id.trim().length > 0
+    );
 
     let analysis: Awaited<ReturnType<typeof aiReviewerService.analyzeTicket>> | null = null;
-    try {
-      analysis = await aiReviewerService.analyzeTicket(ticketId, { formId });
-    } catch (err) {
+    let evalKind: 'TICKET' | 'CALL';
+    let ticketIdForRow: number | null = null;
+    let conversationIdForRow: string | null = null;
+
+    if (ticketLink) {
+      evalKind = 'TICKET';
+      ticketIdForRow = Number(ticketLink.external_id);
+      try {
+        analysis = await aiReviewerService.analyzeTicket(ticketIdForRow, { formId });
+      } catch (err) {
+        perSubmission.push({
+          submission_id: g.submission_id,
+          ticket_id: ticketIdForRow,
+          kind: 'TICKET',
+          status: 'skipped',
+          reason: `analyze_failed: ${(err as Error).message}`,
+        });
+        continue;
+      }
+    } else if (callLink && callLink.call?.call_id) {
+      evalKind = 'CALL';
+      conversationIdForRow = callLink.call.call_id;
+      try {
+        analysis = await aiReviewerService.analyzeConversation(conversationIdForRow, { formId });
+      } catch (err) {
+        perSubmission.push({
+          submission_id: g.submission_id,
+          ticket_id: null,
+          kind: 'CALL',
+          conversation_id: conversationIdForRow,
+          status: 'skipped',
+          reason: `analyze_failed: ${(err as Error).message}`,
+        });
+        continue;
+      }
+    } else {
       perSubmission.push({
         submission_id: g.submission_id,
-        ticket_id: ticketId,
+        ticket_id: null,
+        kind: null,
         status: 'skipped',
-        reason: `analyze_failed: ${(err as Error).message}`,
+        reason: 'unsupported_source (no TICKET ticket_task and no resolvable CALL link)',
       });
       continue;
     }
+    const ticketId = ticketIdForRow ?? 0;
 
     // Build (golden, ai) pairs per question.
     const goldenByQid = new Map(sub.submission_answers.map((a) => [a.question_id, a]));
@@ -245,6 +343,13 @@ export async function runGoldenEval(opts: EvalRunOptions): Promise<EvalRunResult
       const pair: RaterPair = [aiValue, golden];
       localPairs.push(pair);
       allPairs.push(pair);
+      if (qtype === 'SCALE') {
+        const aiNum = Number(aiValue);
+        const goldenNum = Number(golden);
+        if (Number.isInteger(aiNum) && Number.isInteger(goldenNum)) {
+          scalePairs.push(pair);
+        }
+      }
       questions.push({
         question_id: ans.question_id,
         question_text: ans.question?.question_text ?? `(question #${ans.question_id})`,
@@ -285,7 +390,9 @@ export async function runGoldenEval(opts: EvalRunOptions): Promise<EvalRunResult
 
     perSubmission.push({
       submission_id: g.submission_id,
-      ticket_id: ticketId,
+      ticket_id: evalKind === 'TICKET' ? ticketId : null,
+      kind: evalKind,
+      conversation_id: evalKind === 'CALL' ? conversationIdForRow : null,
       status: 'evaluated',
       kappa: localPairs.length > 0 ? computeCohensKappa(localPairs) : undefined,
       questions,
@@ -304,11 +411,35 @@ export async function runGoldenEval(opts: EvalRunOptions): Promise<EvalRunResult
   const evaluatedCount = perSubmission.filter((p) => p.status === 'evaluated').length;
   const overallKappa = allPairs.length > 0 ? computeCohensKappa(allPairs) : null;
 
+  // Phase D (D4): quadratic-weighted kappa over the SCALE-typed pairs.
+  // Build the ordinal axis from the union of integer values that
+  // actually appeared so the weight matrix matches the data.
+  let overallQwk: number | null = null;
+  if (scalePairs.length > 0) {
+    const distinct = new Set<number>();
+    for (const [a, b] of scalePairs) {
+      distinct.add(Number(a));
+      distinct.add(Number(b));
+    }
+    const ordered = [...distinct].sort((a, b) => a - b).map((n) => String(n));
+    const qwk = computeWeightedKappa(scalePairs, ordered, 'quadratic');
+    overallQwk = Number.isFinite(qwk) ? qwk : null;
+  }
+
   let pass = true;
   let delta: number | null = null;
+  let qwkDelta: number | null = null;
   if (overallKappa != null && prevRun?.overall_kappa != null) {
     delta = overallKappa - prevRun.overall_kappa;
     pass = delta >= -DEFAULT_DELTA_THRESHOLD;
+  }
+  // QWK gate: only enforce when we have a comparable QWK on both sides
+  // (prev run actually had SCALE pairs too). When either side is null
+  // we fall back to kappa alone — useful while the eval set is being
+  // populated and not all forms have SCALE questions.
+  if (overallQwk != null && prevRun?.overall_qwk != null) {
+    qwkDelta = overallQwk - prevRun.overall_qwk;
+    pass = pass && qwkDelta >= -DEFAULT_DELTA_THRESHOLD;
   }
 
   const created = await prisma.aiEvalRun.create({
@@ -323,6 +454,9 @@ export async function runGoldenEval(opts: EvalRunOptions): Promise<EvalRunResult
         per_submission: perSubmission,
         delta_threshold: DEFAULT_DELTA_THRESHOLD,
         prev_overall_kappa: prevRun?.overall_kappa ?? null,
+        prev_overall_qwk: prevRun?.overall_qwk ?? null,
+        overall_qwk: overallQwk,
+        qwk_pair_count: scalePairs.length,
       } as any,
       overall_kappa: overallKappa != null ? roundDecimal(overallKappa, 3) : null,
       pass,
@@ -332,7 +466,9 @@ export async function runGoldenEval(opts: EvalRunOptions): Promise<EvalRunResult
   logger.info(
     `[AI EVAL] form_id=${formId} trigger=${triggeredBy} golden=${goldenCount} evaluated=${evaluatedCount} ` +
       `kappa=${overallKappa == null ? 'null' : overallKappa.toFixed(3)} ` +
-      `delta=${delta == null ? 'null' : delta.toFixed(3)} pass=${pass}`
+      `qwk=${overallQwk == null ? 'null' : overallQwk.toFixed(3)} ` +
+      `delta=${delta == null ? 'null' : delta.toFixed(3)} ` +
+      `qwk_delta=${qwkDelta == null ? 'null' : qwkDelta.toFixed(3)} pass=${pass}`
   );
 
   return {
@@ -343,9 +479,12 @@ export async function runGoldenEval(opts: EvalRunOptions): Promise<EvalRunResult
     golden_set_count: goldenCount,
     evaluated_count: evaluatedCount,
     overall_kappa: overallKappa,
+    overall_qwk: overallQwk,
     pass,
     prev_overall_kappa: prevRun?.overall_kappa ?? null,
+    prev_overall_qwk: prevRun?.overall_qwk ?? null,
     delta_vs_prev: delta,
+    delta_qwk_vs_prev: qwkDelta,
     per_submission: perSubmission,
   };
 }

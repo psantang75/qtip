@@ -26,6 +26,7 @@ import prisma from '../config/prisma';
 import logger from '../config/logger';
 import bookstackService from './BookStackService';
 import { getOpenAIClient, isOpenAIConfigured } from './ai/OpenAIClient';
+import { parseKbFrontMatter } from './kbFrontMatter';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const EMBEDDING_DIMS = 1536;
@@ -58,7 +59,7 @@ export interface CrawlSummary {
   elapsed_ms: number;
 }
 
-class KbIndexService {
+export class KbIndexService {
   /** In-memory cache of all embeddings. Loaded lazily; reset() clears it. */
   private cache: IndexedPage[] | null = null;
 
@@ -114,6 +115,14 @@ class KbIndexService {
           summary.pages_skipped++;
           continue;
         }
+        // Phase D (D2): pull markdown FIRST so we can parse the QTIP
+        // front-matter block. We still embed plaintext (BookStack's
+        // HTML stripped) so the existing semanticSearch contract
+        // doesn't change. When markdown is empty (BookStack pages
+        // authored in WYSIWYG mode have no markdown source), we fall
+        // back to plaintext-only and skip front-matter parsing.
+        const markdown = await bookstackService.getPageContent(page.id, 'markdown').catch(() => '');
+        const { meta, playbook_steps } = parseKbFrontMatter(markdown);
         const content = await bookstackService.getPageContent(page.id, 'plaintext');
         const trimmed = content.slice(0, MAX_EMBED_CHARS);
         if (!trimmed.trim()) {
@@ -122,6 +131,36 @@ class KbIndexService {
         }
         const sha = sha256(trimmed);
         const prior = existingByPageId.get(page.id);
+        const metaChanged = meta != null || playbook_steps.length > 0;
+        if (!force && prior && prior.content_sha === sha && !metaChanged) {
+          summary.pages_unchanged++;
+          continue;
+        }
+        // Always upsert kb_pages_meta when we have parsed metadata.
+        // Cheap (<= one row per page) and lets us pick up authors who
+        // added a front-matter block without changing the body text.
+        if (metaChanged) {
+          await prisma.kbPageMeta.upsert({
+            where: { page_id: page.id },
+            create: {
+              page_id: page.id,
+              qtip_role: meta?.qtip_role ?? null,
+              qtip_applies_to: (meta?.qtip_applies_to ?? null) as any,
+              qtip_steps: (meta?.qtip_steps ?? null) as any,
+              qtip_authority: meta?.qtip_authority ?? null,
+              playbook_steps: (playbook_steps.length > 0 ? playbook_steps : null) as any,
+              parsed_at: new Date(),
+            },
+            update: {
+              qtip_role: meta?.qtip_role ?? null,
+              qtip_applies_to: (meta?.qtip_applies_to ?? null) as any,
+              qtip_steps: (meta?.qtip_steps ?? null) as any,
+              qtip_authority: meta?.qtip_authority ?? null,
+              playbook_steps: (playbook_steps.length > 0 ? playbook_steps : null) as any,
+              parsed_at: new Date(),
+            },
+          });
+        }
         if (!force && prior && prior.content_sha === sha) {
           summary.pages_unchanged++;
           continue;
@@ -210,6 +249,82 @@ class KbIndexService {
     }));
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, k);
+  }
+
+  /**
+   * Phase A: Public, best-effort query embedder for callers other than the
+   * KB pipeline (e.g. AICalibrationService ranking learned corrections by
+   * semantic similarity to the current ticket's classification text).
+   *
+   * Returns null when:
+   *   - OpenAI / BookStack are not configured (`isConfigured() === false`)
+   *   - the input is empty after trim
+   *   - the OpenAI call throws (we log and swallow — callers must have a
+   *     non-embedding fallback path; this method must NEVER throw because
+   *     a missing similarity ranking is a soft degradation, not a hard
+   *     failure of the consuming feature).
+   *
+   * Returned vectors are L2-normalized so callers can use a plain dot
+   * product as cosine similarity (mirrors `semanticSearch()`'s contract).
+   */
+  async embedQueryVector(text: string): Promise<Float32Array | null> {
+    if (!this.isConfigured()) return null;
+    const trimmed = (text ?? '').trim();
+    if (!trimmed) return null;
+    try {
+      return await this.embedText(trimmed.slice(0, MAX_EMBED_CHARS));
+    } catch (err) {
+      logger.warn(`[kb-index] embedQueryVector failed: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Phase A: Batch embedder. Accepts an array of texts and returns the
+   * corresponding L2-normalized vectors in the same order. Empty inputs
+   * map to null in the returned array. Returns null entirely when the
+   * service is not configured or the OpenAI call fails (caller falls
+   * back). Used by AICalibrationService to embed N correction texts +
+   * the current classification text in one round trip when re-ranking
+   * learned corrections.
+   */
+  async embedQueryVectors(texts: string[]): Promise<(Float32Array | null)[] | null> {
+    if (!this.isConfigured()) return null;
+    const cleaned = texts.map((t) => (t ?? '').trim().slice(0, MAX_EMBED_CHARS));
+    const nonEmptyIdx: number[] = [];
+    const inputs: string[] = [];
+    cleaned.forEach((t, i) => {
+      if (t) {
+        nonEmptyIdx.push(i);
+        inputs.push(t);
+      }
+    });
+    if (inputs.length === 0) return texts.map(() => null);
+    try {
+      const client = getOpenAIClient();
+      const res = await client.embeddings.create({ model: EMBEDDING_MODEL, input: inputs });
+      const out: (Float32Array | null)[] = texts.map(() => null);
+      for (let i = 0; i < res.data.length; i++) {
+        const raw = res.data[i]?.embedding ?? [];
+        if (raw.length !== EMBEDDING_DIMS) continue;
+        const arr = new Float32Array(raw.length);
+        for (let k = 0; k < raw.length; k++) arr[k] = raw[k];
+        out[nonEmptyIdx[i]] = l2Normalize(arr);
+      }
+      return out;
+    } catch (err) {
+      logger.warn(`[kb-index] embedQueryVectors failed: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Phase A: Cosine similarity helper for callers that already hold two
+   * L2-normalized vectors (e.g. from `embedQueryVectors`). Equals dot
+   * product because both inputs are unit-normalized at embed time.
+   */
+  static cosineSimilarity(a: Float32Array, b: Float32Array): number {
+    return dotProduct(a, b);
   }
 
   // ----- internals --------------------------------------------------------

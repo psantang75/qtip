@@ -22,7 +22,7 @@ vi.mock('../../config/prisma', () => ({
   default: { aiCalibrationMap: { findFirst: findFirstMock } },
 }));
 
-import { applyCalibration, invalidateActiveMapCache } from '../ConfidenceCalibrator';
+import { applyCalibration, applyAnswerCalibration, invalidateActiveMapCache } from '../ConfidenceCalibrator';
 
 describe('ConfidenceCalibrator', () => {
   beforeEach(() => {
@@ -123,5 +123,106 @@ describe('ConfidenceCalibrator', () => {
     });
     const out = await applyCalibration(99016, 0.42);
     expect(out).toBe(0.42);
+  });
+});
+
+// ── Tier-1 Item 3: per-question calibration ──────────────────────────────
+//
+// `applyAnswerCalibration(formId, questionId, nominal)` looks at the
+// active map's optional `by_question[<qid>]` bin set first, then falls
+// back to the per-form bins, then to identity. Gated by env flag
+// `AI_REVIEWER_PER_QUESTION_CALIBRATION` so the rollout can be staged.
+describe('applyAnswerCalibration', () => {
+  beforeEach(() => {
+    findFirstMock.mockReset();
+    invalidateActiveMapCache();
+  });
+
+  it('is identity (clamped) when the per-question feature flag is off', async () => {
+    delete process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION;
+    findFirstMock.mockResolvedValue({
+      version: 1,
+      bins_json: {
+        bins: [{ low: 0, high: 1, calibrated: 0.5 }],
+        by_question: { 42: { bins: [{ low: 0, high: 1, calibrated: 0.99 }] } },
+      },
+    });
+    const out = await applyAnswerCalibration(99016, 42, 0.7);
+    expect(out).toBe(0.7);
+  });
+
+  it('uses the per-question bins when the flag is on AND the map has a by_question entry', async () => {
+    process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION = '1';
+    try {
+      findFirstMock.mockResolvedValue({
+        version: 1,
+        bins_json: {
+          bins: [{ low: 0, high: 1, calibrated: 0.5 }],
+          by_question: { 42: { bins: [{ low: 0, high: 1, calibrated: 0.3 }] } },
+        },
+      });
+      const out = await applyAnswerCalibration(99016, 42, 0.95);
+      expect(out).toBe(0.3);
+    } finally {
+      delete process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION;
+    }
+  });
+
+  it('falls through to per-form bins for questions without a by_question entry', async () => {
+    process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION = '1';
+    try {
+      findFirstMock.mockResolvedValue({
+        version: 1,
+        bins_json: {
+          bins: [{ low: 0.5, high: 1, calibrated: 0.6 }],
+          by_question: { 42: { bins: [{ low: 0, high: 1, calibrated: 0.99 }] } },
+        },
+      });
+      const out = await applyAnswerCalibration(99016, 99, 0.7); // q99 has no entry
+      expect(out).toBe(0.6);
+    } finally {
+      delete process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION;
+    }
+  });
+
+  it('is identity passthrough when there is no active map at all', async () => {
+    process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION = '1';
+    try {
+      findFirstMock.mockResolvedValue(null);
+      const out = await applyAnswerCalibration(99016, 42, 0.42);
+      expect(out).toBe(0.42);
+    } finally {
+      delete process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION;
+    }
+  });
+
+  it('returns null for null / non-finite inputs without touching the DB', async () => {
+    process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION = '1';
+    try {
+      const out1 = await applyAnswerCalibration(99016, 42, null);
+      const out2 = await applyAnswerCalibration(99016, 42, Number.NaN);
+      expect(out1).toBeNull();
+      expect(out2).toBeNull();
+      expect(findFirstMock).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION;
+    }
+  });
+
+  it('skips by_question entries with malformed bins (per-form fallback wins)', async () => {
+    process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION = '1';
+    try {
+      findFirstMock.mockResolvedValue({
+        version: 1,
+        bins_json: {
+          bins: [{ low: 0, high: 1, calibrated: 0.5 }],
+          by_question: { 42: { bins: [{ low: 'oops', high: 'nope' }] } },
+        },
+      });
+      const out = await applyAnswerCalibration(99016, 42, 0.8);
+      expect(out).toBe(0.5);
+    } finally {
+      delete process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION;
+    }
   });
 });

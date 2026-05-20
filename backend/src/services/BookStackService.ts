@@ -1,5 +1,6 @@
 import { bookstackConfig } from '../config/environment';
 import logger from '../config/logger';
+import { stripHtmlToPlaintext } from '../utils/htmlText';
 
 /**
  * BookStack KB service for read-only access to the internal knowledge base
@@ -211,19 +212,32 @@ class BookStackService {
     // plaintext: BookStack v26 doesn't ship a dedicated plaintext field, so
     // we strip tags from the HTML. Cheap, deterministic, no extra dep.
     const html = r.html ?? r.raw_html ?? '';
-    return html
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/\s+\n/g, '\n')
-      .replace(/[ \t]+/g, ' ')
-      .trim();
+    return stripHtmlToPlaintext(html);
+  }
+
+  /**
+   * Fetch a page once and return BOTH its plaintext (for LLM context) and
+   * the list of in-KB hyperlinks found in its HTML. The AI Reviewer
+   * uses this for the link-expansion KB layer: a leaf troubleshoot page
+   * (e.g. "Not Connected to the Internet") often back-links to its
+   * parent decision-flow page (e.g. "SXBR2/SXBR3 Troubleshoot") which
+   * documents the email-vs-phone branching the leaf doesn't cover.
+   * Stripping HTML to plaintext loses the `<a href>` URLs, so we have
+   * to read them off the HTML before stripping. Single API call;
+   * deterministic.
+   */
+  async getPageContentWithLinks(
+    pageId: number
+  ): Promise<{ plaintext: string; links: string[] }> {
+    const r = await this.request<{
+      html?: string;
+      raw_html?: string;
+    } & Record<string, unknown>>(`/api/pages/${pageId}`);
+    const html = r.html ?? r.raw_html ?? '';
+    return {
+      plaintext: stripHtmlToPlaintext(html),
+      links: extractInKbLinksFromHtml(html),
+    };
   }
 
   /**
@@ -314,3 +328,77 @@ class BookStackService {
 
 export const bookstackService = new BookStackService();
 export default bookstackService;
+
+// HTML → plaintext now lives in `utils/htmlText.ts` — same implementation, shared
+// across CRM ticket descriptions / notes and BookStack KB bodies so HTML entities
+// (`&quot;`, `&amp;`, etc.) decode consistently before reaching the AI prompt.
+
+/**
+ * Pull every BookStack page URL referenced from `<a href="...">`
+ * anchors in a KB page's HTML body. Used by the AI Reviewer's KB
+ * link-expansion layer to follow back-links and "see also" pointers
+ * into parent / sibling pages.
+ *
+ * Filters strictly to URLs that look like BookStack pages on this
+ * deployment's host. Returns deduped, in-document order so the BFS
+ * processes top-of-page back-links (typically the "Return to ..."
+ * pointers) before in-body cross-references.
+ */
+function extractInKbLinksFromHtml(html: string): string[] {
+  if (!html) return [];
+  const baseUrl = bookstackConfig?.baseUrl ?? '';
+  const host = (() => {
+    try {
+      return baseUrl ? new URL(baseUrl).host : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  // Match href values on <a> tags. BookStack-rendered HTML uses double
+  // quotes; we permit single quotes too for safety. The URL-shape
+  // gate (must end in /books/<book>/page/<slug>) keeps anchor links
+  // (#section), image attachments, and external sites out of scope.
+  const re = /<a\b[^>]*?href\s*=\s*['"]([^'"]+)['"][^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const raw = (m[1] ?? '').trim();
+    if (!raw) continue;
+    if (!/\/books\/[A-Za-z0-9_-]+\/page\/[A-Za-z0-9_-]+\/?(?:[?#].*)?$/.test(raw)) continue;
+    let absolute: string | null = null;
+    try {
+      absolute = baseUrl ? new URL(raw, baseUrl).toString() : raw;
+    } catch {
+      continue;
+    }
+    if (!absolute) continue;
+    if (host) {
+      try {
+        const u = new URL(absolute);
+        if (u.host !== host) continue;
+      } catch {
+        continue;
+      }
+    }
+    // Drop fragment + query so dedup matches the canonical page URL.
+    try {
+      const u = new URL(absolute);
+      u.hash = '';
+      u.search = '';
+      absolute = u.toString().replace(/\/$/, '');
+    } catch {
+      // keep as-is if URL constructor rejects it
+    }
+    if (!seen.has(absolute)) {
+      seen.add(absolute);
+      out.push(absolute);
+    }
+  }
+  return out;
+}
+
+// Exported for unit tests so we can lock in the link extractor's
+// behavior on real BookStack HTML fixtures.
+export const __test_only__ = { stripHtmlToPlaintext, extractInKbLinksFromHtml };

@@ -11,13 +11,20 @@ export interface AiInboxItem {
   submission_id: number
   form_id: number
   form_name: string
+  /**
+   * Phase C (C4): `<KIND>:<external_id>` identifier shared by every
+   * submission belonging to the same multi-source case (ticket+call).
+   * `source_label` is the pre-formatted human label for the row.
+   */
+  case_id: string | null
+  source_label: string
   ticket_id: number | null
   created_at: string | null
   total_score: number | null
 }
 
 export interface AiInboxSampleItem extends AiInboxItem {
-  routing_reason: 'low_score' | 'low_confidence' | 'random_sample'
+  routing_reason: 'low_score' | 'low_confidence' | 'low_question_agreement' | 'random_sample'
   ai_overall_confidence: number | null
 }
 
@@ -52,6 +59,19 @@ export interface AiDraftDetail {
   }>
   metadata: Array<{ field_id: number; value: string }>
   ticket_tasks: Array<{ kind: 'TICKET' | 'TASK'; external_id: number }>
+  // Multi-source attached calls (Phase C). Mirrors the read-only
+  // SubmissionCall shape consumed by CallDetailsPanel so the audit page
+  // can hand the same data through without remapping.
+  calls?: Array<{
+    id: number
+    call_id: string
+    csr_id: number
+    customer_id: string | null
+    call_date: string
+    duration: number
+    recording_url: string | null
+    transcript: string | null
+  }>
 }
 
 export interface AiExtras {
@@ -120,6 +140,17 @@ export interface CalibrationSettings {
 
 export type ManualRunKind = 'TICKET' | 'TASK' | 'CONVERSATION'
 
+/**
+ * Phase C (C6): one entry in `runManual`'s optional `attachedSources`
+ * list. The route layer renames CONVERSATION → CALL on the way in;
+ * the UI keeps the user-facing CONVERSATION label so the segmented
+ * picker stays consistent with the primary `kind` selector.
+ */
+export interface ManualRunAttachedSource {
+  kind: ManualRunKind
+  external_id: string
+}
+
 export interface ManualRunResult {
   submission_id: number
   status: 'DRAFT' | 'SUBMITTED'
@@ -132,6 +163,14 @@ export interface ManualRunResult {
    * removed when we wire up real usage analytics.
    */
   cost_estimate?: { usd: number; formatted: string; approximated: boolean } | null
+  /**
+   * Provider that handled the synthesis pipeline for this run. Returned
+   * by the backend so the compare-models UI can label which side a
+   * given submission came from without re-querying the form.
+   */
+  provider?: 'anthropic' | 'openai'
+  /** Wall-clock latency for the manual run, in milliseconds. */
+  elapsed_ms?: number
 }
 
 export type ModeReadinessRecommendation =
@@ -205,8 +244,16 @@ export interface RulePackSummary {
 
 export interface PromptPreview {
   form_id: number
+  /**
+   * Which runtime pipeline this preview reflects. Always 'single_source'
+   * today (the most common path); the same Base body is also used by
+   * the multi-source synthesis pass with a different addendum.
+   */
+  assembled_for: 'single_source'
   sections: {
-    system_base: { chars: number }
+    // `text` is only present on `system_base` — see the route comment for
+    // why other sections are char-only.
+    system_base: { chars: number; text?: string }
     rule_packs: { chars: number }
     per_form_guidance: { chars: number }
     learned_corrections: { chars: number; items: number }
@@ -309,13 +356,47 @@ const aiReviewerService = {
       .then((r) => r.data.items),
 
   // ── Manual run ───────────────────────────────────────────────────────
-  // 90s timeout because LLM round-trips on a long ticket can take 30-60s.
-  runManual: (formId: number, kind: ManualRunKind, externalId: string) =>
+  // 720s (12-min) timeout: a multi-source manual run on a LARGE form (e.g.
+  // form 99018, Contact Call Review v2 AI Pilot, ~114 questions) requires
+  // the synthesis pass to emit ~16k output tokens, which Opus 4.7 streams
+  // at ~2-3k tokens/min. Combined with KB link expansion + per-source
+  // traces + an outer JSON-parse retry, the production-path budget is
+  // ~10 min of LLM wall time. The backend's per-call Anthropic timeout
+  // is 600s on the synthesis call (callClaude in AIReviewerService.ts);
+  // 720s here gives a small buffer over that so a slow Opus run still
+  // surfaces the BACKEND's clean error message ("Claude failed to return
+  // valid JSON"...) instead of axios timing out first and leaving the
+  // user with the misleading "Network Error" toast. Smaller forms still
+  // finish in ~30-90s; the bigger ceiling costs the UI nothing in the
+  // common case.
+  runManual: (
+    formId: number,
+    kind: ManualRunKind,
+    externalId: string,
+    attachedSources: ManualRunAttachedSource[] = [],
+    /**
+     * Optional per-call provider override — used by the compare-models
+     * button to fire one run pinned to Anthropic and one pinned to
+     * OpenAI in parallel. When omitted, the backend resolves from the
+     * form's `ai_model_provider` column (defaults 'anthropic').
+     */
+    providerOverride?: 'anthropic' | 'openai',
+  ) =>
     api
       .post<ManualRunResult>(
         '/ai-reviewer/run',
-        { form_id: formId, kind, external_id: externalId },
-        { timeout: 90_000 },
+        {
+          form_id: formId,
+          kind,
+          external_id: externalId,
+          // Only emit the field when the caller actually attached
+          // sources — keeps the legacy single-source request body
+          // byte-identical so the route's backwards-compat path is
+          // exercised exactly the same way it was before C6.
+          ...(attachedSources.length > 0 ? { attached_sources: attachedSources } : {}),
+          ...(providerOverride ? { provider: providerOverride } : {}),
+        },
+        { timeout: 720_000 },
       )
       .then((r) => r.data),
 
@@ -452,6 +533,193 @@ const aiReviewerService = {
     api
       .post<{ activated: number }>(`/ai-reviewer/forms/${formId}/calibration-map/${mapId}/activate`, {})
       .then((r) => r.data),
+
+  // ── KB Coverage dashboard (Tier-2 Item 4) ────────────────────────────
+  getKbCoverage: (formId: number, windowDays = 30) =>
+    api
+      .get<KbCoverageReport>(`/ai-reviewer/forms/${formId}/kb-coverage`, {
+        params: { window: windowDays },
+      })
+      .then((r) => r.data),
+
+  // ── Per-question rubrics (DB-backed; replaced file-based form-rubrics) ──
+  getFormRubrics: (formId: number) =>
+    api
+      .get<{ form_id: number; rubrics: QuestionRubric[] }>(`/ai-reviewer/forms/${formId}/rubrics`)
+      .then((r) => r.data.rubrics),
+
+  upsertFormRubric: (formId: number, questionId: number, rubricMd: string) =>
+    api
+      .put<{ form_id: number; rubrics: QuestionRubric[] }>(
+        `/ai-reviewer/forms/${formId}/rubrics/${questionId}`,
+        { rubric_md: rubricMd },
+      )
+      .then((r) => r.data.rubrics),
+
+  deleteFormRubric: (formId: number, questionId: number) =>
+    api
+      .delete<{ form_id: number; question_id: number; deleted: true }>(
+        `/ai-reviewer/forms/${formId}/rubrics/${questionId}`,
+      )
+      .then((r) => r.data),
+
+  // ── Rule pack library (DB-backed; replaced file-based rule-packs) ────
+  listAllRulePacks: (includeArchived = false) =>
+    api
+      .get<{ items: RulePack[] }>('/ai-reviewer/rule-packs/all', {
+        params: includeArchived ? { include_archived: 1 } : {},
+      })
+      .then((r) => r.data.items),
+
+  getRulePack: (id: number) =>
+    api.get<RulePack>(`/ai-reviewer/rule-packs/${id}`).then((r) => r.data),
+
+  createRulePack: (payload: RulePackUpsertPayload) =>
+    api.post<RulePack>('/ai-reviewer/rule-packs', payload).then((r) => r.data),
+
+  updateRulePack: (id: number, payload: Partial<RulePackUpsertPayload>) =>
+    api.put<RulePack>(`/ai-reviewer/rule-packs/${id}`, payload).then((r) => r.data),
+
+  archiveRulePack: (id: number) =>
+    api.delete<RulePack>(`/ai-reviewer/rule-packs/${id}`).then((r) => r.data),
+
+  restoreRulePack: (id: number) =>
+    api.post<RulePack>(`/ai-reviewer/rule-packs/${id}/restore`).then((r) => r.data),
+
+  // ── Base prompt library (DB-backed; layer 1 of the 4-layer prompt model) ────
+  listBasePrompts: (params?: { kind?: BasePromptKind; includeArchived?: boolean }) =>
+    api
+      .get<{ items: BasePromptSummary[] }>('/ai-reviewer/base-prompts', {
+        params: {
+          ...(params?.kind ? { kind: params.kind } : {}),
+          ...(params?.includeArchived ? { include_archived: 1 } : {}),
+        },
+      })
+      .then((r) => r.data.items),
+
+  getBasePrompt: (id: number) =>
+    api.get<BasePromptDetail>(`/ai-reviewer/base-prompts/${id}`).then((r) => r.data),
+
+  getBasePromptHistory: (id: number, limit = 20) =>
+    api
+      .get<{ items: BasePromptVersion[] }>(`/ai-reviewer/base-prompts/${id}/history`, { params: { limit } })
+      .then((r) => r.data.items),
+
+  createBasePrompt: (payload: BasePromptUpsertPayload) =>
+    api.post<BasePromptDetail>('/ai-reviewer/base-prompts', payload).then((r) => r.data),
+
+  updateBasePrompt: (id: number, payload: Partial<BasePromptUpsertPayload>) =>
+    api.put<BasePromptDetail>(`/ai-reviewer/base-prompts/${id}`, payload).then((r) => r.data),
+
+  archiveBasePrompt: (id: number) =>
+    api.post<BasePromptDetail>(`/ai-reviewer/base-prompts/${id}/archive`).then((r) => r.data),
+
+  rollbackBasePrompt: (id: number, versionId: number) =>
+    api.post<BasePromptDetail>(`/ai-reviewer/base-prompts/${id}/rollback/${versionId}`).then((r) => r.data),
+
+  setBasePromptDefault: (id: number) =>
+    api.post<BasePromptDetail>(`/ai-reviewer/base-prompts/${id}/set-default`).then((r) => r.data),
+
+  // setFormBasePrompt was retired in 20260515090000: the Base prompt is
+  // universal; forms cannot override it.
+}
+
+/**
+ * Storage-level prompt kinds. Only `'base'` and `'trace'` are issuable
+ * for new rows. Legacy `'single_source'` / `'synthesis'` only appear on
+ * archived rows and are filtered out by `is_archived`.
+ */
+export type BasePromptKind = 'base' | 'trace'
+
+export interface BasePromptSummary {
+  id: number
+  key: string
+  name: string
+  prompt_kind: BasePromptKind
+  is_default: boolean
+  is_archived: boolean
+  current_version: number | null
+  updated_at: string
+}
+
+export interface BasePromptDetail extends BasePromptSummary {
+  description: string | null
+  body: string
+}
+
+export interface BasePromptVersion {
+  id: number
+  base_prompt_id: number
+  version: number
+  body_md: string
+  change_note: string | null
+  created_by: number | null
+  created_at: string
+}
+
+export interface BasePromptUpsertPayload {
+  key?: string
+  name: string
+  description?: string | null
+  prompt_kind: BasePromptKind
+  body_md: string
+  change_note?: string | null
+  set_as_default?: boolean
+}
+
+export interface KbCoveragePivot {
+  /** Pivot label as reported by the pivot detector. */
+  label: string
+  /** Number of submissions in the window where this pivot fired. */
+  cases: number
+  /** Mean kb_hit_count across those submissions. */
+  avg_kb_hits: number
+  /** True when cases >= 3 AND avg_kb_hits < 1 — a content gap signal. */
+  gap: boolean
+}
+
+export interface KbCoverageReport {
+  form_id: number
+  window_days: number
+  total_cases: number
+  pivots: KbCoveragePivot[]
+}
+
+/** Per-(form, question) grading rubric authored on the form detail page. */
+export interface QuestionRubric {
+  question_id: number
+  rubric_md: string
+  updated_by: number | null
+  updated_at: string
+}
+
+/**
+ * Reusable rule pack — one block of policy/process text rendered into
+ * the AI Reviewer system prompt for any form it's assigned to. Authored
+ * on the Rule Pack Library page; assigned per form via the chip picker.
+ */
+export interface RulePack {
+  id: number
+  /** Stable slug; the public identifier referenced by chip picker assignments. */
+  key: string
+  name: string
+  owner_dept: string
+  /** Full markdown rule body. */
+  body: string
+  /** KB pages always loaded for runs that include this pack. */
+  always_include_urls: string[]
+  is_archived: boolean
+  updated_at: string
+}
+
+/** Payload shape for create + update on the Rule Pack Library page. */
+export interface RulePackUpsertPayload {
+  /** Required on create; ignored on update (key is immutable post-creation). */
+  key?: string
+  name: string
+  owner_dept: string
+  body_md: string
+  always_include_urls: string[]
 }
 
 export interface GoldenSetRow {

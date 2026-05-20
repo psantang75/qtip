@@ -37,6 +37,15 @@ import { invalidateActiveMapCache, type CalibrationBin } from './ConfidenceCalib
 const DEFAULT_MIN_SAMPLES = 200;
 const DEFAULT_LOOKBACK_DAYS = 365;
 const BIN_WIDTH = 0.05;
+/**
+ * Tier-1 Item 3: minimum sample count required to fit a per-question
+ * bin set. Below this the per-question fit is too noisy to trust and
+ * we skip emitting a `by_question[<qid>]` entry — answers fall back
+ * to the per-form bins. Set lower than DEFAULT_MIN_SAMPLES (200)
+ * because individual questions necessarily have far fewer samples
+ * than the overall form.
+ */
+const PER_QUESTION_MIN_SAMPLES = 20;
 
 export interface FitResult {
   /** Inserted (still inactive) ai_calibration_map row id. */
@@ -102,6 +111,12 @@ export async function previewFit(formId: number): Promise<PreviewResult> {
 
 /**
  * Run the fit, then insert a new (inactive) ai_calibration_map row.
+ *
+ * Tier-1 Item 3: when individual questions accumulate enough samples
+ * (>= PER_QUESTION_MIN_SAMPLES), the fitter ALSO produces per-question
+ * bin sets and writes them under `bins_json.by_question[<qid>]`.
+ * Per-form bins are unchanged — `applyAnswerCalibration` falls back
+ * to them for any question without per-question entries.
  */
 export async function fitAndStore(opts: { formId: number; minSamples?: number }): Promise<FitResult> {
   const formId = opts.formId;
@@ -115,20 +130,30 @@ export async function fitAndStore(opts: { formId: number; minSamples?: number })
   const buckets = bucketize(samples);
   const monotone = poolAdjacentViolators(buckets);
   const bins = bucketsToBins(monotone);
+  const perQuestionBins = await fitPerQuestionBins(formId);
   const nextVersion = await computeNextVersion(formId);
+  const binsJson: { bins: CalibrationBin[]; fallback: number; by_question?: Record<string, { bins: CalibrationBin[]; fallback: number }> } = {
+    bins,
+    fallback: 0.5,
+  };
+  if (Object.keys(perQuestionBins).length > 0) {
+    binsJson.by_question = perQuestionBins;
+  }
   const created = await prisma.aiCalibrationMap.create({
     data: {
       form_id: formId,
       version: nextVersion,
       sample_count: samples.length,
-      bins_json: { bins, fallback: 0.5 } as any,
+      bins_json: binsJson as any,
       is_active: false,
-      notes: `auto-fit (${samples.length} samples)`,
+      notes: `auto-fit (${samples.length} samples${
+        Object.keys(perQuestionBins).length > 0 ? `, ${Object.keys(perQuestionBins).length} per-question fits` : ''
+      })`,
     },
   });
   const binsWithData = monotone.filter((b) => b.n >= 5).length;
   logger.info(
-    `[AI CALIBRATOR] fit form_id=${formId} version=${nextVersion} samples=${samples.length} bins_with_data=${binsWithData}`
+    `[AI CALIBRATOR] fit form_id=${formId} version=${nextVersion} samples=${samples.length} bins_with_data=${binsWithData} per_question_fits=${Object.keys(perQuestionBins).length}`
   );
   return {
     id: created.id,
@@ -138,6 +163,34 @@ export async function fitAndStore(opts: { formId: number; minSamples?: number })
     bins,
     bins_with_data: binsWithData,
   };
+}
+
+/**
+ * Tier-1 Item 3: fit per-question bins for any question with
+ * `>= PER_QUESTION_MIN_SAMPLES` samples on the form. Returns
+ * `Record<questionId, { bins, fallback }>` ready to drop into the
+ * `bins_json.by_question` slot. Empty object when no question
+ * crosses the threshold (back-compat with form-only maps).
+ *
+ * Sample shape mirrors the existing per-form fit: each (nominal
+ * confidence, agreed=0|1) tuple is the AI's `ai_confidence` for
+ * that specific question and whether the AI's value matched the
+ * human's value for that same question.
+ */
+export async function fitPerQuestionBins(
+  formId: number
+): Promise<Record<string, { bins: CalibrationBin[]; fallback: number }>> {
+  const out: Record<string, { bins: CalibrationBin[]; fallback: number }> = {};
+  const byQuestion = await loadEligibleSamplesByQuestion(formId);
+  for (const [qid, samples] of byQuestion.entries()) {
+    if (samples.length < PER_QUESTION_MIN_SAMPLES) continue;
+    const buckets = bucketize(samples);
+    const monotone = poolAdjacentViolators(buckets);
+    const bins = bucketsToBins(monotone);
+    if (bins.length === 0) continue;
+    out[String(qid)] = { bins, fallback: 0.5 };
+  }
+  return out;
 }
 
 /**
@@ -297,6 +350,70 @@ async function loadEligibleSamples(formId: number): Promise<Sample[]> {
 async function countEligibleRows(formId: number): Promise<number> {
   const samples = await loadEligibleSamples(formId);
   return samples.length;
+}
+
+/**
+ * Tier-1 Item 3: load per-question (nominal, agreed) samples for the
+ * form. Bucketed by question_id. Each sample is a single AI answer's
+ * `ai_confidence` paired with whether the AI answer matched the human
+ * answer for that same question.
+ *
+ * Joins ai_calibration_data → submissions → submission_answers so we
+ * can read the per-answer `ai_confidence` (the per-form fit only
+ * needed `ai_overall_confidence`). Questions with no AI confidence
+ * recorded are skipped — calibrating a missing nominal isn't useful.
+ */
+async function loadEligibleSamplesByQuestion(formId: number): Promise<Map<number, Sample[]>> {
+  const cutoff = new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const rows = await prisma.aiCalibrationData.findMany({
+    where: {
+      form_id: formId,
+      created_at: { gte: cutoff },
+      ai_submission_id: { not: null },
+    },
+    select: {
+      ai_answers: true,
+      human_answers: true,
+      ai_submission_id: true,
+    },
+  });
+  if (rows.length === 0) return new Map();
+  const submissionIds = rows.map((r) => r.ai_submission_id!).filter((x) => x != null);
+  const submissionAnswers = await prisma.submissionAnswer.findMany({
+    where: {
+      submission_id: { in: submissionIds },
+      ai_confidence: { not: null },
+    },
+    select: { submission_id: true, question_id: true, ai_confidence: true },
+  });
+  const confBySubmissionAndQuestion = new Map<string, number>();
+  for (const sa of submissionAnswers) {
+    if (sa.ai_confidence == null) continue;
+    const conf = Number(sa.ai_confidence);
+    if (!Number.isFinite(conf)) continue;
+    confBySubmissionAndQuestion.set(`${sa.submission_id}:${sa.question_id}`, conf);
+  }
+  const byQuestion = new Map<number, Sample[]>();
+  for (const r of rows) {
+    if (!r.ai_submission_id) continue;
+    const ai = (r.ai_answers ?? null) as Record<string, string> | null;
+    const human = (r.human_answers ?? null) as Record<string, string> | null;
+    if (!ai || !human) continue;
+    for (const [qidStr, aiVal] of Object.entries(ai)) {
+      const qid = Number(qidStr);
+      if (!Number.isInteger(qid)) continue;
+      const humanVal = human[qidStr];
+      if (humanVal == null) continue;
+      const conf = confBySubmissionAndQuestion.get(`${r.ai_submission_id}:${qid}`);
+      if (conf == null) continue;
+      const agreed: 0 | 1 =
+        String(aiVal).trim().toLowerCase() === String(humanVal).trim().toLowerCase() ? 1 : 0;
+      const list = byQuestion.get(qid) ?? [];
+      list.push({ nominal: Math.min(1, Math.max(0, conf)), agreed });
+      byQuestion.set(qid, list);
+    }
+  }
+  return byQuestion;
 }
 
 async function computeNextVersion(formId: number): Promise<number> {

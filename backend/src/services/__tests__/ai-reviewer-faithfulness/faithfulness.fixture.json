@@ -1,0 +1,29 @@
+{
+  "_doc": [
+    "Phase D (D5): hand-labeled faithfulness regression set.",
+    "Each entry is a (ticket, call) pair where the QA team knows what",
+    "the synthesis pass should flag as a discrepancy. The runner",
+    "(faithfulnessRegression.test.ts) replays both sources through the",
+    "AI Reviewer and asserts that >= 90% of the listed discrepancies",
+    "show up in the synthesis output's `faithfulness.discrepancies[]`.",
+    "",
+    "Schema per entry:",
+    "{",
+    "  case_id:       human-friendly tag (e.g. 'callback-not-recorded-1')",
+    "  ticket_id:     CRM ticket external id",
+    "  conversation_id: Genesys conversation id (calls.call_id)",
+    "  expected_discrepancies: array of {",
+    "    kind:       'missing_in_notes' | 'contradiction' | 'embellishment' | 'pii_leak'",
+    "    summary_substring: one short phrase that MUST appear in the AI's discrepancy.summary",
+    "    severity_floor: 'info' | 'warn' | 'critical' (AI must emit at >= this severity)",
+    "  }",
+    "}",
+    "",
+    "Populate this file by hand from real cases your QA team has",
+    "already audited. Aim for 20 entries spanning all four kinds.",
+    "Keep `expected_discrepancies` short (1-3 per case) and use a",
+    "stable substring (not the full sentence) so prompt drift",
+    "doesn't break the regression test."
+  ],
+  "entries": []
+}

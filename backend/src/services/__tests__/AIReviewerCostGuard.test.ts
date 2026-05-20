@@ -25,7 +25,7 @@ vi.mock('../../config/prisma', () => ({
   },
 }));
 
-import { checkBudget, invalidateCostCache } from '../AIReviewerCostGuard';
+import { checkBudget, invalidateCostCache, estimateNextCaseUsd } from '../AIReviewerCostGuard';
 
 const SAMPLE_LOGS_50C = [
   // Each row uses claude-haiku-4-5 ($1 in / $5 out per 1M tokens).
@@ -110,5 +110,79 @@ describe('AIReviewerCostGuard.checkBudget', () => {
     const out = await checkBudget(99016);
     expect(out.allowed).toBe(true);
     expect(out.warn).toBe(false);
+  });
+
+  // Phase C (C5): predicted-cost gating for multi-source two-pass cases.
+  it('denies a multi-source case that would push MTD over the cap', async () => {
+    findUniqueMock.mockResolvedValue({
+      ai_monthly_cost_budget_usd: 3.2,
+      ai_max_attached_sources: 5,
+    });
+    findManyMock.mockResolvedValue(SAMPLE_LOGS_50C); // $3.00 MTD
+    const out = await checkBudget(99016, {
+      sourceCount: 3,
+      willClassify: false,
+      expectVerification: true,
+    });
+    expect(out.allowed).toBe(false);
+    expect(out.reason).toMatch(/exhausted/i);
+  });
+
+  it('caps sourceCount at ai_max_attached_sources before pricing', async () => {
+    findUniqueMock.mockResolvedValue({
+      ai_monthly_cost_budget_usd: 1000,
+      ai_max_attached_sources: 1,
+    });
+    findManyMock.mockResolvedValue([]);
+    const cappedOut = await checkBudget(99016, {
+      sourceCount: 10,
+      willClassify: false,
+      expectVerification: false,
+    });
+    invalidateCostCache(99016);
+    findUniqueMock.mockResolvedValue({
+      ai_monthly_cost_budget_usd: 1000,
+      ai_max_attached_sources: 10,
+    });
+    const uncappedOut = await checkBudget(99016, {
+      sourceCount: 10,
+      willClassify: false,
+      expectVerification: false,
+    });
+    // Both allowed (budget huge) but the uncapped run must be measurably
+    // more expensive than the capped one — proves the cap actually
+    // suppressed traces.
+    const onePassUsd = estimateNextCaseUsd({
+      sourceCount: 1,
+      willClassify: false,
+      expectVerification: false,
+    });
+    const tenPassUsd = estimateNextCaseUsd({
+      sourceCount: 10,
+      willClassify: false,
+      expectVerification: false,
+    });
+    expect(cappedOut.allowed).toBe(true);
+    expect(uncappedOut.allowed).toBe(true);
+    expect(tenPassUsd).toBeGreaterThan(onePassUsd * 1.5);
+  });
+
+  it('estimateNextCaseUsd scales linearly per attached source', () => {
+    const a = estimateNextCaseUsd({
+      sourceCount: 1,
+      willClassify: false,
+      expectVerification: false,
+    });
+    const b = estimateNextCaseUsd({
+      sourceCount: 3,
+      willClassify: false,
+      expectVerification: false,
+    });
+    expect(a).toBeGreaterThan(0);
+    expect(b).toBeGreaterThan(a);
+    // 3-source case = 3 traces + 1 synthesis vs 1 trace + 1 synthesis.
+    // Should roughly double-or-more the cost; exact ratio depends on
+    // the trace/synthesis split in PASS_COST_ASSUMPTIONS.
+    expect(b / a).toBeGreaterThan(1.4);
   });
 });

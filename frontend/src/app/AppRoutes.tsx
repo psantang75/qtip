@@ -54,6 +54,8 @@ const SubmissionDetailPage  = React.lazy(() => import('../pages/quality/Submissi
 const AIReviewInbox         = React.lazy(() => import('../pages/quality/AIReviewInbox'))
 const AIReviewerFormsList   = React.lazy(() => import('../pages/quality/AIReviewerFormsList'))
 const AIReviewerFormDetail  = React.lazy(() => import('../pages/quality/AIReviewerFormDetail'))
+const RulePackLibrary       = React.lazy(() => import('../pages/quality/ai-reviewer/RulePackLibrary'))
+const BasePromptLibrary     = React.lazy(() => import('../pages/quality/ai-reviewer/BasePromptLibrary'))
 
 const CoachingSessionsPage      = React.lazy(() => import('../pages/training/CoachingSessionsPage'))
 const CoachingSessionDetailPage = React.lazy(() => import('../pages/training/CoachingSessionDetailPage'))
@@ -160,6 +162,15 @@ export default function AppRoutes(): React.ReactElement {
             <Route path="audit"           element={<PageLoader><AuditFormPage /></PageLoader>} />
             <Route path="ai-inbox"        element={<PageLoader><AIReviewInbox /></PageLoader>} />
             <Route path="ai-reviewer"            element={<PageLoader><AIReviewerFormsList /></PageLoader>} />
+            <Route path="ai-reviewer/rule-packs" element={<PageLoader><RulePackLibrary /></PageLoader>} />
+            <Route
+              path="ai-reviewer/base-prompts"
+              element={
+                <RequireRole allowed={[ROLE_IDS.ADMIN]} fallback="/app/quality/ai-reviewer">
+                  <PageLoader><BasePromptLibrary /></PageLoader>
+                </RequireRole>
+              }
+            />
             <Route path="ai-reviewer/:formId"    element={<PageLoader><AIReviewerFormDetail /></PageLoader>} />
           </Route>
 

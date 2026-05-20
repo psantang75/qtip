@@ -1,0 +1,52 @@
+﻿[
+  {
+    "step": "Approach 1 - Attempt to select a channel on the music player",
+    "status": "not_applicable",
+    "evidence_note_date": null
+  },
+  {
+    "step": "Approach 2 - Ensure the music player volume is at 100%",
+    "status": "not_applicable",
+    "evidence_note_date": null
+  },
+  {
+    "step": "Approach 3 - Ensure the player is connected to the audio system properly",
+    "status": "not_applicable",
+    "evidence_note_date": null
+  },
+  {
+    "step": "Approach 4 - Ensure the correct input on the amplifier is selected",
+    "status": "not_applicable",
+    "evidence_note_date": null
+  },
+  {
+    "step": "Approach 5 - Ensure master/input volume on amplifier is at least 50%",
+    "status": "not_applicable",
+    "evidence_note_date": null
+  },
+  {
+    "step": "Approach 6 - Ensure external volume controls are at least 50%",
+    "status": "not_applicable",
+    "evidence_note_date": null
+  },
+  {
+    "step": "Approach 7 - Connect the player to a personal hotspot",
+    "status": "not_applicable",
+    "evidence_note_date": null
+  },
+  {
+    "step": "Approach 8 - Request pictures of all connections",
+    "status": "not_applicable",
+    "evidence_note_date": null
+  },
+  {
+    "step": "Approach 9 - Ensure the speakers are wired properly",
+    "status": "not_applicable",
+    "evidence_note_date": null
+  },
+  {
+    "step": "Approach 10 - Present options to diagnose further or quote amplifier replacement",
+    "status": "not_applicable",
+    "evidence_note_date": null
+  }
+]

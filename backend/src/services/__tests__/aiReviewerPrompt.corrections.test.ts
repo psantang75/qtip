@@ -2,24 +2,62 @@
  * Closed-loop prompt test (Calibration → Prompt feedback path).
  *
  * Asserts that:
- *   1. With no corrections passed, the new file-loaded prompt is
- *      byte-identical to the legacy inline prompt (preserves the
- *      Phase 2 byte-equivalence guarantee — covered also by the
- *      sibling equivalence.test, repeated here for clarity).
+ *   1. With no corrections passed, the assembled system prompt does NOT
+ *      include the LEARNED CORRECTIONS section.
  *   2. With corrections passed, the system prompt grows a
- *      `LEARNED CORRECTIONS FROM HUMAN REVIEWERS` section AND the
- *      file-loaded version still matches the inline implementation
- *      byte-for-byte (so the inline regression baseline tracks the
- *      corrections feature).
+ *      `LEARNED CORRECTIONS FROM HUMAN REVIEWERS` section that renders
+ *      the question text, the AI's previous answer, the human's
+ *      correction, the source ticket, and (when present) the
+ *      reviewer's reason.
+ *
+ * The Base prompt is mocked through `basePromptService.getAssembledPrompt`
+ * so the test does not need a warmed cache or DB. The prior
+ * byte-equivalence assertions against `_buildAiReviewerPromptInline`
+ * were removed in the unified-Base refactor — the inline implementation
+ * is no longer the regression baseline (the prompt is now Base body +
+ * addendum and is materially different from the legacy `system.v3`).
+ * The new regression gate is the snapshot test in
+ * `aiReviewerPromptAssembly.test.ts`.
  */
 
-import { describe, it, expect } from 'vitest';
-import {
-  buildAiReviewerPrompt,
-  _buildAiReviewerPromptInline,
-  type PromptInput,
-  type FormForPrompt,
-} from '../aiReviewerPrompt';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mock basePromptService BEFORE importing aiReviewerPrompt so the
+// module resolves the mocked version at import time. The fixture body
+// is intentionally short — we only need to verify how
+// buildAiReviewerPrompt composes the AROUND text, not the contents of
+// the Base prompt itself.
+vi.mock('../BasePromptService', () => ({
+  basePromptService: {
+    getAssembledPrompt: vi.fn(() => ({
+      id: 1,
+      key: 'base.v1',
+      version: 1,
+      body: '<<MOCK ASSEMBLED BASE>>',
+    })),
+  },
+  default: {
+    getAssembledPrompt: vi.fn(() => ({
+      id: 1,
+      key: 'base.v1',
+      version: 1,
+      body: '<<MOCK ASSEMBLED BASE>>',
+    })),
+  },
+}));
+
+vi.mock('../RulePackService', () => ({
+  rulePackService: {
+    renderPacksForPrompt: vi.fn(() => ''),
+    getPacksForForm: vi.fn(() => []),
+  },
+  default: {
+    renderPacksForPrompt: vi.fn(() => ''),
+    getPacksForForm: vi.fn(() => []),
+  },
+}));
+
+import { buildAiReviewerPrompt, type PromptInput, type FormForPrompt } from '../aiReviewerPrompt';
 import type { CRMNote } from '../CRMService';
 import type { CalibrationCorrection } from '../AICalibrationService';
 import { clearPromptCache } from '../promptLoader';
@@ -80,6 +118,7 @@ function makeCorrection(overrides: Partial<CalibrationCorrection> = {}): Calibra
     ai_value: 'yes',
     human_value: 'no',
     ticket_id: 279060,
+    source_kind: 'TICKET',
     source: 'qa_promoted_draft',
     created_at: new Date('2026-04-28T13:14:00.000Z'),
     data_point_id: 42,
@@ -88,49 +127,36 @@ function makeCorrection(overrides: Partial<CalibrationCorrection> = {}): Calibra
   };
 }
 
+beforeEach(() => {
+  clearPromptCache();
+});
+
 describe('aiReviewerPrompt — calibration corrections injection', () => {
-  it('omits the corrections section entirely when none provided (byte-equivalent baseline)', () => {
-    clearPromptCache();
-    const fileBased = buildAiReviewerPrompt(makeInput());
-    const inline = _buildAiReviewerPromptInline(makeInput());
-    expect(fileBased.system).toBe(inline.system);
-    expect(fileBased.user).toBe(inline.user);
-    expect(fileBased.system).not.toContain('LEARNED CORRECTIONS');
+  it('omits the corrections section entirely when none provided', () => {
+    const built = buildAiReviewerPrompt(makeInput());
+    expect(built.system).toContain('<<MOCK ASSEMBLED BASE>>');
+    expect(built.system).not.toContain('LEARNED CORRECTIONS');
   });
 
   it('omits when corrections is an empty array', () => {
-    clearPromptCache();
-    const fileBased = buildAiReviewerPrompt(makeInput([]));
-    expect(fileBased.system).not.toContain('LEARNED CORRECTIONS');
+    const built = buildAiReviewerPrompt(makeInput([]));
+    expect(built.system).not.toContain('LEARNED CORRECTIONS');
   });
 
   it('appends a LEARNED CORRECTIONS section in the system prompt when corrections are present', () => {
-    clearPromptCache();
     const c = makeCorrection();
-    const fileBased = buildAiReviewerPrompt(makeInput([c]));
-    expect(fileBased.system).toContain('LEARNED CORRECTIONS FROM HUMAN REVIEWERS');
-    expect(fileBased.system).toContain(`Question: "${c.question_text}"`);
-    expect(fileBased.system).toContain('AI previously answered: yes');
-    expect(fileBased.system).toContain('Human corrected to: no');
-    expect(fileBased.system).toContain('Source: ticket #279060');
-  });
-
-  it('keeps the inline implementation byte-equivalent when corrections are passed (baseline tracks feature)', () => {
-    clearPromptCache();
-    const c1 = makeCorrection({ question_id: 99125, ai_value: 'yes', human_value: 'no', ticket_id: 1 });
-    const c2 = makeCorrection({ question_id: 12345, question_text: 'How would you rate the resolution?', ai_value: 'great', human_value: 'poor', ticket_id: 2 });
-    const input = makeInput([c1, c2]);
-    const fileBased = buildAiReviewerPrompt(input);
-    const inline = _buildAiReviewerPromptInline(input);
-    expect(fileBased.system).toBe(inline.system);
-    expect(fileBased.user).toBe(inline.user);
+    const built = buildAiReviewerPrompt(makeInput([c]));
+    expect(built.system).toContain('LEARNED CORRECTIONS FROM HUMAN REVIEWERS');
+    expect(built.system).toContain(`Question: "${c.question_text}"`);
+    expect(built.system).toContain('AI previously answered: yes');
+    expect(built.system).toContain('Human corrected to: no');
+    expect(built.system).toContain('Source: ticket #279060');
   });
 
   it("renders the reviewer's reason when correction_reason is present", () => {
-    clearPromptCache();
     const c = makeCorrection({ correction_reason: 'Vague description; agent did not restate symptom.' });
-    const fileBased = buildAiReviewerPrompt(makeInput([c]));
-    expect(fileBased.system).toContain("Reviewer's reason: Vague description; agent did not restate symptom.");
+    const built = buildAiReviewerPrompt(makeInput([c]));
+    expect(built.system).toContain("Reviewer's reason: Vague description; agent did not restate symptom.");
   });
 
   /**
@@ -139,13 +165,11 @@ describe('aiReviewerPrompt — calibration corrections injection', () => {
    * the only corrections passed into the prompt builder are non-absorbed
    * ones. We assert here that an empty corrections array produces a
    * prompt with NO learned-corrections section, matching the contract
-   * the absorb sweep relies on. (If the prompt builder later starts
-   * synthesizing corrections from elsewhere, this test will catch it.)
+   * the absorb sweep relies on.
    */
   it('absorbed-corrections contract: empty array means no learned-corrections section in the prompt', () => {
-    clearPromptCache();
-    const fileBased = buildAiReviewerPrompt(makeInput([]));
-    expect(fileBased.system).not.toContain('LEARNED CORRECTIONS');
-    expect(fileBased.system).not.toContain('AI previously answered');
+    const built = buildAiReviewerPrompt(makeInput([]));
+    expect(built.system).not.toContain('LEARNED CORRECTIONS');
+    expect(built.system).not.toContain('AI previously answered');
   });
 });

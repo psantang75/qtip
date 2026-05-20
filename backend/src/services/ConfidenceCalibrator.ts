@@ -39,6 +39,22 @@ export interface CalibrationMapBins {
   bins: CalibrationBin[];
   /** Default value used when nominal falls outside any bin (rare). */
   fallback?: number;
+  /**
+   * Tier-1 Item 3 (per-question calibration): optional per-question
+   * bin set, layered ON TOP of the per-form bins. When a key
+   * `<question_id>` is present and the question's nominal confidence
+   * falls within a per-question bin, that bin's `calibrated` value
+   * wins; otherwise the per-form bins above are used. Forms /
+   * questions below the fitter's per-question sample threshold simply
+   * omit the key (full back-compat with maps fitted before this
+   * shape existed).
+   */
+  by_question?: Record<string, { bins: CalibrationBin[]; fallback?: number }>;
+}
+
+interface CachedQuestionBins {
+  bins: CalibrationBin[];
+  fallback: number;
 }
 
 interface CachedActiveMap {
@@ -46,6 +62,8 @@ interface CachedActiveMap {
   version: number;
   bins: CalibrationBin[];
   fallback: number;
+  /** Per-question bin sets, keyed by question_id. Empty when the map has none. */
+  byQuestion: Map<number, CachedQuestionBins>;
   fetchedAt: number;
 }
 
@@ -55,11 +73,49 @@ const cache = new Map<number, CachedActiveMap>();
 /**
  * Apply the form's active calibration map to a nominal confidence.
  * Returns identity (nominal === calibrated) when no active map exists.
+ *
+ * Used for `overall_confidence`. Per-answer calibration (Item 3) goes
+ * through `applyAnswerCalibration` which layers a per-question bin set
+ * on top of the per-form bins.
  */
 export async function applyCalibration(formId: number, nominal: number | null): Promise<number | null> {
   if (nominal == null || !Number.isFinite(nominal)) return null;
   const map = await getActiveMapForForm(formId);
   if (!map) return clamp01(nominal);
+  for (const bin of map.bins) {
+    if (nominal >= bin.low && nominal <= bin.high) return clamp01(bin.calibrated);
+  }
+  return clamp01(map.fallback);
+}
+
+/**
+ * Tier-1 Item 3: apply per-question calibration to a single answer's
+ * `ai_confidence`. The active form map's `by_question[questionId]`
+ * bins win when present; otherwise we fall back to the per-form bins
+ * above; otherwise identity. Gated by env flag
+ * `AI_REVIEWER_PER_QUESTION_CALIBRATION` so the rollout can be
+ * validated on one form at a time before flipping default-on.
+ */
+export async function applyAnswerCalibration(
+  formId: number,
+  questionId: number,
+  nominal: number | null
+): Promise<number | null> {
+  if (nominal == null || !Number.isFinite(nominal)) return null;
+  // Identity when the feature flag is off — the existing per-form
+  // calibration on `overall_confidence` continues unchanged.
+  if (process.env.AI_REVIEWER_PER_QUESTION_CALIBRATION !== '1') return clamp01(nominal);
+  const map = await getActiveMapForForm(formId);
+  if (!map) return clamp01(nominal);
+  const perQ = map.byQuestion.get(questionId);
+  if (perQ) {
+    for (const bin of perQ.bins) {
+      if (nominal >= bin.low && nominal <= bin.high) return clamp01(bin.calibrated);
+    }
+    return clamp01(perQ.fallback);
+  }
+  // No per-question entry — apply the per-form fallback so the answer
+  // benefits from at least the form-level calibration shape.
   for (const bin of map.bins) {
     if (nominal >= bin.low && nominal <= bin.high) return clamp01(bin.calibrated);
   }
@@ -84,11 +140,28 @@ export async function getActiveMapForForm(formId: number): Promise<CachedActiveM
     return null;
   }
   const fallback = typeof json.fallback === 'number' ? json.fallback : binsAverage(bins);
+  // Per-question bin sets (Item 3): optional, fully back-compat. A
+  // map without `by_question` produces an empty Map and the per-
+  // question codepath transparently falls through to the per-form
+  // bins above.
+  const byQuestion = new Map<number, CachedQuestionBins>();
+  if (json.by_question && typeof json.by_question === 'object') {
+    for (const [k, raw] of Object.entries(json.by_question)) {
+      const qid = Number(k);
+      if (!Number.isInteger(qid)) continue;
+      if (!raw || !Array.isArray(raw.bins)) continue;
+      const qBins = raw.bins.filter(isValidBin);
+      if (qBins.length === 0) continue;
+      const qFallback = typeof raw.fallback === 'number' ? raw.fallback : binsAverage(qBins);
+      byQuestion.set(qid, { bins: qBins, fallback: qFallback });
+    }
+  }
   const entry: CachedActiveMap = {
     formId,
     version: row.version,
     bins,
     fallback,
+    byQuestion,
     fetchedAt: Date.now(),
   };
   cache.set(formId, entry);

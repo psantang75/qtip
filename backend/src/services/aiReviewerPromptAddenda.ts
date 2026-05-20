@@ -1,0 +1,383 @@
+/**
+ * AI Reviewer prompt addenda — code-managed pass-specific extensions to
+ * the universal Base prompt (`ai_base_prompt` row with `prompt_kind = 'base'`).
+ *
+ * Architecture (Option 2 in the design plan): admins author ONE Base
+ * prompt. At runtime, BasePromptService.getAssembledPrompt(kind) returns
+ *
+ *     <base body>  +  <addendum for kind>
+ *
+ * so the AI sees ONE coherent system prompt without the admin having to
+ * know that two different runtime pipelines exist.
+ *
+ * Two addenda live here:
+ *  - SINGLE_SOURCE_ADDENDUM — used when a Case has exactly ONE source
+ *    (one ticket OR one task OR one call). Single LLM call.
+ *  - SYNTHESIS_ADDENDUM — used as Pass 2 of the two-pass pipeline when
+ *    a Case has multiple sources. Pass 1 uses a DB-stored, admin-hidden
+ *    Trace prompt (`prompt_kind = 'trace'`); Pass 2 reads the Pass-1
+ *    traces and grades the form.
+ *
+ * These are intentionally code constants (not DB rows): they are
+ * infrastructure scaffolding — the input shape contract and the output
+ * JSON schema — not authored content. Editing them requires a PR and
+ * touches the prompt regression tests and the golden-set eval gate.
+ */
+
+/**
+ * Marker the assembled prompt uses to label the addendum boundary in
+ * preview UIs and tests. Not exported because nothing outside this file
+ * needs to construct prompts; the assembler imports the constants
+ * directly.
+ */
+const ADDENDUM_HEADER = '\n\n---\n\nMODE-SPECIFIC INSTRUCTIONS\n';
+
+/**
+ * Single-source pass — the one-LLM-call review path. Used for cases
+ * with exactly one source attached (the legacy `review()` path in
+ * AIReviewerService).
+ *
+ * Adds:
+ *  - the input shape (raw notes / transcript with KB excerpts), and
+ *  - the OUTPUT SCHEMA the model must emit (no cross-source
+ *    `evidence_source_kind` / `id` and no `faithfulness` block, since
+ *    there's only one source to grade).
+ */
+export const SINGLE_SOURCE_ADDENDUM =
+  ADDENDUM_HEADER +
+  `
+Input shape (this pass):
+- The user prompt contains the form spec, KB excerpts (assigned playbook page first, then linked / classification-text matches), the assigned rule packs, any per-form learned corrections, and the source material (one ticket's notes, one task's notes, or one call transcript). There is exactly ONE source on this case — there is no PER-SOURCE TRACES block.
+- Read the source material directly. Build the timeline, playbook_steps, observations, and answers from the raw notes / transcript.
+
+OUTPUT SCHEMA (this pass — emit these fields in EXACTLY this order):
+    {
+      "playbook_steps": [
+        { "step": "<KB step name>", "evidence_note_date": "<date or null>",
+          "status": "done" | "missing" | "out_of_order" | "not_applicable" }
+      ],
+      "timeline": [
+        { "when": "<date and time as printed in the notes>", "who": "<author or 'Customer' or 'Call'>",
+          "action": "<one short sentence>", "kb_step": "<KB step name or null>" }
+      ],
+      "observations": [
+        { "kind": "documentation" | "best_practice" | "cadence" | "process_drift" | "pii" | "other",
+          "severity": "info" | "warn",
+          "message": "<one short sentence>",
+          "evidence": "<which note date or which field this came from>" }
+      ],
+      "answers": [
+        { "question_id": <int>, "value": <answer-as-string>, "confidence": <0.00..1.00>,
+          "evidence_source": "<note date or transcript timestamp this answer is grounded in>",
+          "evidence_quote": "<short verbatim quote (<= 240 chars) from that source>" }
+      ],
+      "coaching": {
+        "wins": [ "<one short sentence per kudos for the agent>" ],
+        "gaps": [ "<one short sentence per QA-actionable gap>" ],
+        "next_actions": [ "<one short sentence per concrete drill or follow-up>" ]
+      },
+      "narrative": "<short bullet lines, one per finding>",
+      "kb_citations": [ { "id": <kb_page_id>, "name": "<page name>", "url": "<page url>" } ],
+      "overall_confidence": <0.00..1.00>
+    }
+`;
+
+/**
+ * Synthesis pass — Pass 2 of the two-pass pipeline. Used for cases with
+ * 2+ sources (multi-source `reviewCase()` path in AIReviewerService).
+ *
+ * Pass 1 (a separate, admin-hidden Trace prompt stored as
+ * `prompt_kind = 'trace'`) extracts a structured trace per source. Pass
+ * 2 reads all those traces and grades the form.
+ *
+ * Adds:
+ *  - the input shape (PER-SOURCE TRACES + optional CASE PIVOTS / TRACE
+ *    AGREEMENT blocks),
+ *  - the OUTPUT SCHEMA with cross-source attribution
+ *    (\`evidence_source_kind\` + \`evidence_source_id\` on every row +
+ *    the \`faithfulness\` block), and
+ *  - cross-source discipline rules + the trace-agreement confidence
+ *    ceiling.
+ */
+export const SYNTHESIS_ADDENDUM =
+  ADDENDUM_HEADER +
+  `
+Input shape (this pass):
+- You see ALL sources on the case. Pass 1 has already produced a structured trace ('playbook_steps', 'timeline', 'observations', 'extracted_claims') for EACH source. The user message includes a PER-SOURCE TRACES block listing each trace one after another, separated by '--- SOURCE TRACE ---' markers, with the primary source first.
+- When a 'CASE PIVOTS' block is present in the user message, treat each listed pivot as a grading lens — every gradeable answer must implicitly account for ALL listed pivots (e.g. an "Install Refund" pivot means you grade against the install-refund process, not just the bare refund process; if KB pages for a pivot are missing from the per-source traces, call that gap out in the 'narrative' and in an 'observations' entry of 'kind: "documentation"').
+- When a 'TRACE AGREEMENT' block is present in the user message, it reports cross-run consistency for each per-source trace (each source was independently traced multiple times; 'composite' is a weighted blend of how many playbook steps, claims, and observations survived majority voting). See "Confidence ceiling" below.
+
+OUTPUT SCHEMA (this pass — emit these fields in EXACTLY this order):
+    {
+      "playbook_steps": [
+        { "step": "<KB step name>", "evidence_note_date": "<date or null>",
+          "status": "done" | "missing" | "out_of_order" | "not_applicable",
+          "evidence_source_kind": "TICKET" | "TASK" | "CALL", "evidence_source_id": "<external id>" }
+      ],
+      "timeline": [
+        { "when": "<date and time>", "who": "<author or 'Customer' or 'Call'>",
+          "action": "<one short sentence>", "kb_step": "<KB step name or null>",
+          "source_kind": "TICKET" | "TASK" | "CALL", "source_id": "<external id>" }
+      ],
+      "observations": [
+        { "kind": "documentation" | "best_practice" | "cadence" | "process_drift" | "pii" | "other",
+          "severity": "info" | "warn",
+          "message": "<one short sentence>",
+          "evidence": "<which note date or transcript timestamp>",
+          "source_kind": "TICKET" | "TASK" | "CALL", "source_id": "<external id>" }
+      ],
+      "answers": [
+        { "question_id": <int>, "value": <answer-as-string>, "confidence": <0.00..1.00>,
+          "evidence_source": "<note date or transcript timestamp this answer is grounded in>",
+          "evidence_source_kind": "TICKET" | "TASK" | "CALL",
+          "evidence_source_id":   "<external id>",
+          "evidence_quote": "<short verbatim quote (<= 240 chars) from that source>" }
+      ],
+      "coaching": {
+        "wins": [ "<one short sentence per kudos for the agent>" ],
+        "gaps": [ "<one short sentence per QA-actionable gap>" ],
+        "next_actions": [ "<one short sentence per concrete drill or follow-up>" ]
+      },
+      "narrative": "<short bullet lines, one per finding>",
+      "faithfulness": {
+        "coverage":       <0.00..1.00>,
+        "accuracy":       <0.00..1.00>,
+        "pii_discipline": <0.00..1.00>,
+        "discrepancies": [
+          { "kind": "missing_in_notes" | "contradiction" | "embellishment" | "pii_leak",
+            "between": ["TICKET" | "TASK" | "CALL", "TICKET" | "TASK" | "CALL"],
+            "summary": "<one short sentence>",
+            "claim_id_a": <int or null>, "claim_id_b": <int or null>,
+            "severity": "info" | "warn" | "critical" }
+        ]
+      },
+      "kb_citations": [ { "id": <kb_page_id>, "name": "<page name>", "url": "<page url>" } ],
+      "overall_confidence": <0.00..1.00>
+    }
+
+KB grounding discipline (CRITICAL — applies before any KB-following grading):
+- The user message includes a 'KB PAGES LOADED FOR THIS CASE' block listing every KB / playbook page the prompt assembler actually attached to this case (with name + URL + ASSIGNED PLAYBOOK PAGE flag). This is the AUTHORITATIVE surface for any question whose rubric references "the KB article", "the playbook", "documented steps", "KB-required script lines", or any equivalent phrasing.
+- When that block shows '(none — no playbook page assigned … KB-following questions MUST be answered N/A …)', you MUST answer every KB-following question 'na' (when na is allowed by the rubric) and emit an 'observations[]' entry with 'kind: "documentation"', 'severity: "info"', and a message of the form 'kb_gap: <missing topic>' (e.g. 'kb_gap: Soundtrack Player App initial setup'). Do NOT substitute ticket notes, re-open commentary added later by another agent, supervisor edits, or your own training knowledge for the KB. If you cannot see a KB page, you cannot grade KB-following.
+- When the block IS populated, grade KB-following normally against the named pages. The per-source traces already had the full page bodies — quote from them. Cite the page name in 'evidence_source' (e.g. 'Soundtrack Player App Setup KB page') so the human reviewer can verify the comparison.
+- Re-open commentary, supervisor playbook edits added after the interaction, and "what we eventually figured out" notes are NOT the KB and MUST NOT influence KB-following grades. They are also typically out of scope per the 'Audit scope:' line in each attached source's HEADER.
+
+Cross-source discipline (the whole point of this pass):
+- 'playbook_steps', 'timeline', 'observations' MUST carry 'evidence_source_kind' + 'evidence_source_id' so the UI can render which source each finding came from. When the same step is documented in two sources, prefer the source that documents it MORE clearly (usually the call) and add an observation noting that the OTHER source has weaker evidence.
+- For 'answers', prefer the source with the strongest evidence for that question. When sources disagree, pick the verdict that aligns with the KB-documented process (NOT the verdict that "seems nicer to the agent"). Record the disagreement as a 'faithfulness.discrepancies' entry.
+- 'faithfulness' is the cross-source layer:
+    - 'coverage' = of the agent_statement / outcome claims in the CALL trace, what fraction also appear in the TICKET trace? 1.00 = ticket notes fully restate the call. 0.00 = ticket notes mention nothing the call covered.
+    - 'accuracy' = of the claims that DO appear in both sources, what fraction agree (no contradictions)?
+    - 'pii_discipline' = 1.00 when no PII (full card numbers, full SSN, etc.) was captured anywhere; lower as severity grows.
+    - 'discrepancies[]' = per-pair findings. Reference Pass-1 'claim_id' values when applicable so the UI can deep-link the quote.
+- When the case is single-source through this pipeline (only one trace block), still emit 'faithfulness' but set coverage=1, accuracy=1, pii_discipline=1 (or lower for PII issues found in that one source), and 'discrepancies: []'.
+
+Cross-source narrative bullets:
+- For combined ticket+call cases the narrative MUST include cross-source bullets where relevant. These appear AFTER the per-category bullets but BEFORE the final \`Critical fails:\` line (see the Narrative format section in the base prompt for the full structure). Examples:
+  - 'Faithfulness: ticket notes omit two customer commitments made on the call (per call 02:14 and 04:08).'
+  - 'PII: full credit card number captured in the Apr 28 ticket note — also stated verbatim on the call (per call 03:21).'
+
+Confidence ceiling (TRACE AGREEMENT):
+- When a 'TRACE AGREEMENT' block is present, treat the LOWEST source's 'composite' as a hard ceiling for 'overall_confidence': your reported 'overall_confidence' MUST NOT exceed 'min(composite) + 0.10'. You can be MORE conservative than that ceiling; you cannot exceed it. This rule overrides any other confidence intuition — the trace pass is your source of truth for "how much do I actually know about this case".
+
+Hard rules (this pass):
+- ONLY use 'kb_step' names, KB ids, and quotes that came from the trace blocks or the KB excerpts. DO NOT invent.
+- DO NOT pull events into the timeline that weren't in any per-source trace.
+- DO NOT contradict a Pass-1 status without saying so in 'faithfulness.discrepancies'.
+- DO NOT emit prose, markdown bullets, or anything other than the single JSON object.
+`;
+
+/**
+ * Reasoning pass — Pass 2A of the CHUNKED synthesis pipeline. Used on
+ * large forms (typically >30 questions) where emitting reasoning +
+ * answers in one Opus call exceeds the model's practical wall-clock
+ * budget. This pass produces ONLY the reasoning artefacts; a separate
+ * per-category answers pass (Pass 2B, runs on Sonnet in parallel)
+ * fills in the verdicts.
+ *
+ * Why split: a 114-question form's monolithic synthesis output is
+ * ~50k chars / ~17k tokens, which Opus emits at ~2-3k tokens/min ⇒
+ * 5-8 minutes on the wire and frequently truncates. Splitting the
+ * reasoning (small, must be Opus) from the answer mapping (small per
+ * chunk, can be Sonnet) drops total wall time to ~2-3 minutes and
+ * eliminates truncation.
+ *
+ * Adds:
+ *  - the input shape (PER-SOURCE TRACES + optional CASE PIVOTS / TRACE
+ *    AGREEMENT blocks — same as the monolithic synthesis pass), and
+ *  - the OUTPUT SCHEMA WITHOUT `answers[]` — the reasoning pass MUST
+ *    NOT emit answers. The chunked pass downstream will produce them.
+ */
+export const REASONING_ADDENDUM =
+  ADDENDUM_HEADER +
+  `
+Input shape (this pass):
+- You see ALL sources on the case. Pass 1 has already produced a structured trace ('playbook_steps', 'timeline', 'observations', 'extracted_claims') for EACH source. The user message includes a PER-SOURCE TRACES block listing each trace one after another, separated by '--- SOURCE TRACE ---' markers, with the primary source first.
+- When a 'CASE PIVOTS' block is present, treat each listed pivot as a grading lens — your reasoning artefacts must implicitly account for ALL listed pivots so the downstream answers pass has the full context.
+- When a 'TRACE AGREEMENT' block is present, it reports cross-run consistency for each per-source trace. See "Confidence ceiling" below.
+
+OUTPUT SCHEMA (this pass — REASONING + DRAFT VERDICTS — emit these fields in EXACTLY this order):
+    {
+      "playbook_steps": [
+        { "step": "<KB step name>", "evidence_note_date": "<date or null>",
+          "status": "done" | "missing" | "out_of_order" | "not_applicable",
+          "evidence_source_kind": "TICKET" | "TASK" | "CALL", "evidence_source_id": "<external id>" }
+      ],
+      "timeline": [
+        { "when": "<date and time>", "who": "<author or 'Customer' or 'Call'>",
+          "action": "<one short sentence>", "kb_step": "<KB step name or null>",
+          "source_kind": "TICKET" | "TASK" | "CALL", "source_id": "<external id>" }
+      ],
+      "observations": [
+        { "kind": "documentation" | "best_practice" | "cadence" | "process_drift" | "pii" | "other",
+          "severity": "info" | "warn",
+          "message": "<one short sentence>",
+          "evidence": "<which note date or transcript timestamp>",
+          "source_kind": "TICKET" | "TASK" | "CALL", "source_id": "<external id>" }
+      ],
+      "draft_answers": [
+        { "question_id": <int>,
+          "verdict": "yes" | "no" | "na",
+          "brief_rationale": "<one short sentence explaining the verdict>",
+          "evidence_pointer": { "source_kind": "TICKET" | "TASK" | "CALL",
+                                "source_id": "<external id>",
+                                "where": "<timestamp [mm:ss] for CALL, or note date/id for TICKET/TASK, or '(rubric-derived)' when NA via gate>" } }
+      ],
+      "coaching": {
+        "wins": [ "<one short sentence per kudos for the agent>" ],
+        "gaps": [ "<one short sentence per QA-actionable gap>" ],
+        "next_actions": [ "<one short sentence per concrete drill or follow-up>" ]
+      },
+      "narrative": "<short bullet lines, one per finding>",
+      "faithfulness": {
+        "coverage":       <0.00..1.00>,
+        "accuracy":       <0.00..1.00>,
+        "pii_discipline": <0.00..1.00>,
+        "discrepancies": [
+          { "kind": "missing_in_notes" | "contradiction" | "embellishment" | "pii_leak",
+            "between": ["TICKET" | "TASK" | "CALL", "TICKET" | "TASK" | "CALL"],
+            "summary": "<one short sentence>",
+            "claim_id_a": <int or null>, "claim_id_b": <int or null>,
+            "severity": "info" | "warn" | "critical" }
+        ]
+      },
+      "kb_citations": [ { "id": <kb_page_id>, "name": "<page name>", "url": "<page url>" } ],
+      "overall_confidence": <0.00..1.00>
+    }
+
+DRAFT VERDICTS DISCIPLINE (CRITICAL — this is the single source of truth for the per-question scoring):
+- You MUST emit ONE 'draft_answers' entry for EVERY gradeable question_id listed in the FORM SPEC. Skipping a question is a hard failure. Gradeable means any question whose type is YES_NO; ignore SUB_CATEGORY headers and TEXT feedback boxes (those are not graded).
+- You are the single grader. The downstream per-category answers pass will ONLY attach evidence quotes and may flag a dissent — it does NOT independently grade. So your verdicts here are the verdicts the user will see UNLESS reconciliation fires.
+- For each question: read the per-question RUBRIC carefully, walk the per-source traces and the KB pages, then pick the verdict. Apply rubric decision-tree paths in numbered order (stop at first match).
+- 'brief_rationale' is one sentence. Cite the most decisive trace fragment. Examples:
+    - "YES — agent says 'Alright, and Ben' at [01:24] after Ben McCoy verified, satisfying the rubric's single-use requirement."
+    - "NA — q4.6 (troubleshooting required) graded NO, so per rubric path 1 this question is N/A."
+    - "NO — agent's closing line at [07:13] is 'thanks for calling' with no Dynamic Media reference per rubric."
+- 'evidence_pointer.where' MUST point to a SPECIFIC timestamp or note. For NA-via-rubric verdicts (no opportunity arose, gate triggered NA), use '(rubric-derived)'.
+- Gate-question convention: questions whose rubric BEGINS with "Gate." are routing indicators (e.g. "Did the call require troubleshooting?"). Grade them YES/NO based on whether the gate condition is met. They are NOT quality criteria; the category roll-up question explicitly excludes them.
+
+KB grounding discipline (CRITICAL — the downstream answers pass will defer to your reasoning here):
+- The user message includes a 'KB PAGES LOADED FOR THIS CASE' block listing every KB / playbook page the prompt assembler actually attached to this case (with name + URL + ASSIGNED PLAYBOOK PAGE flag). This is the AUTHORITATIVE surface for any question whose rubric references "the KB article", "the playbook", "documented steps", "KB-required script lines", or any equivalent phrasing.
+- When that block shows '(none — no playbook page assigned … KB-following questions MUST be answered N/A …)', state EXPLICITLY in your 'narrative' that KB-following questions are unanswerable on this case and add an 'observations[]' entry with 'kind: "documentation"', 'severity: "info"', message 'kb_gap: <missing topic>'. The downstream answers pass will use this narrative line to grade KB-following questions 'na'.
+- Do NOT substitute ticket notes, re-open commentary added later by another agent, supervisor edits, or your own training knowledge for the KB. They are not the playbook, even if they later describe what should have been done. They are also typically out of scope per the 'Audit scope:' line in each attached source's HEADER.
+- When the block IS populated, reference the named pages in your reasoning so the downstream answers pass can quote them. Add a documentation observation if a specific page name is missing from the loaded set but the case clearly needed it.
+
+N/A precondition discipline (CRITICAL — the downstream answers pass anchors on your reasoning):
+- Many parent questions in the form spec are flagged '[YES_NO|NA]' in the form-spec lines AND carry a per-question RUBRIC that defines an explicit N/A precondition — typically of the form "N/A when no <X> opportunity arose" or "N/A when all of [q123, q124, q125] are NO". Examples on the Contact form: "Were all required contact-management actions handled correctly?" (N/A when no billing/new-contact/inactive/role-change opportunity), "Were all hold and transfer procedures followed correctly?" (N/A when no hold AND no transfer occurred).
+- When you can plainly see from the traces that the N/A precondition is met (the call/ticket contains no opportunity events at all for that topic), STATE THAT EXPLICITLY in your 'narrative' bullet for that category, using language like "N/A — no contact-management opportunity arose; no billing, new-contact, inactive, or role-change events in the call or ticket notes." The downstream answers pass uses your narrative as the authoritative reasoning; if you do not explicitly call out the N/A path, the answers pass will default to NO and the question will be incorrectly graded.
+- Do NOT narrate "no actions taken → NO" for questions that have an N/A precondition. The correct framing is "no opportunity arose → N/A." The distinction matters because NO penalizes the agent while N/A correctly removes the question from the score.
+
+Cross-source discipline (carried over from the monolithic synthesis pass):
+- 'playbook_steps', 'timeline', 'observations' MUST carry 'evidence_source_kind' + 'evidence_source_id'.
+- 'faithfulness': 'coverage' = ticket-vs-call coverage of agent_statement / outcome claims; 'accuracy' = of claims appearing in both sources, fraction without contradiction; 'pii_discipline' = 1.00 unless PII captured anywhere. Single-trace cases: emit faithfulness with coverage=1, accuracy=1, pii_discipline=1 (or lower for PII issues), and 'discrepancies: []'.
+
+Confidence ceiling (TRACE AGREEMENT):
+- When a 'TRACE AGREEMENT' block is present, treat the LOWEST source's 'composite' as a hard ceiling for 'overall_confidence': your reported 'overall_confidence' MUST NOT exceed 'min(composite) + 0.10'.
+
+Hard rules (this pass):
+- ONLY use 'kb_step' names, KB ids, and quotes that came from the trace blocks or the KB excerpts. DO NOT invent.
+- DO NOT emit prose, markdown bullets, or anything other than the single JSON object.
+- DO NOT emit the "answers" field — emit "draft_answers" instead (the schema above). The downstream chunk pass converts your drafts into the final answers with attached evidence quotes.
+`;
+
+/**
+ * Answers chunk pass — Pass 2B of the CHUNKED synthesis pipeline. Runs
+ * once per form CATEGORY in parallel on Sonnet (faster + cheaper than
+ * Opus). Each chunk receives the reasoning artefacts from Pass 2A as
+ * authoritative grading context, the per-source traces for raw
+ * evidence quotes, and an explicit ALLOWED QUESTION IDS list — the
+ * model must answer ALL listed ids and MAY NOT emit answers for ids
+ * outside the list (the assembler discards strays anyway, but the
+ * allowlist keeps each chunk small and the cost predictable).
+ */
+export const ANSWERS_CHUNK_ADDENDUM =
+  ADDENDUM_HEADER +
+  `
+Input shape (this pass):
+- You see (a) the reasoning artefacts already produced by an authoritative reasoning pass — the playbook_steps / timeline / observations / faithfulness / narrative your judgments must align with — under a REASONING ARTEFACTS block, (b) a DRAFT VERDICTS FROM REASONING block listing the reasoning pass's draft verdict + brief rationale for each question_id in your chunk (this is the SINGLE SOURCE OF TRUTH for the verdict you confirm), (c) the PER-SOURCE TRACES block (raw Pass-1 JSON for each source, primary first, separated by '--- SOURCE TRACE ---' markers) for verbatim evidence quotes, (d) optional CASE PIVOTS and TRACE AGREEMENT blocks, and (e) an ALLOWED QUESTION IDS list naming the EXACT integer question_ids you must process on this chunk.
+- Your job on this pass is NOT to re-grade. The reasoning pass has already produced the verdict for each question. Your job is to (a) ATTACH a verbatim evidence quote from the per-source traces that supports the draft verdict, and (b) FLAG dissent ONLY when the rubric and evidence clearly contradict the draft (rare; expected to fire on < 5% of questions in normal operation).
+
+OUTPUT SCHEMA (this pass — ANSWERS WITH EVIDENCE + OPTIONAL DISSENT — emit these fields in EXACTLY this order):
+    {
+      "answers": [
+        { "question_id": <int>,
+          "value": "yes" | "no" | "na",
+          "confidence": <0.00..1.00>,
+          "evidence_source": "<note date or transcript timestamp this answer is grounded in>",
+          "evidence_source_kind": "TICKET" | "TASK" | "CALL",
+          "evidence_source_id":   "<external id>",
+          "evidence_quote": "<short verbatim quote (<= 240 chars) from that source>",
+          "dissent": false | true,
+          "dissent_reason": "<one short sentence; ONLY when dissent=true>" }
+      ]
+    }
+
+Hard rules (this pass):
+- Emit one entry in answers[] for EVERY question_id in the ALLOWED QUESTION IDS list. Do NOT emit entries for any other question_id — those will be discarded.
+- DEFAULT BEHAVIOUR (the common case, ~95% of questions): set 'value' = the draft verdict from the DRAFT VERDICTS FROM REASONING block, 'dissent' = false. Attach a verbatim evidence quote from the per-source traces that supports the draft. The draft's brief_rationale already tells you which trace fragment to look for.
+- DISSENT BEHAVIOUR (rare): set 'dissent' = true and 'dissent_reason' = "<one sentence>" ONLY when the rubric and the trace evidence CLEARLY contradict the draft. Examples of legitimate dissent:
+    - Draft says YES but the literal rubric definition wasn't met (e.g. rubric requires a specific phrase the trace doesn't contain).
+    - Draft says NO but the trace contains a clear quote that satisfies the rubric and the reasoning missed it.
+    - Draft says NA but the rubric's NA precondition was not actually met by the traces.
+  When you flag dissent, ALSO set 'value' to your proposed alternative verdict. A reconciliation pass will resolve the disagreement; your value is treated as a hypothesis, not the final answer.
+- DO NOT dissent on stylistic disagreement, "you would have graded harsher," or because the rubric is ambiguous. Dissent is for clear-cut rubric/evidence contradictions.
+- 'evidence_quote' is REQUIRED for every "yes" and "no" verdict. For 'na' verdicts that came from a rubric NA-precondition (no opportunity arose, gate triggered NA), leave the quote blank and explain in evidence_source ("no <X> opportunity in transcript or notes").
+- 'confidence' should reflect how well the trace evidence anchors the draft verdict: 0.85-0.95 when the quote directly supports it, 0.65-0.80 when the quote is partial or inferential, 0.50-0.60 when you couldn't find a clean quote but trusted the draft anyway.
+- DO NOT emit "playbook_steps", "timeline", "observations", "narrative", "coaching", "faithfulness", "kb_citations", or "overall_confidence" — those belong to the reasoning pass.
+- DO NOT emit prose, markdown bullets, or anything other than the single JSON object.
+`;
+
+/**
+ * Sentinel substrings the assembled-prompt regression tests assert on.
+ * Chosen to be unique to each addendum (the single-source addendum
+ * mentions "PER-SOURCE TRACES" only in a NEGATION, so a shorter token
+ * would collide).
+ */
+export const SINGLE_SOURCE_MARKER = 'OUTPUT SCHEMA (this pass';
+export const SYNTHESIS_MARKER = '--- SOURCE TRACE ---';
+export const REASONING_MARKER = 'REASONING + DRAFT VERDICTS';
+export const ANSWERS_CHUNK_MARKER = 'ALLOWED QUESTION IDS';
+
+/** Pass identifiers for the runtime prompt assembler. */
+export type AddendumKind =
+  | 'single_source'
+  | 'synthesis'
+  | 'reasoning'
+  | 'answers_chunk';
+
+/**
+ * Returns the addendum string for a given pass kind. The base body is
+ * concatenated by `BasePromptService.getAssembledPrompt`.
+ */
+export function addendumForKind(kind: AddendumKind): string {
+  switch (kind) {
+    case 'synthesis':
+      return SYNTHESIS_ADDENDUM;
+    case 'reasoning':
+      return REASONING_ADDENDUM;
+    case 'answers_chunk':
+      return ANSWERS_CHUNK_ADDENDUM;
+    case 'single_source':
+    default:
+      return SINGLE_SOURCE_ADDENDUM;
+  }
+}

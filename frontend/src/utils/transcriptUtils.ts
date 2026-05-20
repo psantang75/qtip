@@ -58,9 +58,31 @@ export interface ConversationTranscript {
 }
 
 /**
+ * Map a Genesys-style `participantPurpose` to a human-readable speaker
+ * label. We intentionally collapse the platform's many internal roles
+ * (agent / acd / ivr / system) into a single "Agent" tag because, from
+ * a QA-reviewer perspective, anything coming from our side of the line
+ * — including the IVR greeting — is "what we said to the caller".
+ *
+ * Returns `null` when we genuinely don't know who spoke; the caller
+ * then renders the line without a prefix rather than mislabelling it.
+ */
+function speakerLabelFromParticipantPurpose(purpose: unknown): 'Agent' | 'Customer' | null {
+  if (typeof purpose !== 'string') return null;
+  const p = purpose.toLowerCase();
+  if (p === 'external' || p === 'customer') return 'Customer';
+  if (p === 'internal' || p === 'agent' || p === 'acd' || p === 'ivr' || p === 'system') return 'Agent';
+  return null;
+}
+
+/**
  * Extracts plain text from transcript phrases
  * @param transcriptData - The transcript data (can be string or structured object)
- * @returns Plain text string with all phrases combined
+ * @returns Plain text string with all phrases combined, with each phrase
+ *          prefixed by an `Agent: ` / `Customer: ` speaker label whenever
+ *          the source data exposes a participant role. Lines from older
+ *          plain-string transcripts (no role metadata) are returned
+ *          unchanged so we never invent a speaker.
  */
 export function extractTranscriptText(transcriptData: string | ConversationTranscript | null | undefined): string {
   if (!transcriptData) {
@@ -89,25 +111,40 @@ export function extractTranscriptText(transcriptData: string | ConversationTrans
     try {
       // Handle array format (multiple conversation transcripts)
       const transcripts = Array.isArray(transcriptData) ? transcriptData : [transcriptData];
-      
+
       const allText: string[] = [];
-      
+
       for (const transcript of transcripts) {
         if (transcript.transcripts && Array.isArray(transcript.transcripts)) {
           for (const transcriptItem of transcript.transcripts) {
             if (transcriptItem.phrases && Array.isArray(transcriptItem.phrases)) {
-              const phraseTexts = transcriptItem.phrases
-                .map(phrase => phrase.text)
-                .filter(text => text && text.trim().length > 0);
-              
-              if (phraseTexts.length > 0) {
-                allText.push(phraseTexts.join('\n'));
+              const phraseLines: string[] = [];
+              for (const phrase of transcriptItem.phrases) {
+                // Prefer Genesys' `decoratedText` over raw `text`. The
+                // raw field is the verbatim ASR output — all lowercase,
+                // no punctuation, no number/currency formatting. The
+                // decorated field is the same content after Genesys'
+                // text-normalisation pass: sentence casing, proper
+                // nouns, "$1,200" instead of "twelve hundred dollars",
+                // commas, periods, etc. We fall back to raw `text`
+                // only when decoration isn't present (older recordings
+                // or non-Genesys transcript sources).
+                const decorated = typeof phrase?.decoratedText === 'string' ? phrase.decoratedText.trim() : '';
+                const raw = typeof phrase?.text === 'string' ? phrase.text.trim() : '';
+                const display = decorated.length > 0 ? decorated : raw;
+                if (!display) continue;
+                const speaker = speakerLabelFromParticipantPurpose(phrase.participantPurpose);
+                phraseLines.push(speaker ? `${speaker}: ${display}` : display);
+              }
+
+              if (phraseLines.length > 0) {
+                allText.push(phraseLines.join('\n'));
               }
             }
           }
         }
       }
-      
+
       return allText.length > 0 ? allText.join('\n\n') : 'No transcript content found';
     } catch (error) {
       console.warn('Error processing transcript data:', error);
@@ -119,22 +156,54 @@ export function extractTranscriptText(transcriptData: string | ConversationTrans
 }
 
 /**
- * Formats transcript text for better readability
- * @param transcriptData - The transcript data
- * @returns Formatted transcript text
+ * Escape a plain-text string so it can be safely injected into HTML
+ * via `dangerouslySetInnerHTML`. We're intentionally producing HTML
+ * here (to bold the speaker labels), so any caller-controlled content
+ * — including transcript text from upstream systems — must be
+ * HTML-escaped first to avoid an XSS vector.
+ */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Formats transcript text for better readability. Returns an HTML
+ * fragment intended to be passed through `dangerouslySetInnerHTML` on
+ * a `whitespace-pre-wrap` container — speaker labels (`Agent:` /
+ * `Customer:`) are wrapped in `<strong>` so reviewers can scan turns
+ * at a glance, while the rest of the transcript text is HTML-escaped.
+ *
+ * Sentinel error / empty strings (e.g. "No transcript available") are
+ * returned verbatim with no markup so the caller can render them as-is.
  */
 export function formatTranscriptText(transcriptData: string | ConversationTranscript | null | undefined): string {
   const rawText = extractTranscriptText(transcriptData);
-  
+
   if (rawText === 'No transcript available' || rawText === 'No transcript content found' || rawText === 'Error processing transcript') {
     return rawText;
   }
-  
-  // Basic formatting - preserve line breaks and normalize whitespace within each line
+
+  // Match the speaker label only at the very start of a line, followed
+  // by ": ". We anchor on \s* so a stray leading space doesn't defeat
+  // the match. Group 1 is the label, group 2 is the rest of the line.
+  const labelRe = /^(Agent|Customer):\s+(.*)$/;
+
   return rawText
     .split('\n')
-    .map(line => line.trim().replace(/\s+/g, ' ')) // Normalize whitespace within each line
-    .filter(line => line.length > 0) // Remove empty lines
+    .map((line) => line.trim().replace(/\s+/g, ' '))
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const m = labelRe.exec(line);
+      if (m) {
+        return `<strong>${m[1]}:</strong> ${escapeHtml(m[2])}`;
+      }
+      return escapeHtml(line);
+    })
     .join('\n');
 }
 

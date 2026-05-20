@@ -17,13 +17,22 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        // AI Reviewer manual runs can take 60–180s end-to-end (Sonnet
+        // trace x N + Opus synthesis + KB link expansion). The browser
+        // sets a 5-minute axios timeout per-request, but the Vite dev
+        // proxy's default socket timeouts will close the connection
+        // before then, surfacing as a spurious "timeout error" in the
+        // UI even though the backend saved the draft. Match the 10-min
+        // ceiling so the proxy is never the bottleneck in dev.
+        timeout: 600000,
+        proxyTimeout: 600000,
       },
       '/uploads': {
         target: 'http://localhost:3000',
         changeOrigin: true,
-        secure: false
-      }
-    }
-  }
+        secure: false,
+      },
+    },
+  },
 })

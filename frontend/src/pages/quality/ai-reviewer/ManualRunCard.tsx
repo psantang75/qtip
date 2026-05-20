@@ -23,9 +23,10 @@
 
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, PlayCircle, ExternalLink } from 'lucide-react'
+import { Loader2, PlayCircle, ExternalLink, Plus, X, AlertTriangle, GitCompareArrows } from 'lucide-react'
 import aiReviewerService, {
   type ManualRunKind,
+  type ManualRunAttachedSource,
   type ManualRunResult,
 } from '@/services/aiReviewerService'
 import { Button } from '@/components/ui/button'
@@ -33,10 +34,31 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import {
+  canRunManual,
+  nextAttachedDefault,
+  trimAttachedSources,
+} from './manualRunCardState'
 
 interface Props {
   formId: number
+  /**
+   * Phase C (C6): per-form cap on attached sources surfaced from
+   * `forms.ai_max_attached_sources`. The page that hosts this card
+   * may not have the form column wired through yet, in which case we
+   * fall back to the schema default (3). Backend enforces the cap
+   * authoritatively, so the UI value is purely a guardrail.
+   */
+  maxAttachedSources?: number
 }
+
+/**
+ * Conservative default that matches `forms.ai_max_attached_sources`'
+ * Prisma default (3) — used when the host page hasn't passed an
+ * explicit cap. Keeping this in sync is the ManualRunCard's only
+ * coupling to the form schema.
+ */
+const DEFAULT_MAX_ATTACHED_SOURCES = 3
 
 interface KindOption {
   kind: ManualRunKind
@@ -58,18 +80,67 @@ const optionCls = (selected: boolean) =>
     ? 'bg-[#00aeef] text-white border-[#00aeef]'
     : 'bg-white text-slate-600 border-slate-200 hover:border-[#00aeef] hover:text-[#00aeef]'
 
-export function ManualRunCard({ formId }: Props) {
+export function ManualRunCard({ formId, maxAttachedSources }: Props) {
   const qc = useQueryClient()
   const { toast } = useToast()
 
   const [kind, setKind] = useState<ManualRunKind>('TICKET')
   const [externalId, setExternalId] = useState<string>('')
   const [lastResult, setLastResult] = useState<ManualRunResult | null>(null)
+  // Compare-models state: when the user fires "Run Both", we capture
+  // both per-provider results here so the result strip can render the
+  // side-by-side panel (Claude vs ChatGPT — submission id, score,
+  // wall-clock time, cost) in a single place beneath the run button.
+  // null means "no compare run since last mutation".
+  const [compareResults, setCompareResults] = useState<{
+    anthropic?: ManualRunResult
+    openai?: ManualRunResult
+    anthropicError?: { message: string; code: string | null }
+    openaiError?: { message: string; code: string | null }
+  } | null>(null)
+  // Persistent inline copy of the most recent failure. The toast still
+  // fires (and disappears after a few seconds), but a manual run can
+  // take 60–120s — by the time the spinner stops, the user has often
+  // tabbed away and missed the toast entirely. This strip stays put
+  // until they dismiss it or kick off a new run.
+  const [lastError, setLastError] = useState<{ message: string; code: string | null } | null>(null)
+  // Phase C (C6): attached sources for multi-source manual runs (e.g.
+  // ticket primary + linked call). Empty array preserves the legacy
+  // single-source request body byte-identically.
+  const [attached, setAttached] = useState<ManualRunAttachedSource[]>([])
+
+  const cap = Math.max(0, Math.min(10, maxAttachedSources ?? DEFAULT_MAX_ATTACHED_SOURCES))
+  const canAttachMore = attached.length < cap
+
+  const updateAttached = (idx: number, patch: Partial<ManualRunAttachedSource>) => {
+    setAttached((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)))
+  }
+  const removeAttached = (idx: number) => {
+    setAttached((prev) => prev.filter((_, i) => i !== idx))
+  }
+  const addAttached = () => {
+    if (!canAttachMore) return
+    setAttached((prev) => [...prev, { kind: nextAttachedDefault(kind), external_id: '' }])
+  }
+
+  // Only send rows that have a non-empty id. We don't auto-trim on
+  // every keystroke (the user may legitimately have whitespace in a
+  // conversation id mid-paste), but we trim at submit time.
+  const trimmedAttached = trimAttachedSources(attached)
 
   const mut = useMutation({
-    mutationFn: () => aiReviewerService.runManual(formId, kind, externalId.trim()),
+    mutationFn: () =>
+      aiReviewerService.runManual(formId, kind, externalId.trim(), trimmedAttached),
+    onMutate: () => {
+      // Clear any prior result/error so the strip below the button always
+      // reflects the run the user is currently waiting on.
+      setLastResult(null)
+      setLastError(null)
+      setCompareResults(null)
+    },
     onSuccess: (data) => {
       setLastResult(data)
+      setLastError(null)
       qc.invalidateQueries({ queryKey: ['ai-calibration-metrics', formId] })
       qc.invalidateQueries({ queryKey: ['ai-calibration-recent', formId] })
       qc.invalidateQueries({ queryKey: ['ai-reviewer-inbox'] })
@@ -103,12 +174,93 @@ export function ManualRunCard({ formId }: Props) {
           : e?.message
           ? String(e.message)
           : 'AI run failed'
+      // Backend AI Reviewer routes return { error, code } — surface the
+      // code in the inline strip so operators can recognise repeat issues
+      // (e.g. INTERACTION_NOT_CLOSED) without digging through server logs.
+      const code = e?.response?.data?.code ?? null
+      setLastError({ message: desc, code: typeof code === 'string' ? code : null })
       toast({ title: 'Run failed', description: desc, variant: 'destructive' })
     },
   })
 
+  // Compare-models mutation: fires two parallel /run calls — one pinned
+  // to Anthropic, one pinned to OpenAI. Settles even when ONE side
+  // fails (e.g. OpenAI not configured) so the user still sees the
+  // working side's result. Multi-source only — the backend rejects
+  // OPENAI provider on the single-source path.
+  const compareMut = useMutation({
+    mutationFn: async () => {
+      const tasks: Array<Promise<{ key: 'anthropic' | 'openai'; value: ManualRunResult } | { key: 'anthropic' | 'openai'; error: { message: string; code: string | null } }>> = (
+        ['anthropic', 'openai'] as const
+      ).map(async (key) => {
+        try {
+          const value = await aiReviewerService.runManual(
+            formId,
+            kind,
+            externalId.trim(),
+            trimmedAttached,
+            key,
+          )
+          return { key, value }
+        } catch (e: any) {
+          const raw = e?.response?.data?.error
+          const message =
+            typeof raw === 'string'
+              ? raw
+              : raw?.message
+              ? String(raw.message)
+              : e?.message
+              ? String(e.message)
+              : 'Run failed'
+          const code = e?.response?.data?.code ?? null
+          return { key, error: { message, code: typeof code === 'string' ? code : null } }
+        }
+      })
+      const settled = await Promise.all(tasks)
+      const out: NonNullable<typeof compareResults> = {}
+      for (const item of settled) {
+        if ('value' in item) {
+          if (item.key === 'anthropic') out.anthropic = item.value
+          else out.openai = item.value
+        } else {
+          if (item.key === 'anthropic') out.anthropicError = item.error
+          else out.openaiError = item.error
+        }
+      }
+      return out
+    },
+    onMutate: () => {
+      setLastResult(null)
+      setLastError(null)
+      setCompareResults(null)
+    },
+    onSuccess: (data) => {
+      setCompareResults(data)
+      qc.invalidateQueries({ queryKey: ['ai-reviewer-inbox'] })
+      qc.invalidateQueries({ queryKey: ['ai-reviewer-forms'] })
+      const sides = [
+        data.anthropic ? 'Claude' : null,
+        data.openai ? 'ChatGPT' : null,
+      ].filter(Boolean)
+      toast({
+        title: sides.length === 2 ? 'Compare run complete' : `Compare run finished (${sides.join(', ')} succeeded)`,
+        description: 'Open each draft below to inspect the answers side-by-side.',
+      })
+    },
+  })
+
   const selectedOpt = KIND_OPTIONS.find((o) => o.kind === kind) ?? KIND_OPTIONS[0]
-  const canRun = !mut.isPending && externalId.trim().length > 0
+  const canRun = !mut.isPending && !compareMut.isPending && canRunManual(externalId, attached)
+  // Compare requires attached_sources (multi-source path) because the
+  // single-source synthesis is Anthropic-only. Surface this in the
+  // button's disabled state + tooltip so the user doesn't fire a
+  // doomed run.
+  const canCompare = canRun && trimmedAttached.length > 0
+  const compareDisabledReason = !canRun
+    ? undefined
+    : trimmedAttached.length === 0
+    ? 'Compare requires at least one attached source (multi-source path).'
+    : undefined
 
   const resultLink =
     lastResult == null
@@ -128,51 +280,156 @@ export function ManualRunCard({ formId }: Props) {
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Kind picker — segmented buttons, matches YES_NO question style */}
+        {/* Interaction — primary source plus any optional attached sources.
+            Primary and attached rows share the same kind-picker + id-input
+            layout so the form reads as one consistent list. */}
         <div>
-          <Label className="text-[12px] font-medium text-slate-700">Interaction kind</Label>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {KIND_OPTIONS.map((opt) => (
-              <button
-                key={opt.kind}
-                type="button"
-                disabled={mut.isPending}
-                onClick={() => setKind(opt.kind)}
-                className={cn(
-                  'h-7 px-3 text-[12px] rounded border font-medium transition-all',
-                  optionCls(kind === opt.kind),
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between">
+            <Label className="text-[12px] font-medium text-slate-700">Interaction</Label>
+            <span className="text-[11px] text-slate-500">
+              {attached.length}/{cap} attached
+            </span>
           </div>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Pick the ticket, task, or conversation to grade. Add more sources to grade them
+            together as a single case (e.g. confirm ticket notes match the call).
+          </p>
+
+          <div className="mt-2 space-y-2">
+            {/* Primary interaction row — same layout as attached sources, no remove button */}
+            <div
+              className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-2"
+              data-testid="manual-run-primary"
+            >
+              <div className="flex flex-wrap items-center gap-1.5">
+                {KIND_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.kind}
+                    type="button"
+                    disabled={mut.isPending}
+                    onClick={() => setKind(opt.kind)}
+                    className={cn(
+                      'h-7 px-3 text-[12px] rounded border font-medium transition-all',
+                      optionCls(kind === opt.kind),
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1">
+                <Input
+                  id="manual-run-id"
+                  aria-label={kind === 'CONVERSATION' ? 'Conversation ID' : `${selectedOpt.label} ID`}
+                  value={externalId}
+                  onChange={(e) => setExternalId(e.target.value)}
+                  placeholder={selectedOpt.placeholder}
+                  disabled={mut.isPending}
+                  autoComplete="off"
+                />
+              </div>
+              {/* Spacer to keep the primary input aligned with attached rows
+                  (which reserve a 7×7 slot for the remove button). */}
+              <div className="hidden sm:block h-7 w-7 shrink-0" aria-hidden="true" />
+            </div>
+
+            {attached.map((row, idx) => {
+              const rowOpt = KIND_OPTIONS.find((o) => o.kind === row.kind) ?? KIND_OPTIONS[0]
+              return (
+                <div
+                  key={idx}
+                  className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-2"
+                  data-testid={`manual-run-attached-${idx}`}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {KIND_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.kind}
+                        type="button"
+                        disabled={mut.isPending}
+                        onClick={() => updateAttached(idx, { kind: opt.kind })}
+                        className={cn(
+                          'h-7 px-3 text-[12px] rounded border font-medium transition-all',
+                          optionCls(row.kind === opt.kind),
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      aria-label={`Attached source ${idx + 1} ID`}
+                      value={row.external_id}
+                      onChange={(e) => updateAttached(idx, { external_id: e.target.value })}
+                      placeholder={rowOpt.placeholder}
+                      disabled={mut.isPending}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeAttached(idx)}
+                    disabled={mut.isPending}
+                    aria-label={`Remove attached source ${idx + 1}`}
+                    className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded text-slate-500 hover:text-destructive hover:bg-white"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addAttached}
+            disabled={!canAttachMore || mut.isPending}
+            className="mt-2 h-7 text-[12px]"
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Add source
+          </Button>
         </div>
 
-        {/* ID input + Run button */}
-        <div className="flex flex-col sm:flex-row sm:items-end gap-2">
-          <div className="flex-1">
-            <Label htmlFor="manual-run-id" className="text-[12px] font-medium text-slate-700">
-              {kind === 'CONVERSATION' ? 'Conversation ID' : `${selectedOpt.label} ID`}
-            </Label>
-            <Input
-              id="manual-run-id"
-              value={externalId}
-              onChange={(e) => setExternalId(e.target.value)}
-              placeholder={selectedOpt.placeholder}
-              disabled={mut.isPending}
-              autoComplete="off"
-            />
-          </div>
+        {/* Run buttons — single-provider Run + side-by-side compare. The
+            compare button is only enabled on the multi-source path (the
+            single-source synthesis is Anthropic-only by design, so the
+            two sides would be identical / would error). */}
+        <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => compareMut.mutate()}
+            disabled={!canCompare || compareMut.isPending || mut.isPending}
+            title={compareDisabledReason}
+            className="sm:w-auto w-full"
+          >
+            {compareMut.isPending ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                Comparing Claude vs ChatGPT… 60–180s
+              </>
+            ) : (
+              <>
+                <GitCompareArrows className="h-3.5 w-3.5 mr-1.5" />
+                Run Both (Compare)
+              </>
+            )}
+          </Button>
           <Button
             onClick={() => mut.mutate()}
-            disabled={!canRun}
+            disabled={!canRun || compareMut.isPending}
             className="bg-primary hover:bg-primary/90 text-white sm:w-auto w-full"
           >
             {mut.isPending ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                Running… this can take 30–60s
+                {trimmedAttached.length > 0
+                  ? 'Running multi-source review… this can take 60–120s'
+                  : 'Running… this can take 30–60s'}
               </>
             ) : (
               <>
@@ -182,6 +439,118 @@ export function ManualRunCard({ formId }: Props) {
             )}
           </Button>
         </div>
+
+        {/* Error strip — persists until dismissed or replaced by a new run.
+            Mirrors the success strip's shape so the eye lands in the same
+            place regardless of outcome. */}
+        {lastError && (
+          <div
+            className="rounded-md border border-red-200 bg-red-50 text-red-900 px-3 py-2 text-[12px] flex items-start justify-between gap-3"
+            role="alert"
+            data-testid="manual-run-error"
+          >
+            <div className="flex items-start gap-2 min-w-0">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <div className="font-semibold">Run failed</div>
+                <div className="text-red-800 break-words">{lastError.message}</div>
+                {lastError.code && (
+                  <div className="mt-0.5 text-[11px] font-mono text-red-700/80">
+                    {lastError.code}
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLastError(null)}
+              aria-label="Dismiss error"
+              className="h-6 w-6 inline-flex items-center justify-center rounded text-red-700 hover:bg-white/60 shrink-0"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Compare result panel — side-by-side Claude vs ChatGPT. Renders
+            in place of the single-result strip so the visual real estate
+            stays bounded. Each side shows submission id, score, provider,
+            cost, wall-clock time + "Open draft" link in a new tab so
+            both can be opened and visually diffed against each other. */}
+        {compareResults && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="manual-run-compare-results">
+            {(['anthropic', 'openai'] as const).map((key) => {
+              const r = compareResults[key]
+              const err = key === 'anthropic' ? compareResults.anthropicError : compareResults.openaiError
+              const sideLabel = key === 'anthropic' ? 'Claude (Anthropic)' : 'ChatGPT (OpenAI)'
+              const link =
+                r == null
+                  ? null
+                  : r.status === 'DRAFT'
+                  ? `/app/quality/audit?promoteDraft=${r.submission_id}`
+                  : `/app/quality/submissions/${r.submission_id}`
+              const sec =
+                r?.elapsed_ms != null ? `${(r.elapsed_ms / 1000).toFixed(1)}s` : null
+
+              if (err) {
+                return (
+                  <div
+                    key={key}
+                    className="rounded-md border border-red-200 bg-red-50 text-red-900 px-3 py-2 text-[12px]"
+                  >
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {sideLabel} — failed
+                    </div>
+                    <div className="text-red-800 break-words mt-0.5">{err.message}</div>
+                    {err.code && (
+                      <div className="mt-0.5 text-[11px] font-mono text-red-700/80">{err.code}</div>
+                    )}
+                  </div>
+                )
+              }
+              if (!r || !link) return null
+              return (
+                <div
+                  key={key}
+                  className={cn(
+                    'rounded-md border px-3 py-2 text-[12px]',
+                    r.status === 'DRAFT'
+                      ? 'border-amber-200 bg-amber-50 text-amber-900'
+                      : 'border-emerald-200 bg-emerald-50 text-emerald-900',
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-semibold">{sideLabel}</div>
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-0.5 text-[11px] font-medium hover:bg-white/50"
+                    >
+                      Open draft
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                  <div className="mt-1 text-slate-700 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span>
+                      {r.status === 'DRAFT'
+                        ? `DRAFT #${r.submission_id}`
+                        : `Submitted #${r.submission_id} (score ${r.total_score})`}
+                    </span>
+                    {sec && <span className="font-mono text-slate-600">{sec}</span>}
+                    {r.cost_estimate && (
+                      <span className="font-mono text-slate-600">
+                        {r.cost_estimate.formatted}
+                        {r.cost_estimate.approximated ? ' (approx)' : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Result strip */}
         {lastResult && resultLink && (

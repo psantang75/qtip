@@ -1,5 +1,20 @@
 // Form types based on backend model
-export type QuestionType = 'YES_NO' | 'SCALE' | 'N_A' | 'TEXT' | 'INFO_BLOCK' | 'RADIO' | 'SUB_CATEGORY' | 'MULTI_SELECT';
+export type QuestionType =
+  | 'YES_NO'
+  | 'SCALE'
+  | 'N_A'
+  | 'TEXT'
+  | 'INFO_BLOCK'
+  | 'RADIO'
+  | 'SUB_CATEGORY'
+  | 'MULTI_SELECT'
+  /**
+   * Phase D (D1): AI-only question type. Auto-graded from the
+   * synthesis-pass `faithfulness` object. Read-only in the UI; humans
+   * don't author or change the value. See backend/src/models/Form.ts
+   * for the verdict mapping.
+   */
+  | 'FAITHFULNESS';
 export type ConditionType = 'EQUALS' | 'NOT_EQUALS' | 'EXISTS' | 'NOT_EXISTS';
 export type InteractionType = 'CALL' | 'TICKET' | 'EMAIL' | 'CHAT' | 'UNIVERSAL';
 export type MetadataFieldType = 'TEXT' | 'DROPDOWN' | 'DATE' | 'AUTO' | 'SPACER';
@@ -177,6 +192,21 @@ export interface BaseForm {
    * the QA Inbox in addition to the random sample.
    */
   ai_sample_low_score_always?: boolean;
+
+  /**
+   * Layer 1 of the AI Reviewer's 4-layer system prompt: which universal
+   * base this form uses. NULL means "inherit the seeded default for the
+   * requested prompt_kind" (system.v3 today). Edited from the Universal
+   * Base card on the AI Reviewer Form Detail page.
+   */
+  ai_base_prompt_id?: number | null;
+
+  /**
+   * Per-form AI model provider. Picks which LLM the synthesis pipeline
+   * (reasoning + answer chunks + verification) calls. Allowed values:
+   * "anthropic" (Claude — default) and "openai" (ChatGPT / GPT-5).
+   */
+  ai_model_provider?: 'anthropic' | 'openai';
 }
 
 /**

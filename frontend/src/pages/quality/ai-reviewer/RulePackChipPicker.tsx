@@ -19,6 +19,7 @@ import { BookOpen, Save } from 'lucide-react'
 import aiReviewerService from '@/services/aiReviewerService'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
+import { useIsAdmin } from '@/hooks/useIsAdmin'
 
 interface RulePackChipPickerProps {
   formId: number
@@ -27,6 +28,7 @@ interface RulePackChipPickerProps {
 export function RulePackChipPicker({ formId }: RulePackChipPickerProps) {
   const qc = useQueryClient()
   const { toast } = useToast()
+  const isAdmin = useIsAdmin()
 
   const packsQ = useQuery({
     queryKey: ['ai-reviewer-rule-packs'],
@@ -102,7 +104,8 @@ export function RulePackChipPicker({ formId }: RulePackChipPickerProps) {
         <Button
           size="sm"
           onClick={() => saveMut.mutate(Array.from(selected))}
-          disabled={!dirty || saveMut.isPending || !hydrated}
+          disabled={!isAdmin || !dirty || saveMut.isPending || !hydrated}
+          title={!isAdmin ? 'Admin only' : undefined}
           className="bg-primary hover:bg-primary/90 text-white"
         >
           <Save className="h-3.5 w-3.5 mr-1" />
@@ -132,11 +135,14 @@ export function RulePackChipPicker({ formId }: RulePackChipPickerProps) {
                     key={p.key}
                     type="button"
                     onClick={() => toggle(p.key)}
+                    disabled={!isAdmin}
+                    title={!isAdmin ? 'Admin only' : undefined}
                     className={
                       'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[12px] transition ' +
                       (on
                         ? 'border-primary bg-primary text-white shadow-sm'
-                        : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400')
+                        : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400') +
+                      (!isAdmin ? ' opacity-60 cursor-not-allowed' : '')
                     }
                   >
                     {p.name}

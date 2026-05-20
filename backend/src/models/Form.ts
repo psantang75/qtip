@@ -4,7 +4,25 @@
  */
 
 export type interaction_type = 'CALL' | 'TICKET' | 'EMAIL' | 'CHAT' | 'UNIVERSAL';
-export type QuestionType = 'YES_NO' | 'SCALE' | 'N_A' | 'TEXT' | 'INFO_BLOCK' | 'RADIO' | 'SUB_CATEGORY';
+export type QuestionType =
+  | 'YES_NO'
+  | 'SCALE'
+  | 'N_A'
+  | 'TEXT'
+  | 'INFO_BLOCK'
+  | 'RADIO'
+  | 'SUB_CATEGORY'
+  | 'MULTI_SELECT'
+  /**
+   * Phase D (D1): a meta question type that the AI Reviewer auto-grades
+   * from the synthesis-pass `faithfulness` object (coverage / accuracy /
+   * pii_discipline). Renders as a read-only summary + raw scores in the
+   * UI; humans don't fill it in. Reserved option_value strings:
+   *   - "pass"  → all three subscores >= the form's faithfulness floor
+   *   - "warn"  → at least one subscore below the floor
+   *   - "fail"  → coverage or accuracy < 0.5, OR a critical discrepancy
+   */
+  | 'FAITHFULNESS';
 export type condition_type = 'EQUALS' | 'NOT_EQUALS' | 'EXISTS' | 'NOT_EXISTS';
 export type logical_operator = 'AND' | 'OR';
 export type MetadataFieldType = 'TEXT' | 'DROPDOWN' | 'DATE' | 'AUTO' | 'SPACER';
@@ -81,6 +99,22 @@ export interface Form {
    * inbox, in addition to the random sample.
    */
   ai_sample_low_score_always?: boolean;
+
+  /**
+   * Layer 1 of the 4-layer system prompt: which `ai_base_prompt` row this
+   * form should use. NULL = "inherit the seeded default for the requested
+   * `prompt_kind`" (system.v3 today). Edited from the Universal Base card
+   * on the AI Reviewer Form Detail page.
+   */
+  ai_base_prompt_id?: number | null;
+
+  /**
+   * Per-form AI model provider. Controls which LLM the synthesis pipeline
+   * calls. Allowed values: "anthropic" (Claude — default) and "openai"
+   * (ChatGPT / GPT-5). Inherited across form versions through
+   * `MySQLFormRepository.updateForm()` so the choice survives Save Form.
+   */
+  ai_model_provider?: string;
 }
 
 /**
@@ -191,6 +225,7 @@ export interface CreateFormDTO {
   ai_submit_as_draft?: boolean;
   ai_sample_review_pct?: number;
   ai_sample_low_score_always?: boolean;
+  ai_model_provider?: string;
   categories: CreateFormCategoryDTO[];
   metadata_fields?: CreateFormMetadataFieldDTO[];
 }

@@ -12,8 +12,9 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { Bot, Sliders } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Bot, FileText, Library, Sliders } from 'lucide-react'
+import { useIsAdmin } from '@/hooks/useIsAdmin'
 import { ListPageShell } from '@/components/common/ListPageShell'
 import { ListPageHeader } from '@/components/common/ListPageHeader'
 import { ListCard } from '@/components/common/ListCard'
@@ -46,6 +47,7 @@ function ModeBadge({ submitAsDraft }: { submitAsDraft: boolean }) {
 
 export default function AIReviewerFormsList() {
   const navigate = useNavigate()
+  const isAdmin = useIsAdmin()
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['ai-reviewer-forms'],
@@ -61,6 +63,24 @@ export default function AIReviewerFormsList() {
       <ListPageHeader
         title="AI Reviewer"
         subtitle="Manage AI guidance, mode, and Trusted-mode sampling per form. Edits here do not bump the form version."
+        actions={
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button variant="outline" asChild>
+                <Link to="/app/quality/ai-reviewer/base-prompts">
+                  <FileText className="mr-1 h-4 w-4" />
+                  Base prompt library
+                </Link>
+              </Button>
+            )}
+            <Button variant="outline" asChild>
+              <Link to="/app/quality/ai-reviewer/rule-packs">
+                <Library className="mr-1 h-4 w-4" />
+                Rule pack library
+              </Link>
+            </Button>
+          </div>
+        }
       />
 
       {isLoading && <ListLoadingSkeleton rows={4} />}

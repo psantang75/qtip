@@ -162,10 +162,27 @@ model Form {
   ai_calibration_auto_absorb_days  Int?     @default(180)
   ai_monthly_cost_budget_usd       Decimal? @db.Decimal(8, 2)
   ai_disagreement_route_threshold  Decimal? @db.Decimal(3, 2)
+  /// Phase C (C2): max number of auto-attached secondary sources the
+  /// case loader may pull in for combined ticket+call reviews. Default
+  /// 3 keeps the prompt cost bounded; per-form override lets a noisy
+  /// queue dial it down to 1 (primary-only effectively) or up to 10.
+  ai_max_attached_sources          Int      @default(3) @db.UnsignedTinyInt
+  /// Optional per-form base prompt assignment. NULL means "use the default
+  /// for the requested `prompt_kind`" (system.v3 today). Lets domain-specific
+  /// forms (sales, warranty, etc.) opt into a non-default base authored
+  /// through the Base Prompt Library.
+  ai_base_prompt_id                Int?
+  /// Per-form AI model provider. Controls which LLM the synthesis pipeline
+  /// (reasoning + answer chunks + verification) calls. Allowed values are
+  /// "anthropic" (Claude — default, current behaviour) and "openai"
+  /// (ChatGPT / GPT-5). Inherited across form versions through
+  /// MySQLFormRepository.updateForm() so the choice survives Save Form.
+  ai_model_provider                String   @default("anthropic") @db.VarChar(32)
 
   creator     User   @relation(fields: [created_by], references: [id], onDelete: Cascade)
   parent_form Form?  @relation("FormVersions", fields: [parent_form_id], references: [id], onDelete: SetNull)
   child_forms Form[] @relation("FormVersions")
+  ai_base_prompt AiBasePrompt? @relation(fields: [ai_base_prompt_id], references: [id], onDelete: SetNull)
 
   form_metadata_fields   FormMetadataField[]
   form_categories        FormCategory[]
@@ -174,6 +191,7 @@ model Form {
   performance_goals_form PerformanceGoal[]   @relation("GoalTargetForm")
 
   @@index([interaction_type])
+  @@index([ai_base_prompt_id], map: "idx_forms_ai_base_prompt")
   @@map("forms")
 }
 
@@ -675,6 +693,11 @@ model Submission {
   id           Int              @id @default(autoincrement())
   form_id      Int
   call_id      Int?
+  /// Phase C (C4): multi-source case the submission belongs to. Format
+  /// `<KIND>:<external_id>` — the KIND/id of the primary source. Lets
+  /// the inbox / calibration / readiness logic group multiple
+  /// submissions (AI run + later sample-review run) under the same case.
+  case_id      String?          @db.VarChar(64)
   submitted_by Int
   submitted_at DateTime         @default(now()) @db.DateTime(0)
   total_score  Decimal?         @db.Decimal(5, 2)
@@ -699,6 +722,7 @@ model Submission {
 
   @@index([status, submitted_at], map: "idx_submissions_status_date")
   @@index([form_id, status, submitted_at], map: "idx_submissions_form_status_date")
+  @@index([case_id], map: "idx_submissions_case_id")
   @@map("submissions")
 }
 
@@ -1393,6 +1417,7 @@ enum FormQuestionType {
   RADIO
   SUB_CATEGORY
   MULTI_SELECT
+  FAITHFULNESS
 }
 
 enum PerformanceGoalType {
@@ -1554,9 +1579,27 @@ model AiCallLog {
   provider        String   @db.VarChar(32)
   model           String   @db.VarChar(64)
   purpose         String   @db.VarChar(64)
+  /**
+   * Cross-cutting (X1): which two-pass stage produced this row.
+   *   - 'classification' — Sonnet topic classifier mini-call (Phase B)
+   *   - 'trace'          — Pass 1 per-source trace (Sonnet)
+   *   - 'synthesis'      — Pass 2 cross-source synthesis (Opus)
+   *   - 'verification'   — Phase A self-consistency re-check (Opus)
+   *   - 'single_pass'    — legacy single-call path (pre-C3)
+   * Backfilled to 'single_pass' on the existing fleet so historical
+   * rollups keep working until callers migrate to the two-pass path.
+   */
+  pass            String   @default("single_pass") @db.VarChar(16)
   ticket_id       Int?     @db.UnsignedInt
   submission_id   Int?     @db.UnsignedInt
   form_id         Int?     @db.UnsignedInt
+  /**
+   * Cross-cutting (X1): groups every LLM call belonging to the same
+   * multi-source review (matches submissions.case_id). NULL for legacy
+   * rows and one-off calls (e.g. preview prompts) that don't belong
+   * to a case.
+   */
+  case_id         String?  @db.VarChar(64)
   prompt_hash     String   @db.Char(64)
   prompt_chars    Int      @db.UnsignedInt
   response_chars  Int      @db.UnsignedInt
@@ -1571,6 +1614,8 @@ model AiCallLog {
   @@index([ticket_id], map: "idx_ai_call_logs_ticket")
   @@index([submission_id], map: "idx_ai_call_logs_submit")
   @@index([created_at], map: "idx_ai_call_logs_created")
+  @@index([pass], map: "idx_ai_call_logs_pass")
+  @@index([case_id], map: "idx_ai_call_logs_case")
   @@map("ai_call_logs")
 }
 
@@ -1582,6 +1627,11 @@ model AiCalibrationData {
   created_at           DateTime @default(now()) @db.DateTime(3)
   form_id              Int      @db.UnsignedInt
   ticket_id            Int      @db.UnsignedInt
+  /// Phase B (B4): kind of external source `ticket_id` refers to —
+  /// 'TICKET' (CRM ticket id, the historical default) or 'CALL'
+  /// (Genesys call id, used by the CALL adapter). Backfilled to
+  /// 'TICKET' for every existing row.
+  source_kind          String   @default("TICKET") @db.VarChar(16)
   source               String   @db.VarChar(32)
   ai_submission_id     Int?     @db.UnsignedInt
   human_submission_id  Int?     @db.UnsignedInt
@@ -1598,6 +1648,7 @@ model AiCalibrationData {
   @@index([ticket_id], map: "idx_calib_ticket")
   @@index([ai_submission_id], map: "idx_calib_ai_sub")
   @@index([form_id, absorbed_at], map: "idx_calib_absorbed")
+  @@index([form_id, source_kind], map: "idx_calib_form_source_kind")
   @@map("ai_calibration_data")
 }
 
@@ -1619,6 +1670,30 @@ model KbPageEmbedding {
 
   @@index([book_slug], map: "idx_kb_book")
   @@map("kb_page_embeddings")
+}
+
+/// Phase D (D2): structured QTIP metadata extracted from BookStack page
+/// front-matter at crawl time. Lets the AI Reviewer filter/score KB
+/// pages by review kind (`qtip_applies_to`) and authority
+/// (`qtip_authority`) without re-parsing markdown on every prompt
+/// build. Pages without a front-matter block don't get a row here.
+///
+/// JSON columns are MySQL JSON arrays so they can be queried with
+/// JSON_CONTAINS at filter time. `playbook_steps` (D3) is the ordered
+/// list of step names extracted from the page's `Steps` section so the
+/// trace prompt can inject the canonical step list directly instead of
+/// asking the model to re-derive it from page bodies.
+model KbPageMeta {
+  page_id          Int      @id @db.UnsignedInt
+  qtip_role        String?  @db.VarChar(64)
+  qtip_applies_to  Json?
+  qtip_steps       Json?
+  qtip_authority   String?  @db.VarChar(64)
+  playbook_steps   Json?
+  parsed_at        DateTime @db.DateTime(3)
+
+  @@index([qtip_authority], map: "idx_kb_meta_authority")
+  @@map("kb_pages_meta")
 }
 
 /// Held-out evaluation set per form (AI Reviewer Industry Parity Phase 3).
@@ -1682,6 +1757,131 @@ model AiEvalRun {
 
   @@index([form_id, ran_at], map: "idx_eval_form_ran")
   @@map("ai_eval_runs")
+}
+
+/// Per-(form, question) grading rubric authored by QA admins on the
+/// AI Reviewer Form Detail page. Renders as the indented "RUBRIC:" block
+/// under the question in the synthesis prompt
+/// ([backend/src/services/aiReviewerTwoPassPrompts.ts](backend/src/services/aiReviewerTwoPassPrompts.ts) `renderFormSpec`).
+///
+/// Replaced the file-based convention `backend/prompts/form-rubrics/<form_id>.md`
+/// (Tier-2 Item 6) so that authoring lives in the UI rather than the repo.
+/// Empty/missing rows are normal — most questions don't need a rubric.
+model AiFormQuestionRubric {
+  id          Int      @id @default(autoincrement())
+  form_id     Int
+  question_id Int
+  rubric_md   String   @db.MediumText
+  updated_by  Int?
+  created_at  DateTime @default(now()) @db.DateTime(3)
+  updated_at  DateTime @default(now()) @updatedAt @db.DateTime(3)
+
+  @@unique([form_id, question_id], map: "uk_rubric_form_question")
+  @@index([form_id], map: "idx_rubric_form")
+  @@map("ai_form_question_rubric")
+}
+
+/// Library of reusable rule packs that get rendered into the AI Reviewer
+/// system prompt for any form they're assigned to. Replaces the file-based
+/// `backend/prompts/rule-packs/*.md` convention so department leads can
+/// edit pack bodies through the Rule Pack Library UI without a code change.
+///
+/// `key` is the human-readable slug and remains the public identifier
+/// (it's what the chip-picker and `pack_hashes_json` in `ai_eval_runs`
+/// reference). Soft-deleted via `is_archived` so historical eval runs
+/// can still resolve the pack a submission ran against.
+model AiRulePack {
+  id                       Int      @id @default(autoincrement())
+  key                      String   @unique(map: "uk_rule_pack_key") @db.VarChar(64)
+  name                     String   @db.VarChar(255)
+  owner_dept               String   @db.VarChar(64)
+  body_md                  String   @db.MediumText
+  always_include_urls_json Json
+  is_archived              Boolean  @default(false) @db.TinyInt
+  updated_by               Int?
+  created_at               DateTime @default(now()) @db.DateTime(3)
+  updated_at               DateTime @default(now()) @updatedAt @db.DateTime(3)
+
+  assignments AiFormRulePackAssignment[]
+
+  @@index([owner_dept, is_archived], map: "idx_rule_pack_dept")
+  @@map("ai_rule_pack")
+}
+
+/// Many-to-many: which rule packs are assigned to which forms. Replaces
+/// the runtime-written JSON file `backend/config/ai-form-rule-packs.json`
+/// (whose `fs.writeFileSync` was unsafe on multi-instance / read-only FS
+/// deployments).
+///
+/// `sort_order` preserves the picker order so packs render deterministically
+/// in the prompt. ON DELETE CASCADE on both sides keeps assignments tidy
+/// when a pack is hard-deleted or a form is removed.
+model AiFormRulePackAssignment {
+  id           Int      @id @default(autoincrement())
+  form_id      Int
+  rule_pack_id Int
+  sort_order   Int      @default(0)
+  updated_by   Int?
+  created_at   DateTime @default(now()) @db.DateTime(3)
+
+  rule_pack AiRulePack @relation(fields: [rule_pack_id], references: [id], onDelete: Cascade)
+
+  @@unique([form_id, rule_pack_id], map: "uk_form_rule_pack")
+  @@index([form_id], map: "idx_form_rule_pack_form")
+  @@map("ai_form_rule_pack_assignment")
+}
+
+/// Library of universal base prompts the AI Reviewer concatenates with
+/// rule packs + per-form guidance + learned corrections at run time.
+/// Replaces the file-based convention `backend/prompts/ai-reviewer/<key>.md`
+/// so admins can author / edit / roll back bases through the Base Prompt
+/// Library page without a code change.
+///
+/// `prompt_kind` partitions the table by which builder consumes the
+/// base (`single_source`, `trace`, `synthesis`). One row per kind has
+/// `is_default = true`; forms that don't pick a specific base fall back
+/// to that default. Soft-deleted via `is_archived` so historical eval
+/// runs can still resolve the base a submission ran against.
+model AiBasePrompt {
+  id                   Int      @id @default(autoincrement())
+  key                  String   @unique(map: "uk_base_prompt_key") @db.VarChar(64)
+  name                 String   @db.VarChar(255)
+  description          String?  @db.Text
+  prompt_kind          String   @db.VarChar(32)
+  current_version_id   Int?
+  is_default           Boolean  @default(false) @db.TinyInt
+  is_archived          Boolean  @default(false) @db.TinyInt
+  updated_by           Int?
+  created_at           DateTime @default(now()) @db.DateTime(3)
+  updated_at           DateTime @default(now()) @updatedAt @db.DateTime(3)
+
+  current_version AiBasePromptVersion?  @relation("CurrentBaseVersion", fields: [current_version_id], references: [id], onDelete: SetNull)
+  versions        AiBasePromptVersion[] @relation("BaseVersions")
+  forms           Form[]
+
+  @@index([prompt_kind, is_default, is_archived], map: "idx_base_prompt_kind_default")
+  @@map("ai_base_prompt")
+}
+
+/// Immutable history rows for `ai_base_prompt`. Every save creates a new
+/// row; the parent's `current_version_id` updates to point at it.
+/// Rollback creates a NEW row whose body is a copy of an older version,
+/// so the timeline reads forward-only and never erases history.
+model AiBasePromptVersion {
+  id             Int      @id @default(autoincrement())
+  base_prompt_id Int
+  version        Int
+  body_md        String   @db.MediumText
+  change_note    String?  @db.VarChar(500)
+  created_by     Int?
+  created_at     DateTime @default(now()) @db.DateTime(3)
+
+  base_prompt    AiBasePrompt   @relation("BaseVersions", fields: [base_prompt_id], references: [id], onDelete: Cascade, map: "fk_base_prompt_version_parent")
+  current_for    AiBasePrompt[] @relation("CurrentBaseVersion")
+
+  @@unique([base_prompt_id, version], map: "uk_base_prompt_version")
+  @@index([base_prompt_id, version(sort: Desc)], map: "idx_base_prompt_version_history")
+  @@map("ai_base_prompt_version")
 }
 
 // =====================================================================

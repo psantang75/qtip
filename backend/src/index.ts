@@ -219,6 +219,34 @@ const server = app.listen(port, () => {
   // probe on boot so smoke signals appear in stdout immediately. Each call
   // catches its own errors so a sub-system failure can't block boot.
   void (async () => {
+    // AI Reviewer config caches: rule packs + per-question rubrics.
+    // Both expose sync read APIs to keep the prompt builders sync, so
+    // they need a warmed cache before the first AI run. Errors are
+    // logged but don't abort boot — the readers fall back to empty
+    // results until the next 60s background refresh succeeds.
+    try {
+      const { warmCache: warmRulePackCache } = await import('./services/RulePackService');
+      await warmRulePackCache();
+    } catch (err) {
+      logger.error('[RULE PACKS] warmCache failed on boot', { error: (err as Error).message });
+    }
+    // Layer 1 of the 4-layer prompt model: universal base prompts. Seeds
+    // the three default rows from the legacy .md files on first boot if
+    // missing, then loads them into the in-process cache the prompt
+    // builders read from synchronously.
+    try {
+      const { warmCache: warmBasePromptCache } = await import('./services/BasePromptService');
+      await warmBasePromptCache();
+    } catch (err) {
+      logger.error('[BASE PROMPTS] warmCache failed on boot', { error: (err as Error).message });
+    }
+    try {
+      const { warmFormRubricsCache } = await import('./services/aiReviewerPrompt');
+      await warmFormRubricsCache();
+    } catch (err) {
+      logger.error('[ai-reviewer] rubrics warmCache failed on boot', { error: (err as Error).message });
+    }
+
     const { runAbsorbSweepOnBoot } = await import('./services/AICalibrationAbsorbSweep');
     await runAbsorbSweepOnBoot();
     const { runGoldenSetSeederOnBoot } = await import('./services/AIGoldenSetSeeder');

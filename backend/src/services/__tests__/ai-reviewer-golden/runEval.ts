@@ -30,7 +30,20 @@ export interface GoldenAnswer {
 }
 
 export interface GoldenTicket {
+  /**
+   * Phase B (B5): kind of source this golden record points at. Defaults
+   * to 'TICKET' for backward compatibility with the original
+   * golden.json schema; 'CALL' opts in to call-source replay through
+   * `analyzeConversation`. Records that omit `kind` are treated as
+   * TICKET goldens.
+   */
+  kind?: 'TICKET' | 'CALL';
   ticket_id: number;
+  /**
+   * Phase B (B5): Genesys conversation id (calls.call_id string).
+   * REQUIRED when `kind === 'CALL'`. Ignored for TICKET goldens.
+   */
+  conversation_id?: string;
   subclass?: string;
   resolution?: string;
   expected: { answers: GoldenAnswer[] } | null;
@@ -45,6 +58,10 @@ export interface GoldenSet {
 
 export interface PerTicketEval {
   ticket_id: number;
+  /** Phase B (B5): mirrors the golden record's `kind`. */
+  kind?: 'TICKET' | 'CALL';
+  /** Phase B (B5): set for call goldens so the report can deep-link. */
+  conversation_id?: string;
   provider: AiProvider;
   status: 'scored' | 'unscored' | 'error';
   matches?: number;
@@ -108,21 +125,53 @@ export async function loadGoldenSetFromDb(formId: number, opts: { limit?: number
     take: limit,
   });
 
-  // De-dupe by ticket_id keeping newest. We sorted desc above so the
-  // first occurrence wins.
-  const seen = new Map<number, GoldenTicket>();
+  // Phase B (B5): collect calls.id → conversation_id (string) lookups in
+  // one batched query so call-source goldens carry the Genesys
+  // conversation id needed by analyzeConversation.
+  const callRowIds = rows
+    .filter((r) => (r as { source_kind?: string | null }).source_kind === 'CALL')
+    .map((r) => r.ticket_id);
+  const callRowSet = new Set(callRowIds);
+  const callMap = new Map<number, string>();
+  if (callRowSet.size > 0) {
+    const calls = await prisma.call.findMany({
+      where: { id: { in: Array.from(callRowSet) } },
+      select: { id: true, call_id: true },
+    });
+    for (const c of calls) callMap.set(c.id, c.call_id);
+  }
+
+  // De-dupe by (kind, ticket_id) keeping newest. We sorted desc above so
+  // the first occurrence wins.
+  const seen = new Map<string, GoldenTicket>();
   for (const row of rows) {
-    if (seen.has(row.ticket_id)) continue;
+    const sourceKind: 'TICKET' | 'CALL' =
+      (row as { source_kind?: string | null }).source_kind === 'CALL' ? 'CALL' : 'TICKET';
+    const dedupKey = `${sourceKind}:${row.ticket_id}`;
+    if (seen.has(dedupKey)) continue;
     const human = (row.human_answers ?? {}) as Record<string, string>;
     const answers: GoldenAnswer[] = Object.entries(human).map(([qid, val]) => ({
       question_id: Number(qid),
       value: String(val ?? ''),
     }));
     if (answers.length === 0) continue;
-    seen.set(row.ticket_id, {
-      ticket_id: row.ticket_id,
-      expected: { answers },
-    });
+    if (sourceKind === 'CALL') {
+      const conversationId = callMap.get(row.ticket_id);
+      // Skip rows whose call row was deleted; we cannot replay them.
+      if (!conversationId) continue;
+      seen.set(dedupKey, {
+        kind: 'CALL',
+        ticket_id: row.ticket_id,
+        conversation_id: conversationId,
+        expected: { answers },
+      });
+    } else {
+      seen.set(dedupKey, {
+        kind: 'TICKET',
+        ticket_id: row.ticket_id,
+        expected: { answers },
+      });
+    }
   }
 
   return {
@@ -166,17 +215,44 @@ export async function runEval(opts: RunEvalOptions = {}): Promise<EvalReport> {
   let errored = 0;
 
   for (const t of golden.tickets) {
+    const kind: 'TICKET' | 'CALL' = t.kind ?? 'TICKET';
     for (const provider of providers) {
       try {
-        const result = await aiReviewerService.analyzeTicket(t.ticket_id, {
-          formId: golden.form_id,
-          provider,
-        });
+        // Phase B (B5): dispatch on the record's kind. CALL goldens use
+        // analyzeConversation with the Genesys conversation id; TICKET
+        // goldens keep the historical analyzeTicket path. Records that
+        // claim kind='CALL' but are missing conversation_id are reported
+        // as errors so the eval can't silently mis-grade them.
+        let result: AIAnalysisResult;
+        if (kind === 'CALL') {
+          if (!t.conversation_id) {
+            errored++;
+            details.push({
+              ticket_id: t.ticket_id,
+              kind: 'CALL',
+              provider,
+              status: 'error',
+              error: 'CALL golden missing conversation_id',
+            });
+            continue;
+          }
+          result = await aiReviewerService.analyzeConversation(t.conversation_id, {
+            formId: golden.form_id,
+            provider,
+          });
+        } else {
+          result = await aiReviewerService.analyzeTicket(t.ticket_id, {
+            formId: golden.form_id,
+            provider,
+          });
+        }
 
         if (!t.expected) {
           unscored++;
           details.push({
             ticket_id: t.ticket_id,
+            kind,
+            conversation_id: t.conversation_id,
             provider,
             status: 'unscored',
             elapsed_ms: result.elapsedMs,
@@ -206,6 +282,8 @@ export async function runEval(opts: RunEvalOptions = {}): Promise<EvalReport> {
         scored++;
         details.push({
           ticket_id: t.ticket_id,
+          kind,
+          conversation_id: t.conversation_id,
           provider,
           status: 'scored',
           matches,
@@ -223,6 +301,8 @@ export async function runEval(opts: RunEvalOptions = {}): Promise<EvalReport> {
           : err instanceof Error ? err.message : String(err);
         details.push({
           ticket_id: t.ticket_id,
+          kind,
+          conversation_id: t.conversation_id,
           provider,
           status: 'error',
           error: message,
@@ -276,13 +356,18 @@ export function formatReport(report: EvalReport): string {
   lines.push('');
   lines.push('Per-ticket detail:');
   for (const d of report.details) {
+    // Phase B (B5): label call goldens distinctly so the report makes
+    // the source kind obvious at a glance.
+    const label = d.kind === 'CALL'
+      ? `call ${d.conversation_id ?? '(no-conv-id)'}`
+      : `ticket ${d.ticket_id}`;
     if (d.status === 'unscored') {
-      lines.push(`  [${d.provider}] ticket ${d.ticket_id}: UNSCORED (no human ground truth) · ${d.elapsed_ms}ms`);
+      lines.push(`  [${d.provider}] ${label}: UNSCORED (no human ground truth) · ${d.elapsed_ms}ms`);
     } else if (d.status === 'error') {
-      lines.push(`  [${d.provider}] ticket ${d.ticket_id}: ERROR — ${d.error}`);
+      lines.push(`  [${d.provider}] ${label}: ERROR — ${d.error}`);
     } else {
       const flags = (d.disagreements ?? []).map((x) => `q${x.question_id}:${x.expected}->${x.actual}`).join(', ');
-      lines.push(`  [${d.provider}] ticket ${d.ticket_id}: ${d.matches}/${d.total} (${((d.agreement ?? 0) * 100).toFixed(0)}%) · ${d.elapsed_ms}ms${flags ? ' · ' + flags : ''}`);
+      lines.push(`  [${d.provider}] ${label}: ${d.matches}/${d.total} (${((d.agreement ?? 0) * 100).toFixed(0)}%) · ${d.elapsed_ms}ms${flags ? ' · ' + flags : ''}`);
     }
   }
   return lines.join('\n');
