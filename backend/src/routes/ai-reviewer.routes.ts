@@ -459,6 +459,42 @@ router.post('/run', async (req: Request, res: Response) => {
     providerOverride = rawProviderOverride;
   }
 
+  // Optional per-call MODEL-TIER override. Drives the "Compare Sonnet
+  // vs Opus" button on the Manual Run card: both lanes are Anthropic,
+  // one runs DEFAULT (Opus), the other runs ALT (Sonnet). When omitted
+  // or 'default', behaviour is unchanged. 'alt' resolves to
+  // ANTHROPIC_ALT_MODEL — kept Anthropic-only for now because OpenAI
+  // doesn't yet have an analogous in-family alternate worth exposing
+  // through this button.
+  const rawModelTier = req.body?.model_tier;
+  let reasoningModelOverride: string | undefined;
+  if (rawModelTier != null) {
+    if (rawModelTier !== 'default' && rawModelTier !== 'alt') {
+      return res
+        .status(400)
+        .json({ error: "Body field 'model_tier' must be one of: default, alt." });
+    }
+    if (rawModelTier === 'alt') {
+      if (providerOverride === 'openai') {
+        return res.status(400).json({
+          error:
+            "model_tier='alt' is only supported when provider is 'anthropic'. " +
+            'Use the Claude vs ChatGPT compare for cross-provider runs.',
+          code: 'MODEL_TIER_PROVIDER_UNSUPPORTED',
+        });
+      }
+      const alt = process.env.ANTHROPIC_ALT_MODEL?.trim();
+      if (!alt) {
+        return res.status(400).json({
+          error:
+            "model_tier='alt' requires ANTHROPIC_ALT_MODEL to be set in the backend env.",
+          code: 'ANTHROPIC_ALT_MODEL_NOT_CONFIGURED',
+        });
+      }
+      reasoningModelOverride = alt;
+    }
+  }
+
   const rawKind = req.body?.kind;
   const kind: 'TICKET' | 'TASK' | 'CONVERSATION' | null =
     rawKind === 'TICKET' || rawKind === 'TASK' || rawKind === 'CONVERSATION' ? rawKind : null;
@@ -545,6 +581,18 @@ router.post('/run', async (req: Request, res: Response) => {
           code: 'PROVIDER_UNSUPPORTED_SINGLE_SOURCE',
         });
       }
+      // Same constraint applies to model_tier='alt' — it's only threaded
+      // through the multi-source chunked-synthesis path (reviewCase),
+      // not the single-source callClaude path. Fail loudly so the
+      // compare UI never silently returns identical Opus results when
+      // the user asked for Sonnet.
+      if (reasoningModelOverride) {
+        return res.status(400).json({
+          error:
+            "model_tier='alt' is only supported for multi-source cases (attached_sources must be present).",
+          code: 'MODEL_TIER_UNSUPPORTED_SINGLE_SOURCE',
+        });
+      }
       if (kind === 'TICKET' || kind === 'TASK') {
         const numericId = Number(externalIdStr);
         if (!Number.isInteger(numericId) || numericId <= 0) {
@@ -576,7 +624,11 @@ router.post('/run', async (req: Request, res: Response) => {
         explicitAttached: attachedRefs,
         maxAttachedSources: Math.max(0, Math.min(10, Number(form.ai_max_attached_sources ?? 3))),
       });
-      result = await aiReviewerService.reviewCase(c, { formId, provider: providerOverride });
+      result = await aiReviewerService.reviewCase(c, {
+        formId,
+        provider: providerOverride,
+        reasoningModelOverride,
+      });
     }
 
     const elapsedMs = Date.now() - runStartedAt;
@@ -589,13 +641,23 @@ router.post('/run', async (req: Request, res: Response) => {
     });
     const resolvedProvider =
       providerOverride ?? (formRow?.ai_model_provider === 'openai' ? 'openai' : 'anthropic');
+    // Resolved reasoning model: surfaced only when the caller explicitly
+    // overrode it (the Sonnet-vs-Opus compare button). Lets the UI label
+    // each compare card by actual model name without re-querying logs.
+    // Omitted on default runs so the response shape stays clean.
+    const resolvedReasoningModel = reasoningModelOverride ?? null;
 
     logger.info(
       `[AI REVIEWER ROUTE] manual run by user ${req.user?.user_id ?? 'unknown'}: ` +
         `form_id=${formId} kind=${kind} external_id=${externalIdStr} attached=${attachedRefs.length} ` +
-        `provider=${resolvedProvider} elapsed_ms=${elapsedMs} → submission_id=${result.submission_id} status=${result.status}`
+        `provider=${resolvedProvider}${resolvedReasoningModel ? ` reasoning_model=${resolvedReasoningModel}` : ''} elapsed_ms=${elapsedMs} → submission_id=${result.submission_id} status=${result.status}`
     );
-    return res.status(201).json({ ...result, provider: resolvedProvider, elapsed_ms: elapsedMs });
+    return res.status(201).json({
+      ...result,
+      provider: resolvedProvider,
+      elapsed_ms: elapsedMs,
+      ...(resolvedReasoningModel ? { resolved_reasoning_model: resolvedReasoningModel } : {}),
+    });
   } catch (err) {
     if (err instanceof AIReviewerServiceError) {
       logger.warn(`[AI REVIEWER ROUTE] /run ${err.code}: ${err.message}`);

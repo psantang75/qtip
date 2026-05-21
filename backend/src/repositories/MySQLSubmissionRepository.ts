@@ -224,6 +224,7 @@ export class MySQLSubmissionRepository {
             form_id: submissionData.form_id,
             call_id: submissionData.call_id ?? null,
             case_id: submissionData.case_id ?? derivedCaseId,
+            ai_provider: submissionData.ai_provider ?? null,
             submitted_by: submissionData.submitted_by,
             status: submissionData.status as PrismaSubmissionStatus,
             submitted_at: submissionData.submitted_at ?? undefined,
@@ -352,7 +353,8 @@ export class MySQLSubmissionRepository {
     call_id: number | null,
     form_id: number,
     submitted_by: number,
-    case_id?: string | null
+    case_id?: string | null,
+    ai_provider?: string | null
   ): Promise<Submission | null> {
     try {
       // When a case_id is provided we MUST key dedup off the case (not just
@@ -360,7 +362,14 @@ export class MySQLSubmissionRepository {
       // column null and instead link via submission_calls/submission_ticket_tasks)
       // silently clobber an unrelated stale DRAFT row that happens to share
       // (form_id, submitted_by, call_id IS NULL). See AIReviewerService.reviewCase.
-      const where: Prisma.SubmissionWhereInput =
+      //
+      // `ai_provider` is the per-AI-provider tag (anthropic / openai). When
+      // supplied, the lookup discriminates on it so compare-mode runs
+      // (Claude vs ChatGPT on the same case + form + ai_user) land in TWO
+      // distinct DRAFT rows instead of clobbering each other. When omitted
+      // (legacy callers, human saves), the lookup behaves exactly as it did
+      // before this column existed and matches any provider tag.
+      const baseWhere: Prisma.SubmissionWhereInput =
         case_id !== undefined && case_id !== null && case_id !== ''
           ? {
               form_id,
@@ -374,6 +383,10 @@ export class MySQLSubmissionRepository {
               status: 'DRAFT',
               call_id: call_id ?? null,
             };
+      const where: Prisma.SubmissionWhereInput =
+        ai_provider !== undefined
+          ? { ...baseWhere, ai_provider: ai_provider ?? null }
+          : baseWhere;
       const sub = await prisma.submission.findFirst({ where });
       return sub as unknown as Submission | null;
     } catch (error) {
@@ -404,6 +417,9 @@ export class MySQLSubmissionRepository {
               : {}),
             ...(submissionData.ai_extras !== undefined
               ? { ai_extras: submissionData.ai_extras as any }
+              : {}),
+            ...(submissionData.ai_provider !== undefined
+              ? { ai_provider: submissionData.ai_provider ?? null }
               : {}),
           },
         });

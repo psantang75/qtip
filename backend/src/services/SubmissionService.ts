@@ -409,11 +409,16 @@ export class SubmissionService implements ISubmissionService {
       // off the case so multi-source / ticket-only / call-only runs each get
       // their own DRAFT row instead of clobbering unrelated stale drafts that
       // share (form_id, submitted_by, call_id IS NULL).
+      // Pass `ai_provider` so AI Reviewer compare-mode runs (Claude vs
+      // ChatGPT on the same case) land in two distinct DRAFT rows
+      // instead of clobbering each other. Human saves and legacy callers
+      // omit it and behave exactly as before.
       const existingDraft = await this.submissionRepository.getExistingDraft(
         submissionData.call_id ?? null,
         submissionData.form_id,
         qa_id,
-        submissionData.case_id ?? null
+        submissionData.case_id ?? null,
+        submissionData.ai_provider ?? undefined
       );
 
       let submission_id: number;

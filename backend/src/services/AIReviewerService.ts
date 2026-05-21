@@ -46,6 +46,7 @@ import {
 } from './ai/ChatModelClient';
 import bookstackService from './BookStackService';
 import kbIndexService from './KbIndexService';
+import { parseKbApproaches, type ParsedProcedure } from './kbProcedureParser';
 import crmService, { type TicketHeader, type TaskHeader, type CRMNote } from './CRMService';
 import phoneSystemService from './PhoneSystemService';
 import { SubmissionService } from './SubmissionService';
@@ -758,6 +759,21 @@ type KbHit = {
   content: string;
   is_playbook: boolean;
   playbook_steps?: string[] | null;
+  /**
+   * Phase F (F3): parsed Approach + chain structure for Tech-Support
+   * style pages, populated from `kb_pages_meta.qtip_steps` when the
+   * crawl-time parser ({@link parseKbApproaches}) returned a non-null
+   * result. Rendered as a KB PROCEDURE block in the trace prompt and
+   * treated as the AUTHORITATIVE procedure source by the reasoning
+   * pass — removing the model's need to interpret numbered approaches
+   * from raw prose.
+   *
+   * `string[]` shape on disk indicates a legacy front-matter
+   * `qtip_steps:` value; structured object shape indicates the
+   * parser's `ParsedProcedure`. We only forward the structured form
+   * here.
+   */
+  procedure?: ParsedProcedure | null;
   linked_from?: { name: string; url: string; hop: number };
 };
 
@@ -902,18 +918,27 @@ export class AIReviewerService {
        * pipeline (reasoning + answer chunks + verification) switches.
        */
       provider?: ModelProvider;
+      /**
+       * Optional explicit reasoning-pass model name. When set, OVERRIDES
+       * the provider's default model on the reasoning + verification
+       * passes only (answer chunks + trace stay on the cheap model).
+       * Used by the "Compare Sonnet vs Opus" button on the Manual Run
+       * card: both lanes are Anthropic, one lane passes
+       * `claude-opus-4-7`, the other `claude-sonnet-4-5`, so per-run
+       * accuracy + cost can be diffed without touching the form column.
+       */
+      reasoningModelOverride?: string;
     }
   ): Promise<AIReviewResult> {
     if (!aiReviewerConfig) {
       throw new AIReviewerServiceError('AI Reviewer is not configured (set AI_REVIEWER_USER_ID).', 'NOT_CONFIGURED', 503);
     }
-    if (!isAnthropicConfigured()) {
-      throw new AIReviewerServiceError('Anthropic is not configured (set ANTHROPIC_API_KEY).', 'NOT_CONFIGURED', 503);
-    }
-    // Resolve synthesis provider: explicit opts override > form column >
-    // default 'anthropic'. We always need Anthropic configured (the
-    // trace pass is Anthropic-only); when synthesis is OpenAI we also
-    // need OpenAI configured.
+    // Resolve synthesis provider FIRST: explicit opts override > form
+    // column > default 'anthropic'. The chosen provider drives all three
+    // passes end-to-end (trace, reasoning, chunks) — workstream G made
+    // the trace pass provider-agnostic so a Claude vs ChatGPT compare
+    // is truly apples-to-apples instead of "same Anthropic trace,
+    // different reasoner".
     const formRowForProvider = await prisma.form.findUnique({
       where: { id: opts.formId },
       select: { ai_model_provider: true },
@@ -921,6 +946,12 @@ export class AIReviewerService {
     const synthesisProvider: ModelProvider =
       opts.provider ??
       (formRowForProvider?.ai_model_provider === 'openai' ? 'openai' : 'anthropic');
+    // Provider-specific config checks: only require the API key for the
+    // provider we actually intend to call. An OpenAI-only deployment
+    // shouldn't need ANTHROPIC_API_KEY just to boot the reviewer.
+    if (synthesisProvider === 'anthropic' && !isAnthropicConfigured()) {
+      throw new AIReviewerServiceError('Anthropic is not configured (set ANTHROPIC_API_KEY).', 'NOT_CONFIGURED', 503);
+    }
     if (synthesisProvider === 'openai' && !isOpenAIConfigured()) {
       throw new AIReviewerServiceError(
         'Form is configured for OpenAI synthesis but OPENAI_API_KEY is not set.',
@@ -1145,7 +1176,7 @@ export class AIReviewerService {
       });
 
       const traceCtx: CallLogMeta = {
-        provider: 'anthropic',
+        provider: synthesisProvider,
         purpose: `ai_reviewer.${adapter.kind.toLowerCase()}.trace`,
         pass: 'trace',
         ticketId: adapter.kind === 'TICKET' && typeof ref.external_id === 'number' ? ref.external_id : null,
@@ -1166,10 +1197,12 @@ export class AIReviewerService {
       const K_TRACE_SAMPLES = Math.max(1, Number(process.env.AI_REVIEWER_TRACE_SAMPLES ?? 3));
       let traceJson: string;
       if (K_TRACE_SAMPLES === 1) {
-        traceJson = await runTracePass(tracePrompt, traceCtx);
+        traceJson = await runTracePass(tracePrompt, traceCtx, synthesisProvider);
       } else {
         const samples = await Promise.all(
-          Array.from({ length: K_TRACE_SAMPLES }, () => runTracePass(tracePrompt, traceCtx))
+          Array.from({ length: K_TRACE_SAMPLES }, () =>
+            runTracePass(tracePrompt, traceCtx, synthesisProvider)
+          )
         );
         const { mergedTraceJson, agreement } = voteOnTraces(samples);
         traceJson = mergedTraceJson;
@@ -1215,6 +1248,11 @@ export class AIReviewerService {
     // fall back to ticket notes as the de-facto playbook.
     const kbAnchorsSeen = new Set<string>();
     const kbAnchors: Array<{ url: string; name: string; is_playbook: boolean }> = [];
+    // Phase F (F3): also collect the parsed KB PROCEDURE structures so
+    // the reasoning + synthesis passes see the same authoritative
+    // procedure data the per-source trace pass saw. Deduped by page
+    // URL across all sources (same dedup key as kbAnchors).
+    const kbProcedures: Array<{ pageName: string; pageUrl: string; procedure: ParsedProcedure }> = [];
     for (const t of tracePayloads) {
       for (const h of t.kbHits) {
         if (!h.url || kbAnchorsSeen.has(h.url)) continue;
@@ -1224,6 +1262,9 @@ export class AIReviewerService {
           name: h.name,
           is_playbook: Boolean(h.is_playbook),
         });
+        if (h.procedure && Array.isArray(h.procedure.approaches) && h.procedure.approaches.length > 0) {
+          kbProcedures.push({ pageName: h.name, pageUrl: h.url, procedure: h.procedure });
+        }
       }
     }
 
@@ -1239,6 +1280,7 @@ export class AIReviewerService {
       pivots,
       traceAgreements,
       kbAnchors,
+      kbProcedures,
     };
 
     const ticketIdForLog =
@@ -1286,6 +1328,7 @@ export class AIReviewerService {
           ticketId: ticketIdForLog,
           accumulateCost,
           provider: synthesisProvider,
+          reasoningModelOverride: opts.reasoningModelOverride,
         })
       : await callClaude(buildSynthesisPrompt(synthesisInput), form, synthesisCtx);
 
@@ -1339,7 +1382,8 @@ export class AIReviewerService {
         const result = await runVerificationPass(
           { answers, timeline, playbookSteps, observations },
           { ...synthesisCtx, purpose: `${synthesisCtx.purpose}.verification`, pass: 'verification' },
-          synthesisProvider
+          synthesisProvider,
+          opts.reasoningModelOverride
         );
         overallConfidence = applyVerificationDeltas(answers, overallConfidence, result, `case=${c.id}`);
         verification = {
@@ -1426,6 +1470,7 @@ export class AIReviewerService {
       submitted_by: aiUserId,
       csr_id: callCsrId,
       case_id: c.id,
+      ai_provider: synthesisProvider,
       metadata,
       answers: finalAnswers,
       ai_overall_confidence: overallConfidence,
@@ -1843,6 +1888,10 @@ export class AIReviewerService {
       form_id: form.id,
       submitted_by: aiUserId,
       csr_id: callCsrId,
+      // Single-source path is Anthropic-only today (callClaude is
+      // hard-coded). Tag the DRAFT so a future compare on the same case
+      // can dedup against this row by provider rather than clobbering it.
+      ai_provider: 'anthropic' as const,
       metadata,
       answers: finalAnswers,
       ai_overall_confidence: overallConfidence,
@@ -2380,6 +2429,8 @@ async function searchKb(
   is_playbook: boolean;
   /** Phase D (D3): canonical step list extracted from kb_pages_meta. */
   playbook_steps?: string[] | null;
+  /** Phase F (F3): parsed Approach + chain structure from kb_pages_meta.qtip_steps. */
+  procedure?: ParsedProcedure | null;
   /**
    * KB link expansion: when this page was pulled in by following an
    * in-body hyperlink from another KB page, we record the source page
@@ -2396,6 +2447,7 @@ async function searchKb(
     content: string;
     is_playbook: boolean;
     playbook_steps?: string[] | null;
+    procedure?: ParsedProcedure | null;
     linked_from?: { name: string; url: string; hop: number };
   };
   const result: KbHit[] = [];
@@ -2611,9 +2663,21 @@ async function searchKb(
       const ids = result.map((p) => p.id);
       const metas = await prisma.kbPageMeta.findMany({
         where: { page_id: { in: ids } },
-        select: { page_id: true, qtip_applies_to: true, playbook_steps: true },
+        select: {
+          page_id: true,
+          qtip_applies_to: true,
+          playbook_steps: true,
+          // Phase F (F3): pull the parsed Approach structure persisted
+          // at crawl time. Shape is either a legacy front-matter
+          // `string[]` OR the parser's `ParsedProcedure` object —
+          // discriminated at read time below.
+          qtip_steps: true,
+        },
       });
-      const metaById = new Map<number, { applies: string[] | null; steps: string[] | null }>(
+      const metaById = new Map<
+        number,
+        { applies: string[] | null; steps: string[] | null; procedure: ParsedProcedure | null }
+      >(
         metas.map((m) => {
           const applies = Array.isArray(m.qtip_applies_to)
             ? (m.qtip_applies_to as unknown as string[])
@@ -2621,7 +2685,19 @@ async function searchKb(
           const steps = Array.isArray(m.playbook_steps)
             ? (m.playbook_steps as unknown as string[])
             : null;
-          return [m.page_id, { applies, steps }] as const;
+          // qtip_steps may carry either the legacy author-supplied
+          // `string[]` form (front-matter) or the parser-derived
+          // `ParsedProcedure` object. We only forward the structured
+          // form to KbHit.procedure; string[] stays unused here.
+          const rawQtipSteps = m.qtip_steps;
+          const procedure =
+            rawQtipSteps != null &&
+            typeof rawQtipSteps === 'object' &&
+            !Array.isArray(rawQtipSteps) &&
+            Array.isArray((rawQtipSteps as { approaches?: unknown }).approaches)
+              ? (rawQtipSteps as unknown as ParsedProcedure)
+              : null;
+          return [m.page_id, { applies, steps, procedure }] as const;
         })
       );
       const mandatorySet = new Set<number>();
@@ -2631,6 +2707,9 @@ async function searchKb(
         const meta = metaById.get(p.id);
         if (meta?.steps && meta.steps.length > 0) {
           p.playbook_steps = meta.steps;
+        }
+        if (meta?.procedure) {
+          p.procedure = meta.procedure;
         }
         if (mandatorySet.has(p.id)) continue;
         if (!reviewKind) continue;
@@ -2642,6 +2721,44 @@ async function searchKb(
     } catch (err) {
       logger.warn(`[AI REVIEWER] kb_pages_meta filter failed (returning unfiltered): ${(err as Error).message}`);
     }
+  }
+
+  // Phase F (F4): on-demand parse fallback. The scheduler crawl populates
+  // `kb_pages_meta.qtip_steps` asynchronously; when an AI run fires
+  // before the crawl reaches a relevant page (or runs concurrently with
+  // an in-flight crawl), the metaById lookup returns `procedure: null`
+  // and the prompt silently degrades to raw-markdown grading — which is
+  // exactly the failure mode `parseKbApproaches` was built to eliminate.
+  // Parse the in-memory `p.content` inline so the PROCEDURE block is
+  // present on EVERY run regardless of crawl timing, and best-effort
+  // persist back to `kb_pages_meta` so subsequent runs hit the cache.
+  // Pure text-to-JSON, no network calls — sub-millisecond per page.
+  for (const p of result) {
+    if (p.procedure) continue;
+    const parsed = parseKbApproaches(p.content);
+    if (!parsed) continue;
+    p.procedure = parsed;
+    void prisma.kbPageMeta
+      .upsert({
+        where: { page_id: p.id },
+        // Only touch qtip_steps + parsed_at — never overwrite
+        // qtip_role / qtip_applies_to / qtip_authority / playbook_steps
+        // that the crawler may have set from front-matter.
+        create: {
+          page_id: p.id,
+          qtip_steps: parsed as any,
+          parsed_at: new Date(),
+        },
+        update: {
+          qtip_steps: parsed as any,
+          parsed_at: new Date(),
+        },
+      })
+      .catch((err) =>
+        logger.warn(
+          `[AI REVIEWER] on-demand qtip_steps upsert failed for page ${p.id}: ${(err as Error).message}`
+        )
+      );
   }
 
   return result;
@@ -2852,50 +2969,68 @@ async function callOpenAI(
  * field" guard. Instead we keep this wrapper minimal: send + retry once
  * if the response isn't JSON, hand the JSON STRING back to the caller.
  *
- * Model selection: defaults to `ANTHROPIC_CHEAP_MODEL` (Sonnet) with
- * the configured Opus model as fallback — same env contract as
- * `classifyCallTopic`. The trace pass is the labour-intensive bulk
- * read; cheap-model latency + cost dominate when a case has 3+ sources.
+ * Model selection: `resolveCheapModelName(provider)` — Anthropic
+ * resolves to `ANTHROPIC_CHEAP_MODEL` (Haiku), OpenAI resolves to
+ * `OPENAI_CHEAP_MODEL`. The trace pass is the labour-intensive bulk
+ * read where cheap-model latency + cost dominate.
+ *
+ * Provider parity (workstream G): this used to hardcode Anthropic so
+ * both compare runs traced on Claude, which made the Claude-vs-GPT
+ * compare "same trace, different reasoner" rather than truly
+ * end-to-end. The `provider` argument flows from `reviewCase`'s
+ * `synthesisProvider` so each compare run drives all three passes
+ * independently.
  */
 async function runTracePass(
   promptParts: { system: string; user: string },
-  traceCtx: CallLogMeta
+  traceCtx: CallLogMeta,
+  provider: ModelProvider = 'anthropic'
 ): Promise<string> {
   return withCallLog<string>(
-    traceCtx,
+    { ...traceCtx, provider },
     promptParts,
     async () => {
-      const client = getAnthropicClient();
-      const model =
-        process.env.ANTHROPIC_CHEAP_MODEL || aiConfig.anthropic?.defaultModel || 'claude-sonnet-4-5';
+      const model = resolveCheapModelName(provider);
       let retried = false;
       let tokensIn: number | null = null;
       let tokensOut: number | null = null;
+      let lastStopReason: string | null = null;
 
       const sendOnce = async (extraSystem?: string) => {
-        const res = await client.messages.create({
-          model,
-          // 8000 (was 4000): see callAnthropic — same truncation risk on
-          // longer trace JSON, same zero cost on normal runs.
-          max_tokens: 8000,
+        const out = await callChatModel(provider, {
           system: promptParts.system + (extraSystem ?? ''),
-          messages: [{ role: 'user', content: promptParts.user }],
+          user: promptParts.user,
+          model,
+          // 8000: same headroom as today's Anthropic-only trace; same
+          // truncation guard, same zero cost on normal runs.
+          maxTokens: 8000,
+          // 10-min ceiling matches the reasoning pass; a fan-out of K
+          // parallel traces on Sonnet historically settles in under a
+          // minute, but slow networks or first-call cold starts have
+          // pushed past 5 min on rare occasions.
+          timeoutMs: 600_000,
+          // JSON mode is honored by OpenAI (and ignored by Anthropic),
+          // mirroring the contract the chunk pass uses — keeps trace
+          // output schema-clean across providers.
+          responseFormat: 'json_object',
         });
-        const usage = (res as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
-        if (usage) {
-          tokensIn = usage.input_tokens ?? null;
-          tokensOut = usage.output_tokens ?? null;
+        tokensIn = out.tokensIn;
+        tokensOut = out.tokensOut;
+        lastStopReason = out.stopReason;
+        if (!out.text) {
+          throw new Error(`${provider} trace response had no text content`);
         }
-        const block = res.content.find((b) => b.type === 'text') as { text: string } | undefined;
-        if (!block) throw new Error('Claude trace response had no text content');
-        return block.text;
+        return out.text;
       };
 
       let raw = await sendOnce();
       let parsed = tryParseJson(raw);
       if (!parsed) {
         retried = true;
-        logger.warn('[AI REVIEWER] Trace response was not valid JSON; retrying once with stricter system prompt.');
+        logger.warn(
+          `[AI REVIEWER] Trace response was not valid JSON; retrying once with stricter system prompt. ` +
+            `provider=${provider} stop_reason=${lastStopReason} tokens_out=${tokensOut} raw_len=${raw.length}`
+        );
         raw = await sendOnce(
           '\n\nIMPORTANT: Your previous response could not be parsed as JSON. Respond with ONLY the JSON object, nothing else, no prose, no code fences.'
         );
@@ -2903,7 +3038,7 @@ async function runTracePass(
       }
       if (!parsed) {
         throw new AIReviewerServiceError(
-          'Claude trace pass failed to return valid JSON after one retry.',
+          `${provider} trace pass failed to return valid JSON after one retry.`,
           'AI_OUTPUT_INVALID',
           502
         );
@@ -2946,13 +3081,20 @@ async function runTracePass(
 async function runReasoningPass(
   promptParts: { system: string; user: string },
   traceCtx: CallLogMeta,
-  provider: ModelProvider = 'anthropic'
+  provider: ModelProvider = 'anthropic',
+  /**
+   * Optional explicit model override. When set, takes precedence over
+   * the provider's env-resolved default. Used by the Sonnet-vs-Opus
+   * compare button so each lane runs on a specific Anthropic model
+   * without touching the form column.
+   */
+  modelOverride?: string
 ): Promise<{ parsed: any; raw: string }> {
   return withCallLog<{ parsed: any; raw: string }>(
     { ...traceCtx, provider },
     promptParts,
     async () => {
-      const model = resolveModelName(provider);
+      const model = resolveModelName(provider, modelOverride);
       let retried = false;
       let tokensIn: number | null = null;
       let tokensOut: number | null = null;
@@ -2963,16 +3105,29 @@ async function runReasoningPass(
           system: promptParts.system + (extraSystem ?? ''),
           user: promptParts.user,
           model,
-          // Reasoning artefacts (no answers[]) cap out around 8k chars
-          // / 3k tokens on the largest forms we've seen. 8000 is more
-          // than 2x the worst-case budget — same ceiling/no-cost
-          // tradeoff as the trace pass.
-          maxTokens: 8000,
+          // Reasoning artefacts + draft_answers[] for every gradeable
+          // question (W1 source-of-truth refactor) push output well past
+          // the old 8k ceiling — Opus has been observed truncating at
+          // raw_len ~16.8k chars on the largest forms. 16000 is the new
+          // baseline; OpenAI gets an additional REASONING_HEADROOM on top
+          // inside ChatModelClient to cover internal reasoning burn.
+          maxTokens: 16000,
           timeoutMs: 600_000,
-          // JSON mode: ignored by Anthropic (the system prompt already
-          // enforces JSON), honoured natively by OpenAI so the answer
-          // chunks downstream can parse without prompt-discipline hacks.
-          responseFormat: 'json_object',
+          // JSON mode is OFF for BOTH providers on the reasoning pass
+          // so the Claude-vs-ChatGPT compare is symmetric — every input
+          // and every parameter is identical, only the model name
+          // differs. Anthropic already ignored response_format (the
+          // system prompt enforces JSON), so removing it is a no-op for
+          // the Claude path. For OpenAI it lets gpt-5/5.5 narrate
+          // freely before converging to JSON instead of being skewed
+          // toward "fill the schema." The retry-once-on-bad-JSON safety
+          // net below catches the rare case where either model wraps
+          // the JSON in surrounding prose.
+          //
+          // Chunk pass (runAnswerChunkPass) keeps JSON mode on because
+          // its output is small (~3-4k chars) and purely structural —
+          // there's no narrative for the model to compress.
+          responseFormat: undefined,
         });
         tokensIn = out.tokensIn;
         tokensOut = out.tokensOut;
@@ -3261,6 +3416,13 @@ async function runChunkedSynthesis(
      * without touching the form column.
      */
     provider?: ModelProvider;
+    /**
+     * Optional reasoning-pass model override. Forwarded to
+     * `runReasoningPass` so the Sonnet-vs-Opus compare can swap the
+     * default Anthropic model per lane. Answer-chunk + reconcile
+     * passes are unaffected (they always use the cheap model).
+     */
+    reasoningModelOverride?: string;
   }
 ): Promise<ClaudeOutput> {
   const provider: ModelProvider = opts.provider ?? 'anthropic';
@@ -3277,7 +3439,8 @@ async function runChunkedSynthesis(
   const { parsed: reasoningParsed, raw: reasoningJson } = await runReasoningPass(
     reasoningPrompt,
     reasoningCtx,
-    provider
+    provider,
+    opts.reasoningModelOverride
   );
 
   const categories = groupGradeableQuestionsByCategory(form);
@@ -4115,7 +4278,13 @@ async function runVerificationPass(
     observations: AiObservation[];
   },
   traceCtx: CallLogMeta,
-  provider: ModelProvider = 'anthropic'
+  provider: ModelProvider = 'anthropic',
+  /**
+   * Optional explicit model override. Mirrors the reasoning-pass
+   * override so a single Sonnet-vs-Opus compare lane stays on Sonnet
+   * end-to-end (no Opus calls fire on the alt lane).
+   */
+  modelOverride?: string
 ): Promise<VerificationResult> {
   // The new prompt asks for warnings AND deltas in one shot. We
   // explicitly call out the asymmetric clamp so the model knows it
@@ -4159,7 +4328,7 @@ async function runVerificationPass(
     { ...traceCtx, provider },
     { system: verifySystem, user: verifyUser },
     async () => {
-      const model = resolveModelName(provider);
+      const model = resolveModelName(provider, modelOverride);
       const out = await callChatModel(provider, {
         system: verifySystem,
         user: verifyUser,

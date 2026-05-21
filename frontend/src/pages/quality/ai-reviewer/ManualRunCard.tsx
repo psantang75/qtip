@@ -98,6 +98,17 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
     anthropicError?: { message: string; code: string | null }
     openaiError?: { message: string; code: string | null }
   } | null>(null)
+  // Tier-compare state: same shape as compareResults but keyed by
+  // model tier (DEFAULT = Opus, ALT = Sonnet — both Anthropic). Fired
+  // by the "Compare Sonnet vs Opus" button. Mutually exclusive with
+  // compareResults so the result strip below the buttons always
+  // reflects exactly one experiment.
+  const [compareTierResults, setCompareTierResults] = useState<{
+    default?: ManualRunResult
+    alt?: ManualRunResult
+    defaultError?: { message: string; code: string | null }
+    altError?: { message: string; code: string | null }
+  } | null>(null)
   // Persistent inline copy of the most recent failure. The toast still
   // fires (and disappears after a few seconds), but a manual run can
   // take 60–120s — by the time the spinner stops, the user has often
@@ -137,6 +148,7 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
       setLastResult(null)
       setLastError(null)
       setCompareResults(null)
+      setCompareTierResults(null)
     },
     onSuccess: (data) => {
       setLastResult(data)
@@ -233,6 +245,7 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
       setLastResult(null)
       setLastError(null)
       setCompareResults(null)
+      setCompareTierResults(null)
     },
     onSuccess: (data) => {
       setCompareResults(data)
@@ -249,18 +262,97 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
     },
   })
 
+  // Tier-compare mutation: fires two parallel Anthropic /run calls,
+  // one with model_tier=default (Opus) and one with model_tier=alt
+  // (Sonnet). Same settle-when-one-fails shape as the cross-provider
+  // compare; same multi-source-only constraint (backend rejects the
+  // model_tier override on the single-source path). Lets the user
+  // diff Sonnet's accuracy + cost against Opus on the SAME case
+  // without touching .env or the form column.
+  const compareTierMut = useMutation({
+    mutationFn: async () => {
+      const tasks: Array<
+        Promise<
+          | { key: 'default' | 'alt'; value: ManualRunResult }
+          | { key: 'default' | 'alt'; error: { message: string; code: string | null } }
+        >
+      > = (['default', 'alt'] as const).map(async (tier) => {
+        try {
+          const value = await aiReviewerService.runManual(
+            formId,
+            kind,
+            externalId.trim(),
+            trimmedAttached,
+            'anthropic',
+            tier,
+          )
+          return { key: tier, value }
+        } catch (e: any) {
+          const raw = e?.response?.data?.error
+          const message =
+            typeof raw === 'string'
+              ? raw
+              : raw?.message
+              ? String(raw.message)
+              : e?.message
+              ? String(e.message)
+              : 'Run failed'
+          const code = e?.response?.data?.code ?? null
+          return { key: tier, error: { message, code: typeof code === 'string' ? code : null } }
+        }
+      })
+      const settled = await Promise.all(tasks)
+      const out: NonNullable<typeof compareTierResults> = {}
+      for (const item of settled) {
+        if ('value' in item) {
+          if (item.key === 'default') out.default = item.value
+          else out.alt = item.value
+        } else {
+          if (item.key === 'default') out.defaultError = item.error
+          else out.altError = item.error
+        }
+      }
+      return out
+    },
+    onMutate: () => {
+      setLastResult(null)
+      setLastError(null)
+      setCompareResults(null)
+      setCompareTierResults(null)
+    },
+    onSuccess: (data) => {
+      setCompareTierResults(data)
+      qc.invalidateQueries({ queryKey: ['ai-reviewer-inbox'] })
+      qc.invalidateQueries({ queryKey: ['ai-reviewer-forms'] })
+      const sides = [
+        data.default ? 'Opus' : null,
+        data.alt ? 'Sonnet' : null,
+      ].filter(Boolean)
+      toast({
+        title:
+          sides.length === 2
+            ? 'Sonnet vs Opus compare complete'
+            : `Sonnet vs Opus compare finished (${sides.join(', ')} succeeded)`,
+        description: 'Open each draft below to inspect the answers side-by-side.',
+      })
+    },
+  })
+
   const selectedOpt = KIND_OPTIONS.find((o) => o.kind === kind) ?? KIND_OPTIONS[0]
-  const canRun = !mut.isPending && !compareMut.isPending && canRunManual(externalId, attached)
-  // Compare requires attached_sources (multi-source path) because the
-  // single-source synthesis is Anthropic-only. Surface this in the
-  // button's disabled state + tooltip so the user doesn't fire a
-  // doomed run.
+  const anyPending = mut.isPending || compareMut.isPending || compareTierMut.isPending
+  const canRun = !anyPending && canRunManual(externalId, attached)
+  // Both compare buttons require attached_sources (multi-source path)
+  // because the single-source synthesis path doesn't honour the
+  // provider OR model_tier overrides. Surface this in the disabled
+  // state + tooltip so the user doesn't fire a doomed run.
   const canCompare = canRun && trimmedAttached.length > 0
+  const canCompareTier = canCompare
   const compareDisabledReason = !canRun
     ? undefined
     : trimmedAttached.length === 0
     ? 'Compare requires at least one attached source (multi-source path).'
     : undefined
+  const compareTierDisabledReason = compareDisabledReason
 
   const resultLink =
     lastResult == null
@@ -394,16 +486,36 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
           </Button>
         </div>
 
-        {/* Run buttons — single-provider Run + side-by-side compare. The
-            compare button is only enabled on the multi-source path (the
-            single-source synthesis is Anthropic-only by design, so the
-            two sides would be identical / would error). */}
-        <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+        {/* Run buttons — single-provider Run + two side-by-side compares.
+            The compare buttons are only enabled on the multi-source path
+            (the single-source synthesis honours neither the provider nor
+            the model_tier override). */}
+        <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => compareTierMut.mutate()}
+            disabled={!canCompareTier || anyPending}
+            title={compareTierDisabledReason}
+            className="sm:w-auto w-full"
+          >
+            {compareTierMut.isPending ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                Comparing Sonnet vs Opus… 90–240s
+              </>
+            ) : (
+              <>
+                <GitCompareArrows className="h-3.5 w-3.5 mr-1.5" />
+                Compare Sonnet vs Opus
+              </>
+            )}
+          </Button>
           <Button
             type="button"
             variant="outline"
             onClick={() => compareMut.mutate()}
-            disabled={!canCompare || compareMut.isPending || mut.isPending}
+            disabled={!canCompare || anyPending}
             title={compareDisabledReason}
             className="sm:w-auto w-full"
           >
@@ -421,7 +533,7 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
           </Button>
           <Button
             onClick={() => mut.mutate()}
-            disabled={!canRun || compareMut.isPending}
+            disabled={!canRun}
             className="bg-primary hover:bg-primary/90 text-white sm:w-auto w-full"
           >
             {mut.isPending ? (
@@ -513,6 +625,94 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
               return (
                 <div
                   key={key}
+                  className={cn(
+                    'rounded-md border px-3 py-2 text-[12px]',
+                    r.status === 'DRAFT'
+                      ? 'border-amber-200 bg-amber-50 text-amber-900'
+                      : 'border-emerald-200 bg-emerald-50 text-emerald-900',
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-semibold">{sideLabel}</div>
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-0.5 text-[11px] font-medium hover:bg-white/50"
+                    >
+                      Open draft
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                  <div className="mt-1 text-slate-700 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span>
+                      {r.status === 'DRAFT'
+                        ? `DRAFT #${r.submission_id}`
+                        : `Submitted #${r.submission_id} (score ${r.total_score})`}
+                    </span>
+                    {sec && <span className="font-mono text-slate-600">{sec}</span>}
+                    {r.cost_estimate && (
+                      <span className="font-mono text-slate-600">
+                        {r.cost_estimate.formatted}
+                        {r.cost_estimate.approximated ? ' (approx)' : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Tier compare result panel — Sonnet vs Opus. Same shape as the
+            cross-provider compare panel above, but each card labels by
+            the resolved Anthropic model name returned by the backend
+            (resolved_reasoning_model) so the user can see at a glance
+            which lane is which without reading code. */}
+        {compareTierResults && (
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            data-testid="manual-run-compare-tier-results"
+          >
+            {(['default', 'alt'] as const).map((tier) => {
+              const r = compareTierResults[tier]
+              const err =
+                tier === 'default'
+                  ? compareTierResults.defaultError
+                  : compareTierResults.altError
+              const tierBase = tier === 'default' ? 'Opus (default)' : 'Sonnet (alt)'
+              const resolvedModel = r?.resolved_reasoning_model
+              const sideLabel = resolvedModel ? `${tierBase} — ${resolvedModel}` : tierBase
+              const link =
+                r == null
+                  ? null
+                  : r.status === 'DRAFT'
+                  ? `/app/quality/audit?promoteDraft=${r.submission_id}`
+                  : `/app/quality/submissions/${r.submission_id}`
+              const sec =
+                r?.elapsed_ms != null ? `${(r.elapsed_ms / 1000).toFixed(1)}s` : null
+
+              if (err) {
+                return (
+                  <div
+                    key={tier}
+                    className="rounded-md border border-red-200 bg-red-50 text-red-900 px-3 py-2 text-[12px]"
+                  >
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {sideLabel} — failed
+                    </div>
+                    <div className="text-red-800 break-words mt-0.5">{err.message}</div>
+                    {err.code && (
+                      <div className="mt-0.5 text-[11px] font-mono text-red-700/80">{err.code}</div>
+                    )}
+                  </div>
+                )
+              }
+              if (!r || !link) return null
+              return (
+                <div
+                  key={tier}
                   className={cn(
                     'rounded-md border px-3 py-2 text-[12px]',
                     r.status === 'DRAFT'

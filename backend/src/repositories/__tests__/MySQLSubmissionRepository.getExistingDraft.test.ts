@@ -87,4 +87,57 @@ describe('MySQLSubmissionRepository.getExistingDraft', () => {
     expect(where).not.toHaveProperty('case_id');
     expect(where.call_id).toBeNull();
   });
+
+  // ── ai_provider discriminator (compare-mode runs) ────────────────────
+  // Anthropic and OpenAI compare runs share (form_id, submitted_by, case_id)
+  // and would previously clobber each other in the same DRAFT row. The
+  // optional `ai_provider` arg lets the AI Reviewer's saveDraft path key
+  // dedup off the authoring provider so each side lands in its own row.
+
+  it('discriminates by ai_provider when supplied (compare-mode anthropic side)', async () => {
+    await repo.getExistingDraft(
+      null,
+      99017,
+      99004,
+      'CALL:a76d394f-45c7-4318-a3f8-1c74e274a07f',
+      'anthropic'
+    );
+
+    const where = findFirstMock.mock.calls[0][0].where;
+    expect(where).toEqual({
+      form_id: 99017,
+      submitted_by: 99004,
+      status: 'DRAFT',
+      case_id: 'CALL:a76d394f-45c7-4318-a3f8-1c74e274a07f',
+      ai_provider: 'anthropic',
+    });
+  });
+
+  it('discriminates by ai_provider when supplied (compare-mode openai side)', async () => {
+    await repo.getExistingDraft(
+      null,
+      99017,
+      99004,
+      'CALL:a76d394f-45c7-4318-a3f8-1c74e274a07f',
+      'openai'
+    );
+
+    const where = findFirstMock.mock.calls[0][0].where;
+    expect(where.ai_provider).toBe('openai');
+    expect(where.case_id).toBe('CALL:a76d394f-45c7-4318-a3f8-1c74e274a07f');
+  });
+
+  it('explicit ai_provider=null matches only legacy untagged rows', async () => {
+    await repo.getExistingDraft(null, 99017, 99004, 'CALL:abc', null);
+
+    const where = findFirstMock.mock.calls[0][0].where;
+    expect(where.ai_provider).toBeNull();
+  });
+
+  it('legacy callers (ai_provider omitted) get the pre-column where clause and match any provider tag', async () => {
+    await repo.getExistingDraft(null, 99017, 99004, 'CALL:abc');
+
+    const where = findFirstMock.mock.calls[0][0].where;
+    expect(where).not.toHaveProperty('ai_provider');
+  });
 });

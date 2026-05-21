@@ -21,8 +21,63 @@
  */
 export function stripHtmlToPlaintext(html: string): string {
   if (!html) return '';
+
+  // Pre-pass: rewrite `<li>` openers with an indent prefix that reflects
+  // the current `<ul>/<ol>` nesting depth. Without this, nested lists
+  // collapsed into a flat bullet wall — and KB pages that express
+  // conditional / fallback semantics through nesting (e.g.
+  // "Approach 2 — Verify signal\n  - If <70%, reaim antenna\n  - If
+  // >=70%, go to Approach 3") looked sequentially required to the AI
+  // Reviewer's trace pass. See backend/prompts/ai-reviewer/trace.v1.md
+  // KB_CONDITIONAL rule for the consumer.
+  //
+  // Implementation: walk the HTML once token-by-token tracking depth on
+  // `<ul`/`<ol` push and `</ul>`/`</ol>` pop. Each `<li` emits
+  // `\n` + 2*max(0, depth-1) spaces + `- `. Outermost level keeps the
+  // legacy zero-indent rendering so flat lists are byte-identical to
+  // before. Unmatched closes are clamped to zero (BookStack exports are
+  // usually balanced but we keep this defensive).
+  const tagRe = /<\/?(ul|ol|li)\b[^>]*>/gi;
+  let depth = 0;
+  let withIndent = '';
+  let cursor = 0;
+  for (const m of html.matchAll(tagRe)) {
+    withIndent += html.slice(cursor, m.index);
+    const raw = m[0];
+    const isClose = raw[1] === '/';
+    const tag = m[1].toLowerCase();
+    if (tag === 'ul' || tag === 'ol') {
+      if (isClose) {
+        depth = Math.max(0, depth - 1);
+        // Keep the existing block-break behaviour for closing list tags
+        // so the downstream `</(p|div|...|ul|ol)>` regex still produces
+        // the paragraph break callers expect. Re-emit the original token
+        // so that pass still matches it.
+        withIndent += raw;
+      } else {
+        depth += 1;
+        // Open tag carries no text payload; drop it (the closer above
+        // emits the paragraph break, matching pre-change behaviour).
+      }
+    } else {
+      // `<li ...>` opener — emit our indented bullet. `</li>` is dropped
+      // (no text payload; the next `<li>` or list-close handles the
+      // separator). Closes of `<li>` are rare in well-formed exports and
+      // harmless when they appear inline. We emit the indent using a
+      // NUL-byte sentinel so that the downstream `[ \t]+` collapse
+      // doesn't eat it; sentinels are converted back to real spaces at
+      // the end of the function.
+      if (!isClose) {
+        const indent = '\x00\x00'.repeat(Math.max(0, depth - 1));
+        withIndent += `\n${indent}- `;
+      }
+    }
+    cursor = m.index + raw.length;
+  }
+  withIndent += html.slice(cursor);
+
   return (
-    html
+    withIndent
       // Drop noisy <style>/<script> bodies wholesale.
       .replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -33,7 +88,6 @@ export function stripHtmlToPlaintext(html: string): string {
       // the AI — rely on to separate notes, signatures, Q&A blocks, etc.
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/(p|div|tr|h[1-6]|blockquote|pre|article|section|ul|ol)>/gi, '\n\n')
-      .replace(/<li[^>]*>/gi, '\n- ')
       // Any remaining (inline) tags collapse to a single space so that
       // `<span>foo</span><span>bar</span>` becomes `foo bar` rather than
       // `foobar`. The horizontal-whitespace pass below cleans up the
@@ -49,10 +103,16 @@ export function stripHtmlToPlaintext(html: string): string {
       .replace(/&#39;/g, "'")
       // Whitespace cleanup that PRESERVES newlines: collapse only
       // horizontal whitespace, trim each line's edges, and cap runs of
-      // blank lines at one (so `\n\n\n\n` becomes `\n\n`).
+      // blank lines at one (so `\n\n\n\n` becomes `\n\n`). Leading
+      // indentation for nested bullets is stored as NUL-byte sentinels
+      // during the <li> pre-pass and is therefore not touched here.
       .replace(/[ \t]+/g, ' ')
       .replace(/[ \t]*\n[ \t]*/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
+      // Convert NUL-byte sentinels back into real space characters now
+      // that all collapse passes have run. Two NULs per nesting level
+      // gives the two-space indent the trace prompt expects.
+      .replace(/\x00/g, ' ')
       .trim()
   );
 }

@@ -27,6 +27,7 @@ import logger from '../config/logger';
 import bookstackService from './BookStackService';
 import { getOpenAIClient, isOpenAIConfigured } from './ai/OpenAIClient';
 import { parseKbFrontMatter } from './kbFrontMatter';
+import { parseKbApproaches } from './kbProcedureParser';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const EMBEDDING_DIMS = 1536;
@@ -131,7 +132,16 @@ export class KbIndexService {
         }
         const sha = sha256(trimmed);
         const prior = existingByPageId.get(page.id);
-        const metaChanged = meta != null || playbook_steps.length > 0;
+        // Phase F (F2): parse the Tech-Support style "Approach N"
+        // procedure structure deterministically in code so the trace
+        // pass doesn't have to derive it from prose. Returns null for
+        // pages that don't fit the skeleton; those fall through to
+        // today's body-only KB rendering with no regression. The
+        // parsed structure is persisted into `kb_pages_meta.qtip_steps`
+        // (the existing JSON column — no schema change) alongside
+        // front-matter metadata when either is present.
+        const parsedProcedure = parseKbApproaches(trimmed);
+        const metaChanged = meta != null || playbook_steps.length > 0 || parsedProcedure != null;
         if (!force && prior && prior.content_sha === sha && !metaChanged) {
           summary.pages_unchanged++;
           continue;
@@ -139,14 +149,24 @@ export class KbIndexService {
         // Always upsert kb_pages_meta when we have parsed metadata.
         // Cheap (<= one row per page) and lets us pick up authors who
         // added a front-matter block without changing the body text.
+        // `qtip_steps` carries EITHER the author-supplied front-matter
+        // step list (legacy front-matter form, string[]) OR the
+        // parser-derived ParsedProcedure object — the consuming code
+        // checks the shape at read time.
         if (metaChanged) {
+          const qtipStepsValue: unknown =
+            meta?.qtip_steps != null
+              ? meta.qtip_steps
+              : parsedProcedure != null
+                ? parsedProcedure
+                : null;
           await prisma.kbPageMeta.upsert({
             where: { page_id: page.id },
             create: {
               page_id: page.id,
               qtip_role: meta?.qtip_role ?? null,
               qtip_applies_to: (meta?.qtip_applies_to ?? null) as any,
-              qtip_steps: (meta?.qtip_steps ?? null) as any,
+              qtip_steps: qtipStepsValue as any,
               qtip_authority: meta?.qtip_authority ?? null,
               playbook_steps: (playbook_steps.length > 0 ? playbook_steps : null) as any,
               parsed_at: new Date(),
@@ -154,12 +174,22 @@ export class KbIndexService {
             update: {
               qtip_role: meta?.qtip_role ?? null,
               qtip_applies_to: (meta?.qtip_applies_to ?? null) as any,
-              qtip_steps: (meta?.qtip_steps ?? null) as any,
+              qtip_steps: qtipStepsValue as any,
               qtip_authority: meta?.qtip_authority ?? null,
               playbook_steps: (playbook_steps.length > 0 ? playbook_steps : null) as any,
               parsed_at: new Date(),
             },
           });
+        } else {
+          // No author metadata AND no parseable procedure structure on
+          // this page. Log it once at debug so operators can build the
+          // "playbooks without structure" list when they want to clean
+          // up KB content authoring. Single warn line per page during
+          // a force-crawl; debug level on incremental ticks to avoid
+          // log spam on pages that legitimately don't need a procedure.
+          if (force) {
+            logger.warn(`[kb-index] no procedure or metadata extracted from page_id=${page.id} (${page.name})`);
+          }
         }
         if (!force && prior && prior.content_sha === sha) {
           summary.pages_unchanged++;

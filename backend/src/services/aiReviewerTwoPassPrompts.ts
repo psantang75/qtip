@@ -37,6 +37,8 @@ import { loadFormRubrics } from './aiReviewerPrompt';
 import type { CasePivot } from './aiReviewerPivotDetector';
 import type { TraceAgreement } from './aiReviewerTraceVoting';
 import { renderTranscriptBlock } from './transcriptRender';
+import type { ParsedProcedure } from './kbProcedureParser';
+import { renderKbProcedureBlock } from './kbProcedureParser';
 
 export type SourceKind = 'TICKET' | 'TASK' | 'CALL';
 
@@ -64,6 +66,17 @@ export interface TracePromptInput {
     content: string;
     is_playbook?: boolean;
     playbook_steps?: string[] | null;
+    /**
+     * Phase F (F3): parsed Approach + chain structure for Tech-Support
+     * style pages, derived from the page body at crawl time and
+     * persisted into `kb_pages_meta.qtip_steps`. When present, the
+     * trace builder emits a deterministic KB PROCEDURE block alongside
+     * the raw page body so the model doesn't have to re-infer step
+     * structure from prose. Absent for pages whose body doesn't fit
+     * the `Approach N` skeleton (those keep today's body-only
+     * rendering with no regression).
+     */
+    procedure?: ParsedProcedure | null;
     /**
      * KB link expansion: when this page was pulled in by following an
      * in-body hyperlink from another KB page in the search results,
@@ -134,6 +147,18 @@ export interface SynthesisPromptInput {
    * Caller passes a flat dedup list across all sources.
    */
   kbAnchors?: Array<{ url: string; name: string; is_playbook: boolean }>;
+  /**
+   * Phase F (F3): parsed KB PROCEDURE blocks for every attached KB
+   * page whose body fits the Tech-Support `Approach N` skeleton. Same
+   * shape as the parser output. Rendered in the reasoning prompt so
+   * Pass 2A sees the same authoritative procedure data that Pass 1's
+   * trace pass saw — without this, the trace pass could correctly
+   * grade against the parsed structure but the reasoning pass would
+   * have to re-derive it from the trace JSON's free-text playbook
+   * steps. Caller passes a flat dedup list (by `pageUrl`) across all
+   * sources.
+   */
+  kbProcedures?: Array<{ pageName: string; pageUrl: string; procedure: ParsedProcedure }>;
 }
 
 /**
@@ -188,7 +213,15 @@ export function buildTracePrompt(input: TracePromptInput): { system: string; use
       } else {
         tag = 'KB PAGE';
       }
-      return `${tag}: ${h.name} (${h.url})\n${h.content}`;
+      // Phase F (F3): when this page has a parsed Approach structure,
+      // emit the deterministic KB PROCEDURE block BEFORE the raw page
+      // body so the model sees the canonical step + chain summary
+      // first. Raw body still follows for author commentary, hyperlinks,
+      // and any narrative the parser doesn't capture.
+      const procedureBlock = h.procedure
+        ? renderKbProcedureBlock(h.procedure, h.name, h.url) + '\n\n'
+        : '';
+      return `${tag}: ${h.name} (${h.url})\n${procedureBlock}${h.content}`;
     })
     .join('\n\n---\n\n');
 
@@ -344,6 +377,7 @@ export function buildSynthesisPrompt(input: SynthesisPromptInput): { system: str
   const pivotsBlock = renderPivots(input.pivots);
   const agreementBlock = renderTraceAgreement(input.traceAgreements);
   const kbAnchorsBlock = renderKbAnchors(input.kbAnchors);
+  const proceduresBlock = renderKbProcedures(input.kbProcedures);
 
   const user = [
     'FORM SPEC:',
@@ -351,6 +385,7 @@ export function buildSynthesisPrompt(input: SynthesisPromptInput): { system: str
     ...(pivotsBlock ? ['', pivotsBlock] : []),
     '',
     kbAnchorsBlock,
+    ...(proceduresBlock ? ['', proceduresBlock] : []),
     ...(agreementBlock ? ['', agreementBlock] : []),
     '',
     'PER-SOURCE TRACES (primary first; each block is the raw Pass-1 JSON):',
@@ -416,6 +451,7 @@ export function buildReasoningPrompt(input: SynthesisPromptInput): { system: str
   const pivotsBlock = renderPivots(input.pivots);
   const agreementBlock = renderTraceAgreement(input.traceAgreements);
   const kbAnchorsBlock = renderKbAnchors(input.kbAnchors);
+  const proceduresBlock = renderKbProcedures(input.kbProcedures);
 
   const user = [
     'FORM SPEC (the questions you must grade — emit one `draft_answers` entry for EVERY gradeable question_id; rubrics are authoritative):',
@@ -423,6 +459,7 @@ export function buildReasoningPrompt(input: SynthesisPromptInput): { system: str
     ...(pivotsBlock ? ['', pivotsBlock] : []),
     '',
     kbAnchorsBlock,
+    ...(proceduresBlock ? ['', proceduresBlock] : []),
     ...(agreementBlock ? ['', agreementBlock] : []),
     '',
     'PER-SOURCE TRACES (primary first; each block is the raw Pass-1 JSON):',
@@ -616,6 +653,28 @@ function renderFormSpec(form: FormForPrompt): string {
  * see the explicit `(none)` to know KB really was unavailable vs simply
  * forgotten by the prompt assembler.
  */
+/**
+ * Phase F (F3): Render the structured KB PROCEDURE blocks the parser
+ * extracted from Tech-Support style pages. One block per page,
+ * separated by horizontal rules. Returns empty string when no parsed
+ * procedures are present so callers can skip the prompt section
+ * entirely (avoids an empty heading that would just confuse the
+ * model). Trace pass also renders these inline with each KB page
+ * body; surfacing them again in the reasoning pass keeps the same
+ * authoritative structure visible across both passes.
+ */
+function renderKbProcedures(
+  kbProcedures:
+    | Array<{ pageName: string; pageUrl: string; procedure: ParsedProcedure }>
+    | undefined
+): string {
+  if (!kbProcedures || kbProcedures.length === 0) return '';
+  const blocks = kbProcedures.map((p) =>
+    renderKbProcedureBlock(p.procedure, p.pageName, p.pageUrl)
+  );
+  return blocks.join('\n\n---\n\n');
+}
+
 function renderKbAnchors(
   kbAnchors: Array<{ url: string; name: string; is_playbook: boolean }> | undefined
 ): string {

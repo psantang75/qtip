@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Users, Building2, ShieldCheck, List, BarChart3, FileText, Activity, CalendarDays, Mail } from 'lucide-react'
+import { Users, Building2, ShieldCheck, List, BarChart3, FileText, Activity, CalendarDays, Mail, Settings } from 'lucide-react'
 import TopBar from './TopBar'
 import { cn } from '@/lib/utils'
 
@@ -9,6 +9,7 @@ const ADMIN_NAV = [
   { label: 'Roles',           path: '/app/admin/roles',            icon: ShieldCheck },
   { label: 'List Management', path: '/app/admin/list-management',  icon: List },
   { label: 'Email Templates', path: '/app/admin/email-templates',  icon: Mail },
+  { label: 'System Settings', path: '/app/admin/system-settings',  icon: Settings },
 ]
 
 const INSIGHTS_NAV = [

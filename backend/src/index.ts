@@ -39,6 +39,7 @@ import csrRoutes from './routes/csr.routes';
 import quizRoutes from './routes/quiz.routes';
 import managerRoutes from './routes/manager.routes';
 import adminRoutes from './routes/admin.routes';
+import adminSystemSettingsRoutes from './routes/admin-system-settings.routes';
 import listRoutes  from './routes/list.routes';
 import phoneSystemRoutes from './routes/phoneSystem.routes';
 import callRoutes from './routes/calls.routes';
@@ -183,6 +184,7 @@ app.use('/api/csr', csrRoutes);
 app.use('/api/quizzes', quizRoutes);
 app.use('/api/manager', managerRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/system-settings', adminSystemSettingsRoutes);
 app.use('/api/list-items', listRoutes);
 app.use('/api/phone-system', phoneSystemRoutes);
 app.use('/api/calls', callRoutes);
@@ -270,6 +272,19 @@ const server = app.listen(port, () => {
       startDigestScheduler();
     } catch (err) {
       logger.error('[EMAIL] startup failed', err);
+    }
+
+    // KB Index Scheduler: keeps `kb_page_embeddings` + the parsed
+    // `kb_pages_meta.qtip_steps` (Approach structure) fresh against
+    // BookStack edits so the AI Reviewer doesn't grade against a
+    // stale snapshot of the playbook. Boot is non-fatal — a missing
+    // OpenAI key or BookStack creds just no-ops the scheduler with a
+    // warn log.
+    try {
+      const { startKbIndexScheduler } = await import('./services/KbIndexScheduler');
+      await startKbIndexScheduler();
+    } catch (err) {
+      logger.error('[KB INDEX SCHEDULER] startup failed', err);
     }
   })();
 });

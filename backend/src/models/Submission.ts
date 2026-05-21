@@ -123,6 +123,15 @@ export interface CreateSubmissionDTO {
    * human-authored submissions.
    */
   ai_extras?: SubmissionAiExtras | null;
+  /**
+   * AI Reviewer provider that authored this DRAFT (multi-source
+   * chunked-synthesis runs only). NULL for human-authored submissions
+   * AND for legacy AI rows created before this column existed. Used as
+   * part of the DRAFT dedup key so compare-mode runs (Claude vs ChatGPT
+   * on the same case) land in two distinct rows instead of clobbering
+   * each other.
+   */
+  ai_provider?: string | null;
 }
 
 export interface CreateSubmissionAnswerDTO {

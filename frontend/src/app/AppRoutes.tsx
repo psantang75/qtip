@@ -22,6 +22,7 @@ import ListManagementPage   from '../pages/admin/ListManagementPage'
 import InsightsKpiManagementPage  from '../pages/admin/InsightsKpiManagementPage'
 import InsightsPageManagementPage from '../pages/admin/InsightsPageManagementPage'
 import InsightsIngestionLogPage   from '../pages/admin/InsightsIngestionLogPage'
+import SystemSettingsPage         from '../pages/admin/SystemSettingsPage'
 import InsightsCalendarPage       from '../pages/admin/InsightsCalendarPage'
 import AdminEmailTemplatesPage    from '../pages/admin/AdminEmailTemplatesPage'
 
@@ -132,6 +133,7 @@ export default function AppRoutes(): React.ReactElement {
           <Route path="roles"            element={<AdminRolesPage />} />
           <Route path="list-management"  element={<ListManagementPage />} />
           <Route path="email-templates"  element={<AdminEmailTemplatesPage />} />
+          <Route path="system-settings"  element={<SystemSettingsPage />} />
           <Route path="insights/kpis"       element={<InsightsKpiManagementPage />} />
           <Route path="insights/pages"      element={<InsightsPageManagementPage />} />
           <Route path="insights/calendar"   element={<InsightsCalendarPage />} />

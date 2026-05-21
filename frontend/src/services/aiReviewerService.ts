@@ -171,6 +171,14 @@ export interface ManualRunResult {
   provider?: 'anthropic' | 'openai'
   /** Wall-clock latency for the manual run, in milliseconds. */
   elapsed_ms?: number
+  /**
+   * Resolved reasoning + verification model for THIS run. Surfaced only
+   * when the caller passed `model_tier='alt'` (the Sonnet-vs-Opus
+   * compare button) — lets the UI label each compare card by the
+   * actual model name without re-querying `ai_call_logs`. Absent on
+   * default runs.
+   */
+  resolved_reasoning_model?: string
 }
 
 export type ModeReadinessRecommendation =
@@ -381,6 +389,14 @@ const aiReviewerService = {
      * form's `ai_model_provider` column (defaults 'anthropic').
      */
     providerOverride?: 'anthropic' | 'openai',
+    /**
+     * Optional model-tier override — drives the Sonnet-vs-Opus compare
+     * button. 'default' (or omitted) uses ANTHROPIC_DEFAULT_MODEL;
+     * 'alt' uses ANTHROPIC_ALT_MODEL on the reasoning + verification
+     * passes. Anthropic-only on the backend; passing 'alt' alongside
+     * `providerOverride='openai'` will 400.
+     */
+    modelTier?: 'default' | 'alt',
   ) =>
     api
       .post<ManualRunResult>(
@@ -395,6 +411,7 @@ const aiReviewerService = {
           // exercised exactly the same way it was before C6.
           ...(attachedSources.length > 0 ? { attached_sources: attachedSources } : {}),
           ...(providerOverride ? { provider: providerOverride } : {}),
+          ...(modelTier ? { model_tier: modelTier } : {}),
         },
         { timeout: 720_000 },
       )

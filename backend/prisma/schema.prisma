@@ -698,6 +698,12 @@ model Submission {
   /// the inbox / calibration / readiness logic group multiple
   /// submissions (AI run + later sample-review run) under the same case.
   case_id      String?          @db.VarChar(64)
+  /// AI Reviewer provider that authored this DRAFT (multi-source
+  /// chunked-synthesis runs only). NULL for human-authored submissions
+  /// AND for legacy AI rows created before this column existed. Used as
+  /// part of the DRAFT dedup key so compare-mode runs (Claude vs ChatGPT
+  /// on the same case) land in two distinct rows.
+  ai_provider  String?          @db.VarChar(16)
   submitted_by Int
   submitted_at DateTime         @default(now()) @db.DateTime(0)
   total_score  Decimal?         @db.Decimal(5, 2)

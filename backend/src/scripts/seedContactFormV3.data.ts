@@ -667,7 +667,19 @@ specific procedure quote (or absence) that drove the YES/NO.`,
         type: 'YES_NO',
         yes_value: 0,
         no_value: 0,
-        rubric_md: `YES if the last ~60 seconds of transcript contains an agent summary ("so we did X, Y, and Z today", "to recap…"). Quote the recap. NO if the call ended without an action summary.`,
+        rubric_md: `YES requires BOTH of the following in the closing portion of the call (roughly the last 60-90 seconds):
+  1. The agent enumerates the specific actions or topics covered on THIS call. A list is mandatory ("so today we sent you the remote code and updated your account", "to recap, we got the player back online and confirmed your billing email"). A single summarizing sentence of the issue does NOT qualify.
+  2. The agent invites the customer to add anything that was missed ("anything else you wanted to cover?", "is there anything I missed?", "what else can we add to that list?"). This is the memory-jog step.
+
+If component 1 is present but component 2 is missing, grade YES and note the missing memory-jog as a coaching observation. If component 2 is present without component 1 (a generic "anything else?" with no enumeration), grade NO.
+
+NO if the call ended without an enumerated action summary, OR if the only end-of-call content is one of the following (these are scored by other questions, not this one):
+  - A brand-thank close such as "thanks for choosing Dynamic Media" — that is q6.4.
+  - A generic sign-off such as "have a great day" or "thanks for calling".
+  - A bare confirmation that one issue was resolved without listing what was done ("alright, you're all set!").
+  - A problem restatement at the START of the call (e.g. "so just wanna confirm, you're trying to...") — that is q1.5, not this question.
+
+Quote the recap turn(s) in evidence_quote with their [mm:ss] timestamp. If no qualifying recap exists, leave evidence_quote empty and instead cite the closing turn(s) so the grader can see what was said.`,
       },
       {
         slug: '6.2',
