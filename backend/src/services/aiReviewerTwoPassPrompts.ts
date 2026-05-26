@@ -1,15 +1,19 @@
 /**
  * Phase C (C3): two-pass prompt builders for the AI Reviewer.
  *
- * Pass 1 (trace.v1.md, runs on Sonnet) ingests ONE source's
+ * Pass 1 (trace pass, runs on Sonnet) ingests ONE source's
  *   header + notes/transcript + KB excerpts and emits a structured
  *   trace (playbook_steps + timeline + observations + extracted_claims).
  *   The trace is intentionally neutral — it does NOT answer the audit
- *   form's questions. Pass 2 does.
+ *   form's questions. Pass 2 does. The trace system prompt is the
+ *   DB-managed `ai_base_prompt` row with `prompt_kind = 'trace'`.
  *
- * Pass 2 (synthesis.v1.md, runs on Opus) takes the form spec, all
+ * Pass 2 (synthesis pass, runs on Opus) takes the form spec, all
  *   per-source traces, the rule packs, and the learned corrections and
  *   produces the final answers + narrative + coaching + faithfulness.
+ *   Its system prompt is the DB-managed `ai_base_prompt` row with
+ *   `prompt_kind = 'base'` plus the synthesis addendum appended in
+ *   `aiReviewerPromptAddenda.ts`.
  *
  * Why two passes:
  *   - Single-pass reviews can't reliably do faithfulness checks
@@ -343,7 +347,7 @@ export interface AnswerChunkPromptInput {
  * the final answers.
  */
 export function buildSynthesisPrompt(input: SynthesisPromptInput): { system: string; user: string } {
-  const systemBase = basePromptService.getAssembledPrompt('synthesis').body;
+  const systemBase = basePromptService.getAssembledPrompt('synthesis', input.form?.ai_base_prompt_id ?? null).body;
   const packsBody = rulePackService.renderPacksForPrompt(input.form.id);
   const packsSection = packsBody
     ? '\n\nRULE PACKS ASSIGNED TO THIS FORM (apply each pack as authoritative for its subject area):' + packsBody
@@ -417,7 +421,7 @@ export function buildSynthesisPrompt(input: SynthesisPromptInput): { system: str
  * grading context.
  */
 export function buildReasoningPrompt(input: SynthesisPromptInput): { system: string; user: string } {
-  const systemBase = basePromptService.getAssembledPrompt('reasoning').body;
+  const systemBase = basePromptService.getAssembledPrompt('reasoning', input.form?.ai_base_prompt_id ?? null).body;
   const packsBody = rulePackService.renderPacksForPrompt(input.form.id);
   const packsSection = packsBody
     ? '\n\nRULE PACKS ASSIGNED TO THIS FORM (apply each pack as authoritative for its subject area):' + packsBody
@@ -493,7 +497,7 @@ export function buildReasoningPrompt(input: SynthesisPromptInput): { system: str
  * artefacts (the assembler already has them from Pass 2A).
  */
 export function buildAnswerChunkPrompt(input: AnswerChunkPromptInput): { system: string; user: string } {
-  const systemBase = basePromptService.getAssembledPrompt('answers_chunk').body;
+  const systemBase = basePromptService.getAssembledPrompt('answers_chunk', input.form?.ai_base_prompt_id ?? null).body;
   const packsBody = rulePackService.renderPacksForPrompt(input.form.id);
   const packsSection = packsBody
     ? '\n\nRULE PACKS ASSIGNED TO THIS FORM (apply each pack as authoritative for its subject area):' + packsBody
@@ -584,6 +588,10 @@ export function groupGradeableQuestionsByCategory(
   for (const q of form.questions) {
     const type = (q.question_type ?? '').toUpperCase();
     if (type === 'TEXT' || type === 'INFO_BLOCK' || type === 'SUB_CATEGORY') continue;
+    // ROLLUP questions are auto-derived; don't include them in any
+    // chunk, and don't even create a chunk for a category that only
+    // contains ROLLUPs (the engine handles it post-scoring).
+    if (q.role === 'ROLLUP') continue;
     const cat = q.category_name || '(uncategorized)';
     if (!byCategory.has(cat)) {
       byCategory.set(cat, []);
@@ -609,10 +617,23 @@ function renderFormSpec(form: FormForPrompt): string {
   for (const q of form.questions) {
     const type = (q.question_type ?? '').toUpperCase();
     if (type === 'TEXT' || type === 'INFO_BLOCK' || type === 'SUB_CATEGORY') continue;
+    // Skip ROLLUP rows here too - they are auto-derived by the rollup
+    // engine and would be overwritten on persist by SubmissionService.
+    if (q.role === 'ROLLUP') continue;
     const naFlag = q.is_na_allowed ? ' (NA allowed)' : '';
     let optionsLabel = '';
     if (type === 'RADIO' || type === 'MULTI_SELECT') {
-      const opts = (q.radio_options ?? []).map((o) => o.value).filter(Boolean).join(' | ');
+      // Render BOTH the option_value AND the human label so the model
+      // has natural-language anchors to match against the question text.
+      // Authors often use opaque values like "1"/"2" with meaningful
+      // labels ("Inbound"/"Outbound") - rendering only the values
+      // leaves the LLM guessing and biased toward yes/no. The answer
+      // mapper accepts either form back (case-insensitive) and
+      // normalises to option_value on persist.
+      const opts = (q.radio_options ?? [])
+        .filter((o) => o.value)
+        .map((o) => (o.text ? `${o.value} ("${o.text}")` : o.value))
+        .join(' | ');
       if (opts) optionsLabel = ` options=[${opts}]`;
     }
     lines.push(

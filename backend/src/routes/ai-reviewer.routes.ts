@@ -1752,6 +1752,7 @@ router.get('/forms/:formId/preview-prompt', async (req: Request, res: Response) 
       form_name: form.form_name,
       interaction_type: form.interaction_type as string,
       ai_review_guidance: ((form as any).ai_review_guidance ?? null) as string | null,
+      ai_base_prompt_id: ((form as any).ai_base_prompt_id ?? null) as number | null,
       categories: form.form_categories.map((c) => ({ id: c.id, category_name: c.category_name })),
       questions: form.form_categories.flatMap((c) =>
         c.form_questions.map((q) => ({
@@ -1881,7 +1882,8 @@ router.get('/cost-rollup', async (req: Request, res: Response) => {
  * deploy and asserts that every subsystem the AI Reviewer relies on
  * reports something sensible. Returns:
  *
- *   - prompt_revision: which `system.vN` prompt is shipping.
+ *   - prompt_revision: key + version of the active universal Base
+ *                      prompt (from `ai_base_prompt` / `_version`).
  *   - ai_enabled_forms: count of forms with ai_enabled=true.
  *   - active_calibration_maps: how many forms have an active map.
  *   - golden_set_total: number of active (non-archived) golden rows.
@@ -1927,9 +1929,20 @@ router.get('/_smoke', async (_req: Request, res: Response) => {
       driftHistoryFiles = 0;
     }
 
+    let promptRevision: string;
+    try {
+      const base = basePromptService.getBaseForKind('base');
+      promptRevision = `${base.key}@v${base.version}`;
+    } catch (err) {
+      logger.warn('[AI REVIEWER ROUTE] smoke could not resolve active base prompt', {
+        error: (err as Error).message,
+      });
+      promptRevision = 'unknown';
+    }
+
     return res.json({
       ok: true,
-      prompt_revision: 'system.v2',
+      prompt_revision: promptRevision,
       ai_enabled_forms: aiEnabledForms,
       active_calibration_maps: activeCalibMaps,
       golden_set_total: goldenTotal,

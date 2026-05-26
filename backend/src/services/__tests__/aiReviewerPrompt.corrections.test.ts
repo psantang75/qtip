@@ -11,16 +11,13 @@
  *      reviewer's reason.
  *
  * The Base prompt is mocked through `basePromptService.getAssembledPrompt`
- * so the test does not need a warmed cache or DB. The prior
- * byte-equivalence assertions against `_buildAiReviewerPromptInline`
- * were removed in the unified-Base refactor — the inline implementation
- * is no longer the regression baseline (the prompt is now Base body +
- * addendum and is materially different from the legacy `system.v3`).
- * The new regression gate is the snapshot test in
- * `aiReviewerPromptAssembly.test.ts`.
+ * so the test does not need a warmed cache or DB. The Base-body
+ * regression gate is the snapshot test in
+ * `aiReviewerPromptAssembly.test.ts`; this file only verifies that the
+ * corrections section is rendered correctly around (whatever) Base.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Mock basePromptService BEFORE importing aiReviewerPrompt so the
 // module resolves the mocked version at import time. The fixture body
@@ -60,7 +57,6 @@ vi.mock('../RulePackService', () => ({
 import { buildAiReviewerPrompt, type PromptInput, type FormForPrompt } from '../aiReviewerPrompt';
 import type { CRMNote } from '../CRMService';
 import type { CalibrationCorrection } from '../AICalibrationService';
-import { clearPromptCache } from '../promptLoader';
 
 function makeForm(): FormForPrompt {
   return {
@@ -126,10 +122,6 @@ function makeCorrection(overrides: Partial<CalibrationCorrection> = {}): Calibra
     ...overrides,
   };
 }
-
-beforeEach(() => {
-  clearPromptCache();
-});
 
 describe('aiReviewerPrompt — calibration corrections injection', () => {
   it('omits the corrections section entirely when none provided', () => {

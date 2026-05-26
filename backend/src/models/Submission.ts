@@ -145,7 +145,8 @@ export interface CreateSubmissionAnswerDTO {
 /**
  * Side outputs the AI Reviewer emits alongside scored answers.
  * Persisted as JSON in submissions.ai_extras. Keep this in sync with
- * the prompt schema in backend/prompts/ai-reviewer/system.v3.md.
+ * the schema emitted by the active Base prompt (`ai_base_prompt` row
+ * keyed `base.v1`) plus the addenda in `aiReviewerPromptAddenda.ts`.
  */
 export interface SubmissionAiExtras {
   timeline?: AiTimelineItem[];

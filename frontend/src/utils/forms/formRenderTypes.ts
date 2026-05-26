@@ -13,6 +13,18 @@ export interface QuestionRenderData {
   isNaAllowed?: boolean;
   isRequired?: boolean;
   isCritical?: boolean;
+  /**
+   * Question role surfaced to the renderer so role=ROLLUP questions can be
+   * rendered read-only with the "Auto-computed" badge. Defaults to DETAIL
+   * for any question that doesn't declare a role.
+   */
+  role?: 'DETAIL' | 'ROLLUP';
+  /**
+   * Short human-readable reason produced by rollupEngine.deriveRollupAnswers
+   * (e.g. "Auto-NO: sub-question Q99283 (and possibly others) answered NO.").
+   * Only set when `role === 'ROLLUP'` and the caller has run the engine.
+   */
+  rollupReason?: string;
   weight?: number;
   options?: Array<{ value: string; label: string }>;
   min?: number;

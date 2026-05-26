@@ -1,0 +1,96 @@
+{
+  "_description": "Shared parity fixture between backend/src/utils/__tests__/rollupEngine.test.ts and frontend/src/utils/forms/__tests__/rollupEngine.test.ts. Both suites load this same file and exercise the same scenarios so the two engines stay in lockstep. Keep this file IDENTICAL to backend/src/utils/__tests__/rollupEngine.fixture.json.",
+  "questions": [
+    { "id": 100, "is_na_allowed": true, "role": "ROLLUP", "rollup_rule": "ANY_NO_TO_NO", "rollup_member_question_ids": [101, 102, 103, 104] },
+    { "id": 101, "role": "DETAIL", "is_na_allowed": false },
+    { "id": 102, "role": "DETAIL", "is_na_allowed": true },
+    { "id": 103, "role": "DETAIL", "is_na_allowed": true },
+    { "id": 104, "role": "DETAIL", "is_na_allowed": true },
+    { "id": 200, "is_na_allowed": false, "role": "ROLLUP", "rollup_rule": "ANY_NO_TO_NO", "rollup_member_question_ids": [201, 202] },
+    { "id": 201, "role": "DETAIL", "is_na_allowed": false },
+    { "id": 202, "role": "DETAIL", "is_na_allowed": false }
+  ],
+  "scenarios": [
+    {
+      "name": "all-visible-yes -> rollup YES",
+      "rollupId": 100,
+      "answers": { "101": "yes", "102": "yes", "103": "yes", "104": "yes" },
+      "visibility": { "101": true, "102": true, "103": true, "104": true },
+      "expectedAnswer": "yes",
+      "expectedVisibleMembers": [101, 102, 103, 104]
+    },
+    {
+      "name": "one-no -> rollup NO",
+      "rollupId": 100,
+      "answers": { "101": "yes", "102": "no",  "103": "yes", "104": "yes" },
+      "visibility": { "101": true, "102": true, "103": true, "104": true },
+      "expectedAnswer": "no",
+      "expectedVisibleMembers": [101, 102, 103, 104]
+    },
+    {
+      "name": "all-NA visible -> rollup NA (NA allowed)",
+      "rollupId": 100,
+      "answers": { "101": "na", "102": "na", "103": "na", "104": "na" },
+      "visibility": { "101": true, "102": true, "103": true, "104": true },
+      "expectedAnswer": "na",
+      "expectedVisibleMembers": [101, 102, 103, 104]
+    },
+    {
+      "name": "all-NA visible -> rollup YES (NA NOT allowed)",
+      "rollupId": 200,
+      "answers": { "201": "na", "202": "na" },
+      "visibility": { "201": true, "202": true },
+      "expectedAnswer": "yes",
+      "expectedVisibleMembers": [201, 202]
+    },
+    {
+      "name": "all-hidden -> zero visible members -> rollup NA (NA allowed)",
+      "rollupId": 100,
+      "answers": { "101": "no", "102": "no", "103": "no", "104": "no" },
+      "visibility": { "101": false, "102": false, "103": false, "104": false },
+      "expectedAnswer": "na",
+      "expectedVisibleMembers": []
+    },
+    {
+      "name": "mixed: hidden NOs ignored, visible YES + NA -> rollup YES",
+      "rollupId": 100,
+      "answers": { "101": "no", "102": "yes", "103": "na", "104": "na" },
+      "visibility": { "101": false, "102": true, "103": true, "104": true },
+      "expectedAnswer": "yes",
+      "expectedVisibleMembers": [102, 103, 104]
+    },
+    {
+      "name": "mixed: hidden NOs ignored, visible NO wins -> rollup NO",
+      "rollupId": 100,
+      "answers": { "101": "no", "102": "yes", "103": "no", "104": "yes" },
+      "visibility": { "101": false, "102": true, "103": true, "104": true },
+      "expectedAnswer": "no",
+      "expectedVisibleMembers": [102, 103, 104]
+    },
+    {
+      "name": "yes-and-na-mix visible, no NOs -> rollup YES",
+      "rollupId": 100,
+      "answers": { "101": "yes", "102": "yes", "103": "na", "104": "yes" },
+      "visibility": { "101": true, "102": true, "103": true, "104": true },
+      "expectedAnswer": "yes",
+      "expectedVisibleMembers": [101, 102, 103, 104]
+    },
+    {
+      "name": "missing-answer treated as not-NO and not-NA: members partially answered, one NO present -> NO",
+      "rollupId": 100,
+      "answers": { "101": "yes", "103": "no" },
+      "visibility": { "101": true, "102": true, "103": true, "104": true },
+      "expectedAnswer": "no",
+      "expectedVisibleMembers": [101, 102, 103, 104]
+    },
+    {
+      "name": "idempotent: running engine twice yields the same result",
+      "rollupId": 100,
+      "answers": { "101": "yes", "102": "no", "103": "yes", "104": "yes" },
+      "visibility": { "101": true, "102": true, "103": true, "104": true },
+      "expectedAnswer": "no",
+      "expectedVisibleMembers": [101, 102, 103, 104],
+      "runTwice": true
+    }
+  ]
+}

@@ -9,6 +9,13 @@
  *   - ai_base_prompt          parent row per logical base
  *   - ai_base_prompt_version  immutable history rows
  *
+ * Default rows for both `prompt_kind = 'base'` (key `base.v1`) and
+ * `prompt_kind = 'trace'` (key `trace.v1`) are seeded by the data
+ * migration `20260526150000_seed_default_base_prompts` — there is no
+ * runtime fallback to disk. Fresh environments get the rows on
+ * `prisma migrate deploy`; existing environments are untouched (the
+ * migration is idempotent).
+ *
  * Two prompt kinds are stored:
  *   - 'base'   — the ONE admin-editable universal Base prompt. The same
  *                body is used by both the single-source pipeline AND the
@@ -28,12 +35,9 @@
  * Caching strategy (sync public read API, async writes):
  *   - Reads are sync and served from in-process caches. The AI Reviewer
  *     prompt builders (`buildAiReviewerPrompt`, `buildTracePrompt`,
- *     `buildSynthesisPrompt`) were sync when bases were file-loaded;
- *     keeping the read API sync means zero churn at those call sites.
- *   - `warmCache()` is awaited at server bootstrap before `app.listen`,
- *     and on first run also seeds the default rows from the .md files in
- *     `backend/prompts/ai-reviewer/` so dev / staging / prod all start
- *     with byte-identical bases to the file era.
+ *     `buildSynthesisPrompt`) need sync access; the cache keeps the
+ *     read API sync at zero churn for those call sites.
+ *   - `warmCache()` is awaited at server bootstrap before `app.listen`.
  *   - Every write (`upsertBase`, `archiveBase`, `rollbackToVersion`,
  *     `setDefaultForKind`) refreshes the cache immediately on the
  *     writer instance.
@@ -45,8 +49,6 @@
  * read identically at the call sites.
  */
 
-import { promises as fs } from 'fs';
-import path from 'path';
 import prisma from '../config/prisma';
 import logger from '../config/logger';
 import { addendumForKind } from './aiReviewerPromptAddenda';
@@ -142,26 +144,6 @@ export class BasePromptError extends Error {
  */
 const VALID_KINDS: ReadonlySet<PromptKind> = new Set(['base', 'trace']);
 
-const SEED_PROMPTS_DIR = path.join(__dirname, '..', '..', 'prompts', 'ai-reviewer');
-const SEED_DEFAULTS: Array<{ key: string; name: string; description: string; prompt_kind: PromptKind; file: string }> = [
-  {
-    key: 'base.v1',
-    name: 'Base prompt',
-    description:
-      'Universal grading rules applied to every AI review (single-source AND multi-source). Pass-specific input shape and output schema are appended in code (aiReviewerPromptAddenda.ts).',
-    prompt_kind: 'base',
-    file: 'base.v1.md',
-  },
-  {
-    key: 'trace.v1',
-    name: 'Trace extraction (Pass 1)',
-    description:
-      'Per-source structured-extraction prompt used as Pass 1 of the two-pass multi-source pipeline. Infrastructure-only; hidden from the Library UI.',
-    prompt_kind: 'trace',
-    file: 'trace.v1.md',
-  },
-];
-
 // ── In-memory cache ────────────────────────────────────────────────────
 
 /** id → resolved active body for fast lookups. */
@@ -225,58 +207,15 @@ async function refreshCache(): Promise<void> {
 }
 
 /**
- * Idempotent first-run seed. For each of the three default bases, if
- * no row exists with that `key`, INSERT the parent + version 1 from the
- * matching .md file in `backend/prompts/ai-reviewer/`. Already-seeded
- * rows are left untouched (this matters in dev where the file may have
- * been edited after seeding — we never overwrite admin edits).
- */
-async function seedDefaultsIfMissing(): Promise<void> {
-  for (const seed of SEED_DEFAULTS) {
-    const existing = await prisma.aiBasePrompt.findUnique({ where: { key: seed.key } });
-    if (existing) continue;
-    let body: string;
-    try {
-      body = await fs.readFile(path.join(SEED_PROMPTS_DIR, seed.file), 'utf8');
-    } catch (err) {
-      logger.warn(`[BASE PROMPTS] could not seed "${seed.key}" — file ${seed.file} missing: ${(err as Error).message}`);
-      continue;
-    }
-    await prisma.$transaction(async (tx) => {
-      const parent = await tx.aiBasePrompt.create({
-        data: {
-          key: seed.key,
-          name: seed.name,
-          description: seed.description,
-          prompt_kind: seed.prompt_kind,
-          is_default: true,
-          is_archived: false,
-        },
-      });
-      const version = await tx.aiBasePromptVersion.create({
-        data: {
-          base_prompt_id: parent.id,
-          version: 1,
-          body_md: body,
-          change_note: 'Initial seed from backend/prompts/ai-reviewer/' + seed.file,
-        },
-      });
-      await tx.aiBasePrompt.update({
-        where: { id: parent.id },
-        data: { current_version_id: version.id },
-      });
-    });
-    logger.info(`[BASE PROMPTS] seeded default "${seed.key}" (${seed.prompt_kind}, ${body.length} chars)`);
-  }
-}
-
-/**
  * Hydrate the cache and start the background refresh timer. Call once
  * during server bootstrap before `app.listen`. Errors propagate so a
  * failing DB doesn't silently start the server with an empty cache.
+ *
+ * Default rows for `base.v1` and `trace.v1` are inserted by the data
+ * migration `20260526150000_seed_default_base_prompts` and not by this
+ * service — `prisma migrate deploy` is the only seed path.
  */
 export async function warmCache(): Promise<void> {
-  await seedDefaultsIfMissing();
   await refreshCache();
   logger.info(
     `[BASE PROMPTS] cache warmed: ${baseCacheById?.size ?? 0} base(s), ` +
@@ -305,14 +244,27 @@ function ensureCacheLoaded(): {
 
 class BasePromptService {
   /**
-   * Resolve the active prompt body for a kind. There is exactly ONE
-   * default per kind in storage; this is the read API every runtime
-   * call site uses. Throws if no default is configured (a hard config
-   * error — the seed bootstrap guarantees this can't happen on a
-   * properly-warmed instance).
+   * Resolve the active prompt body for a kind. The optional
+   * `baseIdOverride` honors a per-form selection (`forms.ai_base_prompt_id`):
+   * when supplied and resolvable in the cache it wins, otherwise we fall
+   * back to the kind's global default. Throws when no default is
+   * configured (a hard config error — the seed bootstrap guarantees this
+   * can't happen on a properly-warmed instance).
    */
-  getBaseForKind(kind: PromptKind): BaseResolution {
+  getBaseForKind(kind: PromptKind, baseIdOverride?: number | null): BaseResolution {
     const { bases, defaults } = ensureCacheLoaded();
+
+    if (baseIdOverride != null && Number.isInteger(baseIdOverride) && baseIdOverride > 0) {
+      const override = bases.get(baseIdOverride);
+      if (override) return override;
+      // Silent fall-through to default — the override may point at an
+      // archived row; we don't want a per-form misconfiguration to
+      // hard-fail every AI run on that form.
+      logger.warn(
+        `[BASE PROMPTS] override id=${baseIdOverride} not in cache (archived or stale) — falling back to default for kind "${kind}"`,
+      );
+    }
+
     const defaultId = defaults.get(kind);
     if (defaultId == null) {
       throw new BasePromptError(`No default base prompt configured for kind "${kind}"`, 'NO_DEFAULT', 500);
@@ -344,9 +296,15 @@ class BasePromptService {
    *
    * Pass 1 (trace) is a separate prompt — call
    * `getBaseForKind('trace')` directly for that.
+   *
+   * `baseIdOverride` (optional) honors a per-form base prompt selection
+   * — see `getBaseForKind` for fall-through semantics.
    */
-  getAssembledPrompt(kind: AssembledPromptKind): { id: number; key: string; version: number; body: string } {
-    const base = this.getBaseForKind('base');
+  getAssembledPrompt(
+    kind: AssembledPromptKind,
+    baseIdOverride?: number | null,
+  ): { id: number; key: string; version: number; body: string } {
+    const base = this.getBaseForKind('base', baseIdOverride);
     return {
       id: base.id,
       key: base.key,

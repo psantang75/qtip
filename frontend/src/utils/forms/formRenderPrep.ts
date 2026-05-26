@@ -95,6 +95,7 @@ export const prepareQuestionForRender = (
 ): QuestionRenderData => {
   const questionType = (question.question_type || '').toLowerCase() as QuestionRenderData['type'];
 
+  const isRollup = question.role === 'ROLLUP';
   const baseData: QuestionRenderData = {
     id:            question.id || 0,
     text:          question.question_text || '',
@@ -104,6 +105,12 @@ export const prepareQuestionForRender = (
     isNaAllowed:   !!question.is_na_allowed,
     isRequired:    !!question.is_required,
     isCritical:    !!question.is_critical,
+    role:          isRollup ? 'ROLLUP' : 'DETAIL',
+    // The rollup engine writes its reason into `answer.notes` for ROLLUP
+    // questions (see frontend/src/utils/forms/rollupEngine.ts). Surface it
+    // here so the renderer can show the "Auto-computed" badge tooltip
+    // without re-running the engine.
+    rollupReason:  isRollup ? (currentAnswer?.notes || undefined) : undefined,
     weight:        question.weight,
     currentValue:  currentAnswer?.answer,
     notes:         currentAnswer?.notes,

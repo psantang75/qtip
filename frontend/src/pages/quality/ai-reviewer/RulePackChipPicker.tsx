@@ -1,12 +1,11 @@
 /**
  * Rule pack chip picker for the AI Reviewer detail page.
  *
- * QA admins use this to pick which file-based Rule Packs the AI applies
- * when grading interactions on this form. Pack content lives in
- * backend/prompts/rule-packs/*.md (text-only authoring; pack BODIES
- * are version-controlled via git). Pack ASSIGNMENT to a form is fully
- * UI-driven and persists to backend/config/ai-form-rule-packs.json
- * via PUT /api/ai-reviewer/forms/:formId/rule-packs.
+ * QA admins use this to pick which DB-managed Rule Packs the AI applies
+ * when grading interactions on this form. Pack content lives in the
+ * `ai_rule_pack` table (authored via the Rule Pack Library page). Pack
+ * ASSIGNMENT to a form persists to the `ai_form_rule_pack_assignment`
+ * table via PUT /api/ai-reviewer/forms/:formId/rule-packs.
  *
  * Why chips instead of a dropdown: most forms get 0-3 packs and the
  * grouping by owner department is the primary affordance. Chips show
@@ -120,8 +119,7 @@ export function RulePackChipPicker({ formId }: RulePackChipPickerProps) {
         )}
         {!packsQ.isLoading && (packsQ.data ?? []).length === 0 && (
           <p className="text-[12px] text-slate-500">
-            No rule packs in the library yet. Add a markdown file under <code>backend/prompts/rule-packs/</code> and restart the
-            backend.
+            No rule packs in the library yet. Open the Rule Pack Library page to author one.
           </p>
         )}
         {groupNames.map((dept) => (

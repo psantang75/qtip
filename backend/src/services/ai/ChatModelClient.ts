@@ -63,6 +63,26 @@ export interface ChatModelOptions {
    * enforces JSON output via the addenda contract.
    */
   responseFormat?: 'json_object' | 'text';
+  /**
+   * Optional Anthropic tool definitions. When supplied, the call is
+   * issued with `tools` + `tool_choice` so the model is forced to
+   * emit a structured tool_use block matching the tool's
+   * `input_schema`. This is how the answers pass enforces per-question
+   * value enums (RADIO/MULTI_SELECT) at the API layer instead of
+   * relying on prompt discipline. OpenAI ignores this — the OpenAI
+   * branch is text/JSON only for now.
+   */
+  tools?: Array<{
+    name: string;
+    description: string;
+    input_schema: Record<string, unknown>;
+  }>;
+  /**
+   * Force-call a specific tool by name. Mirrors Anthropic's
+   * `tool_choice: { type: 'tool', name }`. When omitted but `tools` is
+   * provided, the model may CHOOSE whether to call a tool.
+   */
+  toolChoice?: { type: 'tool'; name: string };
 }
 
 export interface ChatModelResult {
@@ -85,6 +105,14 @@ export interface ChatModelResult {
    * truncation uniformly.
    */
   stopReason: string | null;
+  /**
+   * Anthropic tool-use payload, when the call was issued with `tools`
+   * and the model emitted a `tool_use` block. The shape is the model's
+   * parsed `input` JSON — i.e. the structured arguments it picked for
+   * the forced tool. `null` when no tool was called (text-only
+   * response) or when the provider doesn't support tools.
+   */
+  toolInput: unknown | null;
 }
 
 /**
@@ -205,24 +233,50 @@ async function callChatModelOnce(
     const tokensIn = res.usage?.prompt_tokens ?? null;
     const tokensOut = res.usage?.completion_tokens ?? null;
     const stopReason = choice?.finish_reason ?? null;
-    return { text, tokensIn, tokensOut, latencyMs, model, provider, stopReason };
+    return { text, tokensIn, tokensOut, latencyMs, model, provider, stopReason, toolInput: null };
   }
 
   // Anthropic default branch.
   const client = getAnthropicClient();
+  // Tool-use mode: when the caller passes `tools`, forward them along
+  // with `tool_choice`. Anthropic will respond with a `tool_use` block
+  // whose `input` is JSON validated against the tool's `input_schema`
+  // — which is the entire point (per-question value enums become
+  // enforceable at the wire instead of being prompt suggestions).
+  const toolArgs = opts.tools
+    ? {
+        tools: opts.tools as unknown as Parameters<typeof client.messages.create>[0]['tools'],
+        ...(opts.toolChoice
+          ? { tool_choice: opts.toolChoice as unknown as Parameters<typeof client.messages.create>[0]['tool_choice'] }
+          : {}),
+      }
+    : {};
   const res = await client.messages.create(
     {
       model,
       max_tokens: opts.maxTokens,
       system: opts.system,
       messages: [{ role: 'user', content: opts.user }],
+      ...toolArgs,
     },
     { timeout: timeoutMs, maxRetries: 0 }
   );
   const latencyMs = Date.now() - started;
   const block = res.content.find((b) => b.type === 'text') as { text: string } | undefined;
-  if (!block) {
-    logger.warn(`[chat-model] Anthropic response had no text block (model=${model})`);
+  // Tool-use mode: extract the FIRST tool_use block's parsed input.
+  // We only force one tool at a time today; multi-tool calls would
+  // need this code revisited (and we'd surface an array instead).
+  const toolBlock = res.content.find((b) => b.type === 'tool_use') as
+    | { type: 'tool_use'; name: string; input: unknown }
+    | undefined;
+  if (opts.tools && !toolBlock) {
+    logger.warn(
+      `[chat-model] Anthropic was given tools but emitted no tool_use block (model=${model}, ` +
+        `forced=${opts.toolChoice?.name ?? 'none'})`
+    );
+  }
+  if (!block && !toolBlock) {
+    logger.warn(`[chat-model] Anthropic response had no text or tool_use block (model=${model})`);
   }
   const usage = (res as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
   const tokensIn = usage?.input_tokens ?? null;
@@ -236,6 +290,7 @@ async function callChatModelOnce(
     model,
     provider,
     stopReason,
+    toolInput: toolBlock?.input ?? null,
   };
 }
 

@@ -23,6 +23,7 @@
 
 import prisma from '../config/prisma';
 import logger from '../config/logger';
+import { deriveRollupAnswers, type RollupQuestionShape } from './rollupEngine';
 
 interface Category {
   id: number;
@@ -43,6 +44,10 @@ interface Question {
   scale_max?: number;
   sort_order?: number;
   is_critical?: boolean;
+  /** See rollupEngine.ts. DETAIL (default) means scored from its own answer; ROLLUP means derived. */
+  role?: 'DETAIL' | 'ROLLUP';
+  rollup_rule?: 'ANY_NO_TO_NO' | null;
+  rollup_member_question_ids?: number[] | null;
   conditions?: QuestionCondition[];
 }
 
@@ -223,7 +228,34 @@ function scoreForm(
   const answersMap: Record<number, Answer> = {};
   answers.forEach((a) => { answersMap[a.question_id] = a; });
 
-  const visibilityMap = buildVisibilityMap(questions, answersMap, conditionsByQuestion);
+  let visibilityMap = buildVisibilityMap(questions, answersMap, conditionsByQuestion);
+
+  // Apply the rollup engine BEFORE scoring so role=ROLLUP questions
+  // contribute the canonical engine value (yes / no / na) rather than
+  // whatever stale value the AI or human may have left in the answers
+  // table. See backend/src/utils/rollupEngine.ts. We re-build the
+  // visibility map immediately afterward because a newly-derived rollup
+  // answer (e.g. roll-up flipped from blank to NO) could in turn satisfy
+  // or break another question's gate, and skipping the rebuild would leave
+  // those downstream questions in the wrong visibility state.
+  const rollupShapes: RollupQuestionShape[] = questions.map((q) => ({
+    id: q.id,
+    role: q.role ?? 'DETAIL',
+    rollup_rule: q.rollup_rule ?? null,
+    // Prisma returns JSON columns as `JsonValue`; coerce to a clean
+    // number[] (or null) so the engine never sees mixed types.
+    rollup_member_question_ids: Array.isArray(q.rollup_member_question_ids)
+      ? (q.rollup_member_question_ids as unknown[])
+          .map((v) => (typeof v === 'number' ? v : Number(v)))
+          .filter((n) => Number.isFinite(n) && n > 0)
+      : null,
+    is_na_allowed: !!q.is_na_allowed,
+  }));
+  const derived = deriveRollupAnswers(rollupShapes, answersMap, visibilityMap);
+  if (derived.notes.length > 0) {
+    Object.assign(answersMap, derived.answers);
+    visibilityMap = buildVisibilityMap(questions, answersMap, conditionsByQuestion);
+  }
 
   const questionsByCategory: Record<number, Question[]> = {};
   questions.forEach((q) => {

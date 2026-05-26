@@ -2,31 +2,31 @@
  * Prompt-assembly regression gate.
  *
  * Snapshots the assembled system prompts (Base body + addendum) for
- * BOTH runtime passes:
+ * every runtime pass:
  *   - single_source: one-LLM-call review path
- *   - synthesis:     Pass 2 of the two-pass multi-source path
+ *   - synthesis:     Pass 2 of the legacy two-pass multi-source path
+ *   - reasoning:     Pass 2A of the chunked synthesis pipeline
+ *   - answers_chunk: Pass 2B of the chunked synthesis pipeline
  *
  * Snapshot mismatch === intentional prompt change. When that happens,
  * update the snapshot deliberately, run the golden-set eval before
- * merging, and confirm the kappa diff is acceptable. This is the
- * post-refactor replacement for the byte-equivalence test that
- * compared file-loaded vs inline implementations during the file
- * extraction phase.
+ * merging, and confirm the kappa diff is acceptable.
  *
- * The Base body is loaded from `backend/prompts/ai-reviewer/base.v1.md`
- * directly (no DB) so this test stands alone — no warmCache, no
- * Prisma, no migrations required.
+ * The Base body is mocked to a known stub so this test stands alone —
+ * no warmCache, no Prisma, no migrations required. The real Base body
+ * lives in the `ai_base_prompt` table (seeded by migration
+ * `20260526150000_seed_default_base_prompts`); changes to that body
+ * are exercised by the golden-set eval, not by this snapshot test.
+ * What this test still guards is the in-code addendum constants and
+ * the order they're concatenated with the (mocked) base.
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { promises as fs } from 'fs';
-import path from 'path';
 
 // The KB anchors tests below exercise the prompt builders, which read
 // the (DB-backed) Base prompt at call time. Stub the service so this
-// test file remains DB-free — the addendum / anchors blocks live in
-// code constants and the rendered user prompt, neither of which needs
-// the real base body to assert.
+// test file remains DB-free. The body literal must be inlined here
+// because vi.mock is hoisted above any top-level `const` declarations.
 vi.mock('../BasePromptService', () => {
   const stub = { id: 1, key: 'base.v1', version: 1, body: '<<MOCK ASSEMBLED BASE>>' };
   const service = {
@@ -35,6 +35,8 @@ vi.mock('../BasePromptService', () => {
   };
   return { basePromptService: service, default: service };
 });
+
+const MOCK_BASE_BODY = '<<MOCK ASSEMBLED BASE>>';
 
 vi.mock('../RulePackService', () => {
   const service = {
@@ -55,12 +57,6 @@ import {
   ANSWERS_CHUNK_MARKER,
   addendumForKind,
 } from '../aiReviewerPromptAddenda';
-
-const BASE_PATH = path.join(__dirname, '..', '..', '..', 'prompts', 'ai-reviewer', 'base.v1.md');
-
-async function loadBase(): Promise<string> {
-  return fs.readFile(BASE_PATH, 'utf8');
-}
 
 describe('aiReviewerPromptAssembly', () => {
   it('addendum dispatcher returns the matching constant for each kind', () => {
@@ -92,40 +88,13 @@ describe('aiReviewerPromptAssembly', () => {
     expect(SYNTHESIS_ADDENDUM).toContain('TRACE AGREEMENT');
   });
 
-  it('base body contains the universal grading-rule sections', async () => {
-    const base = await loadBase();
-    // Identity / role line.
-    expect(base).toContain('You are the AI Reviewer for Q-Tip');
-    // Universal sections that should be present in EVERY pass.
-    expect(base).toContain('Playbook steps (REQUIRED structured output');
-    expect(base).toContain('Per-answer evidence (REQUIRED on every answer)');
-    expect(base).toContain('Coaching block (REQUIRED');
-    expect(base).toContain('Narrative format');
-    expect(base).toContain('Audit chain (universal');
-    expect(base).toContain('Universal KB authorities');
-    expect(base).toContain('Customer intent and process divergence');
-    expect(base).toContain('Pictures and attachments');
-    expect(base).toContain('Grading philosophy');
-    expect(base).toContain('Timeline (REQUIRED structured output)');
-    expect(base).toContain('Advisory observations (REQUIRED but non-scored)');
-    expect(base).toContain('Playbook integrity');
-    expect(base).toContain('WHAT COUNTS AS A NOTE');
-    // Schema MUST NOT be inline in the base; it lives in the addendum.
-    expect(base).not.toContain('"playbook_steps": [');
-    // The base must reference the addendum so the model knows to look
-    // for the schema in the appended section.
-    expect(base).toContain('OUTPUT SCHEMA section appended to the end');
-  });
-
-  it('snapshots the assembled single-source prompt', async () => {
-    const base = await loadBase();
-    const assembled = base + addendumForKind('single_source');
+  it('snapshots the assembled single-source prompt', () => {
+    const assembled = MOCK_BASE_BODY + addendumForKind('single_source');
     expect(assembled).toMatchSnapshot('single_source-assembled');
   });
 
-  it('snapshots the assembled synthesis prompt', async () => {
-    const base = await loadBase();
-    const assembled = base + addendumForKind('synthesis');
+  it('snapshots the assembled synthesis prompt', () => {
+    const assembled = MOCK_BASE_BODY + addendumForKind('synthesis');
     expect(assembled).toMatchSnapshot('synthesis-assembled');
   });
 
@@ -153,8 +122,10 @@ describe('aiReviewerPromptAssembly', () => {
 
   it('ANSWERS_CHUNK_ADDENDUM consumes draft verdicts and supports dissent flagging', () => {
     expect(ANSWERS_CHUNK_ADDENDUM).toContain(ANSWERS_CHUNK_MARKER);
-    // The chunk pass emits the answers[] schema with cross-source attribution.
-    expect(ANSWERS_CHUNK_ADDENDUM).toContain('"answers": [');
+    // The chunk pass emits answers via the submit_answers tool now;
+    // per-answer fields still describe cross-source attribution so the
+    // model knows which fields to populate.
+    expect(ANSWERS_CHUNK_ADDENDUM).toContain('submit_answers');
     expect(ANSWERS_CHUNK_ADDENDUM).toContain('evidence_source_kind');
     expect(ANSWERS_CHUNK_ADDENDUM).toContain('evidence_source_id');
     // CONSISTENCY REFACTOR (W1.2): chunk MUST reference the draft
@@ -165,22 +136,21 @@ describe('aiReviewerPromptAssembly', () => {
     expect(ANSWERS_CHUNK_ADDENDUM).toContain('DEFAULT BEHAVIOUR');
     expect(ANSWERS_CHUNK_ADDENDUM).toContain('DISSENT BEHAVIOUR');
     // Reasoning artefacts (playbook, timeline, faithfulness, narrative,
-    // coaching, kb_citations, overall_confidence) are forbidden — they
-    // belong to Pass 2A.
-    expect(ANSWERS_CHUNK_ADDENDUM).toContain('DO NOT emit "playbook_steps"');
+    // category_notes, coaching, kb_citations, overall_confidence) are
+    // forbidden — they belong to Pass 2A.
+    expect(ANSWERS_CHUNK_ADDENDUM).toContain('"playbook_steps"');
+    expect(ANSWERS_CHUNK_ADDENDUM).toContain('"category_notes"');
     // The chunk MUST reference the reasoning artefacts as context.
     expect(ANSWERS_CHUNK_ADDENDUM).toContain('REASONING ARTEFACTS');
   });
 
-  it('snapshots the assembled reasoning prompt', async () => {
-    const base = await loadBase();
-    const assembled = base + addendumForKind('reasoning');
+  it('snapshots the assembled reasoning prompt', () => {
+    const assembled = MOCK_BASE_BODY + addendumForKind('reasoning');
     expect(assembled).toMatchSnapshot('reasoning-assembled');
   });
 
-  it('snapshots the assembled answers_chunk prompt', async () => {
-    const base = await loadBase();
-    const assembled = base + addendumForKind('answers_chunk');
+  it('snapshots the assembled answers_chunk prompt', () => {
+    const assembled = MOCK_BASE_BODY + addendumForKind('answers_chunk');
     expect(assembled).toMatchSnapshot('answers_chunk-assembled');
   });
 
@@ -212,8 +182,9 @@ import {
   buildSynthesisPrompt,
   buildReasoningPrompt,
   buildAnswerChunkPrompt,
+  groupGradeableQuestionsByCategory,
 } from '../aiReviewerTwoPassPrompts';
-import type { FormForPrompt } from '../aiReviewerPrompt';
+import { buildAiReviewerPrompt, type FormForPrompt } from '../aiReviewerPrompt';
 
 function makeMinimalForm(): FormForPrompt {
   return {
@@ -366,5 +337,101 @@ describe('DRAFT VERDICTS FROM REASONING block (W1.2)', () => {
     });
     expect(chunk.user).toContain('DRAFT VERDICTS FROM REASONING');
     expect(chunk.user).toContain('(no drafts available');
+  });
+});
+
+// Rollup engine integration: role=ROLLUP questions are auto-derived by
+// backend/src/utils/rollupEngine.ts and overwritten on persist by
+// SubmissionService.applyRollupEngineToAnswers, so the prompt builders
+// MUST skip them. This block pins that contract across all three of the
+// gradeable-question rendering paths (single-pass, chunked grouper, and
+// chunked spec renderer).
+describe('ROLLUP exclusion from AI prompts', () => {
+  function makeFormWithRollup(): FormForPrompt {
+    return {
+      id: 99020,
+      form_name: 'v3 Form with Rollup',
+      interaction_type: 'CALL',
+      ai_review_guidance: null,
+      categories: [{ id: 1, category_name: 'Contact Management' }],
+      questions: [
+        {
+          id: 800,
+          category_name: 'Contact Management',
+          question_text: 'Did the agent confirm the billing contact?',
+          question_type: 'YES_NO',
+          yes_value: 1,
+          no_value: 0,
+          na_value: 0,
+          is_na_allowed: true,
+          radio_options: [],
+          role: 'DETAIL',
+        },
+        {
+          id: 801,
+          category_name: 'Contact Management',
+          question_text: 'Were all required contact-management actions handled correctly?',
+          question_type: 'YES_NO',
+          yes_value: 1,
+          no_value: 0,
+          na_value: 0,
+          is_na_allowed: true,
+          radio_options: [],
+          role: 'ROLLUP',
+        },
+      ],
+    };
+  }
+
+  it('renderFormForPrompt (single-pass) omits ROLLUP rows and keeps DETAIL rows', () => {
+    const built = buildAiReviewerPrompt({
+      form: makeFormWithRollup(),
+      adapterKind: 'CALL',
+      header: { case_id: '12345' },
+      notes: [],
+      kbHits: [],
+    });
+    expect(built.user).toContain('question_id=800');
+    expect(built.user).toContain('Did the agent confirm the billing contact?');
+    expect(built.user).not.toContain('question_id=801');
+    expect(built.user).not.toContain('Were all required contact-management actions handled correctly?');
+  });
+
+  it('groupGradeableQuestionsByCategory (chunked) excludes ROLLUP ids from every chunk', () => {
+    const groups = groupGradeableQuestionsByCategory(makeFormWithRollup());
+    expect(groups).toEqual([{ category: 'Contact Management', questionIds: [800] }]);
+  });
+
+  it('buildAnswerChunkPrompt (chunked) does not render the ROLLUP question line in the CATEGORY FORM SPEC', () => {
+    const chunk = buildAnswerChunkPrompt({
+      form: makeFormWithRollup(),
+      categoryName: 'Contact Management',
+      // Use only the DETAIL id; the grouper would have produced this.
+      questionIds: [800],
+      reasoning: { reasoningJson: '{}' },
+      traces: [
+        { sourceKind: 'CALL', sourceId: 'call-1', traceJson: '{}', header: {} },
+      ],
+    });
+    expect(chunk.user).toContain('q800 [YES_NO');
+    expect(chunk.user).not.toContain('q801 [YES_NO');
+    expect(chunk.user).not.toContain('Were all required contact-management actions handled correctly?');
+  });
+
+  it('buildAnswerChunkPrompt defends against a stale ROLLUP id sneaking into questionIds', () => {
+    // Even if a caller mistakenly passes the ROLLUP id, renderFormSpec
+    // filters it out so the model never sees it. This is the
+    // belt-and-suspenders behaviour mirroring the renderer.
+    const chunk = buildAnswerChunkPrompt({
+      form: makeFormWithRollup(),
+      categoryName: 'Contact Management',
+      questionIds: [800, 801],
+      reasoning: { reasoningJson: '{}' },
+      traces: [
+        { sourceKind: 'CALL', sourceId: 'call-1', traceJson: '{}', header: {} },
+      ],
+    });
+    expect(chunk.user).toContain('q800 [YES_NO');
+    expect(chunk.user).not.toContain('q801 [YES_NO');
   });
 });

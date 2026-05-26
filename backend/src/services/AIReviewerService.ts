@@ -44,6 +44,7 @@ import {
   resolveModelName,
   type ModelProvider,
 } from './ai/ChatModelClient';
+import { buildAnswersTool, getGradeableQuestionIds } from './ai/AnswersToolSchema';
 import bookstackService from './BookStackService';
 import kbIndexService from './KbIndexService';
 import { parseKbApproaches, type ParsedProcedure } from './kbProcedureParser';
@@ -51,7 +52,10 @@ import crmService, { type TicketHeader, type TaskHeader, type CRMNote } from './
 import phoneSystemService from './PhoneSystemService';
 import { SubmissionService } from './SubmissionService';
 import { MySQLSubmissionRepository } from '../repositories/MySQLSubmissionRepository';
-import { AI_REVIEWER_FEEDBACK_QUESTION_TEXT } from '../repositories/MySQLFormRepository';
+import {
+  AI_REVIEWER_FEEDBACK_QUESTION_TEXT,
+  CATEGORY_FEEDBACK_TEXT_PREFIX_RE,
+} from '../repositories/MySQLFormRepository';
 import logger from '../config/logger';
 import type {
   CreateSubmissionAnswerDTO,
@@ -1341,7 +1345,8 @@ export class AIReviewerService {
 
     const {
       answers,
-      narrative,
+      narrative: _narrative,
+      categoryNotes,
       kbCitations,
       overallConfidence: rawOverallConfidence,
       timeline,
@@ -1356,6 +1361,11 @@ export class AIReviewerService {
       // intentionally unused so the aggregated `aggregatedCostPayload`
       // below stays the single source of truth.
     } = synthesisOutput;
+    // `narrative` (cross-cutting flat findings) is intentionally NOT
+    // routed to any submission_answer per the 2026-05 reviewer ask
+    // ("no other notes in the AI reviewer feedback at the bottom for
+    // now"). It still lives in the call-log raw response for debugging.
+    void _narrative;
     let overallConfidence = rawOverallConfidence;
 
     // Verification pass (Tier-1 Item 2). Trigger band widened from
@@ -1421,10 +1431,25 @@ export class AIReviewerService {
         422
       );
     }
-    const feedbackText = composeFeedback({ narrative, kbCitations });
+    // Route per-category notes into their category's Feedback TEXT
+    // question when one exists; unmatched notes plus KB citations fall
+    // through to the bottom AI Reviewer Feedback question.
+    const { perCategory, unmatched } = composeCategoryFeedback(
+      categoryNotes,
+      form,
+      kbCitations
+    );
+    const bottomFeedbackText = composeBottomFeedback({
+      unmatchedCategoryNotes: unmatched,
+      kbCitations,
+    });
     const finalAnswers: CreateSubmissionAnswerDTO[] = [
       ...answers,
-      { question_id: feedbackQuestion.id, answer: feedbackText },
+      ...Array.from(perCategory.entries()).map(([qid, html]) => ({
+        question_id: qid,
+        answer: html,
+      })),
+      { question_id: feedbackQuestion.id, answer: bottomFeedbackText },
     ];
 
     // Resolve agentDisplayName / interactionDate with attached-source
@@ -1781,7 +1806,8 @@ export class AIReviewerService {
     };
     const {
       answers,
-      narrative,
+      narrative: _narrativeSingle,
+      categoryNotes,
       kbCitations,
       overallConfidence: rawOverallConfidence,
       timeline,
@@ -1792,6 +1818,10 @@ export class AIReviewerService {
       selfConsistencyWarnings,
       cost,
     } = await callClaude(promptParts, form, traceCtx);
+    // Cross-cutting flat `narrative` is intentionally not persisted to
+    // a submission_answer; see the multi-source write site for the
+    // rationale (2026-05 reviewer ask).
+    void _narrativeSingle;
     let overallConfidence = rawOverallConfidence;
     const costPayload = cost
       ? { usd: cost.usd, formatted: cost.formatted, approximated: cost.approximated }
@@ -1854,11 +1884,26 @@ export class AIReviewerService {
       );
     }
 
-    const feedbackText = composeFeedback({ narrative, kbCitations });
-    // Feedback question is human-text — no confidence score makes sense for it.
+    // Route per-category notes into their category's Feedback TEXT
+    // question when one exists; unmatched notes plus KB citations fall
+    // through to the bottom AI Reviewer Feedback question. Feedback
+    // questions are human-text — no confidence score makes sense.
+    const { perCategory, unmatched } = composeCategoryFeedback(
+      categoryNotes,
+      form,
+      kbCitations
+    );
+    const bottomFeedbackText = composeBottomFeedback({
+      unmatchedCategoryNotes: unmatched,
+      kbCitations,
+    });
     const finalAnswers: CreateSubmissionAnswerDTO[] = [
       ...answers,
-      { question_id: feedbackQuestion.id, answer: feedbackText },
+      ...Array.from(perCategory.entries()).map(([qid, html]) => ({
+        question_id: qid,
+        answer: html,
+      })),
+      { question_id: feedbackQuestion.id, answer: bottomFeedbackText },
     ];
 
     const { csrId, metadata } = await buildSubmissionMetadata({
@@ -2076,6 +2121,11 @@ async function loadFormForReview(formId: number): Promise<FormForPrompt & { ai_s
       na_value: q.na_value,
       is_na_allowed: q.is_na_allowed,
       radio_options: q.radio_options.map((r) => ({ value: r.option_value, text: r.option_text, score: r.score })),
+      // Thread role so prompt renderers can skip ROLLUP questions (the
+      // rollup engine writes their answer deterministically; sending them
+      // to Claude wastes input+output tokens and the answer would be
+      // overwritten anyway).
+      role: ((q as { role?: string }).role === 'ROLLUP' ? 'ROLLUP' : 'DETAIL') as 'DETAIL' | 'ROLLUP',
     }))
   );
 
@@ -2084,6 +2134,7 @@ async function loadFormForReview(formId: number): Promise<FormForPrompt & { ai_s
     form_name: form.form_name,
     interaction_type: formInteractionType,
     ai_review_guidance: ((form as any).ai_review_guidance ?? null) as string | null,
+    ai_base_prompt_id: ((form as any).ai_base_prompt_id ?? null) as number | null,
     ai_submit_as_draft: (form as any).ai_submit_as_draft === true,
     categories: form.form_categories.map((c) => ({ id: c.id, category_name: c.category_name })),
     questions,
@@ -2767,6 +2818,17 @@ async function searchKb(
 interface ClaudeOutput {
   answers: CreateSubmissionAnswerDTO[];
   narrative: string;
+  /**
+   * Per-category COMMENTARY emitted by the AI. Each entry contains the
+   * exact `category_name` from the form spec and a short (1-4 sentence)
+   * evidence-anchored note for that category. NOT a verdict / rollup
+   * — the scoring engine derives category disposition from the leaf
+   * answers. Routed to the form's per-category `Feedback — <Category>`
+   * TEXT question when one exists; unmatched entries fall through to
+   * the bottom `AI Reviewer Feedback` field. Empty array when the
+   * model emitted nothing.
+   */
+  categoryNotes: { category: string; notes: string }[];
   kbCitations: { id: number; name: string; url: string }[];
   /** Top-level confidence the AI emits for the whole review (0..1, null if not provided). */
   overallConfidence: number | null;
@@ -3192,7 +3254,9 @@ async function runAnswerChunkPass(
   promptParts: { system: string; user: string },
   traceCtx: CallLogMeta,
   categoryName: string,
-  provider: ModelProvider = 'anthropic'
+  provider: ModelProvider = 'anthropic',
+  form?: FormForPrompt,
+  allowedQuestionIds?: number[]
 ): Promise<any[]> {
   return withCallLog<any[]>(
     { ...traceCtx, provider },
@@ -3207,6 +3271,17 @@ async function runAnswerChunkPass(
       let tokensIn: number | null = null;
       let tokensOut: number | null = null;
       let lastStopReason: string | null = null;
+
+      // Tool-use mode (Anthropic only): force the model to emit answers
+      // through a `submit_answers` tool whose input_schema constrains
+      // `value` per question_id (RADIO/MULTI_SELECT enum, YES_NO yes/no,
+      // SCALE integer). Anthropic's API rejects model outputs that
+      // don't match the schema, so the historical "value = 'yes' on a
+      // RADIO" failure mode becomes physically impossible.
+      const useTool = provider === 'anthropic' && form != null && allowedQuestionIds != null;
+      const tool = useTool
+        ? buildAnswersTool(form!, allowedQuestionIds!, 'answers_chunk')
+        : null;
 
       const sendOnce = async (extraSystem?: string) => {
         const out = await callChatModel(provider, {
@@ -3223,39 +3298,63 @@ async function runAnswerChunkPass(
           // a slow network hiccup. Orchestrator owns retry semantics.
           timeoutMs: 300_000,
           responseFormat: 'json_object',
+          ...(tool
+            ? {
+                tools: [tool],
+                toolChoice: { type: 'tool' as const, name: 'submit_answers' },
+              }
+            : {}),
         });
         tokensIn = out.tokensIn;
         tokensOut = out.tokensOut;
         lastStopReason = out.stopReason;
+        if (tool) {
+          // Tool path: the model is forced to call `submit_answers`;
+          // toolInput is the validated arguments object.
+          const ti = out.toolInput as { answers?: unknown } | null;
+          if (!ti || !Array.isArray(ti.answers)) {
+            throw new Error(
+              `${provider} answer-chunk tool call returned no answers[] payload (toolInput=${JSON.stringify(ti).slice(0, 200)})`
+            );
+          }
+          return { rawText: JSON.stringify(ti), answers: ti.answers as any[] };
+        }
         if (!out.text) {
           throw new Error(`${provider} answer-chunk response had no text content`);
         }
-        return out.text;
+        return { rawText: out.text, answers: null as any[] | null };
       };
 
-      let raw = await sendOnce();
-      let parsed = tryParseJson(raw);
-      if (!parsed) {
-        retried = true;
-        logger.warn(
-          `[AI REVIEWER] Answer chunk "${categoryName}": first response was not valid JSON; retrying. ` +
-            `stop_reason=${lastStopReason} tokens_out=${tokensOut} raw_len=${raw.length}`
-        );
-        raw = await sendOnce(
-          '\n\nIMPORTANT: Your previous response could not be parsed as JSON. Respond with ONLY the JSON object, nothing else, no prose, no code fences.'
-        );
-        parsed = tryParseJson(raw);
-      }
-      if (!parsed || !Array.isArray(parsed.answers)) {
-        throw new AIReviewerServiceError(
-          `Answer chunk "${categoryName}" failed to return a valid answers[] array after one retry.`,
-          'AI_OUTPUT_INVALID',
-          502
-        );
+      const first = await sendOnce();
+      let raw = first.rawText;
+      let answersArr: any[] | null = first.answers;
+      if (answersArr == null) {
+        // Free-text JSON path (OpenAI / no-tool fallback): parse + retry-on-fail.
+        let parsed = tryParseJson(raw);
+        if (!parsed) {
+          retried = true;
+          logger.warn(
+            `[AI REVIEWER] Answer chunk "${categoryName}": first response was not valid JSON; retrying. ` +
+              `stop_reason=${lastStopReason} tokens_out=${tokensOut} raw_len=${raw.length}`
+          );
+          const retry = await sendOnce(
+            '\n\nIMPORTANT: Your previous response could not be parsed as JSON. Respond with ONLY the JSON object, nothing else, no prose, no code fences.'
+          );
+          raw = retry.rawText;
+          parsed = tryParseJson(raw);
+        }
+        if (!parsed || !Array.isArray(parsed.answers)) {
+          throw new AIReviewerServiceError(
+            `Answer chunk "${categoryName}" failed to return a valid answers[] array after one retry.`,
+            'AI_OUTPUT_INVALID',
+            502
+          );
+        }
+        answersArr = parsed.answers as any[];
       }
 
       return {
-        result: parsed.answers,
+        result: answersArr,
         model,
         rawResponse: raw,
         retried,
@@ -3500,7 +3599,7 @@ async function runChunkedSynthesis(
         caseId: opts.caseId,
         onCost: opts.accumulateCost(`synthesis_answers:${category}`),
       };
-      return runAnswerChunkPass(chunkPrompt, chunkCtx, category, provider);
+      return runAnswerChunkPass(chunkPrompt, chunkCtx, category, provider, form, questionIds);
     })
   );
 
@@ -3687,6 +3786,17 @@ async function callClaude(
 
       let lastStopReason: string | null = null;
 
+      // Tool-use mode for the single-source path: force the answers
+      // pass through the same `submit_answers` JSON-schema tool the
+      // chunked path uses, so RADIO / MULTI_SELECT / YES_NO values are
+      // schema-validated at the API. Narrative + reasoning artefacts
+      // (playbook_steps, timeline, observations, coaching,
+      // category_notes, kb_citations, overall_confidence) still come
+      // back as a free-text JSON block in the same assistant turn —
+      // Anthropic supports text + tool_use blocks side by side.
+      const gradeableIds = getGradeableQuestionIds(form);
+      const answersTool = buildAnswersTool(form, gradeableIds, 'single_source');
+
       const sendOnce = async (extraSystem?: string) => {
         const res = await client.messages.create(
           {
@@ -3705,6 +3815,8 @@ async function callClaude(
             // by default (Anthropic deprecated the temperature parameter).
             system: promptParts.system + (extraSystem ?? ''),
             messages: [{ role: 'user', content: promptParts.user }],
+            tools: [answersTool] as unknown as Parameters<typeof client.messages.create>[0]['tools'],
+            tool_choice: { type: 'tool', name: 'submit_answers' } as unknown as Parameters<typeof client.messages.create>[0]['tool_choice'],
           },
           {
             // The shared client uses ANTHROPIC_TIMEOUT_MS (~120s) which is
@@ -3729,36 +3841,51 @@ async function callClaude(
         lastStopReason =
           (res as { stop_reason?: string | null }).stop_reason ?? null;
         const textBlock = res.content.find((b) => b.type === 'text') as { text: string } | undefined;
-        if (!textBlock) throw new Error('Claude returned no text content');
-        return textBlock.text;
+        const toolBlock = res.content.find((b) => b.type === 'tool_use') as
+          | { type: 'tool_use'; name: string; input: { answers?: unknown } }
+          | undefined;
+        if (!toolBlock) throw new Error('Claude returned no tool_use block for submit_answers');
+        return { text: textBlock?.text ?? '', toolInput: toolBlock.input };
       };
 
-      let raw = await sendOnce();
+      let { text: raw, toolInput } = await sendOnce();
+      // The text block carries narrative + reasoning artefacts (no
+      // answers). Parse it; on failure, fall back to a minimal object
+      // and rely on the tool's `answers[]`. The retry is still useful
+      // because reasoning fields drive verification + coaching.
       let parsed = tryParseJson(raw);
       if (!parsed) {
         retried = true;
         logger.warn(
-          `[AI REVIEWER] First Claude response was not valid JSON; retrying once with stricter system prompt. ` +
+          `[AI REVIEWER] First Claude text block was not valid JSON; retrying once with stricter system prompt. ` +
             `stop_reason=${lastStopReason} tokens_out=${tokensOut} raw_len=${raw.length} ` +
             `head=${JSON.stringify(raw.slice(0, 400))} tail=${JSON.stringify(raw.slice(-400))}`
         );
-        raw = await sendOnce('\n\nIMPORTANT: Your previous response could not be parsed as JSON. Respond with ONLY the JSON object, nothing else, no prose, no code fences.');
+        const retry = await sendOnce('\n\nIMPORTANT: Your previous text block could not be parsed as JSON. Emit a SINGLE JSON object in the text block (no prose, no code fences) AND call the submit_answers tool with the answers.');
+        raw = retry.text;
+        toolInput = retry.toolInput;
         parsed = tryParseJson(raw);
       }
       if (!parsed) {
         logger.error(
-          `[AI REVIEWER] Claude retry ALSO failed JSON parse. ` +
+          `[AI REVIEWER] Claude retry text block ALSO failed JSON parse. ` +
             `stop_reason=${lastStopReason} tokens_out=${tokensOut} raw_len=${raw.length} ` +
             `head=${JSON.stringify(raw.slice(0, 400))} tail=${JSON.stringify(raw.slice(-400))}`
         );
-        throw new AIReviewerServiceError(
-          'Claude failed to return valid JSON after one retry.',
-          'AI_OUTPUT_INVALID',
-          502
-        );
+        // Degrade gracefully: the tool's answers[] is the authoritative
+        // grading payload anyway; the missing text block just costs us
+        // narrative + reasoning artefacts. Build a minimal envelope so
+        // mapClaudeOutputToAnswers + downstream coaching don't NPE.
+        parsed = {};
       }
 
-      const out = mapClaudeOutputToAnswers(parsed, form);
+      // Merge: answers[] comes from the tool (schema-validated);
+      // everything else (narrative, reasoning artefacts, coaching,
+      // category_notes) comes from the text block.
+      const ti = toolInput as { answers?: unknown } | null;
+      const toolAnswers = ti && Array.isArray(ti.answers) ? (ti.answers as any[]) : [];
+      const merged = { ...parsed, answers: toolAnswers };
+      const out = mapClaudeOutputToAnswers(merged, form);
       const cost = estimateUsdCost(model, tokensIn, tokensOut);
       if (cost) {
         logger.info(
@@ -3812,19 +3939,56 @@ function mapClaudeOutputToAnswers(parsed: any, form: FormForPrompt): ClaudeOutpu
   const answeredIds = new Set<number>();
   const out: CreateSubmissionAnswerDTO[] = [];
   const answerEvidence: Record<number, { evidence_source?: string; evidence_quote?: string }> = {};
+  // Questions where Claude returned a value the validator could not map
+  // to the form's option space (typically RADIO/MULTI_SELECT/SCALE
+  // questions whose options don't include yes/no, but the model
+  // defaulted to yes/no anyway because the question text reads that
+  // way). We GRACEFULLY DEGRADE rather than 502'ing the entire review:
+  // the answer is dropped from the persisted set and surfaced as a
+  // self-consistency warning so the human reviewer can finish that
+  // question manually. This matches the project philosophy of being
+  // fluid about form construction; a single mismapped answer should
+  // not invalidate hours of cross-source synthesis work.
+  const validationFailures: { qid: number; question_text: string; question_type: string; value: string }[] = [];
 
   for (const a of parsed.answers as any[]) {
     const question = questionsById.get(Number(a.question_id));
     if (!question) continue; // ignore stray answers; AI Feedback question is added by caller
     if (question.question_text.trim() === AI_REVIEWER_FEEDBACK_QUESTION_TEXT) continue; // caller fills this
     if (question.question_type === 'TEXT') continue; // human-written commentary fields stay empty for AI runs
+    // Defense-in-depth: ROLLUP rows are filtered out of the prompt
+    // renderers, but if a model returns one anyway (legacy run, prompt
+    // regression, etc.) we drop it on the floor. SubmissionService
+    // overwrites it with the engine-derived value before persist
+    // either way.
+    if (question.role === 'ROLLUP') continue;
     const validated = validateAnswerForQuestion(a.value, question);
     if (validated == null) {
-      throw new AIReviewerServiceError(
-        `Claude returned an unrecognized value for question_id=${question.id} (${question.question_text}): ${JSON.stringify(a.value)}`,
-        'AI_OUTPUT_INVALID',
-        502
+      // YES_NO has a well-defined fixed enum; a mismatch here is a hard
+      // contract break and SHOULD throw (the upstream prompt is explicit
+      // about the legal values). For author-defined option spaces
+      // (RADIO/MULTI_SELECT/SCALE) we degrade gracefully so the human
+      // reviewer can finish manually instead of losing the whole review.
+      if (question.question_type === 'YES_NO') {
+        throw new AIReviewerServiceError(
+          `Claude returned an unrecognized value for question_id=${question.id} (${question.question_text}): ${JSON.stringify(a.value)}`,
+          'AI_OUTPUT_INVALID',
+          502
+        );
+      }
+      const failure = {
+        qid: question.id,
+        question_text: question.question_text,
+        question_type: question.question_type,
+        value: String(a.value ?? ''),
+      };
+      validationFailures.push(failure);
+      logger.warn(
+        `[AI REVIEWER] question_id=${failure.qid} (${failure.question_type}) value ${JSON.stringify(failure.value)} ` +
+        `did not match any configured option for "${failure.question_text}" - skipping AI answer; ` +
+        `the human reviewer will complete this question.`
       );
+      continue;
     }
     out.push({
       question_id: question.id,
@@ -3852,9 +4016,16 @@ function mapClaudeOutputToAnswers(parsed: any, form: FormForPrompt): ClaudeOutpu
   // Every gradeable question must have an answer. TEXT questions are
   // always human-only (except the auto-managed AI Reviewer Feedback,
   // filled by the caller); INFO_BLOCK is non-gradeable display content.
+  const failedQids = new Set(validationFailures.map((f) => f.qid));
   for (const q of form.questions) {
     if (q.question_text.trim() === AI_REVIEWER_FEEDBACK_QUESTION_TEXT) continue;
     if (q.question_type === 'INFO_BLOCK' || q.question_type === 'TEXT' || q.question_type === 'SUB_CATEGORY') continue;
+    // ROLLUP rows are intentionally not in the prompt; a model correctly
+    // following the spec will not answer them, so do not throw here.
+    if (q.role === 'ROLLUP') continue;
+    // Validation-failed questions were intentionally skipped above; they
+    // surface as self-consistency warnings instead.
+    if (failedQids.has(q.id)) continue;
     if (!answeredIds.has(q.id)) {
       throw new AIReviewerServiceError(
         `Claude did not answer question_id=${q.id} (${q.question_text}).`,
@@ -3891,6 +4062,22 @@ function mapClaudeOutputToAnswers(parsed: any, form: FormForPrompt): ClaudeOutpu
     );
   }
 
+  // Surface AI contract violations on author-defined option spaces
+  // (RADIO / MULTI_SELECT / SCALE). These were silently dropped from
+  // `out` above instead of 502'ing the whole review; routing them here
+  // lets the UI show the reviewer exactly which questions to answer
+  // manually. The text is reviewer-facing - it appears in the warnings
+  // panel on the submission, so phrase it as actionable guidance, not
+  // a stack trace.
+  if (validationFailures.length > 0) {
+    selfConsistencyWarnings.push(
+      ...validationFailures.map(
+        (f) =>
+          `AI did not return a valid ${f.question_type} value for q${f.qid} ("${f.question_text}") - returned ${JSON.stringify(f.value)}; please answer manually.`
+      )
+    );
+  }
+
   // Tier-2 (Phase F) evidence-floor enforcement: the synthesis prompt
   // tells the model to prefer "no" when the evidence_quote is empty for
   // a yes verdict, but the model often ignores that rule in practice
@@ -3916,6 +4103,18 @@ function mapClaudeOutputToAnswers(parsed: any, form: FormForPrompt): ClaudeOutpu
   return {
     answers: out,
     narrative: typeof parsed.narrative === 'string' ? parsed.narrative : '',
+    categoryNotes: Array.isArray(parsed.category_notes)
+      ? parsed.category_notes
+          .filter(
+            (n: any) =>
+              n &&
+              typeof n.category === 'string' &&
+              typeof n.notes === 'string' &&
+              n.category.trim().length > 0 &&
+              n.notes.trim().length > 0
+          )
+          .map((n: any) => ({ category: String(n.category).trim(), notes: String(n.notes).trim() }))
+      : [],
     kbCitations: Array.isArray(parsed.kb_citations)
       ? parsed.kb_citations
           .filter((c: any) => c && Number.isInteger(c.id))
@@ -3949,7 +4148,8 @@ const PLAYBOOK_STATUSES: ReadonlySet<AiPlaybookStep['status']> = new Set([
  * When the model breaks that invariant, we flip the row to `not_applicable`
  * — by far the most common correct status when evidence is absent because
  * the issue resolved earlier in the troubleshooting sequence (see the
- * RESOLUTION-STOP RULE in `prompts/ai-reviewer/system.v3.md`). Reviewers
+ * RESOLUTION-STOP RULE in the universal Base prompt, `ai_base_prompt`
+ * row keyed `base.v1`). Reviewers
  * can edit the verdict if `missing` was actually intended; we'd rather
  * default to "the agent legitimately stopped" than surface a phantom gap.
  */
@@ -4034,17 +4234,17 @@ function detectSelfConsistencyWarnings(
  * push a self-consistency warning so the orchestrator's verification
  * trigger fires for that case.
  *
- * Why code, not prompt: the synthesis prompt has carried "AI graders
- * are biased toward yes — when the evidence_quote is empty for a yes
- * verdict, prefer no" since system.v3 / synthesis.v1, but the model
- * routinely violates it (this is the single biggest source of
- * overconfident "yes" answers we saw on closed cases). Moving the
- * rule into post-parse code makes it unconditional.
+ * Why code, not prompt: the universal Base prompt has long carried
+ * "AI graders are biased toward yes — when the evidence_quote is empty
+ * for a yes verdict, prefer no", but the model routinely violates it
+ * (this is the single biggest source of overconfident "yes" answers
+ * we saw on closed cases). Moving the rule into post-parse code makes
+ * it unconditional.
  *
  * Negative verdicts (NO on YES_NO, score-0 options on RADIO/MULTI_SELECT,
  * SCALE === 0) are intentionally left alone — an empty-evidence "no" is
- * the documented absent-evidence pattern (see synthesis.v1.md "Notes:
- * Incomplete" guidance), so capping it would be wrong.
+ * the documented absent-evidence pattern in the Base prompt's
+ * "Notes: Incomplete" guidance, so capping it would be wrong.
  *
  * MUTATES `answers` in place — same pattern as existing `parsePlaybookSteps`
  * which auto-corrects rows. Returns the per-answer warnings so the
@@ -4571,13 +4771,28 @@ function validateAnswerForQuestion(value: unknown, question: FormForPrompt['ques
       return Number.isFinite(n) ? String(n) : null;
     }
     case 'RADIO': {
-      const opt = question.radio_options.find((o) => o.value === s || o.text === s);
+      // Strict contract: the value MUST be one of the form's defined
+      // options. Accept either option_value or option_text, case-
+      // insensitively (pure format normalisation, not inference).
+      // Authors often use opaque values like "1"/"2" with meaningful
+      // labels ("Inbound"/"Outbound"); the model may return either
+      // form. Always normalise back to option_value on persist.
+      // On miss, return null -> graceful skip + reviewer warning in
+      // mapClaudeOutputToAnswers. No heuristic inference.
+      const needle = s.toLowerCase();
+      const opt = question.radio_options.find(
+        (o) => o.value.toLowerCase() === needle || (o.text ?? '').toLowerCase() === needle
+      );
       return opt ? opt.value : null;
     }
     case 'MULTI_SELECT': {
-      const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
+      const parts = s.split(',').map((p) => p.trim().toLowerCase()).filter(Boolean);
       const matched = parts
-        .map((p) => question.radio_options.find((o) => o.value === p || o.text === p)?.value)
+        .map((p) =>
+          question.radio_options.find(
+            (o) => o.value.toLowerCase() === p || (o.text ?? '').toLowerCase() === p
+          )?.value
+        )
         .filter((v): v is string => !!v);
       return matched.length > 0 ? matched.join(',') : null;
     }
@@ -4587,101 +4802,159 @@ function validateAnswerForQuestion(value: unknown, question: FormForPrompt['ques
 }
 
 /**
- * Compose the AI Reviewer Feedback free-text. Output is HTML so the
- * RichTextDisplay component renders KB references as clickable links
- * straight to the BookStack page (per reviewer ask 2026-05: "make the
- * links in the notes a hyperlink so we can click to the KB page").
+ * Linkify in-text mentions of any cited KB page name. Used by both the
+ * per-category notes renderer and the bottom AI Reviewer Feedback
+ * composer so KB references render as clickable links straight to the
+ * BookStack page, regardless of which answer they land in.
  *
- * Strategy:
- *   1. Parse the narrative into bullet lines. The prompt instructs the
- *      model to emit one `Label: verdict` line per audit-chain step
- *      (Description, Subclass, Steps followed, Notes, Resolution,
- *      Closure) plus optional cross-cutting findings. We render each
- *      line as `<li><strong>Label:</strong> …verdict…</li>` so the
- *      reviewer sees a proper bulleted checklist instead of a wall of
- *      `<br>`-joined text. Lines without a recognisable `Label:` prefix
- *      become plain `<li>` items so we never lose content.
- *   2. Linkify in-narrative mentions of any cited KB page name. We
- *      match the page name in quotes (the prompt instructs the model to
- *      cite "by name" — e.g. *(per "Ticket Handling Process")*) and
- *      replace just the quoted name with an <a> tag. Longest names
- *      first so "Ticket Handling Process" wins over a substring like
- *      "Process".
- *   3. Footer "Knowledge Base Citations:" list also rendered as
- *      <a>-tag bullets so reviewers always have a clickable index even
- *      if the model forgets to mention a page in the narrative.
+ * Matches the page name in quotes (the prompt instructs the model to
+ * cite "by name" — e.g. *(per "Ticket Handling Process")*) and replaces
+ * just the quoted name with an <a> tag. Longest names first so
+ * "Ticket Handling Process" wins over a substring like "Process".
  *
- * Escaping: every model-supplied string (narrative + page name + url)
- * goes through escapeHtml() before assembly. The downstream renderer
- * (RichTextDisplay) also runs DOMPurify, so this is belt-and-suspenders.
+ * Input MUST already be HTML-escaped — this function only rewrites
+ * quoted name spans; it does not escape anything itself.
  */
-function composeFeedback(parts: {
-  narrative: string;
-  kbCitations: { id: number; name: string; url: string }[];
-}): string {
-  const cites = parts.kbCitations.filter((c) => c.name && c.url);
-  const narrativeText = (parts.narrative ?? '').trim();
-
-  // Pre-build the citation linkifier so we can apply it to each parsed
-  // bullet's verdict text.
+function buildKbLinkifier(
+  kbCitations: { id: number; name: string; url: string }[]
+): (htmlEscaped: string) => string {
+  const cites = kbCitations.filter((c) => c.name && c.url);
   const sortedByLen = [...cites].sort((a, b) => b.name.length - a.name.length);
-  const linkifyKb = (htmlEscaped: string): string => {
+  return (htmlEscaped: string): string => {
     let out = htmlEscaped;
     for (const c of sortedByLen) {
       const safeName = escapeHtml(c.name);
       const safeUrl = escapeHtml(c.url);
       const anchor = `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeName}</a>`;
       const escapedForRegex = safeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Match quoted name (straight or curly quotes) — the dominant form
-      // is `(per "Name")` but be lenient.
-      const re = new RegExp(`([\"'\u2018\u2019\u201C\u201D])${escapedForRegex}\\1`, 'g');
-      out = out.replace(re, (_m, q: string) => `${q}${anchor}${q}`);
+      // Match the quoted name in one of four ways:
+      //  - Curly-quote pair  (… "Name" …, … 'Name' …)
+      //  - HTML-escaped pair (&quot;Name&quot;) — the input is already
+      //    escapeHtml'd in this pipeline, so straight ASCII quotes
+      //    become &quot; before this regex runs. Matching the escape
+      //    sequence lets KB citation linkification work end-to-end.
+      const re = new RegExp(
+        `(?:([\u2018\u2019\u201C\u201D])${escapedForRegex}\\1|(&quot;)${escapedForRegex}(&quot;))`,
+        'g'
+      );
+      out = out.replace(re, (_m, q1: string | undefined, qOpen: string | undefined, qClose: string | undefined) => {
+        if (q1) return `${q1}${anchor}${q1}`;
+        return `${qOpen}${anchor}${qClose}`;
+      });
     }
     return out;
   };
+}
 
-  // Recognise lines like `Steps followed: incomplete — switch-to-internet…`.
-  // Label = letters/spaces/hyphens followed by a colon + space. We accept
-  // any label the model emits (not just the canonical six) so future
-  // additions to the audit chain don't fall through to plain-bullet.
-  const labelRe = /^([A-Za-z][A-Za-z \-/&]{1,40}):\s+(.+)$/;
+/**
+ * Route the AI's `category_notes[]` to the correct per-category
+ * `Feedback — <Category>` TEXT question on the form (when one exists).
+ * Returns:
+ *   - `perCategory`: Map<question_id, html> for each note we matched to
+ *     a per-category Feedback TEXT question. The HTML is prefixed with
+ *     "AI Review Notes — " so the human reviewer immediately recognises
+ *     AI-authored content (matches the AI_REVIEW_NOTES_PREFIX constant
+ *     in MySQLFormRepository).
+ *   - `unmatched`: notes for categories that have no Feedback TEXT
+ *     question. The bottom AI Reviewer Feedback composer renders these
+ *     so no AI commentary is silently dropped on the floor.
+ *
+ * Matching is by (a) `category_name` equality (case-insensitive,
+ * whitespace-trimmed) and (b) a TEXT question on that category whose
+ * `question_text` starts with the `CATEGORY_FEEDBACK_TEXT_PREFIX_RE`
+ * pattern (em-dash or hyphen tolerated). This is purely a naming
+ * convention today — there is no `is_category_feedback` column on
+ * `form_questions` — so the regex stays narrow on purpose. If the user
+ * adds a schema flag later, swap the matching predicate without
+ * changing the surrounding wiring.
+ */
+function composeCategoryFeedback(
+  categoryNotes: { category: string; notes: string }[],
+  form: FormForPrompt,
+  kbCitations: { id: number; name: string; url: string }[]
+): {
+  perCategory: Map<number, string>;
+  unmatched: { category: string; notes: string }[];
+} {
+  const perCategory = new Map<number, string>();
+  const unmatched: { category: string; notes: string }[] = [];
+  const linkifyKb = buildKbLinkifier(kbCitations);
 
-  const segments: string[] = [];
-
-  if (narrativeText) {
-    const rawLines = narrativeText
-      .split(/\r?\n+/)
-      .map((l) => l.replace(/^\s*[-*•]\s+/, '').trim()) // strip stray markdown bullets
-      .filter((l) => l.length > 0);
-
-    const items: string[] = [];
-    for (const line of rawLines) {
-      const m = labelRe.exec(line);
-      if (m) {
-        const label = escapeHtml(m[1].trim());
-        const verdict = linkifyKb(escapeHtml(m[2].trim()));
-        items.push(`<li><strong>${label}:</strong> ${verdict}</li>`);
-      } else {
-        items.push(`<li>${linkifyKb(escapeHtml(line))}</li>`);
-      }
-    }
-
-    if (items.length > 0) {
-      segments.push(`<ul>${items.join('')}</ul>`);
-    }
+  // Pre-index TEXT feedback questions by lower-cased category_name. A
+  // category can only have ONE feedback sink per form by convention —
+  // if the form somehow has two we take the first sort-order match
+  // (form.questions is already sorted by category sort_order then
+  // question sort_order).
+  const sinkByCategory = new Map<string, number>();
+  for (const q of form.questions) {
+    if ((q.question_type ?? '').toUpperCase() !== 'TEXT') continue;
+    if (!CATEGORY_FEEDBACK_TEXT_PREFIX_RE.test(q.question_text ?? '')) continue;
+    const key = (q.category_name ?? '').trim().toLowerCase();
+    if (!key || sinkByCategory.has(key)) continue;
+    sinkByCategory.set(key, q.id);
   }
 
-  if (segments.length === 0) {
-    // Safety net — see Phase 2026-05 reviewer ask: "If it doesn't return
-    // anything, instead of showing blank, we should have a note about the
-    // AI not returning a narrative referred to Advisory Observations."
-    // This fires when the model emits an empty/missing `narrative` field
-    // despite the prompt requiring one. Without this, reviewers see only
-    // the citations list (or nothing) and assume the AI ran broken.
+  for (const note of categoryNotes) {
+    const key = note.category.trim().toLowerCase();
+    const qid = sinkByCategory.get(key);
+    if (qid == null) {
+      unmatched.push(note);
+      continue;
+    }
+    const safeNotes = linkifyKb(escapeHtml(note.notes));
+    // Plain paragraph layout — the per-category Feedback TEXT field is
+    // small and reviewer-facing, so we avoid a heavy `<ul>` even when
+    // the model emits multiple sentences. Newlines in the notes become
+    // soft <br/>s so multi-sentence notes still render with breaks.
+    const body = safeNotes.split(/\r?\n+/).join('<br/>');
+    perCategory.set(qid, `<p><strong>AI Review Notes</strong> — ${body}</p>`);
+  }
+
+  return { perCategory, unmatched };
+}
+
+/**
+ * Compose the bottom `AI Reviewer Feedback` HTML. Carries ONLY:
+ *  - per-category notes whose category lacks a `Feedback — <Category>`
+ *    TEXT question (so AI commentary never silently disappears).
+ *  - the Knowledge Base Citations footer (cross-cutting clickable
+ *    index; not "notes" per the 2026-05 reviewer ask "no other notes
+ *    in the AI reviewer feedback at the bottom for now").
+ *
+ * The cross-cutting flat narrative the model emits in the text block
+ * (Faithfulness / PII / Tone / Resolution one-liners) is intentionally
+ * NOT rendered here — per the same ask. It remains accessible via the
+ * call-log raw response for debugging; the visible audit surface lives
+ * inside the per-category Feedback fields plus this fallback box.
+ *
+ * Escaping: every model-supplied string goes through escapeHtml()
+ * before assembly. The downstream renderer (RichTextDisplay) also runs
+ * DOMPurify, so this is belt-and-suspenders.
+ */
+function composeBottomFeedback(parts: {
+  unmatchedCategoryNotes: { category: string; notes: string }[];
+  kbCitations: { id: number; name: string; url: string }[];
+}): string {
+  const cites = parts.kbCitations.filter((c) => c.name && c.url);
+  const segments: string[] = [];
+  const linkifyKb = buildKbLinkifier(cites);
+
+  for (const note of parts.unmatchedCategoryNotes) {
+    const safeCategory = escapeHtml(note.category);
+    const safeNotes = linkifyKb(escapeHtml(note.notes)).split(/\r?\n+/).join('<br/>');
     segments.push(
-      '<p><em>The AI Reviewer did not return a narrative for this submission. ' +
-        'See the Advisory Observations panel and the cited Knowledge Base pages below ' +
-        'for context, or re-run the AI Reviewer against this ticket to try again.</em></p>'
+      `<p><strong>AI Review Notes — ${safeCategory}</strong><br/>${safeNotes}</p>`
+    );
+  }
+
+  if (segments.length === 0 && cites.length === 0) {
+    // Empty-state safety net — the AI returned nothing routable to
+    // this box. Tell the reviewer that explicitly rather than render a
+    // blank field.
+    segments.push(
+      '<p><em>The AI Reviewer did not return any cross-category commentary or KB citations ' +
+        'for this submission. See the per-category Feedback fields above and the Advisory ' +
+        'Observations panel for the AI\'s per-category notes.</em></p>'
     );
   }
 
@@ -4730,5 +5003,7 @@ export const _internal = {
   parseDraftAnswers,
   extractNarrative,
   runReconciliationPass,
+  composeCategoryFeedback,
+  composeBottomFeedback,
 };
 

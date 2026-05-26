@@ -14,6 +14,7 @@ import {
 } from '../models';
 import { MySQLSubmissionRepository } from '../repositories/MySQLSubmissionRepository';
 import { calculateFormScoreBySubmissionId, recalculateScores, getScoreBreakdown } from '../utils/scoringUtil';
+import { deriveRollupAnswers, type RollupQuestionShape, type RollupAnswerShape } from '../utils/rollupEngine';
 import prisma from '../config/prisma';
 import logger from '../config/logger';
 
@@ -84,6 +85,141 @@ export interface ISubmissionService {
  */
 export class SubmissionService implements ISubmissionService {
   constructor(private submissionRepository: MySQLSubmissionRepository) {}
+
+  /**
+   * Runs the rollup engine on a soon-to-be-persisted submission payload and
+   * returns a NEW answers array with any role=ROLLUP questions overwritten /
+   * inserted with the engine's canonical derived value.
+   *
+   * Called from every write path (submitAudit, saveDraft,
+   * promoteDraftToSubmitted) BEFORE handing the answers to the repository,
+   * so the row that lands in `submission_answers` for a ROLLUP question is
+   * always the engine's value rather than whatever the AI / human may have
+   * tried to set. This keeps reads, exports, and the scoring re-loader in
+   * lockstep — see backend/src/utils/scoringUtil.ts which also re-runs the
+   * engine at score time as a safety net.
+   *
+   * Returns the input array unchanged when the form has no ROLLUP questions
+   * so the common case stays a no-op.
+   */
+  private async applyRollupEngineToAnswers(
+    form_id: number,
+    answers: CreateSubmissionAnswerDTO[],
+  ): Promise<CreateSubmissionAnswerDTO[]> {
+    if (!form_id || !Array.isArray(answers)) return answers;
+
+    const categories = await prisma.formCategory.findMany({
+      where: { form_id },
+      select: { id: true },
+    });
+    if (categories.length === 0) return answers;
+    const categoryIds = categories.map((c) => c.id);
+
+    const questionRows = await prisma.formQuestion.findMany({
+      where: { category_id: { in: categoryIds } },
+      select: {
+        id: true,
+        is_na_allowed: true,
+        role: true,
+        rollup_rule: true,
+        rollup_member_question_ids: true,
+      },
+    });
+
+    const hasAnyRollup = questionRows.some((q) => (q as any).role === 'ROLLUP');
+    if (!hasAnyRollup) return answers;
+
+    const conditionRows = await prisma.formQuestionCondition.findMany({
+      where: { question_id: { in: questionRows.map((q) => q.id) } },
+      select: {
+        question_id: true,
+        target_question_id: true,
+        condition_type: true,
+        target_value: true,
+        group_id: true,
+      },
+    });
+
+    const answersMap: Record<number, RollupAnswerShape> = {};
+    for (const a of answers) {
+      const qid = Number(a.question_id);
+      if (!Number.isFinite(qid)) continue;
+      answersMap[qid] = { question_id: qid, answer: a.answer ?? '', notes: a.notes ?? undefined };
+    }
+
+    // Compact visibility logic mirroring scoringUtil.buildVisibilityMap.
+    // We could share that function but it lives in scoringUtil with private
+    // scope; inlining the minimum here keeps the dependency arrow one-way
+    // (SubmissionService -> rollupEngine, not -> scoringUtil internals).
+    const NA = new Set(['na', 'n/a']);
+    const YES_LIKE = new Set(['yes', 'true', '1', 'on']);
+    const NO_LIKE = new Set(['no', 'false', '0', 'off']);
+    const condsByQ: Record<number, typeof conditionRows> = {};
+    for (const c of conditionRows) {
+      if (!condsByQ[c.question_id]) condsByQ[c.question_id] = [];
+      condsByQ[c.question_id].push(c);
+    }
+    const visibility: Record<number, boolean> = {};
+    for (const q of questionRows) {
+      const conds = condsByQ[q.id];
+      if (!conds || conds.length === 0) { visibility[q.id] = true; continue; }
+      const groups: Record<number, typeof conds> = {};
+      for (const c of conds) {
+        const g = c.group_id || 0;
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(c);
+      }
+      const anyGroupTrue = Object.values(groups).some((g) =>
+        g.every((c) => {
+          const a = answersMap[c.target_question_id];
+          if (!a) return c.condition_type === 'NOT_EXISTS';
+          const aLower = String(a.answer || '').trim().toLowerCase();
+          const vLower = String(c.target_value || '').trim().toLowerCase();
+          switch (c.condition_type) {
+            case 'EQUALS': {
+              if (YES_LIKE.has(aLower) && YES_LIKE.has(vLower)) return true;
+              if (NO_LIKE.has(aLower) && NO_LIKE.has(vLower)) return true;
+              if (NA.has(aLower) && NA.has(vLower)) return true;
+              return aLower === vLower;
+            }
+            case 'NOT_EQUALS': return aLower !== vLower;
+            case 'EXISTS': return aLower !== '';
+            case 'NOT_EXISTS': return aLower === '';
+            default: return false;
+          }
+        }),
+      );
+      visibility[q.id] = anyGroupTrue;
+    }
+
+    const shapes: RollupQuestionShape[] = questionRows.map((q) => ({
+      id: q.id,
+      role: (q as any).role ?? 'DETAIL',
+      rollup_rule: (q as any).rollup_rule ?? null,
+      rollup_member_question_ids: Array.isArray((q as any).rollup_member_question_ids)
+        ? ((q as any).rollup_member_question_ids as unknown[])
+            .map((v) => (typeof v === 'number' ? v : Number(v)))
+            .filter((n) => Number.isFinite(n) && n > 0)
+        : null,
+      is_na_allowed: !!q.is_na_allowed,
+    }));
+
+    const derived = deriveRollupAnswers(shapes, answersMap, visibility);
+    if (derived.notes.length === 0) return answers;
+
+    const byId = new Map<number, CreateSubmissionAnswerDTO>();
+    for (const a of answers) byId.set(Number(a.question_id), a);
+    for (const note of derived.notes) {
+      const newAns = derived.answers[note.questionId];
+      if (!newAns) continue;
+      byId.set(note.questionId, {
+        question_id: note.questionId,
+        answer: newAns.answer,
+        notes: newAns.notes ?? note.reason,
+      });
+    }
+    return Array.from(byId.values());
+  }
 
   /**
    * Get assigned audits for QA Analyst
@@ -201,9 +337,17 @@ export class SubmissionService implements ISubmissionService {
       // Validate submission data
       await this.validateSubmissionData(submissionData);
 
+      // Inject canonical rollup answers BEFORE persistence so role=ROLLUP
+      // questions land in submission_answers with the engine's value.
+      const answersWithRollups = await this.applyRollupEngineToAnswers(
+        submissionData.form_id,
+        submissionData.answers ?? [],
+      );
+
       // Set submission metadata
       const normalizedSubmissionData = {
         ...submissionData,
+        answers: answersWithRollups,
         submitted_by: qa_id,
         status: 'SUBMITTED' as SubmissionStatus,
         submitted_at: new Date()
@@ -326,6 +470,17 @@ export class SubmissionService implements ISubmissionService {
       .map((c) => Number(c.call_id))
       .filter((n) => Number.isFinite(n) && n > 0);
 
+    // Promote-time rollup re-derivation: the human may have flipped a
+    // DETAIL answer that feeds a rollup, so re-run the engine on the final
+    // edits payload before persisting. Without this, the promoted row
+    // would carry the AI's pre-edit rollup value while scoring uses the
+    // new one (scoring re-derives at score time) - the DB and the score
+    // would then disagree on the rollup answer.
+    const editedAnswersWithRollups = await this.applyRollupEngineToAnswers(
+      draft.form_id,
+      edits.answers,
+    );
+
     // Replace answers + metadata + flip status atomically. We do the
     // status/submitted_by/submitted_at flip + answer-replace inline
     // rather than calling repository.updateSubmission so we can update
@@ -341,9 +496,9 @@ export class SubmissionService implements ISubmissionService {
       });
 
       await tx.submissionAnswer.deleteMany({ where: { submission_id } });
-      if (edits.answers.length > 0) {
+      if (editedAnswersWithRollups.length > 0) {
         await tx.submissionAnswer.createMany({
-          data: edits.answers.map((a) => ({
+          data: editedAnswersWithRollups.map((a) => ({
             submission_id,
             question_id: a.question_id,
             answer: a.answer ?? null,
@@ -397,9 +552,19 @@ export class SubmissionService implements ISubmissionService {
       // Validate basic submission data (less strict for drafts)
       await this.validateDraftSubmissionData(submissionData);
 
+      // Apply the rollup engine on draft saves too so the AI-staged DRAFT
+      // already shows the engine-derived value for any ROLLUP question -
+      // otherwise the human auditor would see the AI's raw guess (or
+      // blank) until promotion. Promote re-applies as a safety net.
+      const answersWithRollups = await this.applyRollupEngineToAnswers(
+        submissionData.form_id,
+        submissionData.answers ?? [],
+      );
+
       // Set draft metadata
       const normalizedSubmissionData = {
         ...submissionData,
+        answers: answersWithRollups,
         submitted_by: qa_id,
         status: 'DRAFT' as SubmissionStatus,
         submitted_at: null

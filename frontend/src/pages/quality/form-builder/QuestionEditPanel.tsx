@@ -1,6 +1,6 @@
 import React from 'react'
 import { CheckCircle2, Plus, GripVertical } from 'lucide-react'
-import type { FormQuestionCondition, RadioOption, QuestionType, ConditionType } from '@/types/form.types'
+import type { FormQuestionCondition, FormQuestionRole, FormRollupRule, RadioOption, QuestionType, ConditionType } from '@/types/form.types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +19,9 @@ export interface EditState {
   newOptText: string; newOptScore: number
   lCond: boolean; lGroups: FormQuestionCondition[][]
   lCritical: boolean
+  lRole: FormQuestionRole
+  lRollupRule: FormRollupRule
+  lRollupMembers: number[]
   err: string | null
 }
 
@@ -34,17 +37,30 @@ export interface EditActions {
   setLCond: (v: boolean) => void
   setLGroups: React.Dispatch<React.SetStateAction<FormQuestionCondition[][]>>
   setLCritical: (v: boolean) => void
+  setLRole: (v: FormQuestionRole) => void
+  setLRollupRule: (v: FormRollupRule) => void
+  setLRollupMembers: (v: number[]) => void
   setErr: (v: string | null) => void
   addOpt: () => void; saveEdit: () => void; onCancelEdit: () => void
 }
 
-export function QuestionEditPanel({ qi, state, actions, categoryQuestions }: {
+export function QuestionEditPanel({ qi, state, actions, categoryQuestions, gateIds, currentQuestionId }: {
   qi: number
   state: EditState; actions: EditActions
+  /**
+   * Questions that live in the SAME category as the one being edited.
+   * Used for both the Conditional Logic editor and the Roll-up member
+   * picker. Mirrors how ConditionEditor scopes its target list, so
+   * authors only ever pick from questions visually next to this one.
+   */
   categoryQuestions: AllQuestionRef[]
+  /** Question IDs referenced as a gate by another question's condition. */
+  gateIds: Set<number>
+  /** Numeric ID of the question being edited (so members can't include self). */
+  currentQuestionId: number | undefined
 }) {
-  const { lText, lType, lRequired, lVisible, lNa, lYes, lNo, lNaVal, lScaleMin, lScaleMax, lRadio, newOptText, newOptScore, lCond, lGroups, lCritical, err } = state
-  const { setLText, setLType, setLRequired, setLVisible, setLNa, setLYes, setLNo, setLNaVal, setLScaleMin, setLScaleMax, setLRadio, setNewOptText, setNewOptScore, setLCond, setLGroups, setLCritical, setErr, addOpt, saveEdit, onCancelEdit } = actions
+  const { lText, lType, lRequired, lVisible, lNa, lYes, lNo, lNaVal, lScaleMin, lScaleMax, lRadio, newOptText, newOptScore, lCond, lGroups, lCritical, lRole, lRollupRule, lRollupMembers, err } = state
+  const { setLText, setLType, setLRequired, setLVisible, setLNa, setLYes, setLNo, setLNaVal, setLScaleMin, setLScaleMax, setLRadio, setNewOptText, setNewOptScore, setLCond, setLGroups, setLCritical, setLRole, setLRollupRule, setLRollupMembers, setErr, addOpt, saveEdit, onCancelEdit } = actions
 
   const noPoints  = lType === 'INFO_BLOCK' || lType === 'TEXT' || lType === 'SUB_CATEGORY'
   const hasOptions = lType === 'RADIO' || lType === 'MULTI_SELECT'
@@ -100,6 +116,18 @@ export function QuestionEditPanel({ qi, state, actions, categoryQuestions }: {
         </div>
         {lCond && <ConditionEditor lGroups={lGroups} setLGroups={setLGroups} categoryQuestions={categoryQuestions} needsValue={needsValue} />}
       </div>
+
+      {lType === 'YES_NO' && (
+        <RollupSection
+          qi={qi}
+          lRole={lRole} setLRole={setLRole}
+          lRollupRule={lRollupRule} setLRollupRule={setLRollupRule}
+          lRollupMembers={lRollupMembers} setLRollupMembers={setLRollupMembers}
+          categoryQuestions={categoryQuestions}
+          gateIds={gateIds}
+          currentQuestionId={currentQuestionId}
+        />
+      )}
 
       <div className="flex flex-wrap gap-5 pt-1 border-t border-slate-100">
         <div className="flex items-center gap-2"><Switch checked={lRequired} onCheckedChange={setLRequired} /><Label className="text-xs cursor-pointer">Required</Label></div>
@@ -202,6 +230,148 @@ function OptionsList({ lType, lRadio, setLRadio, newOptText, setNewOptText, newO
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Roll-up authoring section. Only rendered for YES_NO questions because the
+ * engine produces yes/no/na answers; making a SCALE or RADIO question into
+ * a roll-up has no sensible mapping in V1.
+ */
+function RollupSection({
+  qi, lRole, setLRole, lRollupRule, setLRollupRule,
+  lRollupMembers, setLRollupMembers,
+  categoryQuestions, gateIds, currentQuestionId,
+}: {
+  qi: number
+  lRole: FormQuestionRole
+  setLRole: (v: FormQuestionRole) => void
+  lRollupRule: FormRollupRule
+  setLRollupRule: (v: FormRollupRule) => void
+  lRollupMembers: number[]
+  setLRollupMembers: (v: number[]) => void
+  /**
+   * Restricted to the SAME category as the rollup question. Matches the
+   * Conditional Logic editor's scoping rule (ConditionEditor.tsx) so
+   * authors never have to scroll through unrelated questions when
+   * picking members.
+   */
+  categoryQuestions: AllQuestionRef[]
+  gateIds: Set<number>
+  currentQuestionId: number | undefined
+}) {
+  // Same segmented-pill class set used by the audit form's YesNo / Radio
+  // questions (formRendererComponents.optionCls) so the builder feels
+  // consistent with what reviewers see when grading.
+  const pillBase = 'inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-md border transition-colors cursor-pointer select-none'
+  const pillOn   = 'bg-primary text-white border-primary'
+  const pillOff  = 'bg-white text-slate-700 border-slate-300 hover:border-primary/50'
+
+  // Suppress `lRollupRule` unused-warning. We still store it (in case we
+  // ever add additional rules) but don't expose it in the UI today.
+  void lRollupRule
+  void setLRollupRule
+
+  // Picker list - SAME category, YES_NO type, not self, not another
+  // roll-up. Conditional trigger questions ARE included so the author
+  // sees full context (helpful in complex forms) but they're rendered
+  // read-only with a "Conditional" pill instead of a checkbox so they
+  // can't be picked. Authors should pick the action the conditional
+  // controls, not the trigger itself.
+  const memberCandidates = categoryQuestions.filter((q) => {
+    if (currentQuestionId !== undefined && q.id === currentQuestionId) return false  // never self
+    if (q.role === 'ROLLUP') return false  // no nested roll-ups in V1
+    if (q.type !== 'YES_NO') return false  // SUB_CATEGORY/TEXT/INFO can't contribute
+    return true
+  })
+
+  const toggleMember = (id: number) => {
+    if (lRollupMembers.includes(id)) {
+      setLRollupMembers(lRollupMembers.filter((m) => m !== id))
+    } else {
+      setLRollupMembers([...lRollupMembers, id])
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3">
+        <Label className="text-xs font-medium text-slate-700">Question role</Label>
+        <div className="flex gap-1.5">
+          <button type="button" id={`role-detail-${qi}`}
+            className={`${pillBase} ${lRole === 'DETAIL' ? pillOn : pillOff}`}
+            onClick={() => setLRole('DETAIL')}
+            title="Standard graded question - the human or AI answers it directly.">
+            Detail
+          </button>
+          <button type="button" id={`role-rollup-${qi}`}
+            className={`${pillBase} ${lRole === 'ROLLUP' ? pillOn : pillOff}`}
+            onClick={() => setLRole('ROLLUP')}
+            title="Category summary question - the answer is computed from the sub-questions you pick below.">
+            Roll-up
+          </button>
+        </div>
+      </div>
+
+      {lRole === 'ROLLUP' && (
+        <div className="border border-primary/30 bg-primary/[0.03] rounded-lg p-3 space-y-3">
+          <div className="space-y-1.5">
+            <p className="text-[12px] font-semibold text-slate-700">How this roll-up is scored</p>
+            <ul className="text-[11px] text-slate-600 leading-relaxed list-disc pl-5 space-y-0.5">
+              <li><strong>YES</strong> if every applicable sub-question is YES (or N/A)</li>
+              <li><strong>NO</strong> if any applicable sub-question is NO</li>
+              <li><strong>N/A</strong> if no sub-questions applied to this call (e.g. all gates were NO)</li>
+            </ul>
+            <p className="text-[10px] text-slate-500 italic pt-1">
+              "Applicable" means visible &mdash; sub-questions that are hidden by their own conditional logic are skipped automatically.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">
+              Sub-questions that feed this roll-up <span className="text-slate-400">({lRollupMembers.length} selected)</span>
+            </Label>
+            <p className="text-[10px] text-slate-500">
+              Pick the scoreable Yes/No questions to include. Questions that trigger Conditional Logic are shown for context but can't be picked &mdash; choose the question that the conditional controls instead.
+            </p>
+            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-md bg-white divide-y divide-slate-100">
+              {memberCandidates.length === 0 ? (
+                <div className="px-3 py-2 text-[11px] text-slate-400 italic">
+                  No eligible Yes/No questions in this category. Add some sub-questions first, then come back to set up the roll-up.
+                </div>
+              ) : memberCandidates.map((q) => {
+                const isConditionalTrigger = gateIds.has(q.id)
+                const checked = lRollupMembers.includes(q.id)
+                if (isConditionalTrigger) {
+                  return (
+                    <div key={q.id} className="flex items-start gap-2 px-2.5 py-1.5 bg-slate-50/60">
+                      <span
+                        className="mt-0.5 inline-flex items-center justify-center h-3.5 px-1.5 rounded text-[8px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200"
+                        title="This question controls another question via Conditional Logic, so it can't be a roll-up member. Pick the question the conditional controls instead."
+                      >
+                        Conditional
+                      </span>
+                      <span className="flex-1 min-w-0 text-xs text-slate-500 italic">{q.text || '(untitled)'}</span>
+                    </div>
+                  )
+                }
+                return (
+                  <label key={q.id} className="flex items-start gap-2 px-2.5 py-1.5 hover:bg-slate-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleMember(q.id)}
+                      className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300"
+                    />
+                    <span className="flex-1 min-w-0 text-xs text-slate-700">{q.text || '(untitled)'}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

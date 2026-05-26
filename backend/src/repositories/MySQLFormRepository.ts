@@ -3,7 +3,7 @@
  */
 
 import prisma from '../config/prisma';
-import { CreateFormDTO, FormWithCategories, FormCategoryWithQuestions, FormQuestion, QuestionType, condition_type, logical_operator, MetadataFieldType, interaction_type } from '../models';
+import { CreateFormDTO, FormWithCategories, FormCategoryWithQuestions, FormQuestion, QuestionType, condition_type, logical_operator, MetadataFieldType, interaction_type, FormQuestionRole, FormRollupRule } from '../models';
 import type {
   FormInteractionType, FormQuestionType, FormMetadataFieldType,
   FormMetadataInteractionType, FormQuestionConditionType, FormQuestionLogicalOperator,
@@ -17,6 +17,23 @@ const safeParam = <T>(value: T | undefined): T | null => (value === undefined ? 
 export const AI_REVIEWER_FEEDBACK_QUESTION_TEXT = 'AI Reviewer Feedback';
 /** Canonical category name that wraps the auto-managed AI Reviewer feedback question. */
 export const AI_REVIEWER_CATEGORY_NAME = 'AI Reviewer';
+/**
+ * Regex matching the per-category Feedback TEXT question convention used
+ * across form authoring (e.g. "Feedback — Greeting / Verification"). The
+ * AI Reviewer's per-category notes are routed into the TEXT question on
+ * a category whose `question_text` starts with this prefix. We tolerate
+ * both the em-dash (canonical seed style) and the ASCII hyphen so legacy
+ * seeds and hand-typed forms both match.
+ */
+export const CATEGORY_FEEDBACK_TEXT_PREFIX_RE = /^feedback\s*[\u2014-]\s*/i;
+/**
+ * Prefix prepended to every AI-injected per-category Feedback answer so
+ * the human reviewer can see at a glance that the text was written by
+ * the AI Reviewer (versus a human auditor who edited it afterward). The
+ * frontend may also use this prefix to detect / strip AI-authored
+ * content in future iterations.
+ */
+export const AI_REVIEW_NOTES_PREFIX = 'AI Review Notes - ';
 
 /**
  * When `formData.ai_enabled` is true and the payload doesn't already include
@@ -149,6 +166,12 @@ export class MySQLFormRepository {
               na_value: safeParam(question.na_value) ?? 0,
               visible_to_csr: question.visible_to_csr === false ? false : true,
               is_critical: question.is_critical === true,
+              role: (question.role ?? 'DETAIL') as any,
+              rollup_rule: (question.rollup_rule ?? null) as any,
+              // rollup_member_question_ids is set in a second pass below
+              // because the members may reference questions that have not
+              // yet been created in this transaction (rollups commonly
+              // sit at sort_order 0 and reference siblings at 1..N).
             },
           });
 
@@ -194,6 +217,28 @@ export class MySQLFormRepository {
         }
       }
 
+      // Second pass: resolve rollup member IDs now that every question
+      // in this form has been created and has a known new ID in
+      // questionIdMap. See resolveRollupMemberIds() for the rationale.
+      for (let ci = 0; ci < formData.categories.length; ci++) {
+        const category = formData.categories[ci];
+        for (let qi = 0; qi < category.questions.length; qi++) {
+          const question = category.questions[qi];
+          if (question.role !== 'ROLLUP') continue;
+          const newQid = questionIdMap.get(`${ci}-${qi}`);
+          if (newQid === undefined) continue;
+          const resolved = this.resolveRollupMemberIds(
+            question.rollup_member_question_ids,
+            formData,
+            questionIdMap,
+          );
+          await tx.formQuestion.update({
+            where: { id: newQid },
+            data: { rollup_member_question_ids: resolved as any },
+          });
+        }
+      }
+
       if (formData.metadata_fields && formData.metadata_fields.length > 0) {
         let spacerCount = 0;
         for (const field of formData.metadata_fields) {
@@ -220,6 +265,65 @@ export class MySQLFormRepository {
 
     logger.info(`✅ Form created with ID: ${form_id}`);
     return form_id;
+  }
+
+  /**
+   * Coerces the JSON column value back into `number[] | null`. Prisma
+   * surfaces JSON columns as `Prisma.JsonValue` which TS can't narrow on
+   * its own; we accept either `null`, an array of numbers, or any other
+   * shape (silently dropped). Used only on the read path.
+   */
+  private normalizeRollupMembers(value: unknown): number[] | null {
+    if (value == null) return null;
+    if (!Array.isArray(value)) return null;
+    const ids = value
+      .map((v) => (typeof v === 'number' ? v : Number(v)))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    return ids.length > 0 ? ids : null;
+  }
+
+  /**
+   * Translates the client-supplied `rollup_member_question_ids` (which can
+   * hold either negative temp IDs for brand-new questions or old positive
+   * IDs from a prior save) into the canonical new IDs created in this
+   * transaction. Runs as a SECOND pass after every question in the form
+   * has been created, because rollups commonly reference siblings that
+   * sit later in the same category and whose new IDs do not yet exist
+   * during the first create pass.
+   *
+   * Returns `null` when the input is empty or every member fails to
+   * resolve, so the column stores NULL instead of `[]` (keeps the engine's
+   * "no members configured" branch consistent).
+   */
+  private resolveRollupMemberIds(
+    memberIds: number[] | null | undefined,
+    formData: CreateFormDTO,
+    questionIdMap: Map<string, number>,
+  ): number[] | null {
+    if (!memberIds || memberIds.length === 0) return null;
+    const resolved: number[] = [];
+    for (const oldId of memberIds) {
+      let newId: number | undefined;
+      for (let tci = 0; tci < formData.categories.length; tci++) {
+        const targetCategory = formData.categories[tci];
+        for (let tqi = 0; tqi < targetCategory.questions.length; tqi++) {
+          const tq = targetCategory.questions[tqi] as any;
+          if (tq.id === oldId) {
+            newId = questionIdMap.get(`${tci}-${tqi}`);
+            break;
+          }
+        }
+        if (newId !== undefined) break;
+      }
+      if (newId === undefined && oldId > 0) {
+        // Already a positive ID and not found in the formData payload -
+        // the client may have sent the new ID directly (e.g. on a re-save
+        // after a previous round-trip). Trust it as-is.
+        newId = oldId;
+      }
+      if (newId !== undefined && newId > 0) resolved.push(newId);
+    }
+    return resolved.length > 0 ? resolved : null;
   }
 
   private resolveTargetQuestionId(
@@ -338,6 +442,9 @@ export class MySQLFormRepository {
           na_value: q.na_value,
           visible_to_csr: q.visible_to_csr,
           is_critical: (q as any).is_critical ?? false,
+          role: ((q as any).role ?? 'DETAIL') as FormQuestionRole,
+          rollup_rule: ((q as any).rollup_rule ?? null) as FormRollupRule | null,
+          rollup_member_question_ids: this.normalizeRollupMembers((q as any).rollup_member_question_ids),
           conditions: q.conditions_source.map((c) => ({
             id: c.id,
             question_id: c.question_id,
@@ -563,6 +670,11 @@ export class MySQLFormRepository {
               na_value: safeParam(question.na_value) ?? 0,
               visible_to_csr: question.visible_to_csr === false ? false : true,
               is_critical: question.is_critical === true,
+              role: (question.role ?? 'DETAIL') as any,
+              rollup_rule: (question.rollup_rule ?? null) as any,
+              // rollup_member_question_ids is set in a second pass below
+              // because members may reference questions whose new IDs do
+              // not exist yet at this point in the transaction.
             },
           });
 
@@ -607,6 +719,28 @@ export class MySQLFormRepository {
               }
             }
           }
+        }
+      }
+
+      // Second pass: resolve rollup member IDs now that every question
+      // in this new form version has been created. Same rationale as
+      // createForm; see resolveRollupMemberIds().
+      for (let ci = 0; ci < formData.categories.length; ci++) {
+        const category = formData.categories[ci];
+        for (let qi = 0; qi < category.questions.length; qi++) {
+          const question = category.questions[qi];
+          if (question.role !== 'ROLLUP') continue;
+          const newQid = questionIdMap.get(`${ci}-${qi}`);
+          if (newQid === undefined) continue;
+          const resolved = this.resolveRollupMemberIds(
+            question.rollup_member_question_ids,
+            formData,
+            questionIdMap,
+          );
+          await tx.formQuestion.update({
+            where: { id: newQid },
+            data: { rollup_member_question_ids: resolved as any },
+          });
         }
       }
 

@@ -33,7 +33,7 @@ function makeNote(
   return {
     id,
     note: body,
-    created_on: new Date(createdOnIso),
+    created_on: createdOnIso,
     created_by: 7,
     created_by_name: 'Agent Beth',
     status_after: null,

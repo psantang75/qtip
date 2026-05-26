@@ -19,6 +19,12 @@ export {
   getMaxPossibleScore
 } from './scoringEngine';
 
+// Roll-up answer derivation — pure transform that runs between
+// processConditionalLogic and calculateFormScore. Mirrors
+// backend/src/utils/rollupEngine.ts.
+export { deriveRollupAnswers } from './rollupEngine';
+export type { RollupNote, DeriveResult } from './rollupEngine';
+
 // Form building and structure
 export {
   createEmptyForm,

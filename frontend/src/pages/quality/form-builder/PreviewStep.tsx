@@ -10,6 +10,7 @@ import {
   FormRenderer,
   type FormRenderData,
   getQuestionScore,
+  deriveRollupAnswers,
 } from '@/utils/forms'
 import FormMetadataDisplay from '@/components/common/FormMetadataDisplay'
 import { ScoreBreakdownTables } from '@/components/quality/ScoreBreakdownTables'
@@ -63,9 +64,13 @@ export function PreviewStep({ form, onBack, onSave, saving }: PreviewStepProps) 
   useEffect(() => {
     const strings: Record<number, string> = {}
     const vis = processConditionalLogic(previewForm, strings)
-    const { totalScore, categoryScores } = calculateFormScore(previewForm, {})
+    // Even with an empty answer map we still run the engine so that
+    // role=ROLLUP questions render as "Auto-N/A" (or YES) instead of
+    // sitting blank in the preview.
+    const derived = deriveRollupAnswers(previewForm, {}, vis).answers
+    const { totalScore, categoryScores } = calculateFormScore(previewForm, derived)
     setVisibilityMap(vis)
-    setFormRenderData(prepareFormForRender(previewForm, {}, vis, categoryScores, totalScore))
+    setFormRenderData(prepareFormForRender(previewForm, derived, vis, categoryScores, totalScore))
   }, [previewForm])
 
   useEffect(() => {
@@ -73,9 +78,10 @@ export function PreviewStep({ form, onBack, onSave, saving }: PreviewStepProps) 
     const strings: Record<number, string> = {}
     Object.entries(answers).forEach(([id, a]) => { strings[Number(id)] = a.answer || '' })
     const vis = processConditionalLogic(previewForm, strings)
-    const { totalScore, categoryScores } = calculateFormScore(previewForm, answers)
+    const derived = deriveRollupAnswers(previewForm, answers, vis).answers
+    const { totalScore, categoryScores } = calculateFormScore(previewForm, derived)
     setVisibilityMap(vis)
-    setFormRenderData(prepareFormForRender(previewForm, answers, vis, categoryScores, totalScore))
+    setFormRenderData(prepareFormForRender(previewForm, derived, vis, categoryScores, totalScore))
   }, [answers, previewForm]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAnswerChange = useCallback((questionId: number, value: string, _type: string) => {

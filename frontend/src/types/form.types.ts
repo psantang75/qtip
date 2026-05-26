@@ -21,6 +21,25 @@ export type MetadataFieldType = 'TEXT' | 'DROPDOWN' | 'DATE' | 'AUTO' | 'SPACER'
 export type LogicalOperator = 'AND' | 'OR';
 
 /**
+ * Question authoring role used by the form builder + rollupEngine.
+ * DETAIL (default) is a normal graded question. ROLLUP means the answer is
+ * computed from `rollup_member_question_ids` via `rollup_rule` (see
+ * frontend/src/utils/forms/rollupEngine.ts) - the human / AI does not grade
+ * it directly. Scoring engine treats both roles identically once an answer
+ * is present.
+ */
+export type FormQuestionRole = 'DETAIL' | 'ROLLUP';
+
+/**
+ * Aggregation rule for ROLLUP questions. Currently only ANY_NO_TO_NO is
+ * implemented; the type is open for future rules without a migration.
+ *   ANY_NO_TO_NO -- any visible member = NO -> NO; all visible members NA
+ *                   or zero visible members -> NA (if is_na_allowed) else
+ *                   YES; otherwise YES.
+ */
+export type FormRollupRule = 'ANY_NO_TO_NO';
+
+/**
  * Radio option interface - matches radio_options table exactly
  */
 export interface RadioOption {
@@ -93,6 +112,16 @@ export interface FormQuestion {
   is_required?: boolean; // UI field for form builder
   visible_to_csr?: boolean; // Whether this question is visible to CSR users (default: true)
   is_critical?: boolean; // When true, a NO answer triggers the form's critical-fail cap
+
+  /**
+   * Declarative roll-up authoring. See rollupEngine.ts. `role` defaults
+   * to 'DETAIL' so omitting the field means "behave exactly like every
+   * existing question". When set to 'ROLLUP', the question's answer is
+   * computed from `rollup_member_question_ids` via `rollup_rule`.
+   */
+  role?: FormQuestionRole;
+  rollup_rule?: FormRollupRule | null;
+  rollup_member_question_ids?: number[] | null;
 }
 
 /**
@@ -196,7 +225,7 @@ export interface BaseForm {
   /**
    * Layer 1 of the AI Reviewer's 4-layer system prompt: which universal
    * base this form uses. NULL means "inherit the seeded default for the
-   * requested prompt_kind" (system.v3 today). Edited from the Universal
+   * requested prompt_kind" (`base.v1` today). Edited from the Universal
    * Base card on the AI Reviewer Form Detail page.
    */
   ai_base_prompt_id?: number | null;

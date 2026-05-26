@@ -29,6 +29,7 @@ function buildAllQuestions(form: Form): AllQuestionRef[] {
       scaleMax: q.scale_max ?? 5,
       naAllowed: q.is_na_allowed ?? false,
       radioOptions: q.radio_options ?? [],
+      role: q.role ?? 'DETAIL',
     }))
   )
 }
@@ -45,7 +46,31 @@ function buildCategoryQuestions(form: Form, catIdx: number): AllQuestionRef[] {
     scaleMax: q.scale_max ?? 5,
     naAllowed: q.is_na_allowed ?? false,
     radioOptions: q.radio_options ?? [],
+    role: q.role ?? 'DETAIL',
   }))
+}
+
+/**
+ * Set of question IDs that are referenced as Conditional Logic triggers
+ * (i.e. another question's conditions point at them via
+ * target_question_id, or the legacy conditional_question_id field). Used
+ * by the roll-up editor to render those questions as read-only context
+ * rows in the member picker so authors pick the controlled question, not
+ * its conditional trigger. Internal variable name kept as `gateIds` for
+ * brevity; the user-facing label is "Conditional".
+ */
+function computeGateIds(questions: FormQuestion[]): Set<number> {
+  const out = new Set<number>()
+  for (const q of questions) {
+    const conds = q.conditions ?? []
+    for (const c of conds) {
+      if (c.target_question_id && c.target_question_id > 0) out.add(c.target_question_id)
+    }
+    if (!conds.length && q.conditional_question_id && q.conditional_question_id > 0) {
+      out.add(q.conditional_question_id)
+    }
+  }
+  return out
 }
 
 function computeDependentCounts(questions: FormQuestion[], allQuestions: AllQuestionRef[]): Map<number, number> {
@@ -96,6 +121,7 @@ export function QuestionsStep({ form, onChange }: { form: Form; onChange: (f: Fo
     () => computeDependentCounts(allFormQuestions, allQuestions),
     [allFormQuestions, allQuestions],
   )
+  const gateIds = useMemo(() => computeGateIds(allFormQuestions), [allFormQuestions])
 
   const conditionalChildren = useMemo(
     () => cat ? computeConditionalChildren(cat.questions, activeCatIdx, categoryQuestions) : new Set<number>(),
@@ -252,6 +278,7 @@ export function QuestionsStep({ form, onChange }: { form: Form; onChange: (f: Fo
                           form={form} onChange={onChange}
                           allQuestions={allQuestions}
                           categoryQuestions={categoryQuestions}
+                          gateIds={gateIds}
                           isEditing={expandedSet.has(qi)}
                           onToggleEdit={toggleEdit}
                           onCancelEdit={collapseOne}

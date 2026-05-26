@@ -238,30 +238,37 @@ Recap shapes that ALL qualify as YES (not exhaustive):
         yes_value: 1,
         no_value: 0,
         is_na_allowed: true,
-        rubric_md: `Decision order — pick the FIRST that fits:
+        rubric_md: `Contact-management category rollup. The CRM contact list
+is NOT visible in this review — every action question (2.2, 2.5, 2.8, 2.11)
+is judged from transcript evidence with a LOOSE / CHARITABLE read: if the
+agent's narration suggests the action was performed or that the CRM state
+is already correct, that counts as YES.
+
+OVERRIDE: the global prompt tells you to prefer NO when a YES verdict
+isn't backed by a clean quote. For this category, do the opposite — when
+the agent's narration plausibly supports a YES, answer YES. NO is reserved
+for clear omissions (agent acknowledged the need and ignored it).
+
+Decision order — pick the FIRST that fits:
 
 1. N/A — the call contained no contact-management opportunity at all.
-   That means ALL FOUR gates are NO:
+   ALL FOUR gates are NO:
      - 2.1 (opportunity to confirm billing contact) = NO
      - 2.4 (customer referenced a person not in CRM) = NO
      - 2.7 (customer indicated someone left the org) = NO
      - 2.10 (call indicated a contact owner/role change is needed) = NO
-   Cite "no opportunity on this call" plus the four gate evaluations
-   in evidence.
 
 2. YES — at least one of the four gates fired AND every required
-   downstream action for that gate was completed correctly in CRM
-   (2.2, 2.5, 2.8, 2.11 as applicable).
+   downstream action (2.2, 2.5, 2.8, 2.11 as applicable) is loosely
+   supported by the transcript. Hedged narration ("it looks like we
+   removed him", "I've got that already") IS sufficient.
 
-3. NO — at least one gate fired AND any required downstream action
-   was missed or done incorrectly.
+3. NO — at least one gate fired AND the matching action question shows
+   a clear miss: agent acknowledged the need on-call but never performed,
+   never confirmed, and never even read the record back.
 
 Evidence: name the gate that fired and quote the matching action
-question's transcript / ticket evidence (or absence of it). If N/A,
-list the four gate evaluations.
-
-Never grade this question from rollup math alone — anchor on the
-gate evaluations the trace already produced.`,
+question's transcript line (or note its absence).`,
       },
       { slug: '2.0', text: 'Billing Contact', type: 'SUB_CATEGORY' },
       {
@@ -270,7 +277,14 @@ gate evaluations the trace already produced.`,
         type: 'YES_NO',
         yes_value: 0,
         no_value: 0,
-        rubric_md: `Gate. YES if billing, invoicing, payment, or who-receives-invoices was discussed in the transcript or referenced in the ticket. NO otherwise.`,
+        rubric_md: `Gate. Loose transcript read.
+
+YES if billing, invoicing, payment, who-receives-invoices, or the billing
+contact's name/role surfaces anywhere in the call. Any opening counts.
+
+NO only if billing was never mentioned in the call at all.
+
+Quote the line that triggered YES, or note absence of any billing mention.`,
       },
       {
         slug: '2.2',
@@ -279,7 +293,29 @@ gate evaluations the trace already produced.`,
         yes_value: 0,
         no_value: 0,
         conditions: [{ target_slug: '2.1' }],
-        rubric_md: `YES requires the agent to verbally confirm the billing contact ("just to confirm, invoices still go to [name]?"). Quote the confirmation. NO if billing was discussed but no confirmation occurred.`,
+        rubric_md: `Transcript-evidence based. The CRM record is NOT visible
+in this review — judge LOOSELY from what the agent did on the call.
+
+OVERRIDE: ignore the global "prefer NO when no clean quote" rule for
+this question. If the agent's narration plausibly supports a YES,
+answer YES even when the phrasing is hedged or indirect.
+
+YES if ANY of the following is true on the call:
+1. The agent names, reads back, or restates the billing contact in
+   any form ("invoices still go to [name]?", "I have [name] on file",
+   "looks like [name] is on the account").
+2. The agent acknowledges who handles billing in a way that implies
+   the record is consistent ("yes, that's what I have", "right, that
+   matches").
+3. The agent references the billing contact from the CRM screen, even
+   hedged ("from what I can see", "looks like").
+
+NO ONLY if 2.1 was YES AND the agent never named, confirmed, or
+referenced the billing contact at all on the call.
+
+If 2.1 was NO, answer NO with note "gate=NO; not applicable".
+
+Quote whatever line you used.`,
       },
       { slug: '2.3', text: 'Contact Addition', type: 'SUB_CATEGORY' },
       {
@@ -288,7 +324,38 @@ gate evaluations the trace already produced.`,
         type: 'YES_NO',
         yes_value: 0,
         no_value: 0,
-        rubric_md: `Gate. Compare names mentioned in the transcript against the customer's existing contacts in CRM. YES if a referenced person is NOT in CRM. NO if no new person was referenced or all referenced people exist in CRM.`,
+        rubric_md: `Gate. Transcript-only — judge whether the call surfaces
+a person who IS or SHOULD BE on THIS customer's CRM contact list. The
+CRM is not visible in this review, but the gate is anchored to the
+customer's account, not to any human being mentioned in passing.
+
+YES requires the call to surface a person tied to this customer's
+account / contact list. Concrete YES patterns:
+1. The caller declares themselves the new account contact —
+   "I'm the new contact", "I'm taking over from Mary", "I handle
+   billing now", "going forward I'll be your point of contact".
+2. The agent's response signals the person is not on file —
+   "I don't see you in the system", "you're not on the account yet",
+   "let me get you added", "I'll need to add you for documentation".
+3. The customer names a person in a business role at the customer —
+   "our new GM is Sarah", "James handles ordering for us",
+   "Lisa is our office manager now".
+
+NO when the person mentioned is NOT tied to this customer's account.
+Examples that DO NOT fire this gate:
+- A relative or family member ("my dad", "my sister", "my brother
+  used to work here").
+- A third-party installer, vendor, contractor, or past technician
+  with no role on the account ("the guy who set it up", "the
+  contractor who installed it").
+- A generic or hypothetical reference ("if someone takes over",
+  "whoever handles this").
+- The caller simply identifying themselves at call-start with no
+  add-signal from the agent (just stating their name to verify the
+  account is identification, not a contact-management event).
+
+Quote the line that triggered YES, OR the line you used to rule the
+gate NO when a person was mentioned.`,
       },
       {
         slug: '2.5',
@@ -297,7 +364,42 @@ gate evaluations the trace already produced.`,
         yes_value: 0,
         no_value: 0,
         conditions: [{ target_slug: '2.4' }],
-        rubric_md: `YES requires evidence of a new contact record created on this customer during the call window — check the CRM contact list for a contact created/modified during the call. NO if 2.4 was YES but no contact was added.`,
+        rubric_md: `Transcript-evidence based. The CRM contact list is NOT
+visible in this review — judge LOOSELY. Until CRM access exists, ASSUME
+the action was performed when the transcript shows any of the patterns
+below. Disclaimers like "this won't affect anyone else's contact" do NOT
+disqualify a YES — the agent is still capturing a contact record.
+
+OVERRIDE: ignore the global "prefer NO when no clean quote" rule for
+this question. The default for this question is YES — only swing to NO
+when the agent clearly failed to do anything.
+
+YES if ANY of the following is true (any tense, any hedge):
+1. The agent states they will add / are adding / have added the
+   contact in any form ("I'll add you", "I'm gonna need to add you",
+   "let me get you added", "I've got you in", "I'm adding you for
+   documentation purposes").
+2. The agent collects ANY data that would feed a contact record —
+   name spelling, email, phone, role, position. Data collection
+   counts as evidence the add is happening even if the agent never
+   says the word "add".
+3. The agent verbally indicates the person is or will be on file
+   ("I have you here already", "you're on the account", "got you
+   captured").
+4. The agent references the CRM screen in a way that implies the
+   contact is being / has been recorded ("just put you in", "got
+   that documented", "added that to the account").
+
+NO only if 2.4 was YES AND the agent:
+   - explicitly declined to add the person ("we don't add tech-support
+     callers"), OR
+   - never collected any contact data AND never acknowledged the add,
+     OR
+   - deferred with no plausible follow-up signal.
+
+If 2.4 was NO, answer NO with note "gate=NO; not applicable".
+
+Quote whichever line supports your call.`,
       },
       { slug: '2.6', text: 'Contact Removal', type: 'SUB_CATEGORY' },
       {
@@ -306,7 +408,35 @@ gate evaluations the trace already produced.`,
         type: 'YES_NO',
         yes_value: 0,
         no_value: 0,
-        rubric_md: `Gate. YES if the transcript contains phrases like "no longer with us", "left the company", "they're not here anymore", or equivalent. NO otherwise.`,
+        rubric_md: `Gate. Transcript-only — judge whether THE CUSTOMER's
+contact list is affected by a departure, NOT whether any human being
+mentioned in the call has left somewhere.
+
+YES requires an explicit departure of a person tied to this customer's
+account or contact list. Concrete YES patterns:
+- "[Name] no longer works here"
+- "she's no longer with us", "he left the company"
+- "we let him go", "[Name] retired", "[Name] is no longer with [customer]"
+- "[Old contact] is gone, I'm taking over" (departure + replacement
+  tied to this account)
+- Agent narrating from screen about a known account contact —
+  "looks like [previous POC] is no longer on the account"
+
+NO when the departure is incidental and NOT tied to this customer's
+account / contact list. Examples that DO NOT fire this gate:
+- "The guy who set it all up has passed away" (third-party installer,
+  no role on the account)
+- "The contractor who built it isn't around anymore"
+- Personal / family departures ("my dad passed", "my sister left town")
+- Departures at a different company mentioned in passing
+- Anyone with no known business role at THIS customer
+
+A pure role change ("Jacqueline handles this now") WITHOUT any
+departure language belongs to 2.10, not here.
+
+Quote the departure line AND name (or describe) the person's role at
+the customer. If you cannot establish the departed person had a role
+at this customer's account, the answer is NO.`,
       },
       {
         slug: '2.8',
@@ -315,7 +445,40 @@ gate evaluations the trace already produced.`,
         yes_value: 0,
         no_value: 0,
         conditions: [{ target_slug: '2.7' }],
-        rubric_md: `YES requires a CRM contact's \`active\` status to flip to false during the call window for the person the customer indicated has left. NO if 2.7 was YES but no contact was deactivated.`,
+        rubric_md: `Transcript-evidence based. The CRM record is NOT visible
+in this review — judge LOOSELY. Until CRM access exists, ASSUME the action
+was performed when the transcript suggests it. HEDGED narration counts —
+"it looks like", "from what I can see", "appears to have been", "seems
+like" are all valid confirmations.
+
+OVERRIDE: ignore the global "prefer NO when no clean quote" rule for
+this question. The default for this question is YES — only swing to NO
+when the agent clearly failed to address the departure.
+
+YES if ANY of the following is true (any tense, any hedge):
+1. The agent states they will remove / are removing / have removed /
+   are deactivating the departed contact in any form ("I'm taking
+   them off", "marking them inactive", "I'll remove them").
+2. The agent verbally indicates the departed contact has already been
+   removed or is no longer active, in ANY phrasing — including hedged
+   readings of the CRM screen. Examples that all count as YES:
+     - "we've removed him already"
+     - "it looks like we've removed him from what I can see in the
+       account"
+     - "from what I can see he's already off"
+     - "he's not on the account anymore"
+     - "appears to have been taken off"
+3. The agent confirms the active contact on file is the correct one
+   (i.e. the departed person isn't listed) — "yeah, that's what I
+   have", "right, [other person] is the contact now".
+
+NO ONLY if 2.7 was YES AND the agent acknowledged the departure but
+neither performed the removal, nor referenced the CRM screen, nor
+confirmed any record state at all.
+
+If 2.7 was NO, answer NO with note "gate=NO; not applicable".
+
+Quote whichever line supports your call.`,
       },
       { slug: '2.9', text: 'Contact Assignment', type: 'SUB_CATEGORY' },
       {
@@ -324,7 +487,43 @@ gate evaluations the trace already produced.`,
         type: 'YES_NO',
         yes_value: 0,
         no_value: 0,
-        rubric_md: `Gate. YES if the transcript mentions a role/responsibility change ("she's the new GM", "I handle ordering now", "John is taking over for Mary").`,
+        rubric_md: `Gate. Transcript-only. Anchored to THIS customer's
+account contacts — generic role mentions or internal references at the
+customer don't fire the gate; only an explicit request to change WHO
+the customer's account-related contact is.
+
+YES requires BOTH on the call:
+(a) The customer requests a specific change in who the account-related
+    contact is, naming a specific person:
+    - "Going forward please talk to [Name]"
+    - "[Name] is taking over for me"
+    - "I handle ordering now, not Mary"
+    - "Please update your records to show [Name] as the contact"
+    - "[Name] should be the point of contact going forward"
+(b) The agent's reply indicates the record needs updating — "got it,
+    I'll update that", "let me change the owner", "I'll re-assign",
+    "I'll get that put in", "OK I'll switch that over".
+
+NO when:
+- The customer is verifying / restating an existing assignment AND
+  the agent confirms the record already matches:
+    customer: "should be Jacqueline"
+    agent:    "yeah, that's what I have", "correct, that's already
+              on the account", "yep, [name] is who we've got"
+- The role mention is generic and not naming a specific new owner —
+  "our IT department handles this", "whoever is on shift", "the
+  ordering team".
+- No specific person is named as the new owner.
+- Customer simply identifies who currently handles something without
+  requesting a record change ("Jim handles ordering" — without
+  context of "this is new" or "please update").
+
+A name + a role IS NOT ENOUGH on its own. You MUST read the agent's
+reply. If the agent's reply confirms the existing record matches, the
+answer is NO. If you cannot find the agent's reply, the answer is NO.
+
+You MUST quote BOTH the customer's request line AND the agent's
+response in your evidence.`,
       },
       {
         slug: '2.11',
@@ -333,7 +532,36 @@ gate evaluations the trace already produced.`,
         yes_value: 0,
         no_value: 0,
         conditions: [{ target_slug: '2.10' }],
-        rubric_md: `YES if the CRM contact's \`assigned_to\` or role field was updated during the call window to match the customer's stated assignment. NO if 2.10 was YES but no update was made.`,
+        rubric_md: `Transcript-evidence based. The CRM record is NOT visible
+in this review — judge LOOSELY. Until CRM access exists, ASSUME the
+assignment was handled correctly when the transcript suggests it. Hedged
+narration counts.
+
+OVERRIDE: ignore the global "prefer NO when no clean quote" rule for
+this question. The default for this question is YES — only swing to NO
+when the agent clearly failed to address the assignment need.
+
+YES if ANY of the following is true (any tense, any hedge):
+1. The agent states they will assign / are assigning / have assigned /
+   are updating the owner in any form ("I'll update the owner", "I'm
+   getting that re-assigned", "I've put that on [name]").
+2. The agent verbally indicates the assignment is already correct on
+   file — hedged readings of the CRM screen count. Examples that all
+   count as YES:
+     - "yeah, that's what I have"
+     - "right, [name] is on the account"
+     - "looks like that's already set"
+     - "from what I can see [name] is the owner"
+3. The agent acknowledges the assignment in any form that implies
+   the record reflects it.
+
+NO ONLY if 2.10 was YES AND the agent acknowledged the assignment
+need but neither performed it, nor referenced the CRM screen, nor
+confirmed any record state at all.
+
+If 2.10 was NO, answer NO with note "gate=NO; not applicable".
+
+Quote whichever line supports your call.`,
       },
       { slug: '2.F', text: 'Feedback — Contact Management', type: 'TEXT' },
     ],

@@ -19,6 +19,7 @@ import {
   prepareFormForRender,
   FormRenderer,
   getQuestionScore,
+  deriveRollupAnswers,
   type FormRenderData,
 } from '@/utils/forms'
 import { validateAnswers } from '@/utils/submissionUtils'
@@ -280,11 +281,18 @@ export default function AuditFormPage() {
     const seedStrings: Record<number, string> = {}
     Object.entries(seedAnswers).forEach(([qId, a]) => { seedStrings[Number(qId)] = a.answer || '' })
     const initialVisibility = processConditionalLogic(form, seedStrings)
-    const { totalScore, categoryScores: initCatScores } = calculateFormScore(form, seedAnswers)
-    setAnswers(seedAnswers)
+    // Derive roll-up answers BEFORE scoring so role=ROLLUP questions
+    // contribute their engine-computed value (yes / no / na) and any
+    // saved (DB) value the AI may have stored is overwritten with the
+    // canonical derived value. Re-score also re-derives them on every
+    // subsequent edit via updateRenderData() below, so the audit form
+    // stays in sync as the human flips DETAIL answers.
+    const seededWithRollups = deriveRollupAnswers(form, seedAnswers, initialVisibility).answers
+    const { totalScore, categoryScores: initCatScores } = calculateFormScore(form, seededWithRollups)
+    setAnswers(seededWithRollups)
     setVisibilityMap(initialVisibility)
     setScore(totalScore)
-    setFormRenderData(prepareFormForRender(form, seedAnswers, initialVisibility, initCatScores, totalScore))
+    setFormRenderData(prepareFormForRender(form, seededWithRollups, initialVisibility, initCatScores, totalScore))
 
     const today = new Date().toISOString().split('T')[0]
     const initialMeta: Record<string, string> = {}
@@ -354,10 +362,17 @@ export default function AuditFormPage() {
     const answerStrings: Record<number, string> = {}
     Object.entries(currentAnswers).forEach(([qId, a]) => { answerStrings[Number(qId)] = a.answer || '' })
     const newVisibility = processConditionalLogic(formData, answerStrings)
-    const { totalScore } = calculateFormScore(formData, currentAnswers)
+    // Re-derive roll-ups whenever a detail answer changes so any
+    // role=ROLLUP question reflects the new state immediately. We push
+    // the derived map back into React state via setAnswers so subsequent
+    // edits (and the submit handler downstream) see the canonical value
+    // rather than the stale pre-engine map.
+    const withRollups = deriveRollupAnswers(formData, currentAnswers, newVisibility).answers
+    const { totalScore } = calculateFormScore(formData, withRollups)
     setScore(totalScore)
     setVisibilityMap(newVisibility)
-    setFormRenderData(prepareFormForRender(formData, currentAnswers, newVisibility, {}, totalScore))
+    setAnswers(withRollups)
+    setFormRenderData(prepareFormForRender(formData, withRollups, newVisibility, {}, totalScore))
   }
 
   const handleAnswerChange = (questionId: number, value: string, _questionType: string) => {

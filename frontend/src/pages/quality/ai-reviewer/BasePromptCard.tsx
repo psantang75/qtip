@@ -72,10 +72,9 @@ export function BasePromptCard({ formId }: Props) {
           <div>
             <h2 className="text-[14px] font-semibold text-slate-900 flex items-center gap-1.5">
               <FileText className="h-4 w-4 text-primary" /> Base prompt
-              {activeBase && (
+              {activeBase?.current_version != null && (
                 <span className="ml-1 inline-flex items-center rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-[10px] font-mono text-slate-600">
-                  {activeBase.key}
-                  {activeBase.current_version != null ? ` v${activeBase.current_version}` : ''}
+                  v{activeBase.current_version}
                 </span>
               )}
             </h2>

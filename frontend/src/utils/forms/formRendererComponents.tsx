@@ -63,7 +63,8 @@ const optionCls = (selected: boolean) =>
 
 export const YesNoQuestion: React.FC<QuestionProps> = ({ question, isDisabled = false, onAnswerChange }) => {
   if (!question.isVisible) return null;
-  const { id, text, currentValue, isNaAllowed, isCritical } = question;
+  const { id, text, currentValue, isNaAllowed, isCritical, role, rollupReason } = question;
+  const isRollup = role === 'ROLLUP';
   const options = [
     { value: 'yes', label: 'Yes' },
     { value: 'no',  label: 'No'  },
@@ -82,12 +83,29 @@ export const YesNoQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
           </span>
         )}
         <span>{text}</span>
+        {isRollup && (
+          <span
+            title={rollupReason || 'Auto-computed from this category\u2019s sub-questions.'}
+            className="inline-flex items-center rounded-full bg-[#00aeef]/10 text-[#00aeef] border border-[#00aeef]/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+          >
+            Auto
+          </span>
+        )}
       </p>
       <div className="flex items-center gap-1 shrink-0">
         {options.map(opt => (
-          <button key={opt.value} type="button" disabled={isDisabled}
-            onClick={() => onAnswerChange(id, opt.value, 'yes_no')}
-            className={cn('h-7 px-3 text-[12px] rounded border font-medium transition-all', optionCls(currentValue === opt.value))}>
+          // Roll-up questions are derived by code (rollupEngine) - the
+          // human / AI does not get to edit them directly. We force
+          // disabled and ignore clicks so the user always sees the
+          // engine's canonical value next to the auto-NA badge.
+          <button key={opt.value} type="button" disabled={isDisabled || isRollup}
+            onClick={() => { if (!isRollup) onAnswerChange(id, opt.value, 'yes_no'); }}
+            title={isRollup ? (rollupReason || 'Auto-computed') : undefined}
+            className={cn(
+              'h-7 px-3 text-[12px] rounded border font-medium transition-all',
+              optionCls(currentValue === opt.value),
+              isRollup && 'cursor-not-allowed opacity-90',
+            )}>
             {opt.label}
           </button>
         ))}
@@ -131,9 +149,13 @@ export const TextQuestion: React.FC<QuestionProps> = ({ question, isDisabled = f
   // Auto-managed AI Reviewer Feedback question: the AI is the only writer
   // (per backend ensureAiReviewerFeedbackQuestion). Render its HTML payload
   // as rich text with clickable KB links instead of dumping the raw HTML
-  // into a textarea where reviewers see <p>/<a>/&#39; markup.
+  // into a textarea where reviewers see <p>/<a>/&#39; markup. Per-category
+  // "Feedback — <Category>" questions now also receive an HTML "AI Review
+  // Notes - …" block from the AI reviewer, so we apply the same rich-text
+  // pass-through to any TEXT answer whose payload starts with an HTML tag.
   const isAiReviewerFeedback = (text || '').trim() === AI_REVIEWER_FEEDBACK_QUESTION_TEXT;
-  if (isAiReviewerFeedback) {
+  const looksLikeHtml = value.trimStart().startsWith('<');
+  if (isAiReviewerFeedback || looksLikeHtml) {
     return (
       <div>
         <p className="text-[13px] text-slate-800 leading-snug mb-1.5">{text}</p>

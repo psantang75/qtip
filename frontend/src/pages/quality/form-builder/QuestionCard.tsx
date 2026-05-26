@@ -3,7 +3,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Trash2, Pencil } from 'lucide-react'
 import type {
-  Form, FormQuestion, FormQuestionCondition, RadioOption,
+  Form, FormQuestion, FormQuestionCondition, FormQuestionRole, FormRollupRule, RadioOption,
   QuestionType, ConditionType, LogicalOperator,
 } from '@/types/form.types'
 import { Button } from '@/components/ui/button'
@@ -50,11 +50,12 @@ function scoringText(q: FormQuestion): string {
   return ''
 }
 
-export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, categoryQuestions, isEditing, onToggleEdit, onCancelEdit, dependentCount, isConditionalChild }: {
+export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, categoryQuestions, gateIds, isEditing, onToggleEdit, onCancelEdit, dependentCount, isConditionalChild }: {
   q: FormQuestion; qi: number; catIdx: number
   form: Form; onChange: (f: Form) => void
   allQuestions: AllQuestionRef[]
   categoryQuestions: AllQuestionRef[]
+  gateIds: Set<number>
   isEditing: boolean
   onToggleEdit: (qi: number) => void
   onCancelEdit: (qi: number) => void
@@ -82,6 +83,11 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
   const [lCond, setLCond] = useState(q.is_conditional ?? false)
   const [lGroups, setLGroups] = useState<FormQuestionCondition[][]>(() => parseConditionGroups(q))
   const [lCritical, setLCritical] = useState(q.is_critical === true)
+  const [lRole, setLRole] = useState<FormQuestionRole>(q.role ?? 'DETAIL')
+  const [lRollupRule, setLRollupRule] = useState<FormRollupRule>((q.rollup_rule ?? 'ANY_NO_TO_NO') as FormRollupRule)
+  const [lRollupMembers, setLRollupMembers] = useState<number[]>(
+    Array.isArray(q.rollup_member_question_ids) ? q.rollup_member_question_ids : [],
+  )
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
@@ -95,6 +101,9 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
     setLCond(q.is_conditional ?? false)
     setLGroups(parseConditionGroups(q))
     setLCritical(q.is_critical === true)
+    setLRole(q.role ?? 'DETAIL')
+    setLRollupRule((q.rollup_rule ?? 'ANY_NO_TO_NO') as FormRollupRule)
+    setLRollupMembers(Array.isArray(q.rollup_member_question_ids) ? q.rollup_member_question_ids : [])
     setErr(null)
   }, [isEditing, q])
 
@@ -105,6 +114,34 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
     if (hasOptions && lRadio.length === 0) { setErr('Add at least one option'); return }
     if (lType === 'SCALE' && lScaleMin >= lScaleMax) { setErr('Scale min must be less than max'); return }
     if (lCond && lGroups.some(g => g.some(c => !c.target_question_id))) { setErr('All conditions need a source question'); return }
+    // Roll-up validation: must have >=1 member; cannot include self; cannot
+    // include another roll-up (no nested roll-ups in V1).
+    const rollupActive = lType === 'YES_NO' && lRole === 'ROLLUP'
+    // Silently strip gate ids: the UI renders them as read-only context
+    // rows so the user has no way to uncheck a legacy gate that was saved
+    // earlier. Stripping here means the next save self-heals the payload.
+    const cleanedRollupMembers = rollupActive
+      ? lRollupMembers.filter((mid) => !gateIds.has(mid))
+      : lRollupMembers
+    if (rollupActive) {
+      if (cleanedRollupMembers.length === 0) { setErr('Roll-up must have at least one member question'); return }
+      const myId = q.id
+      if (myId !== undefined && cleanedRollupMembers.includes(myId)) {
+        setErr('Roll-up cannot include itself as a member'); return
+      }
+      const rollupMemberIsRollup = cleanedRollupMembers.some((mid) => {
+        const ref = categoryQuestions.find((aq) => aq.id === mid)
+        return ref?.role === 'ROLLUP'
+      })
+      if (rollupMemberIsRollup) { setErr('Nested roll-ups are not supported; pick DETAIL questions only'); return }
+      // Reject members that aren't in this category (defense in depth -
+      // the UI already filters them out, but a stale payload from a prior
+      // save shouldn't slip through).
+      const memberOutsideCategory = cleanedRollupMembers.some((mid) =>
+        !categoryQuestions.some((aq) => aq.id === mid)
+      )
+      if (memberOutsideCategory) { setErr('Roll-up members must live in the same category as the roll-up question'); return }
+    }
     const flatConditions: FormQuestionCondition[] = lGroups.flatMap((group, gIdx) =>
       group.map((c, ci) => ({ ...c, group_id: gIdx, sort_order: ci, logical_operator: 'AND' as LogicalOperator }))
     )
@@ -120,6 +157,12 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
       }),
       is_conditional: lCond,
       ...(lCond ? { conditions: flatConditions } : { conditions: [] }),
+      // Roll-up: only persist when role+type are compatible; otherwise
+      // clear the related fields so non-YES_NO or DETAIL questions never
+      // carry stale roll-up config in the payload.
+      role: rollupActive ? 'ROLLUP' : 'DETAIL',
+      rollup_rule: rollupActive ? lRollupRule : null,
+      rollup_member_question_ids: rollupActive ? lRollupMembers : null,
     }
     const cats = [...form.categories]
     const qs = [...cats[catIdx].questions]; qs[qi] = updated
@@ -201,6 +244,14 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
                   Critical
                 </span>
               )}
+              {q.role === 'ROLLUP' && (
+                <span
+                  className="inline-flex items-center rounded-full bg-primary/10 text-primary border border-primary/30 px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
+                  title={`Auto-computed from ${Array.isArray(q.rollup_member_question_ids) ? q.rollup_member_question_ids.length : 0} member question(s).`}
+                >
+                  Roll-up
+                </span>
+              )}
             </p>
             {!isEditing && (
               <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
@@ -245,9 +296,11 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
       {isEditing && (
         <QuestionEditPanel
           qi={qi}
-          state={{ lText, lType, lRequired, lVisible, lNa, lYes, lNo, lNaVal, lScaleMin, lScaleMax, lRadio, newOptText, newOptScore, lCond, lGroups, lCritical, err }}
-          actions={{ setLText, setLType, setLRequired, setLVisible, setLNa, setLYes, setLNo, setLNaVal, setLScaleMin, setLScaleMax, setLRadio, setNewOptText, setNewOptScore, setLCond, setLGroups, setLCritical, setErr, addOpt, saveEdit, onCancelEdit: () => onCancelEdit(qi) }}
+          state={{ lText, lType, lRequired, lVisible, lNa, lYes, lNo, lNaVal, lScaleMin, lScaleMax, lRadio, newOptText, newOptScore, lCond, lGroups, lCritical, lRole, lRollupRule, lRollupMembers, err }}
+          actions={{ setLText, setLType, setLRequired, setLVisible, setLNa, setLYes, setLNo, setLNaVal, setLScaleMin, setLScaleMax, setLRadio, setNewOptText, setNewOptScore, setLCond, setLGroups, setLCritical, setLRole, setLRollupRule, setLRollupMembers, setErr, addOpt, saveEdit, onCancelEdit: () => onCancelEdit(qi) }}
           categoryQuestions={categoryQuestions}
+          gateIds={gateIds}
+          currentQuestionId={q.id}
         />
       )}
     </div>

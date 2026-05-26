@@ -28,8 +28,9 @@ export function stripHtmlToPlaintext(html: string): string {
   // conditional / fallback semantics through nesting (e.g.
   // "Approach 2 — Verify signal\n  - If <70%, reaim antenna\n  - If
   // >=70%, go to Approach 3") looked sequentially required to the AI
-  // Reviewer's trace pass. See backend/prompts/ai-reviewer/trace.v1.md
-  // KB_CONDITIONAL rule for the consumer.
+  // Reviewer's trace pass. See the KB_CONDITIONAL rule in the
+  // DB-managed `trace.v1` Base prompt (`ai_base_prompt` row,
+  // `prompt_kind = 'trace'`) for the consumer.
   //
   // Implementation: walk the HTML once token-by-token tracking depth on
   // `<ul`/`<ol` push and `</ul>`/`</ol>` pop. Each `<li` emits

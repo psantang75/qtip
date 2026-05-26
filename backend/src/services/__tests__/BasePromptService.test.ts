@@ -57,11 +57,6 @@ vi.mock('../../config/prisma', () => ({
   },
 }));
 
-// Stub fs so seedDefaultsIfMissing() never actually touches disk.
-vi.mock('fs', () => ({
-  promises: { readFile: vi.fn().mockResolvedValue('seed body') },
-}));
-
 import {
   basePromptService,
   warmCache,

@@ -16,7 +16,18 @@
  * synthesis JSON keyed by call order.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Dev `.env` sets AI_REVIEWER_TRACE_SAMPLES=1 to keep local AI runs cheap.
+// The multi-source orchestrator suite below was authored against the
+// production default (K=3) — its mock sequences queue 3 traces per source
+// before synthesis. We pin K=3 in beforeEach (capturing + restoring the
+// prior value in afterEach) so the orchestrator behaves as the test
+// fixtures expect, regardless of the developer's local .env override.
+// Per-test overrides (verifier-band, high-confidence-skip, single-sample
+// tests) still win because they wrap their own try/finally inside the
+// test body.
+const ORIGINAL_TRACE_SAMPLES = process.env.AI_REVIEWER_TRACE_SAMPLES;
 
 const { messagesCreate, submitAuditMock, saveDraftMock, checkBudgetMock, detectPivotsMock } = vi.hoisted(() => ({
   messagesCreate: vi.fn(),
@@ -230,10 +241,14 @@ vi.mock('../aiReviewerPivotDetector', () => ({
   _clearPivotCache: vi.fn(),
 }));
 
-// Auto-managed AI Reviewer Feedback question text — must match the
-// text the orchestrator looks up on the form.
+// Auto-managed AI Reviewer Feedback question text + constants used by
+// the per-category feedback router (composeCategoryFeedback). Must
+// match the production exports — the orchestrator uses them when
+// composing the final answers payload.
 vi.mock('../../repositories/MySQLFormRepository', () => ({
   AI_REVIEWER_FEEDBACK_QUESTION_TEXT: 'AI Reviewer Feedback',
+  CATEGORY_FEEDBACK_TEXT_PREFIX_RE: /^feedback\s*[\u2014-]\s*/i,
+  AI_REVIEW_NOTES_PREFIX: 'AI Review Notes - ',
 }));
 const AI_FEEDBACK_TEXT = 'AI Reviewer Feedback';
 
@@ -323,8 +338,40 @@ function aiTextResponse(text: string) {
   };
 }
 
+/**
+ * Synthesis-side variant of aiTextResponse: emits BOTH a text block
+ * (carrying the narrative + reasoning artefacts) AND a tool_use block
+ * (carrying the structured answers via the submit_answers tool). The
+ * monolithic synthesis path now forces a tool call; tests that mock
+ * the Anthropic client for that path must provide the tool_use payload
+ * or callClaude throws "no tool_use block for submit_answers".
+ *
+ * The `synthesisJson` argument is the same JSON object the legacy
+ * text-only mock returned; we parse out its `answers[]` field for the
+ * tool_use input and the rest goes in the text block.
+ */
+function aiSynthesisResponse(synthesisJson: string) {
+  const parsed = JSON.parse(synthesisJson);
+  const answers = Array.isArray(parsed.answers) ? parsed.answers : [];
+  const textBlockPayload = { ...parsed };
+  delete textBlockPayload.answers;
+  return {
+    content: [
+      { type: 'text', text: JSON.stringify(textBlockPayload) },
+      {
+        type: 'tool_use',
+        id: 'toolu_test',
+        name: 'submit_answers',
+        input: { answers },
+      },
+    ],
+    usage: { input_tokens: 100, output_tokens: 50 },
+  };
+}
+
 describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
   beforeEach(() => {
+    process.env.AI_REVIEWER_TRACE_SAMPLES = '3';
     messagesCreate.mockReset();
     submitAuditMock.mockReset();
     saveDraftMock.mockReset();
@@ -358,6 +405,14 @@ describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
     });
   });
 
+  afterEach(() => {
+    if (ORIGINAL_TRACE_SAMPLES === undefined) {
+      delete process.env.AI_REVIEWER_TRACE_SAMPLES;
+    } else {
+      process.env.AI_REVIEWER_TRACE_SAMPLES = ORIGINAL_TRACE_SAMPLES;
+    }
+  });
+
   it('runs trace x N + synthesis x 1, persists merged links, sets case_id from primary', async () => {
     // Order of LLM calls for {primary: TICKET, attached: [CALL]} with
     // K=3 trace voting (default AI_REVIEWER_TRACE_SAMPLES):
@@ -374,7 +429,7 @@ describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('CALL:abc-123')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('CALL:abc-123')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('CALL:abc-123')))
-      .mockResolvedValueOnce(aiTextResponse(makeSynthesisJson()));
+      .mockResolvedValueOnce(aiSynthesisResponse(makeSynthesisJson()));
 
     const svc = new AIReviewerService();
     const c: Case = {
@@ -425,7 +480,7 @@ describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
-      .mockResolvedValueOnce(aiTextResponse(makeSynthesisJson()));
+      .mockResolvedValueOnce(aiSynthesisResponse(makeSynthesisJson()));
 
     const svc = new AIReviewerService();
     const c: Case = {
@@ -479,7 +534,7 @@ describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
-      .mockResolvedValueOnce(aiTextResponse(makeSynthesisJson()));
+      .mockResolvedValueOnce(aiSynthesisResponse(makeSynthesisJson()));
 
     const svc = new AIReviewerService();
     const c: Case = {
@@ -543,7 +598,7 @@ describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
-      .mockResolvedValueOnce(aiTextResponse(makeSynthesisJson()));
+      .mockResolvedValueOnce(aiSynthesisResponse(makeSynthesisJson()));
 
     const svc = new AIReviewerService();
     const c: Case = {
@@ -596,7 +651,7 @@ describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
-      .mockResolvedValueOnce(aiTextResponse(makeSynthesisJson()));
+      .mockResolvedValueOnce(aiSynthesisResponse(makeSynthesisJson()));
 
     const svc = new AIReviewerService();
     const c: Case = {
@@ -631,7 +686,7 @@ describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
       .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
-      .mockResolvedValueOnce(aiTextResponse(makeSynthesisJson()));
+      .mockResolvedValueOnce(aiSynthesisResponse(makeSynthesisJson()));
 
     const svc = new AIReviewerService();
     const c: Case = {
@@ -694,7 +749,7 @@ describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
       });
       messagesCreate
         .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
-        .mockResolvedValueOnce(aiTextResponse(ambiguousSynthesis))
+        .mockResolvedValueOnce(aiSynthesisResponse(ambiguousSynthesis))
         .mockResolvedValueOnce(aiTextResponse(verifierResp));
 
       const svc = new AIReviewerService();
@@ -737,7 +792,7 @@ describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
       detectPivotsMock.mockResolvedValue([]);
       messagesCreate
         .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
-        .mockResolvedValueOnce(aiTextResponse(makeSynthesisJson())); // overall=0.9
+        .mockResolvedValueOnce(aiSynthesisResponse(makeSynthesisJson())); // overall=0.9
       const svc = new AIReviewerService();
       await svc.reviewCase(
         { id: 'TICKET:42', primary: { kind: 'TICKET', external_id: 42 }, attached: [] },
@@ -763,7 +818,7 @@ describe('AIReviewerService.reviewCase — multi-source orchestrator', () => {
       detectPivotsMock.mockResolvedValue([]);
       messagesCreate
         .mockResolvedValueOnce(aiTextResponse(makeTraceJson('TICKET:42')))
-        .mockResolvedValueOnce(aiTextResponse(makeSynthesisJson()));
+        .mockResolvedValueOnce(aiSynthesisResponse(makeSynthesisJson()));
 
       const svc = new AIReviewerService();
       const c: Case = {

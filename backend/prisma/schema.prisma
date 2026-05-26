@@ -245,6 +245,22 @@ model FormQuestion {
   visible_to_csr Boolean          @default(true) @db.TinyInt
   is_critical    Boolean          @default(false) @db.TinyInt
 
+  /// Question authoring role. DETAIL (default) is a normal graded question.
+  /// ROLLUP means the answer is computed at render/submit time from
+  /// `rollup_member_question_ids` via the rule in `rollup_rule` (see
+  /// backend/src/utils/rollupEngine.ts). The scoring engine treats both
+  /// roles identically once an answer is present, so this field never
+  /// changes how scoring works.
+  role                       FormQuestionRole @default(DETAIL)
+  /// Aggregation rule used when `role = ROLLUP`. Only ANY_NO_TO_NO is
+  /// implemented today; the enum is open for future rules.
+  rollup_rule                FormRollupRule?
+  /// JSON array of FormQuestion IDs that contribute to this rollup. Only
+  /// meaningful when `role = ROLLUP`. Members hidden by FormQuestionCondition
+  /// at evaluation time are excluded (gate=NO -> action hidden -> not
+  /// counted), so empty visible-member sets naturally roll up to N/A.
+  rollup_member_question_ids Json?
+
   category                   FormCategory            @relation(fields: [category_id], references: [id], onDelete: Cascade)
   radio_options              RadioOption[]
   submission_answers         SubmissionAnswer[]
@@ -1452,6 +1468,15 @@ enum FormQuestionConditionType {
   NOT_EQUALS
   EXISTS
   NOT_EXISTS
+}
+
+enum FormQuestionRole {
+  DETAIL
+  ROLLUP
+}
+
+enum FormRollupRule {
+  ANY_NO_TO_NO
 }
 
 enum FormQuestionLogicalOperator {
