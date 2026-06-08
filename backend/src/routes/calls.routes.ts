@@ -26,9 +26,13 @@ function formatTranscripts(transcripts: ConversationDetailResponse[] | null | un
             .map((segment: any) =>
               segment.phrases
                 ?.map((phrase: any) => {
+                  // Emit plain text — the frontend's `formatTranscriptText`
+                  // HTML-escapes its input and wraps `Agent:` / `Customer:`
+                  // labels in <strong> itself, so embedding HTML here would
+                  // be escaped and rendered as literal markup to the user.
                   const prefix = phrase.participantPurpose === 'external'
-                    ? '<span class="font-bold">Customer:</span> '
-                    : '<span class="font-bold">Agent:</span> ';
+                    ? 'Customer: '
+                    : 'Agent: ';
                   return prefix + phrase.text;
                 })
                 .join('\n') || ''
