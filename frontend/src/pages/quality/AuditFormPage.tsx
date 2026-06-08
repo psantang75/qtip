@@ -98,6 +98,7 @@ export default function AuditFormPage() {
           .map((a: any) => ({ question_id: Number(a.question_id), answer: String(a.answer ?? ''), notes: '' })),
         metadata: [] as Array<{ field_id: number; value: string }>,
         ticket_tasks: [] as Array<{ kind: 'TICKET' | 'TASK'; external_id: number }>,
+        calls: [] as NonNullable<import('@/services/aiReviewerService').AiDraftDetail['calls']>,
       }
     },
     enabled: !!(aiSubmissionId && aiMode),
@@ -369,9 +370,21 @@ export default function AuditFormPage() {
     // rather than the stale pre-engine map.
     const withRollups = deriveRollupAnswers(formData, currentAnswers, newVisibility).answers
     const { totalScore } = calculateFormScore(formData, withRollups)
+    // deriveRollupAnswers returns the shared `Answer` shape (notes/score
+    // optional). Local state uses the stricter `AnswerType` shape, so fill
+    // in the defaults rather than widen the state type.
+    const normalized: Record<number, AnswerType> = {}
+    for (const [k, v] of Object.entries(withRollups)) {
+      normalized[Number(k)] = {
+        question_id: v.question_id,
+        answer: v.answer,
+        score: v.score ?? 0,
+        notes: v.notes ?? '',
+      }
+    }
     setScore(totalScore)
     setVisibilityMap(newVisibility)
-    setAnswers(withRollups)
+    setAnswers(normalized)
     setFormRenderData(prepareFormForRender(formData, withRollups, newVisibility, {}, totalScore))
   }
 
