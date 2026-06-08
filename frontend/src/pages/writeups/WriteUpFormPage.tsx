@@ -18,6 +18,33 @@ import { PriorDisciplineSection } from './writeup-form/PriorDisciplineSection'
 import { InternalNotesSection } from './writeup-form/InternalNotesSection'
 import { WRITE_UP_TYPE_LABELS, COACHING_PURPOSE_LABELS } from '@/constants/labels'
 
+// Convert a zod error path like `incidents.0.violations.1.policy_violated`
+// into a human label like `Incident 1 → Violation 2 → Policy Violated`.
+const FIELD_LABELS: Record<string, string> = {
+  csr_id:              'Employee',
+  document_type:       'Document Type',
+  meeting_date:        'Meeting Date',
+  corrective_action:   'Corrective Action',
+  correction_timeline: 'Correction Timeline',
+  consequence:         'Consequence',
+  manager_id:          'Manager',
+  hr_witness_id:       'HR Witness',
+  linked_coaching_id:  'Linked Coaching',
+  internal_notes:      'Internal Notes',
+  incidents:           'Incident',
+  violations:          'Violation',
+  examples:            'Example',
+  policy_violated:     'Policy Violated',
+  description:         'Description',
+  example_date:        'Example Date',
+}
+function prettifyPath(path: string): string {
+  return path
+    .split('.')
+    .map(seg => (/^\d+$/.test(seg) ? `${parseInt(seg, 10) + 1}` : FIELD_LABELS[seg] ?? seg))
+    .join(' → ')
+}
+
 export default function WriteUpFormPage() {
   const navigate  = useNavigate()
   const { id }    = useParams<{ id: string }>()
@@ -117,8 +144,11 @@ export default function WriteUpFormPage() {
   }, [existing])
 
   // ── Validation ─────────────────────────────────────────────────────────────
+  // Two tiers: drafts can be saved with the bare minimum the backend needs
+  // to identify the record (employee + document type). Scheduling adds the
+  // meeting date so the agent has somewhere to be.
 
-  const validate = (): string | null => {
+  const validateDraft = (): string | null => {
     if (!form.csr_id)        return 'Please select an employee'
     if (!form.document_type) return 'Please select a document type'
     if (
@@ -126,6 +156,37 @@ export default function WriteUpFormPage() {
       form.hr_witness_id > 0 &&
       form.manager_id === form.hr_witness_id
     ) return 'Manager and HR Witness cannot be the same person'
+    return null
+  }
+
+  // Scheduling tightens the rules: a Performance Warning meeting can only be
+  // put on the books when the employee, doc type, and both meeting attendees
+  // are set, AND the incident chain (Incident → Violation → Example) has at
+  // least one complete entry. The backend mirrors these checks in
+  // `assertTransitionGuards` so direct API callers can't bypass them.
+  const validateSchedule = (): string | null => {
+    const draftErr = validateDraft()
+    if (draftErr) return draftErr
+    if (!form.meeting_date)            return 'Meeting date is required to schedule'
+    if (!form.manager_id)              return 'Manager is required to schedule'
+    if (!form.hr_witness_id)           return 'HR Witness is required to schedule'
+    if (form.incidents.length === 0 || !form.incidents.some(i => i.description.trim())) {
+      return 'At least one incident with a description is required to schedule'
+    }
+    const firstCompleteIncident = form.incidents.find(i => i.description.trim() && (i.violations?.length ?? 0) > 0)
+    if (!firstCompleteIncident) {
+      return 'At least one incident must include a violation to schedule'
+    }
+    const hasViolationWithPolicy = firstCompleteIncident.violations.some(v => v.policy_violated.trim())
+    if (!hasViolationWithPolicy) {
+      return 'At least one violation must have a policy specified to schedule'
+    }
+    const hasExample = firstCompleteIncident.violations.some(
+      v => v.policy_violated.trim() && (v.examples?.length ?? 0) > 0 && v.examples.some(e => e.description.trim()),
+    )
+    if (!hasExample) {
+      return 'At least one violation must include an example with a description to schedule'
+    }
     return null
   }
 
@@ -153,9 +214,35 @@ export default function WriteUpFormPage() {
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
+  // Centralised error-to-toast translator. The backend returns
+  // `{ message, errors: [{ path, message }] }` for Zod validation failures
+  // (see `validateSchema` in `backend/src/validation/csr.validation.ts`).
+  // Show the field-level messages so the user can fix the actual problem
+  // instead of staring at a generic "Save failed".
+  const reportSaveError = (err: any) => {
+    const fields = err?.response?.data?.errors as Array<{ path: string; message: string }> | undefined
+    if (fields && fields.length > 0) {
+      const lines = fields.map(f => (f.path ? `${prettifyPath(f.path)}: ${f.message}` : f.message))
+      toast({
+        title: 'Please fix the following',
+        description: lines.join('\n'),
+        variant: 'destructive',
+      })
+      return
+    }
+    toast({
+      title: 'Save failed',
+      description: err?.response?.data?.message ?? err?.message ?? 'Please try again.',
+      variant: 'destructive',
+    })
+  }
+
   const saveMut = useMutation({
     mutationFn: async () => {
-      const err = validate()
+      // Drafts only require the bare-minimum identifiers — everything else
+      // is allowed to be empty so a manager can capture an in-progress
+      // Performance Warning and come back to it later.
+      const err = validateDraft()
       if (err) throw new Error(err)
       const payload = buildPayload()
       let savedId: number
@@ -177,16 +264,13 @@ export default function WriteUpFormPage() {
       toast({ title: isEdit ? 'Performance Warning saved' : 'Draft created' })
       navigate(`/app/performancewarnings/${savedId}`)
     },
-    onError: (err: any) => {
-      toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
-    },
+    onError: reportSaveError,
   })
 
   const scheduleMut = useMutation({
     mutationFn: async () => {
-      const err = validate()
+      const err = validateSchedule()
       if (err) throw new Error(err)
-      if (!form.meeting_date) throw new Error('Meeting date is required to schedule')
       const payload = buildPayload()
       let savedId: number
       if (isEdit) {
@@ -212,9 +296,7 @@ export default function WriteUpFormPage() {
       toast({ title: 'Performance Warning scheduled' })
       navigate(`/app/performancewarnings/${savedId}`)
     },
-    onError: (err: any) => {
-      toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
-    },
+    onError: reportSaveError,
   })
 
   const isSaving       = saveMut.isPending || scheduleMut.isPending

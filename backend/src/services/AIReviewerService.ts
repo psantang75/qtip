@@ -1390,7 +1390,7 @@ export class AIReviewerService {
       if (selfConsistencyWarnings.length > 0) triggers.push('self_consistency');
       try {
         const result = await runVerificationPass(
-          { answers, timeline, playbookSteps, observations },
+          { answers, timeline, playbookSteps, observations, categoryNotes, coaching },
           { ...synthesisCtx, purpose: `${synthesisCtx.purpose}.verification`, pass: 'verification' },
           synthesisProvider,
           opts.reasoningModelOverride
@@ -1843,7 +1843,7 @@ export class AIReviewerService {
       if (selfConsistencyWarnings.length > 0) triggers.push('self_consistency');
       try {
         const result = await runVerificationPass(
-          { answers, timeline, playbookSteps, observations },
+          { answers, timeline, playbookSteps, observations, categoryNotes, coaching },
           { ...traceCtx, purpose: `${traceCtx.purpose}.verification`, pass: 'verification' }
         );
         overallConfidence = applyVerificationDeltas(answers, overallConfidence, result, `single`);
@@ -4476,6 +4476,22 @@ async function runVerificationPass(
     timeline: AiTimelineItem[];
     playbookSteps: AiPlaybookStep[];
     observations: AiObservation[];
+    /**
+     * Reviewer-facing per-category commentary. Added to the verifier
+     * input so the absence-claim audit (see verifySystem) can catch
+     * partial-presence-reported-as-full-absence errors in the
+     * category_notes text that the user sees as the per-category
+     * "Feedback" paragraph. The user sees this text directly, so a
+     * factually wrong "X was omitted" claim here is the most
+     * user-visible faithfulness failure mode.
+     */
+    categoryNotes: { category: string; notes: string }[];
+    /**
+     * SPIN-style coaching block. Coaching.gaps[] is the third common
+     * surface for absence claims (alongside observations[] and
+     * categoryNotes[]) — same audit rule applies.
+     */
+    coaching: AiCoaching;
   },
   traceCtx: CallLogMeta,
   provider: ModelProvider = 'anthropic',
@@ -4492,9 +4508,9 @@ async function runVerificationPass(
   // anchor the magnitude — empirically, models follow shape better
   // when given a few "small/medium/large" calibration points.
   const verifySystem =
-    'You are auditing your own previous output as the QA reviewer. Examine the answers, timeline, playbook_steps, and observations below.\n\n' +
+    'You are auditing your own previous output as the QA reviewer. Examine the answers, timeline, playbook_steps, observations, category_notes, and coaching below.\n\n' +
     'Two outputs are required:\n' +
-    '  1. warnings[]: one short sentence per flagged answer (e.g. yes-verdict with no supporting timeline item, or no-verdict with no missing playbook step). Empty array is fine when nothing is mismatched.\n' +
+    '  1. warnings[]: one short sentence per flagged finding. Empty array is fine when nothing is mismatched. Flag answer-level concerns (yes-verdict with no supporting timeline item, no-verdict with no missing playbook step) AND narrative-level faithfulness concerns (see "Absence-claim audit" below).\n' +
     '  2. confidence_deltas: signed adjustments you would make to the original confidence numbers. Negative numbers REDUCE confidence (use this for unsupported answers); positive numbers INCREASE it (use ONLY when the trace is unambiguously stronger than the original confidence reflected).\n\n' +
     'Bounds (we will clamp anything outside these — emit values within them):\n' +
     '  - overall_delta: [-0.20, +0.10]   (negative half is wider on purpose — the verifier exists to catch problems, not to validate).\n' +
@@ -4507,8 +4523,15 @@ async function runVerificationPass(
     '  - +0.05 = trace fully supports the verdict and the original confidence was unjustifiably low\n' +
     '  - +0.10 = whole-review picture is materially stronger than the per-answer numbers reflected\n\n' +
     'Bias toward catching problems. If you are unsure, lean negative. Do NOT use positive deltas as a "vote of confidence" — they are reserved for cases where the original number understated objective trace support.\n\n' +
+    'Absence-claim audit (CRITICAL — narrative-level faithfulness check, applies to observations[], category_notes[], and coaching.gaps[]):\n' +
+    '- For every entry in observations[].message, category_notes[].notes, and coaching.gaps[] that contains an absence keyword ("missing", "omitted", "not documented", "not captured", "not recorded", "not in notes", "not on the ticket", "absent", or any equivalent phrasing), verify the finding SHAPE:\n' +
+    '  - VALID shape: the finding either (a) quotes a verbatim related snippet that IS present (in single or double quotes, anchored to a note date / transcript timestamp / KB page name) and names which atomic part is missing, OR (b) explicitly states "no related content in <named surfaces>" naming the surfaces searched.\n' +
+    '  - INVALID shape: the finding makes a compound absence claim like "X-and-Y was not documented" without quoting the parts of X-and-Y that ARE present, OR uses "omitted from notes" as a vague shorthand without naming what was searched.\n' +
+    '- For every INVALID-shape absence claim, emit a warning of the form: "Absence-claim shape: <surface>[<index>] claims \'<short paraphrase of claim>\' without quoting affirmative content or naming searched surfaces — likely partial-presence reported as full absence."\n' +
+    '- Penalize the overall_delta by an additional -0.05 per invalid-shape absence claim (up to the existing -0.20 clamp). These are user-visible faithfulness errors and the most common source of human-reviewer confusion.\n' +
+    '- A correctly-shaped absence claim (with affirmative quote OR explicit empty-search statement) is FINE — do NOT flag those.\n\n' +
     'Respond with ONLY this JSON object (no prose, no code fences):\n' +
-    '{ "warnings": ["<one short sentence per flagged answer>"], "overall_delta": <number>, "per_answer_deltas": { "<question_id>": <number>, ... } }';
+    '{ "warnings": ["<one short sentence per flagged finding>"], "overall_delta": <number>, "per_answer_deltas": { "<question_id>": <number>, ... } }';
   const verifyUser = JSON.stringify(
     {
       answers: ctx.answers.map((a) => ({
@@ -4519,6 +4542,8 @@ async function runVerificationPass(
       timeline: ctx.timeline,
       playbook_steps: ctx.playbookSteps,
       observations: ctx.observations,
+      category_notes: ctx.categoryNotes,
+      coaching: ctx.coaching,
     },
     null,
     2

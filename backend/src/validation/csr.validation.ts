@@ -1,4 +1,5 @@
 ﻿import { z } from 'zod';
+import logger from '../config/logger';
 import {
   PageSchema,
   PageSizeSchema,
@@ -95,12 +96,19 @@ export const validateSchema = (schema: z.ZodSchema) => {
       next();
     } catch (error) {
       if (error instanceof z.ZodError) {
+        const errors = error.errors.map(err => ({
+          path: err.path.join('.'),
+          message: err.message,
+        }));
+        // Surface the failed paths in the backend log so 400s aren't a black
+        // box when the user only sees a toast / red banner. Paths only — no
+        // field values — to avoid leaking PII into logs.
+        logger.warn(`[VALIDATION] ${req.method} ${req.originalUrl} rejected`, {
+          fields: errors,
+        });
         return res.status(400).json({
           message: 'Validation error',
-          errors: error.errors.map(err => ({
-            path: err.path.join('.'),
-            message: err.message,
-          })),
+          errors,
         });
       }
       next(error);

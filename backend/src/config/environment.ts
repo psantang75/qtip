@@ -23,6 +23,18 @@ interface EnvironmentConfig {
   PHONE_DB_PASSWORD?: string;
   PHONE_DB_NAME?: string;
   PHONE_DB_CONNECTION_LIMIT?: number;
+  /**
+   * Optional override applied to `tblConversationRecording.RecordingPath`
+   * before the streaming endpoint opens the MP3. The DB stores Windows
+   * UNC paths like `\\wagoneer\DMCMS\PhoneSystem Recording\<id>.mp3`,
+   * which work as-is when the Node process runs on a Windows host with
+   * share access. Leave unset on Windows. On Linux, mount the share and
+   * set this to the mount root prefix that should replace the UNC root
+   * (e.g. `/mnt/phonesystem-recordings`). The leading `\\wagoneer\DMCMS\PhoneSystem Recording\`
+   * portion is rewritten to this value (with `/` separators) so the
+   * filename suffix is preserved.
+   */
+  PHONE_RECORDING_BASE_PATH?: string;
 
   // CRM Database Configuration (Phase 2 read-only consumer; optional)
   CRM_DB_HOST?: string;
@@ -227,6 +239,7 @@ export const config: EnvironmentConfig = {
   PHONE_DB_PASSWORD: process.env.PHONE_DB_PASSWORD,
   PHONE_DB_NAME: process.env.PHONE_DB_NAME,
   PHONE_DB_CONNECTION_LIMIT: process.env.PHONE_DB_CONNECTION_LIMIT ? parseInt(process.env.PHONE_DB_CONNECTION_LIMIT, 10) : undefined,
+  PHONE_RECORDING_BASE_PATH: process.env.PHONE_RECORDING_BASE_PATH,
 
   // CRM Database (Phase 2; optional; pool only created when fully configured)
   CRM_DB_HOST: process.env.CRM_DB_HOST,

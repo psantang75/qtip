@@ -65,8 +65,15 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   const aiReviewerCategory = formData.categories.find(isAiReviewerCat);
   const nonAiCategories    = formData.categories.filter((c: any) => !isAiReviewerCat(c));
 
+  // Per-question `visible_to_csr` is the source of truth for CSR visibility.
+  // Zero-weight categories are otherwise hidden for CSR, except for
+  // "Overall Feedback" which intentionally has weight 0 but should be shown
+  // (with question-level Agent Visible deciding which questions appear).
+  const isOverallFeedbackCat = (c: any) =>
+    String(c?.category_name || c?.name || '').trim().toLowerCase() === 'overall feedback';
+
   const visibleCategories = userRole === 3
-    ? nonAiCategories.filter((category: any) => (category.weight || 0) > 0)
+    ? nonAiCategories.filter((category: any) => (category.weight || 0) > 0 || isOverallFeedbackCat(category))
     : nonAiCategories;
 
   // Pull the AI Reviewer Feedback answer (always TEXT) for the simplified card.
@@ -96,7 +103,6 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
       const qType = (question.question_type || '').toLowerCase();
 
       if (qType === 'info' || qType === 'info_block') return;
-      if (userRole === 3 && qType === 'text' && question.visible_to_csr !== true) return;
 
       if (qType === 'sub_category') {
         subCategories[question.question_text] = [];
@@ -204,15 +210,15 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
           <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-3">
             Category Breakdown
           </p>
-          <div className="rounded-xl border border-slate-200 overflow-hidden">
+          <div className="rounded-xl border border-primary/30 overflow-hidden">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Category</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-slate-600">Weight</th>
-                  <th className="text-right px-3 py-2.5 font-semibold text-slate-600">Earned</th>
-                  <th className="text-right px-3 py-2.5 font-semibold text-slate-600">Possible</th>
-                  <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Score</th>
+                <tr className="bg-primary/10 border-b border-primary/30">
+                  <th className="text-left px-4 py-2.5 text-[12px] font-semibold text-primary uppercase tracking-wider">Category</th>
+                  <th className="text-center px-3 py-2.5 text-[12px] font-semibold text-primary uppercase tracking-wider">Weight</th>
+                  <th className="text-right px-3 py-2.5 text-[12px] font-semibold text-primary uppercase tracking-wider">Earned</th>
+                  <th className="text-right px-3 py-2.5 text-[12px] font-semibold text-primary uppercase tracking-wider">Possible</th>
+                  <th className="text-right px-4 py-2.5 text-[12px] font-semibold text-primary uppercase tracking-wider">Score</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -235,11 +241,11 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                 ))}
               </tbody>
               <tfoot>
-                <tr className="bg-slate-100 border-t-2 border-slate-300">
-                  <td className="px-4 py-2.5 font-bold text-slate-800 text-[13px]">Total</td>
-                  <td className="px-3 py-2.5 text-center font-semibold text-slate-600">100%</td>
-                  <td className="px-3 py-2.5 text-right font-semibold text-slate-700">{totalWeightedPointsEarned.toFixed(2)}</td>
-                  <td className="px-3 py-2.5 text-right font-semibold text-slate-700">{totalWeightedPointsPossible.toFixed(2)}</td>
+                <tr className="bg-primary/10 border-t-2 border-primary/30">
+                  <td className="px-4 py-2.5 font-bold text-primary text-[13px] uppercase tracking-wider">Total</td>
+                  <td className="px-3 py-2.5 text-center font-semibold text-primary">100%</td>
+                  <td className="px-3 py-2.5 text-right font-semibold text-primary">{totalWeightedPointsEarned.toFixed(2)}</td>
+                  <td className="px-3 py-2.5 text-right font-semibold text-primary">{totalWeightedPointsPossible.toFixed(2)}</td>
                   <td className={`px-4 py-2.5 text-right font-bold text-[15px] ${scoreClass(formScore)}`}>
                     {formScore.toFixed(1)}%
                   </td>
@@ -258,13 +264,13 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
           </p>
           {categoryScores.map((category: CategoryScore) => (
             <div key={category.id} className="rounded-xl border border-slate-200 overflow-hidden">
-              {/* Category header row */}
-              <div className="flex items-center justify-between px-4 py-2.5 bg-primary/8 border-b border-primary/20">
-                <div className="flex items-center gap-2">
-                  <span className="w-[3px] h-4 rounded-full bg-primary shrink-0" />
-                  <span className="text-[13px] font-bold text-slate-800">{category.name}</span>
+              {/* Category header row — matches FormRenderer's CategoryRenderer */}
+              <div className="flex items-center justify-between gap-2.5 bg-primary/10 border-b border-primary/30 px-4 py-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-[3px] h-4 rounded-full bg-[#00aeef] shrink-0" />
+                  <h3 className="text-[13px] font-semibold text-primary uppercase tracking-wider truncate">{category.name}</h3>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   <span className="text-[11px] text-slate-500">Weight: {(category.weight * 100).toFixed(0)}%</span>
                   <span className={`text-[13px] font-bold ${category.pointsPossible === 0 ? 'text-slate-400' : scoreClass(category.score)}`}>
                     {category.pointsPossible === 0 ? 'N/A' : `${category.score.toFixed(1)}%`}
@@ -275,7 +281,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="text-left px-4 py-2 font-semibold text-slate-500 w-1/2">Question</th>
+                    <th className="text-left pl-[29px] pr-3 py-2 font-semibold text-slate-500 w-1/2">Question</th>
                     <th className="text-left px-3 py-2 font-semibold text-slate-500">Answer</th>
                     <th className="text-right px-3 py-2 font-semibold text-slate-500">Points</th>
                     <th className="text-right px-4 py-2 font-semibold text-slate-500">Possible</th>
@@ -287,8 +293,8 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                     return (
                       <React.Fragment key={subCatName}>
                         {subCatName !== 'default' && (
-                          <tr className="bg-slate-50">
-                            <td colSpan={4} className="px-4 py-2 text-[12px] font-semibold text-slate-600 uppercase tracking-wide">
+                          <tr>
+                            <td colSpan={4} className="bg-slate-100 border-b-2 border-slate-400 pl-[29px] pr-4 py-1.5 text-[12px] font-bold text-slate-900 uppercase tracking-wider">
                               {subCatName}
                             </td>
                           </tr>
@@ -298,7 +304,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                           const hasScore = !(q.pointsEarned === 0 && q.pointsPossible === 0);
                           return (
                             <tr key={q.id} className={`hover:bg-slate-50/60 transition-colors ${q.criticalMissed ? 'bg-red-50/40' : ''}`}>
-                              <td className="px-4 py-2.5 text-slate-700 leading-snug">
+                              <td className="pl-[29px] pr-3 py-2.5 text-slate-700 leading-snug">
                                 <span className="inline-flex items-start gap-2 flex-wrap">
                                   <span>{q.text}</span>
                                   {q.criticalMissed && (
@@ -339,7 +345,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-100 border-t border-slate-200">
-                    <td colSpan={2} className="px-4 py-2 text-[12px] font-semibold text-slate-600">Category Total</td>
+                    <td colSpan={2} className="pl-[29px] pr-3 py-2 text-[12px] font-semibold text-slate-600">Category Total</td>
                     <td className="px-3 py-2 text-right text-[13px] font-bold text-slate-700">{category.pointsEarned.toFixed(1)}</td>
                     <td className="px-4 py-2 text-right text-[13px] font-semibold text-slate-500">{category.pointsPossible.toFixed(1)}</td>
                   </tr>

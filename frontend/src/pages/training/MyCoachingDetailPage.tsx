@@ -10,6 +10,7 @@ import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
+import { LegacyImportBanner } from '@/components/common/LegacyImportBanner'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
@@ -113,6 +114,10 @@ export default function MyCoachingDetailPage() {
             <Button variant="outline" onClick={() => navigate('/app/training/my-coaching')}>← Back</Button>
           }
         />
+
+        {Boolean(Number(session.is_legacy)) && (
+          <LegacyImportBanner legacyType={session.legacy_coaching_type} />
+        )}
 
         {isScheduled && (
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">

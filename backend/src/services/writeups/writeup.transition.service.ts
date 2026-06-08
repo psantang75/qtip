@@ -61,6 +61,9 @@ export async function transitionStatus(
   const newStatus = input.status
   assertTransition(existing.status, newStatus)
   assertTransitionGuards(existing, input, viewerRole, newStatus)
+  if (existing.status === 'DRAFT' && newStatus === 'SCHEDULED') {
+    await assertScheduleReadiness(writeUpId, existing)
+  }
 
   // Mirror signWriteUp's auto-route: a manager-recorded refusal at
   // AWAITING_SIGNATURE jumps straight to FOLLOW_UP_PENDING when a follow-up
@@ -165,8 +168,19 @@ function assertTransitionGuards(existing: any, input: TransitionStatusInput, vie
       throw new WriteUpServiceError('refusal_reason is required when recording a signature refusal', 400, 'WRITEUP_VALIDATION')
     }
   }
-  if (existing.status === 'DRAFT' && newStatus === 'SCHEDULED' && !input.meeting_date && !existing.meeting_date) {
-    throw new WriteUpServiceError('meeting_date is required to schedule a write-up', 400, 'WRITEUP_VALIDATION')
+  if (existing.status === 'DRAFT' && newStatus === 'SCHEDULED') {
+    if (!input.meeting_date && !existing.meeting_date) {
+      throw new WriteUpServiceError('meeting_date is required to schedule a write-up', 400, 'WRITEUP_VALIDATION')
+    }
+    if (!existing.manager_id) {
+      throw new WriteUpServiceError('Manager is required to schedule a write-up', 400, 'WRITEUP_VALIDATION')
+    }
+    if (!existing.hr_witness_id) {
+      throw new WriteUpServiceError('HR Witness is required to schedule a write-up', 400, 'WRITEUP_VALIDATION')
+    }
+    // The incident chain (incident → violation → example) is validated
+    // separately in `assertScheduleReadiness` because it requires async
+    // database lookups against the nested records.
   }
   if (existing.status === 'SCHEDULED' && newStatus === 'AWAITING_SIGNATURE') {
     if (!input.meeting_notes) {
@@ -184,6 +198,52 @@ function assertTransitionGuards(existing: any, input: TransitionStatusInput, vie
   if (existing.status === 'FOLLOW_UP_PENDING' && newStatus === 'FOLLOW_UP_COMPLETED' &&
       !input.follow_up_notes && !existing.follow_up_notes) {
     throw new WriteUpServiceError('follow_up_notes are required to complete a follow-up', 400, 'WRITEUP_VALIDATION')
+  }
+}
+
+/**
+ * Confirm a draft has a complete incident chain before allowing it to be
+ * scheduled. The form requires at least one incident → violation → example,
+ * each with non-empty descriptive text. Mirrored on the frontend in
+ * `WriteUpFormPage.validateSchedule`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function assertScheduleReadiness(writeUpId: number, _existing: any): Promise<void> {
+  const incidents = await prisma.writeUpIncident.findMany({
+    where: { write_up_id: writeUpId },
+    select: {
+      description: true,
+      violations: {
+        select: {
+          policy_violated: true,
+          examples: { select: { description: true } },
+        },
+      },
+    },
+  })
+
+  const completeIncident = incidents.find(inc => (inc.description ?? '').trim())
+  if (!completeIncident) {
+    throw new WriteUpServiceError(
+      'At least one incident with a description is required to schedule',
+      400, 'WRITEUP_VALIDATION',
+    )
+  }
+
+  const completeViolation = completeIncident.violations.find(v => (v.policy_violated ?? '').trim())
+  if (!completeViolation) {
+    throw new WriteUpServiceError(
+      'At least one violation with a policy is required to schedule',
+      400, 'WRITEUP_VALIDATION',
+    )
+  }
+
+  const completeExample = completeViolation.examples.some(e => (e.description ?? '').trim())
+  if (!completeExample) {
+    throw new WriteUpServiceError(
+      'At least one example with a description is required to schedule',
+      400, 'WRITEUP_VALIDATION',
+    )
   }
 }
 

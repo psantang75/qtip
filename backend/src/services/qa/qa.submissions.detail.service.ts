@@ -15,6 +15,7 @@ import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
 import { dbLogger } from '../../config/logger'
 import { QAServiceError } from './qa.types'
+import { attachPhoneSystemRecordings } from '../callRecordingEnrichment'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -164,13 +165,14 @@ async function loadMetadata(submissionId: number): Promise<any[]> {
 }
 
 async function loadCalls(submissionId: number): Promise<any[]> {
-  return prisma.$queryRaw<any[]>(Prisma.sql`
+  const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
     SELECT c.call_id, c.customer_id, c.call_date, c.duration, c.recording_url, c.transcript
     FROM submission_calls sc
     JOIN calls c ON sc.call_id = c.id
     WHERE sc.submission_id = ${submissionId}
     ORDER BY sc.sort_order ASC
   `)
+  return attachPhoneSystemRecordings(rows)
 }
 
 /**

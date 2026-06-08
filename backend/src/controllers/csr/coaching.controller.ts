@@ -315,6 +315,7 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
           cs.delivered_at, cs.completed_at,
           cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
           cs.due_date, cs.follow_up_required, cs.follow_up_date, cs.created_at,
+          cs.is_legacy, cs.legacy_coaching_type,
           creator.username as created_by_name,
           GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ',') as topics,
           GROUP_CONCAT(DISTINCT li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids

@@ -3,7 +3,7 @@ import { authenticate } from '../middleware/auth';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { Call } from '../models/Call';
-import phoneSystemService, { type ConversationDetailResponse, type ConversationMeta } from '../services/PhoneSystemService';
+import phoneSystemService, { type ConversationDetailResponse, type ConversationMeta, type CallRecordingResponse } from '../services/PhoneSystemService';
 import logger from '../config/logger';
 
 const router = express.Router();
@@ -49,10 +49,19 @@ function formatTranscripts(transcripts: ConversationDetailResponse[] | null | un
  * exist in PhoneSystem but not yet in Q-Tip's own `calls` table. Pulls real
  * call_date and duration from tblConversations when meta is provided.
  */
+// PhoneSystem returns every recording leg for a conversation (newest first).
+// For QA review we only surface the agent leg — see callRecordingEnrichment.ts
+// for the rationale.
+function agentLegOnly(recordings?: CallRecordingResponse[]): CallRecordingResponse[] {
+  if (!recordings || recordings.length === 0) return [];
+  return [recordings[0]];
+}
+
 function buildVirtualCall(
   externalId: string,
   phoneSystemData: {
     audio: { audio_url: string } | null;
+    recordings?: CallRecordingResponse[];
     transcript: ConversationDetailResponse[] | null;
   },
   meta: ConversationMeta | null,
@@ -66,6 +75,7 @@ function buildVirtualCall(
     call_date: meta?.start_et ?? new Date(),
     duration: meta?.duration_seconds ?? 0,
     recording_url: phoneSystemData.audio?.audio_url || null,
+    recordings: agentLegOnly(phoneSystemData.recordings),
     transcript: formatTranscripts(phoneSystemData.transcript),
     csr_name: 'Unknown',
     department_name: 'Unknown',
@@ -86,17 +96,22 @@ router.get('/search', async (req: Request, res: Response) => {
       limit = 20
     } = req.query;
 
-    // If searching by external_id (conversation ID), first verify it exists in PhoneSystem
+    // If searching by external_id (conversation ID), first verify it exists in PhoneSystem.
+    // Cache the result so we don't query the phone DB twice when the call is
+    // missing from our own table and we need to build a virtual record below.
+    let phoneSystemForExternal: Awaited<ReturnType<typeof phoneSystemService.getAudioAndTranscriptByConversationId>> | null = null;
     if (external_id) {
       logger.info(`[CALLS ROUTE] Searching for conversation ID: ${external_id}`);
-      
-      const phoneSystemData = await phoneSystemService.getAudioAndTranscriptByConversationId(external_id as string);
-      
-      if (!phoneSystemData.audio && (!phoneSystemData.transcript || phoneSystemData.transcript.length === 0)) {
+
+      phoneSystemForExternal = await phoneSystemService.getAudioAndTranscriptByConversationId(external_id as string);
+
+      const hasRecordings = phoneSystemForExternal.recordings && phoneSystemForExternal.recordings.length > 0;
+      const hasTranscript = phoneSystemForExternal.transcript && phoneSystemForExternal.transcript.length > 0;
+      if (!hasRecordings && !hasTranscript) {
         logger.info(`[CALLS ROUTE] Conversation ID ${external_id} not found in PhoneSystem`);
         return res.json([]);
       }
-      
+
       logger.info(`[CALLS ROUTE] Conversation ID ${external_id} found in PhoneSystem`);
     }
 
@@ -168,17 +183,33 @@ router.get('/search', async (req: Request, res: Response) => {
       call_date: row.call_date,
       duration: row.duration,
       recording_url: row.recording_url,
+      recordings: [] as CallRecordingResponse[],
       transcript: row.transcript,
       csr_name: row.csr_name,
       department_name: row.department_name
     }));
+
+    // For DB calls matched by external_id, layer in PhoneSystem recordings so
+    // the call selector can offer one audio player per communication leg even
+    // when our own `calls.recording_url` is still empty.
+    if (external_id && phoneSystemForExternal && calls.length > 0) {
+      const psRecordings = agentLegOnly(phoneSystemForExternal.recordings);
+      calls.forEach(c => {
+        c.recordings = psRecordings;
+        if (!c.recording_url && psRecordings.length > 0) {
+          c.recording_url = psRecordings[0].audio_url;
+        }
+      });
+    }
 
     // If searching by external_id and no results in main DB, create a virtual call record
     if (external_id && calls.length === 0) {
       logger.info(`[CALLS ROUTE] Creating virtual call record for conversation ID: ${external_id}`);
 
       const [phoneSystemData, meta] = await Promise.all([
-        phoneSystemService.getAudioAndTranscriptByConversationId(external_id as string),
+        phoneSystemForExternal
+          ? Promise.resolve(phoneSystemForExternal)
+          : phoneSystemService.getAudioAndTranscriptByConversationId(external_id as string),
         phoneSystemService.getConversationMetaByConversationId(external_id as string),
       ]);
 

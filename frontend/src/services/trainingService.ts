@@ -118,6 +118,8 @@ export interface CoachingSession {
   quiz_attempts?: QuizAttemptSummary[]
   quiz_count?: number
   quiz_passed_count?: number
+  is_legacy?: boolean | number | null
+  legacy_coaching_type?: string | null
 }
 
 export type ResourceType = 'URL' | 'PDF' | 'IMAGE' | 'WORD' | 'POWERPOINT' | 'EXCEL' | 'VIDEO' | 'FILE'

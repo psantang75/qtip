@@ -4,6 +4,7 @@ import cacheService from './CacheService';
 import { handleDatabaseError, createNotFoundError, createValidationError } from '../utils/errorHandler';
 import { dbPerformanceTracker } from '../middleware/performance';
 import logger from '../config/logger';
+import { attachPhoneSystemRecordings } from './callRecordingEnrichment';
 
 export interface CSRAudit {
   id: number;
@@ -381,7 +382,7 @@ export class CSRService {
           categories: categoriesWithQuestions
         },
         metadata: metadataArray,
-        calls: calls,
+        calls: await attachPhoneSystemRecordings(calls as any[]),
         ticket_tasks: ticket_tasks.map((r: any) => ({
           kind: r.kind,
           external_id: Number(r.external_id),

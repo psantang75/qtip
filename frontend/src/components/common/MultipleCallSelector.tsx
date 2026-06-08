@@ -4,7 +4,8 @@ import { Phone, MicOff, Plus, X, FileDown, ChevronDown, ChevronUp } from 'lucide
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import callService, { type Call } from '@/services/callService'
+import callService, { type Call, type CallRecording } from '@/services/callService'
+import { AudioPlayer } from '@/components/common/AudioPlayer'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
 import { formatTranscriptText } from '@/utils/transcriptUtils'
 
@@ -19,7 +20,6 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
   const [transcriptOpen, setTranscriptOpen] = useState(false)
   const [adding,         setAdding]         = useState(false)
   const [callId,         setCallId]         = useState('')
-  const [callDate,       setCallDate]       = useState('')
   const [error,          setError]          = useState('')
 
   const setActiveTab = (i: number) => {
@@ -30,8 +30,6 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
   const addMut = useMutation({
     mutationFn: () => callService.searchCalls({
       external_id: callId.trim() || undefined,
-      date_start:  callDate || undefined,
-      date_end:    callDate || undefined,
     }),
     onSuccess: (results) => {
       // Use found call if available, otherwise create a manual entry from the entered fields
@@ -43,7 +41,7 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
             call_id:       callId.trim(),
             csr_id:        0,
             customer_id:   null,
-            call_date:     callDate || new Date().toISOString(),
+            call_date:     new Date().toISOString(),
             duration:      0,
             recording_url: null,
             transcript:    null,
@@ -57,7 +55,6 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
       setActiveTab(updated.length - 1)
       setAdding(false)
       setCallId('')
-      setCallDate('')
       setError('')
     },
     onError: () => {
@@ -67,7 +64,7 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
         call_id:       callId.trim(),
         csr_id:        0,
         customer_id:   null,
-        call_date:     callDate || new Date().toISOString(),
+        call_date:     new Date().toISOString(),
         duration:      0,
         recording_url: null,
         transcript:    null,
@@ -77,7 +74,6 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
       setActiveTab(updated.length - 1)
       setAdding(false)
       setCallId('')
-      setCallDate('')
       setError('')
     },
   })
@@ -97,7 +93,6 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
   const handleCancel = () => {
     setAdding(false)
     setCallId('')
-    setCallDate('')
     setError('')
   }
 
@@ -123,7 +118,7 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
             >
               <Phone className="h-3 w-3" />
               Call {i + 1}
-              {c.recording_url && (
+              {(c.recording_url || (c.recordings && c.recordings.length > 0)) && (
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
               )}
             </button>
@@ -157,19 +152,37 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
             )}
           </div>
 
-          {activeCall.recording_url ? (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Audio Recording</p>
-              <audio controls className="w-full h-9 rounded-lg">
-                <source src={activeCall.recording_url} type="audio/mpeg" />
-              </audio>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 py-2 px-3 bg-slate-50 rounded-lg">
-              <MicOff className="h-4 w-4 text-slate-400 shrink-0" />
-              <p className="text-[12px] text-slate-400">No audio recording available</p>
-            </div>
-          )}
+          {(() => {
+            // Prefer the per-leg recordings array (multi-segment calls);
+            // fall back to the legacy single recording_url.
+            const recs: CallRecording[] = (activeCall.recordings && activeCall.recordings.length > 0)
+              ? activeCall.recordings
+              : activeCall.recording_url
+                ? [{ recording_id: 'legacy', audio_url: activeCall.recording_url }]
+                : []
+            if (recs.length === 0) {
+              return (
+                <div className="flex items-center gap-2 py-2 px-3 bg-slate-50 rounded-lg">
+                  <MicOff className="h-4 w-4 text-slate-400 shrink-0" />
+                  <p className="text-[12px] text-slate-400">No audio recording available</p>
+                </div>
+              )
+            }
+            return (
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  {recs.length === 1 ? 'Audio Recording' : `Audio Recordings (${recs.length} legs)`}
+                </p>
+                {recs.map((rec, i) => (
+                  <AudioPlayer
+                    key={rec.recording_id || i}
+                    url={rec.audio_url}
+                    label={recs.length > 1 ? `Leg ${i + 1} of ${recs.length}` : undefined}
+                  />
+                ))}
+              </div>
+            )
+          })()}
 
           {activeCall.transcript && (
             <div>
@@ -214,29 +227,17 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
       {/* ── Add call form ─────────────────────────────────────────────── */}
       {adding ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 space-y-2 mt-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] font-medium text-slate-500 mb-1">Call ID</label>
-              <Input
-                placeholder="e.g. 4567894"
-                value={callId}
-                onChange={e => setCallId(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAdd()}
-                disabled={addMut.isPending}
-                className="h-9 text-[13px]"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-slate-500 mb-1">Call Date</label>
-              <Input
-                type="date"
-                value={callDate}
-                onChange={e => setCallDate(e.target.value)}
-                disabled={addMut.isPending}
-                className="h-9 text-[13px]"
-              />
-            </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-500 mb-1">Call ID</label>
+            <Input
+              placeholder="e.g. 4567894"
+              value={callId}
+              onChange={e => setCallId(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAdd()}
+              disabled={addMut.isPending}
+              className="h-9 text-[13px]"
+              autoFocus
+            />
           </div>
           {error && <p className="text-[12px] text-red-600">{error}</p>}
           <div className="flex justify-end gap-2">

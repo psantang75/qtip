@@ -71,8 +71,8 @@ export const YesNoQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
     ...(isNaAllowed ? [{ value: 'na', label: 'N/A' }] : []),
   ];
   return (
-    <div className="flex items-start gap-3">
-      <p className="flex-1 text-[13px] text-slate-800 leading-snug pt-0.5 inline-flex items-start gap-2 flex-wrap">
+    <div>
+      <p className="text-[13px] text-slate-800 leading-snug mb-3 inline-flex items-start gap-2 flex-wrap">
         {isCritical && (
           <span
             aria-label="Critical question"
@@ -92,7 +92,7 @@ export const YesNoQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
           </span>
         )}
       </p>
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex flex-col gap-1.5 pl-4">
         {options.map(opt => (
           // Roll-up questions are derived by code (rollupEngine) - the
           // human / AI does not get to edit them directly. We force
@@ -102,7 +102,7 @@ export const YesNoQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
             onClick={() => { if (!isRollup) onAnswerChange(id, opt.value, 'yes_no'); }}
             title={isRollup ? (rollupReason || 'Auto-computed') : undefined}
             className={cn(
-              'h-7 px-3 text-[12px] rounded border font-medium transition-all',
+              'h-7 px-3 text-[12px] rounded border font-medium transition-all self-start text-left',
               optionCls(currentValue === opt.value),
               isRollup && 'cursor-not-allowed opacity-90',
             )}>
@@ -189,14 +189,14 @@ export const RadioQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
   if (radioOptions.length === 0) return <p className="text-[12px] text-red-500">Error: No options for this question.</p>;
   return (
     <div>
-      <p className="text-[13px] text-slate-800 leading-snug mb-2">{text}</p>
-      <div className="flex flex-wrap gap-1.5">
+      <p className="text-[13px] text-slate-800 leading-snug mb-3">{text}</p>
+      <div className="flex flex-col gap-1.5 pl-4">
         {radioOptions.map((option: RadioOption & { value?: string; label?: string }) => {
           const val = String(option.option_value || option.value || '');
           return (
             <button key={val} type="button" disabled={isDisabled}
               onClick={() => onAnswerChange(id, val, 'radio')}
-              className={cn('h-7 px-3 text-[12px] rounded border font-medium transition-all', optionCls(String(currentValue || '') === val))}>
+              className={cn('h-7 px-3 text-[12px] rounded border font-medium transition-all self-start text-left', optionCls(String(currentValue || '') === val))}>
               {option.option_text || option.label}
             </button>
           );
@@ -223,13 +223,13 @@ export const MultiSelectQuestion: React.FC<QuestionProps> = ({ question, isDisab
 
   return (
     <div>
-      <p className="text-[13px] text-slate-800 leading-snug mb-2">{text}</p>
-      <div className="flex flex-wrap gap-1.5">
+      <p className="text-[13px] text-slate-800 leading-snug mb-3">{text}</p>
+      <div className="flex flex-col gap-1.5 pl-4">
         {options.map((option: RadioOption & { value?: string; label?: string }) => {
           const val = String(option.option_value || option.value || '');
           return (
             <button key={val} type="button" disabled={isDisabled} onClick={() => handleToggle(val)}
-              className={cn('h-7 px-3 text-[12px] rounded border font-medium transition-all', optionCls(selectedValues.has(val)))}>
+              className={cn('h-7 px-3 text-[12px] rounded border font-medium transition-all self-start text-left', optionCls(selectedValues.has(val)))}>
               {option.option_text || option.label}
             </button>
           );
@@ -251,9 +251,7 @@ export const InfoQuestion: React.FC<QuestionProps> = ({ question }) => {
 export const SubCategoryQuestion: React.FC<QuestionProps> = ({ question }) => {
   if (!question.isVisible) return null;
   return (
-    <div className="pt-1 pb-0">
-      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{question.text}</p>
-    </div>
+    <p className="text-[12px] font-bold text-slate-900 uppercase tracking-wider border-b-2 border-slate-400 bg-slate-100 pl-[29px] pr-4 py-1.5">{question.text}</p>
   );
 };
 
@@ -265,8 +263,8 @@ export const QuestionRenderer: React.FC<QuestionProps> = (props) => {
   const isInfo   = props.question.type === 'info' || props.question.type === 'info_block';
   return (
     <div id={`question-${props.question.id}`}
-      className={cn('px-4 py-2.5 transition-colors',
-        isSubCat ? 'bg-slate-50 border-b border-slate-100' : 'border-b border-slate-100 last:border-0',
+      className={cn('transition-colors',
+        isSubCat ? '' : 'pl-[29px] pr-4 py-2.5 border-b border-slate-100 last:border-0',
         isInfo ? 'py-2' : ''
       )}>
       {props.question.type === 'yes_no'       && <YesNoQuestion       {...props} />}
@@ -291,9 +289,9 @@ interface CategoryProps {
 
 export const CategoryRenderer: React.FC<CategoryProps> = ({ category, isDisabled = false, onAnswerChange, onNotesChange }) => (
   <div className="mb-4">
-    <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-t-lg px-4 py-2.5">
+    <div className="flex items-center gap-2.5 bg-primary/10 border border-primary/30 rounded-t-lg px-4 py-2.5">
       <span className="w-[3px] h-4 rounded-full bg-[#00aeef] shrink-0" />
-      <h3 className="text-[12px] font-semibold text-slate-600 uppercase tracking-wider">{category.name}</h3>
+      <h3 className="text-[13px] font-semibold text-primary uppercase tracking-wider">{category.name}</h3>
     </div>
     <div className="border border-t-0 border-slate-200 rounded-b-lg overflow-hidden bg-white">
       {category.description && (

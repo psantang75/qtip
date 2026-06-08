@@ -19,6 +19,7 @@ import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
 import { trainerLogger } from '../TrainerLogger'
 import { TrainerServiceError } from './trainer.types'
+import { attachPhoneSystemRecordings } from '../callRecordingEnrichment'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -104,7 +105,7 @@ export async function getTrainerSubmissionDetail(
       interaction_type: submission.interaction_type,
     },
     metadata: metadataRows,
-    calls:    callsRows,
+    calls:    await attachPhoneSystemRecordings(callsRows),
     answers:  answersRows,
     dispute:  disputeRows.length > 0 ? disputeRows[0] : null,
   }

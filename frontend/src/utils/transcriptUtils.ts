@@ -76,6 +76,18 @@ function speakerLabelFromParticipantPurpose(purpose: unknown): 'Agent' | 'Custom
 }
 
 /**
+ * Format a non-negative integer number of seconds as `m:ss` (e.g. `0:05`,
+ * `12:34`). Used to prefix each transcript turn with its in-call offset
+ * so reviewers can quickly point to "what happened at 3:21".
+ */
+function secondsToMmss(secs: number): string {
+  const safe = Number.isFinite(secs) && secs > 0 ? Math.floor(secs) : 0;
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+/**
  * Extracts plain text from transcript phrases
  * @param transcriptData - The transcript data (can be string or structured object)
  * @returns Plain text string with all phrases combined, with each phrase
@@ -118,6 +130,15 @@ export function extractTranscriptText(transcriptData: string | ConversationTrans
         if (transcript.transcripts && Array.isArray(transcript.transcripts)) {
           for (const transcriptItem of transcript.transcripts) {
             if (transcriptItem.phrases && Array.isArray(transcriptItem.phrases)) {
+              // Phrase `startTimeMs` is absolute epoch milliseconds, not an
+              // offset from the call start. Pick the earliest available
+              // baseline so each turn renders as `m:ss` relative to the
+              // segment start: prefer the segment's `startTime`, fall back
+              // to the first phrase's `startTimeMs`.
+              const segmentStart = typeof transcriptItem.startTime === 'number' ? transcriptItem.startTime : undefined;
+              const firstPhraseStart = transcriptItem.phrases.find((p: TranscriptPhrase) => typeof p?.startTimeMs === 'number')?.startTimeMs;
+              const baselineMs = segmentStart ?? firstPhraseStart ?? 0;
+
               const phraseLines: string[] = [];
               for (const phrase of transcriptItem.phrases) {
                 // Prefer Genesys' `decoratedText` over raw `text`. The
@@ -134,7 +155,14 @@ export function extractTranscriptText(transcriptData: string | ConversationTrans
                 const display = decorated.length > 0 ? decorated : raw;
                 if (!display) continue;
                 const speaker = speakerLabelFromParticipantPurpose(phrase.participantPurpose);
-                phraseLines.push(speaker ? `${speaker}: ${display}` : display);
+                if (!speaker) {
+                  phraseLines.push(display);
+                  continue;
+                }
+                const offsetSec = typeof phrase?.startTimeMs === 'number'
+                  ? Math.max(0, Math.floor((phrase.startTimeMs - baselineMs) / 1000))
+                  : 0;
+                phraseLines.push(`${speaker} [${secondsToMmss(offsetSec)}] ${display}`);
               }
 
               if (phraseLines.length > 0) {
@@ -188,9 +216,10 @@ export function formatTranscriptText(transcriptData: string | ConversationTransc
     return rawText;
   }
 
-  // Match the speaker label only at the very start of a line, followed
-  // by ": ". We anchor on \s* so a stray leading space doesn't defeat
-  // the match. Group 1 is the label, group 2 is the rest of the line.
+  // Primary format (current): `Agent [m:ss] text` / `Customer [m:ss] text`.
+  // Group 1 = speaker, group 2 = timestamp, group 3 = utterance.
+  const labelWithTsRe = /^(Agent|Customer)\s+\[([0-9:]+)\]\s+(.*)$/;
+  // Fallback (legacy + backend-formatted): `Agent: text` / `Customer: text`.
   const labelRe = /^(Agent|Customer):\s+(.*)$/;
 
   return rawText
@@ -198,6 +227,10 @@ export function formatTranscriptText(transcriptData: string | ConversationTransc
     .map((line) => line.trim().replace(/\s+/g, ' '))
     .filter((line) => line.length > 0)
     .map((line) => {
+      const mts = labelWithTsRe.exec(line);
+      if (mts) {
+        return `<strong>${mts[1]}</strong> <span class="text-slate-500">[${escapeHtml(mts[2])}]</span> ${escapeHtml(mts[3])}`;
+      }
       const m = labelRe.exec(line);
       if (m) {
         return `<strong>${m[1]}:</strong> ${escapeHtml(m[2])}`;

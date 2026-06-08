@@ -2,11 +2,19 @@ import { executeQuery } from '../utils/databaseUtils';
 import logger from '../config/logger';
 
 /**
- * Interface for tempRecording table structure
+ * Row shape returned from `tblConversationRecording` in the PhoneSystem DB.
+ * One conversation can have multiple rows here — Genesys writes one
+ * recording per communication leg (IVR / queue / agent / transfer), so
+ * multi-segment calls produce N audio files.
  */
-export interface TempRecording {
+export interface ConversationRecordingRow {
+  ConversationRecordingID: string;
   ConversationID: string;
-  Recordings: string;
+  RecordingID: string;
+  RecordingPath: string;
+  OriginalFileName: string | null;
+  CreatedOn: Date | string | null;
+  Status: string | null;
 }
 
 /**
@@ -18,11 +26,16 @@ export interface tblConversationTranscript {
 }
 
 /**
- * Interface for PhoneSystem call recording response
+ * One playable recording surfaced to the API / UI. `audio_url` is the
+ * internal streaming endpoint (`/api/phone-system/audio/<RecordingID>`)
+ * — never the raw UNC `RecordingPath`, which can't be opened by a browser.
  */
 export interface CallRecordingResponse {
   conversation_id: string;
+  recording_id: string;
   audio_url: string;
+  original_filename?: string | null;
+  created_on?: string | null;
 }
 
 /**
@@ -50,131 +63,194 @@ export interface ConversationMeta {
  * Uses the 'phone' database pool (PHONE_DB_* env block) — a read-only
  * consumer of the external phone system DB. Q-Tip never writes here.
  */
+/**
+ * Build the relative URL the frontend uses to stream a recording. The
+ * actual file lives on a Windows share (`RecordingPath` in the DB); a
+ * backend proxy endpoint reads it from disk and pipes it back to the
+ * browser with HTTP Range support.
+ */
+const buildAudioUrl = (recordingId: string): string =>
+  `/api/phone-system/audio/${encodeURIComponent(recordingId)}`;
+
+const toIsoOrNull = (d: Date | string | null | undefined): string | null => {
+  if (!d) return null;
+  const dt = d instanceof Date ? d : new Date(d);
+  return Number.isFinite(dt.getTime()) ? dt.toISOString() : null;
+};
+
+const toResponse = (row: ConversationRecordingRow): CallRecordingResponse => ({
+  conversation_id: row.ConversationID,
+  recording_id: row.RecordingID,
+  audio_url: buildAudioUrl(row.RecordingID),
+  original_filename: row.OriginalFileName,
+  created_on: toIsoOrNull(row.CreatedOn),
+});
+
 class PhoneSystemService {
   /**
-   * Get audio URL by conversation ID from tempRecording table
-   * @param conversationId - The conversation ID to search for
-   * @returns Promise with call recording details including audio URL
+   * Look up the most recent completed audio recording for a conversation.
+   * Returns null when nothing playable is available yet.
+   * Multi-leg calls (IVR / queue / agent / transfer) can have several
+   * recordings — use `getRecordingsForConversation` to get them all.
    */
   async getAudioUrlByConversationId(conversationId: string): Promise<CallRecordingResponse | null> {
-    // TEMPORARILY COMMENTED OUT - tempRecording data retrieval
-    logger.info(`[PHONE SYSTEM SERVICE] Audio URL retrieval temporarily disabled for conversation ID: ${conversationId}`);
-    return null;
-    
-    /* COMMENTED OUT - tempRecording data retrieval
     try {
       logger.info(`[PHONE SYSTEM SERVICE] Fetching audio URL for conversation ID: ${conversationId}`);
-      
+
       const query = `
-        SELECT 
+        SELECT
+          ConversationRecordingID,
           ConversationID,
-          Recordings
-        FROM tempRecording 
+          RecordingID,
+          RecordingPath,
+          OriginalFileName,
+          CreatedOn,
+          Status
+        FROM tblConversationRecording
         WHERE ConversationID = ?
+          AND RecordingID IS NOT NULL
+          AND RecordingPath IS NOT NULL
+          AND RecordingPath <> ''
+        ORDER BY CreatedOn DESC
         LIMIT 1
       `;
-      
-      const results = await executeQuery<TempRecording>(query, [conversationId], 'phone');
-      
+
+      const results = await executeQuery<ConversationRecordingRow>(query, [conversationId], 'phone');
+
       if (results.length === 0) {
         logger.info(`[PHONE SYSTEM SERVICE] No recording found for conversation ID: ${conversationId}`);
         return null;
       }
-      
-      const recording = results[0];
-      logger.info(`[PHONE SYSTEM SERVICE] Found recording:`, {
-        conversation_id: recording.ConversationID,
-        audio_url: recording.Recordings
-      });
-      
-      return {
-        conversation_id: recording.ConversationID,
-        audio_url: recording.Recordings
-      };
+
+      const response = toResponse(results[0]);
+      logger.info('[PHONE SYSTEM SERVICE] Found recording:', response);
+      return response;
     } catch (error) {
       logger.error(`[PHONE SYSTEM SERVICE] Error fetching audio URL for conversation ID ${conversationId}:`, error);
       throw new Error(`Failed to retrieve audio URL for conversation ID: ${conversationId}`);
     }
-    */
   }
 
   /**
-   * Get multiple recordings by conversation IDs
-   * @param conversationIds - Array of conversation IDs
-   * @returns Promise with array of call recording details
+   * Return every completed recording for a conversation, newest first.
+   * Used so the UI can show one audio player per communication leg.
+   */
+  async getRecordingsForConversation(conversationId: string): Promise<CallRecordingResponse[]> {
+    try {
+      const query = `
+        SELECT
+          ConversationRecordingID,
+          ConversationID,
+          RecordingID,
+          RecordingPath,
+          OriginalFileName,
+          CreatedOn,
+          Status
+        FROM tblConversationRecording
+        WHERE ConversationID = ?
+          AND RecordingID IS NOT NULL
+          AND RecordingPath IS NOT NULL
+          AND RecordingPath <> ''
+        ORDER BY CreatedOn DESC
+      `;
+
+      const results = await executeQuery<ConversationRecordingRow>(query, [conversationId], 'phone');
+      return results.map(toResponse);
+    } catch (error) {
+      logger.error(`[PHONE SYSTEM SERVICE] Error fetching recordings for conversation ID ${conversationId}:`, error);
+      throw new Error(`Failed to retrieve recordings for conversation ID: ${conversationId}`);
+    }
+  }
+
+  /**
+   * Look up the on-disk path for a recording by its `RecordingID`. The
+   * streaming endpoint uses this to read the file from the share.
+   */
+  async getRecordingPathById(recordingId: string): Promise<{ path: string; originalFilename: string | null } | null> {
+    try {
+      const query = `
+        SELECT RecordingPath, OriginalFileName
+        FROM tblConversationRecording
+        WHERE RecordingID = ?
+          AND RecordingPath IS NOT NULL
+          AND RecordingPath <> ''
+        ORDER BY CreatedOn DESC
+        LIMIT 1
+      `;
+
+      const results = await executeQuery<{ RecordingPath: string; OriginalFileName: string | null }>(
+        query,
+        [recordingId],
+        'phone',
+      );
+
+      if (results.length === 0) return null;
+      return { path: results[0].RecordingPath, originalFilename: results[0].OriginalFileName };
+    } catch (error) {
+      logger.error(`[PHONE SYSTEM SERVICE] Error fetching recording path for ID ${recordingId}:`, error);
+      throw new Error(`Failed to retrieve recording path for ID: ${recordingId}`);
+    }
+  }
+
+  /**
+   * Get the most recent recording for each of several conversation IDs.
    */
   async getAudioUrlsByConversationIds(conversationIds: string[]): Promise<CallRecordingResponse[]> {
-    // TEMPORARILY COMMENTED OUT - tempRecording data retrieval
-    logger.info(`[PHONE SYSTEM SERVICE] Audio URLs retrieval temporarily disabled for ${conversationIds.length} conversation IDs`);
-    return [];
-    
-    /* COMMENTED OUT - tempRecording data retrieval
     try {
-      if (conversationIds.length === 0) {
-        return [];
-      }
-      
+      if (conversationIds.length === 0) return [];
+
       logger.info(`[PHONE SYSTEM SERVICE] Fetching audio URLs for ${conversationIds.length} conversation IDs`);
-      
+
       const placeholders = conversationIds.map(() => '?').join(',');
       const query = `
-        SELECT 
-          ConversationID,
-          Recordings
-        FROM tempRecording 
-        WHERE ConversationID IN (${placeholders})
+        SELECT t.ConversationRecordingID, t.ConversationID, t.RecordingID, t.RecordingPath, t.OriginalFileName, t.CreatedOn, t.Status
+        FROM tblConversationRecording t
+        INNER JOIN (
+          SELECT ConversationID, MAX(CreatedOn) AS MaxCreatedOn
+          FROM tblConversationRecording
+          WHERE ConversationID IN (${placeholders})
+            AND RecordingID IS NOT NULL
+            AND RecordingPath IS NOT NULL
+            AND RecordingPath <> ''
+          GROUP BY ConversationID
+        ) latest ON latest.ConversationID = t.ConversationID AND latest.MaxCreatedOn = t.CreatedOn
       `;
-      
-      const results = await executeQuery<TempRecording>(query, conversationIds, 'phone');
-      
+
+      const results = await executeQuery<ConversationRecordingRow>(query, conversationIds, 'phone');
       logger.info(`[PHONE SYSTEM SERVICE] Found ${results.length} recordings`);
-      
-      return results.map(recording => ({
-        conversation_id: recording.ConversationID,
-        audio_url: recording.Recordings
-      }));
+      return results.map(toResponse);
     } catch (error) {
-      logger.error(`[PHONE SYSTEM SERVICE] Error fetching audio URLs for conversation IDs:`, error);
+      logger.error('[PHONE SYSTEM SERVICE] Error fetching audio URLs for conversation IDs:', error);
       throw new Error('Failed to retrieve audio URLs for conversation IDs');
     }
-    */
   }
 
   /**
-   * Get all recordings (since date filtering is not available)
-   * @param limit - Maximum number of results to return
-   * @returns Promise with array of call recording details
+   * Get a slice of the most recent recordings across all conversations.
+   * Used by the debug/health endpoints.
    */
   async getAllRecordings(limit: number = 100): Promise<CallRecordingResponse[]> {
-    // TEMPORARILY COMMENTED OUT - tempRecording data retrieval
-    logger.info(`[PHONE SYSTEM SERVICE] All recordings retrieval temporarily disabled (limit: ${limit})`);
-    return [];
-    
-    /* COMMENTED OUT - tempRecording data retrieval
     try {
       logger.info(`[PHONE SYSTEM SERVICE] Getting all recordings (limit: ${limit})`);
-      
+
+      const safeLimit = Number.isFinite(limit) && limit > 0 && limit <= 1000 ? Math.floor(limit) : 100;
       const query = `
-        SELECT 
-          ConversationID,
-          Recordings
-        FROM tempRecording 
+        SELECT ConversationRecordingID, ConversationID, RecordingID, RecordingPath, OriginalFileName, CreatedOn, Status
+        FROM tblConversationRecording
+        WHERE RecordingID IS NOT NULL
+          AND RecordingPath IS NOT NULL
+          AND RecordingPath <> ''
+        ORDER BY CreatedOn DESC
         LIMIT ?
       `;
-      
-      const results = await executeQuery<TempRecording>(query, [limit], 'phone');
-      
+
+      const results = await executeQuery<ConversationRecordingRow>(query, [safeLimit], 'phone');
       logger.info(`[PHONE SYSTEM SERVICE] Found ${results.length} recordings`);
-      
-      return results.map(recording => ({
-        conversation_id: recording.ConversationID,
-        audio_url: recording.Recordings
-      }));
+      return results.map(toResponse);
     } catch (error) {
-      logger.error(`[PHONE SYSTEM SERVICE] Error getting all recordings:`, error);
+      logger.error('[PHONE SYSTEM SERVICE] Error getting all recordings:', error);
       throw new Error('Failed to get recordings');
     }
-    */
   }
 
   /**
@@ -209,29 +285,31 @@ class PhoneSystemService {
       logger.info('[PHONE SYSTEM SERVICE] Getting database statistics');
       
       const statsQuery = `
-        SELECT 
-          COUNT(*) as total_recordings
-        FROM tempRecording
+        SELECT
+          COUNT(*) AS total_recordings,
+          MAX(CreatedOn) AS latest_recording,
+          MIN(CreatedOn) AS oldest_recording
+        FROM tblConversationRecording
+        WHERE RecordingID IS NOT NULL
+          AND RecordingPath IS NOT NULL
+          AND RecordingPath <> ''
       `;
-      
+
       const results = await executeQuery<{
         total_recordings: number;
+        latest_recording: Date | string | null;
+        oldest_recording: Date | string | null;
       }>(statsQuery, [], 'phone');
-      
+
       if (results.length === 0) {
-        return {
-          totalRecordings: 0,
-          latestRecording: null,
-          oldestRecording: null
-        };
+        return { totalRecordings: 0, latestRecording: null, oldestRecording: null };
       }
-      
+
       const stats = results[0];
-      
       return {
-        totalRecordings: stats.total_recordings,
-        latestRecording: null, // Not available since call_date column doesn't exist
-        oldestRecording: null  // Not available since call_date column doesn't exist
+        totalRecordings: Number(stats.total_recordings) || 0,
+        latestRecording: toIsoOrNull(stats.latest_recording),
+        oldestRecording: toIsoOrNull(stats.oldest_recording),
       };
     } catch (error) {
       logger.error('[PHONE SYSTEM SERVICE] Error getting database statistics:', error);
@@ -320,26 +398,27 @@ class PhoneSystemService {
    */
   async getAudioAndTranscriptByConversationId(conversationId: string): Promise<{
     audio: CallRecordingResponse | null;
+    recordings: CallRecordingResponse[];
     transcript: ConversationDetailResponse[] | null;
   }> {
     try {
       logger.info(`[PHONE SYSTEM SERVICE] Fetching audio and transcript for conversation ID: ${conversationId}`);
-      
-      // Fetch both audio and transcript in parallel
-      const [audioResult, transcriptResult] = await Promise.allSettled([
-        this.getAudioUrlByConversationId(conversationId),
+
+      const [recordingsResult, transcriptResult] = await Promise.allSettled([
+        this.getRecordingsForConversation(conversationId),
         this.getTranscriptByConversationId(conversationId)
       ]);
-      
-      const audio = audioResult.status === 'fulfilled' ? audioResult.value : null;
+
+      const recordings = recordingsResult.status === 'fulfilled' ? recordingsResult.value : [];
+      const audio = recordings.length > 0 ? recordings[0] : null;
       const transcript = transcriptResult.status === 'fulfilled' ? transcriptResult.value : null;
-      
+
       logger.info(`[PHONE SYSTEM SERVICE] Results for conversation ID ${conversationId}:`, {
-        audioFound: !!audio,
+        recordingsFound: recordings.length,
         transcriptFound: transcript ? transcript.length : 0
       });
-      
-      return { audio, transcript };
+
+      return { audio, recordings, transcript };
     } catch (error) {
       logger.error(`[PHONE SYSTEM SERVICE] Error fetching audio and transcript for conversation ID ${conversationId}:`, error);
       throw new Error(`Failed to retrieve audio and transcript for conversation ID: ${conversationId}`);

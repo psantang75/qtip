@@ -547,6 +547,9 @@ model CoachingSession {
   csr_support_needed     String?              @db.VarChar(255)
   csr_acknowledged_at    DateTime?            @db.DateTime(0)
 
+  is_legacy            Boolean @default(false) @db.TinyInt
+  legacy_coaching_type String? @db.VarChar(50)
+
   csr         User              @relation("CoachingCsr", fields: [csr_id], references: [id], onDelete: Cascade)
   creator     User?             @relation("CoachingCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
   kb_resource TrainingResource? @relation(fields: [kb_resource_id], references: [id], onDelete: SetNull)
@@ -599,6 +602,8 @@ model WriteUp {
   updated_at             DateTime       @updatedAt @db.DateTime(0)
   delivered_at           DateTime?      @db.DateTime(0)
   closed_at              DateTime?      @db.DateTime(0)
+  is_legacy              Boolean        @default(false) @db.TinyInt
+  legacy_coaching_type   String?        @db.VarChar(50)
   csr                    User           @relation("WriteUpCsr", fields: [csr_id], references: [id], onDelete: Cascade)
   creator                User           @relation("WriteUpCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
   manager                User?          @relation("WriteUpManager", fields: [manager_id], references: [id], onDelete: SetNull)

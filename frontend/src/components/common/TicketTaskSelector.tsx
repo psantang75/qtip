@@ -11,7 +11,7 @@ import crmService, {
   type CRMNote,
 } from '@/services/crmService'
 import { formatCrmDateTime } from '@/utils/dateFormat'
-import { htmlToPlainText } from '@/components/common/RichTextDisplay'
+import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 
 /** Build the deep-link URL into the CRM for a given record. */
 function buildCrmUrl(kind: TicketTaskKind, externalId: number): string {
@@ -262,29 +262,25 @@ export default function TicketTaskSelector({
             <div className="grid grid-cols-[auto_1fr] gap-3 items-end">
               <div>
                 <label className="block text-[11px] font-medium text-slate-500 mb-1">Type</label>
-                <div className="flex items-center gap-3 h-9">
-                  <label className="flex items-center gap-1.5 text-[12px] text-slate-700 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="ticket-task-kind"
-                      value="TICKET"
-                      checked={kind === 'TICKET'}
-                      onChange={() => setKind('TICKET')}
-                      className="accent-primary"
-                    />
-                    Ticket
-                  </label>
-                  <label className="flex items-center gap-1.5 text-[12px] text-slate-700 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="ticket-task-kind"
-                      value="TASK"
-                      checked={kind === 'TASK'}
-                      onChange={() => setKind('TASK')}
-                      className="accent-primary"
-                    />
-                    Task
-                  </label>
+                <div className="flex items-center gap-1.5 h-9">
+                  {(['TICKET', 'TASK'] as const).map((opt) => {
+                    const selected = kind === opt
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setKind(opt)}
+                        className={cn(
+                          'h-7 px-3 text-[12px] rounded border font-medium transition-all',
+                          selected
+                            ? 'bg-[#00aeef] text-white border-[#00aeef]'
+                            : 'bg-white text-slate-600 border-slate-200 hover:border-[#00aeef] hover:text-[#00aeef]',
+                        )}
+                      >
+                        {opt === 'TICKET' ? 'Ticket' : 'Task'}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
               <div>
@@ -466,8 +462,7 @@ function NotesSection({ title, notes, muted = false }: { title?: string; notes: 
 }
 
 function NoteRow({ note }: { note: CRMNote }) {
-  const cleanBody = useMemo(() => htmlToPlainText(note.note), [note.note])
-  const hasBody = cleanBody.trim().length > 0
+  const hasBody = (note.note ?? '').trim().length > 0
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white overflow-hidden text-[12px]">
@@ -492,9 +487,7 @@ function NoteRow({ note }: { note: CRMNote }) {
         </div>
       </div>
       {hasBody && (
-        <div className="px-3 py-2.5 text-slate-700 whitespace-pre-wrap break-words leading-snug">
-          {cleanBody}
-        </div>
+        <RichTextDisplay html={note.note} className="px-3 py-2.5 text-[12px]" />
       )}
     </div>
   )

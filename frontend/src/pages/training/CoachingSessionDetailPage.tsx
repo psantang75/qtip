@@ -11,6 +11,7 @@ import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
+import { LegacyImportBanner } from '@/components/common/LegacyImportBanner'
 
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
@@ -377,6 +378,12 @@ export default function CoachingSessionDetailPage() {
           }
         />
       </div>
+
+      {Boolean(Number(session.is_legacy)) && (
+        <div className="shrink-0 px-6 pb-4">
+          <LegacyImportBanner legacyType={session.legacy_coaching_type} />
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 px-6 pb-6">
         <div className="grid grid-cols-3 gap-6 h-full">

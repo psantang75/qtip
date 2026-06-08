@@ -2,6 +2,14 @@ import apiClient from './apiClient';
 import { logError, logWarn } from '../utils/errorHandling';
 
 // Types for Call Management
+export interface CallRecording {
+  conversation_id?: string;
+  recording_id: string;
+  audio_url: string;
+  original_filename?: string | null;
+  created_on?: string | null;
+}
+
 export interface Call {
   id: number;
   call_id: string;
@@ -10,6 +18,13 @@ export interface Call {
   call_date: string;
   duration: number;
   recording_url: string | null;
+  /**
+   * Every PhoneSystem recording for this conversation, newest first.
+   * Multi-leg calls (IVR / queue / agent / transfer) have one entry per
+   * leg. `recording_url` is `recordings[0]?.audio_url` when populated
+   * server-side.
+   */
+  recordings?: CallRecording[];
   transcript: string | null;
   csr_name?: string;
   department_name?: string;

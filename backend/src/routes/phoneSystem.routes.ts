@@ -7,7 +7,9 @@ import {
   testPhoneSystemConnection,
   getPhoneSystemStats,
   getTranscriptByConversationId,
-  getAudioAndTranscriptByConversationId
+  getAudioAndTranscriptByConversationId,
+  getRecordingsForConversation,
+  streamRecording,
 } from '../controllers/phoneSystem.controller';
 
 const router = express.Router();
@@ -24,10 +26,24 @@ router.use(authenticate);
 
 /**
  * @route GET /api/phone-system/recording/:conversationId
- * @desc Get audio URL by conversation ID
+ * @desc Get the most recent audio URL by conversation ID
  * @access Private (QA Analyst, Manager, Director)
  */
 router.get('/recording/:conversationId', getAudioUrlByConversationId);
+
+/**
+ * @route GET /api/phone-system/recordings/conversation/:conversationId
+ * @desc List every recording for a conversation (one per communication leg)
+ * @access Private (QA Analyst, Manager, Director)
+ */
+router.get('/recordings/conversation/:conversationId', getRecordingsForConversation);
+
+/**
+ * @route GET /api/phone-system/audio/:recordingId
+ * @desc Stream a recording's MP3 file (supports HTTP Range for seeking)
+ * @access Private (QA Analyst, Manager, Director)
+ */
+router.get('/audio/:recordingId', streamRecording);
 
 /**
  * @route POST /api/phone-system/recordings/batch

@@ -45,10 +45,25 @@ export const PageSizeSchema = z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 export const IsoDateStringSchema = z.string().regex(ISO_DATE_REGEX, 'Invalid date format. Expected YYYY-MM-DD')
 
-// Empty-string coercer — most controllers receive `?status=` from the UI
-// when the dropdown is cleared. Treat that as "filter not set".
-export const optionalString = () => z.preprocess(v => (v === '' ? undefined : v), z.string().optional())
-export const optionalDate   = () => z.preprocess(v => (v === '' ? undefined : v), IsoDateStringSchema.optional())
+// Empty-string / null coercer — most controllers receive `?status=` from
+// the UI when the dropdown is cleared (empty string), and JSON-body callers
+// send `null` for cleared optional fields (which matches the DB's NULL
+// semantics). Both mean "no value", so we normalise them to `undefined`
+// before running the inner schema's `.optional()` so neither rejects.
+const isAbsent = (v: unknown) => v === '' || v === null
+export const optionalString = () => z.preprocess(v => (isAbsent(v) ? undefined : v), z.string().optional())
+export const optionalDate   = () => z.preprocess(v => (isAbsent(v) ? undefined : v), IsoDateStringSchema.optional())
+
+/**
+ * Optional positive integer — accepts a number, a numeric string, `null`,
+ * `0`, or `''` (the last three all mean "not set" in form payloads). Used
+ * for foreign-key id fields that the UI clears by setting to 0 or null.
+ */
+export const optionalPositiveInt = () =>
+  z.preprocess(
+    v => (isAbsent(v) || v === 0 || v === '0' ? undefined : v),
+    z.coerce.number().int().positive().optional(),
+  )
 
 // ── Prisma-mirrored enums (single source of truth) ───────────────────────────
 

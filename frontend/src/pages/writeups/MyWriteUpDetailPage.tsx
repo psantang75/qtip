@@ -5,6 +5,7 @@ import { ListPageHeader } from '@/components/common/ListPageHeader'
 import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
+import { LegacyImportBanner } from '@/components/common/LegacyImportBanner'
 import { ContentSections } from './writeup-detail/ContentSections'
 import { StatusBanner, SignatureSection, SignedSection, RefusedSection } from './writeup-detail/AgentSections'
 import { useWriteUpDetail } from './writeup-detail/useWriteUpDetail'
@@ -47,6 +48,12 @@ export default function MyWriteUpDetailPage() {
           </div>
         }
       />
+
+      {Boolean(Number(writeup.is_legacy)) && (
+        <div className="mx-auto max-w-3xl px-4 mb-4">
+          <LegacyImportBanner legacyType={writeup.legacy_coaching_type} />
+        </div>
+      )}
 
       {isDraft ? (
         <div className="mx-auto max-w-3xl px-4">

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { optionalDate } from './common'
+import { optionalDate, optionalString, optionalPositiveInt } from './common'
 
 /**
  * Write-up request validation (pre-production review item #86).
@@ -39,15 +39,15 @@ const positiveInt = z.coerce.number().int().positive()
 const ExampleInputSchema = z.object({
   example_date:     optionalDate(),
   description:      z.string().trim().min(1, 'Example description is required'),
-  source:           z.string().optional(),
-  qa_submission_id: positiveInt.optional(),
-  qa_question_id:   positiveInt.optional(),
+  source:           optionalString(),
+  qa_submission_id: optionalPositiveInt(),
+  qa_question_id:   optionalPositiveInt(),
   sort_order:       z.coerce.number().int().min(0).optional(),
 })
 
 const ViolationInputSchema = z.object({
   policy_violated:    z.string().trim().min(1, 'policy_violated is required'),
-  reference_material: z.string().optional(),
+  reference_material: optionalString(),
   sort_order:         z.coerce.number().int().min(0).optional(),
   examples:           z.array(ExampleInputSchema).optional(),
 })
@@ -70,18 +70,31 @@ const listItemIdsSchema = z
   .union([z.array(z.union([z.string(), z.number()])), z.string()])
   .optional()
 
+/**
+ * Write-up create payload.
+ *
+ * **Draft semantics:** only `csr_id` and `document_type` are required at the
+ * schema level. Everything else is optional so the "Save as Draft" flow can
+ * persist a half-finished record. Stricter validations (e.g. "meeting_date
+ * required to schedule") live in the lifecycle transition layer, not here.
+ *
+ * Optional string / id / date fields are written through the shared
+ * `optionalString` / `optionalPositiveInt` / `optionalDate` helpers, which
+ * accept `null`, `0`, and `''` as "not set" — matching what the UI sends
+ * for cleared inputs and what the DB stores for `NULL` columns.
+ */
 export const CreateWriteUpSchema = z.object({
   csr_id:                positiveInt,
   document_type:         WriteUpDocumentTypeSchema,
   meeting_date:          optionalDate(),
-  corrective_action:     z.string().optional(),
-  correction_timeline:   z.string().optional(),
+  corrective_action:     optionalString(),
+  correction_timeline:   optionalString(),
   checkin_date:          optionalDate(),
-  consequence:           z.string().optional(),
-  internal_notes:        z.string().optional(),
-  linked_coaching_id:    positiveInt.optional(),
-  manager_id:            positiveInt.optional(),
-  hr_witness_id:         positiveInt.optional(),
+  consequence:           optionalString(),
+  internal_notes:        optionalString(),
+  linked_coaching_id:    optionalPositiveInt(),
+  manager_id:            optionalPositiveInt(),
+  hr_witness_id:         optionalPositiveInt(),
   incidents:             z.array(IncidentInputSchema).optional(),
   prior_discipline:      z.array(PriorDisciplineRefSchema).optional(),
   behavior_flag_ids:     listItemIdsSchema,

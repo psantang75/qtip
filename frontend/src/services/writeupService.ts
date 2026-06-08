@@ -218,6 +218,8 @@ export interface WriteUpDetail extends WriteUp {
   behavior_flag_items?: Array<{ id: number; category?: string | null; label: string; sort_order: number }>
   root_cause_items?: Array<{ id: number; category?: string | null; label: string; sort_order: number }>
   support_needed_items?: Array<{ id: number; category?: string | null; label: string; sort_order: number }>
+  is_legacy?: boolean | number | null
+  legacy_coaching_type?: string | null
   incidents: WriteUpIncident[]
   prior_discipline: PriorDisciplineRow[]
   attachments: WriteUpAttachment[]

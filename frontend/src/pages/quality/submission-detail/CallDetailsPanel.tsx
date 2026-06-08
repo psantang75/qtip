@@ -4,12 +4,21 @@ import { cn } from '@/lib/utils'
 import { formatTranscriptText } from '@/utils/transcriptUtils'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
 import { InfoRow } from '@/components/common/DetailLayout'
+import { AudioPlayer } from '@/components/common/AudioPlayer'
+import { type CallRecording } from '@/services/callService'
 
 interface SubmissionCall {
   call_id?: string
   call_date?: string
   recording_url?: string | null
+  recordings?: CallRecording[]
   transcript?: string | null
+}
+
+const callRecordings = (call: SubmissionCall): CallRecording[] => {
+  if (call.recordings && call.recordings.length > 0) return call.recordings
+  if (call.recording_url) return [{ recording_id: 'legacy', audio_url: call.recording_url }]
+  return []
 }
 
 interface Props {
@@ -61,7 +70,7 @@ export function CallDetailsPanel({ calls }: Props) {
             >
               <Phone className="h-3 w-3" />
               Call {i + 1}
-              {c.recording_url && (
+              {callRecordings(c).length > 0 && (
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
               )}
             </button>
@@ -77,19 +86,31 @@ export function CallDetailsPanel({ calls }: Props) {
             {call.call_date && <InfoRow label="Call Date" value={fmtDate(call.call_date)} />}
           </div>
 
-          {call.recording_url ? (
-            <div>
-              <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-1.5">Audio Recording</p>
-              <audio controls className="w-full h-9 rounded-lg">
-                <source src={call.recording_url} type="audio/mpeg" />
-              </audio>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 py-2 px-3 bg-slate-50 rounded-lg">
-              <MicOff className="h-4 w-4 text-slate-400 shrink-0" />
-              <p className="text-[12px] text-slate-400">No audio recording available</p>
-            </div>
-          )}
+          {(() => {
+            const recs = callRecordings(call)
+            if (recs.length === 0) {
+              return (
+                <div className="flex items-center gap-2 py-2 px-3 bg-slate-50 rounded-lg">
+                  <MicOff className="h-4 w-4 text-slate-400 shrink-0" />
+                  <p className="text-[12px] text-slate-400">No audio recording available</p>
+                </div>
+              )
+            }
+            return (
+              <div className="space-y-2">
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide">
+                  {recs.length === 1 ? 'Audio Recording' : `Audio Recordings (${recs.length} legs)`}
+                </p>
+                {recs.map((rec, i) => (
+                  <AudioPlayer
+                    key={rec.recording_id || i}
+                    url={rec.audio_url}
+                    label={recs.length > 1 ? `Leg ${i + 1} of ${recs.length}` : undefined}
+                  />
+                ))}
+              </div>
+            )
+          })()}
 
           {call.transcript && (
             <div>
@@ -124,9 +145,9 @@ export function CallDetailsPanel({ calls }: Props) {
       {calls.length > 1 && (
         <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center gap-3">
           <span className="text-[11px] text-slate-400">{calls.length} calls</span>
-          {calls.filter((c: SubmissionCall) => c.recording_url).length > 0 && (
+          {calls.filter((c: SubmissionCall) => callRecordings(c).length > 0).length > 0 && (
             <span className="text-[11px] text-emerald-600">
-              {calls.filter((c: SubmissionCall) => c.recording_url).length} with audio
+              {calls.filter((c: SubmissionCall) => callRecordings(c).length > 0).length} with audio
             </span>
           )}
           {calls.filter((c: SubmissionCall) => c.transcript).length > 0 && (

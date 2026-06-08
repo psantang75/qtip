@@ -11,6 +11,7 @@ import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
 import { serviceLogger } from '../../config/logger'
 import { ManagerServiceError } from './manager.types'
+import { attachPhoneSystemRecordings } from '../callRecordingEnrichment'
 
 export interface AuditDetailParams {
   userId: number
@@ -143,7 +144,7 @@ export async function getManagerTeamAuditDetails(
   }
   const submission = submissionRows[0]
 
-  const [metadata, calls, ticketTaskRows, answers, qaResults] = await Promise.all([
+  const [metadata, callsRaw, ticketTaskRows, answers, qaResults] = await Promise.all([
     prisma.$queryRaw<Array<{ field_name: string; value: string }>>(Prisma.sql`
       SELECT fmf.field_name, sm.value
       FROM submission_metadata sm
@@ -180,6 +181,7 @@ export async function getManagerTeamAuditDetails(
     `),
   ])
 
+  const calls = await attachPhoneSystemRecordings(callsRaw)
   const qaAnalystName = qaResults.length > 0 ? qaResults[0].username : null
 
   const csrMeta = metadata.find((m) => m.field_name === CSR_FIELD_NAME)
