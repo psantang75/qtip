@@ -4,6 +4,7 @@
   "description": "QTIP backend API (Express + Prisma + MySQL)",
   "main": "dist/index.js",
   "scripts": {
+    "postinstall": "prisma generate",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "build": "tsc && npm run copy:assets",
