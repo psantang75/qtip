@@ -37,6 +37,25 @@ interface AnswerType {
   notes: string
 }
 
+// Normalize the shared `Answer` shape (notes/score optional) returned by
+// `deriveRollupAnswers` into the stricter local `AnswerType` shape used by
+// component state. Centralized so every callsite that pushes engine output
+// into setAnswers stays in sync.
+function toAnswerTypes(
+  src: Record<number, { question_id: number; answer: string; notes?: string; score?: number }>,
+): Record<number, AnswerType> {
+  const out: Record<number, AnswerType> = {}
+  for (const [k, v] of Object.entries(src)) {
+    out[Number(k)] = {
+      question_id: v.question_id,
+      answer: v.answer,
+      score: v.score ?? 0,
+      notes: v.notes ?? '',
+    }
+  }
+  return out
+}
+
 const SCROLL_HIGHLIGHT_DURATION = 3000
 
 export default function AuditFormPage() {
@@ -290,7 +309,7 @@ export default function AuditFormPage() {
     // stays in sync as the human flips DETAIL answers.
     const seededWithRollups = deriveRollupAnswers(form, seedAnswers, initialVisibility).answers
     const { totalScore, categoryScores: initCatScores } = calculateFormScore(form, seededWithRollups)
-    setAnswers(seededWithRollups)
+    setAnswers(toAnswerTypes(seededWithRollups))
     setVisibilityMap(initialVisibility)
     setScore(totalScore)
     setFormRenderData(prepareFormForRender(form, seededWithRollups, initialVisibility, initCatScores, totalScore))
@@ -370,21 +389,9 @@ export default function AuditFormPage() {
     // rather than the stale pre-engine map.
     const withRollups = deriveRollupAnswers(formData, currentAnswers, newVisibility).answers
     const { totalScore } = calculateFormScore(formData, withRollups)
-    // deriveRollupAnswers returns the shared `Answer` shape (notes/score
-    // optional). Local state uses the stricter `AnswerType` shape, so fill
-    // in the defaults rather than widen the state type.
-    const normalized: Record<number, AnswerType> = {}
-    for (const [k, v] of Object.entries(withRollups)) {
-      normalized[Number(k)] = {
-        question_id: v.question_id,
-        answer: v.answer,
-        score: v.score ?? 0,
-        notes: v.notes ?? '',
-      }
-    }
     setScore(totalScore)
     setVisibilityMap(newVisibility)
-    setAnswers(normalized)
+    setAnswers(toAnswerTypes(withRollups))
     setFormRenderData(prepareFormForRender(formData, withRollups, newVisibility, {}, totalScore))
   }
 
