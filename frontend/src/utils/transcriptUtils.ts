@@ -225,6 +225,11 @@ export function formatTranscriptText(transcriptData: string | ConversationTransc
   return rawText
     .split('\n')
     .map((line) => line.trim().replace(/\s+/g, ' '))
+    // Legacy unwrap: older backend builds wrote speaker labels into the
+    // DB as `<span class="font-bold">Customer:</span> text`. Strip those
+    // wrappers so the standard plain-text regex below matches and we
+    // don't escape the HTML back at the reviewer.
+    .map((line) => line.replace(/<span class="font-bold">(Agent|Customer):<\/span>\s*/g, '$1: '))
     .filter((line) => line.length > 0)
     .map((line) => {
       const mts = labelWithTsRe.exec(line);
