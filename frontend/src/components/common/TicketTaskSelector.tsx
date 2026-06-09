@@ -18,8 +18,9 @@ function buildCrmUrl(kind: TicketTaskKind, externalId: number): string {
   if (kind === 'TASK') {
     return `https://crm.dm-us.com/TaskManager/AccountsReceivableManager?TaskID=${externalId}`
   }
-  // Tickets: placeholder until the ticket-detail URL is provided.
-  return `https://crm.dm-us.com/?TicketID=${externalId}`
+  // Ticket edit page. CustomerID/JobID are populated server-side from the
+  // ticket once it loads, so passing 0 for both is the canonical entry URL.
+  return `https://crm.dm-us.com/Tickets/Edit?CustomerID=0&JobID=0&TicketID=${externalId}`
 }
 
 /**
