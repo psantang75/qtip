@@ -14,7 +14,7 @@ import apiClient from '@/services/apiClient'
  */
 export function AudioPlayer({ url, label }: { url: string; label?: string }) {
   const [src, setSrc] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     if (!url) return
@@ -25,7 +25,7 @@ export function AudioPlayer({ url, label }: { url: string; label?: string }) {
     let revokeUrl: string | null = null
     let cancelled = false
     setSrc(null)
-    setErr(null)
+    setFailed(false)
     apiClient
       .get(url.replace(/^\/api/, ''), { responseType: 'blob' })
       .then((res) => {
@@ -34,18 +34,23 @@ export function AudioPlayer({ url, label }: { url: string; label?: string }) {
         revokeUrl = URL.createObjectURL(blob)
         setSrc(revokeUrl)
       })
-      .catch(() => { if (!cancelled) setErr('Failed to load audio') })
+      .catch(() => { if (!cancelled) setFailed(true) })
     return () => {
       cancelled = true
       if (revokeUrl) URL.revokeObjectURL(revokeUrl)
     }
   }, [url])
 
-  if (err) {
+  // Render the same neutral "No audio recording available" panel that
+  // CallDetailsPanel shows when there are no recordings at all. From the
+  // reviewer's perspective both states mean "no audio is playing", so a
+  // red error here would look like a bug (and was the source of the
+  // dev-vs-stage UX delta when stage's PhoneSystem share is unreachable).
+  if (failed) {
     return (
-      <div className="flex items-center gap-2 py-2 px-3 bg-red-50 rounded-lg">
-        <MicOff className="h-4 w-4 text-red-400 shrink-0" />
-        <p className="text-[12px] text-red-600">{err}</p>
+      <div className="flex items-center gap-2 py-2 px-3 bg-slate-50 rounded-lg">
+        <MicOff className="h-4 w-4 text-slate-400 shrink-0" />
+        <p className="text-[12px] text-slate-400">No audio recording available</p>
       </div>
     )
   }
