@@ -12,40 +12,29 @@ const router = express.Router();
 router.use(authenticate);
 
 /**
- * Format the raw Genesys transcript JSON into the Customer:/Agent: prefixed
- * text the QA UI renders. Returns null when nothing usable came back.
+ * Pass the raw Genesys transcript JSON through to the frontend so
+ * `transcriptUtils.extractTranscriptText` can render per-turn `[m:ss]`
+ * timestamps from `phrases[].startTimeMs`. We deliberately do NOT
+ * pre-format to plain `Agent: text` here — that older path threw away
+ * the timestamp data and forced both ingestion paths (manual QA + AI
+ * Reviewer) to produce diverging shapes in `calls.transcript`.
+ *
+ * Multi-leg conversations are wrapped in a JSON array so the frontend's
+ * parser still gets valid JSON. If any leg fails to parse (e.g. legacy
+ * plain-text rows), fall back to a separator-joined string — the
+ * frontend tolerates non-JSON input and renders it via the label-only
+ * regex path.
  */
 function formatTranscripts(transcripts: ConversationDetailResponse[] | null | undefined): string | null {
   if (!transcripts || transcripts.length === 0) return null;
-  return transcripts
-    .map((t) => {
-      try {
-        const parsed = JSON.parse(t.transcript);
-        if (parsed?.transcripts && Array.isArray(parsed.transcripts)) {
-          return parsed.transcripts
-            .map((segment: any) =>
-              segment.phrases
-                ?.map((phrase: any) => {
-                  // Emit plain text — the frontend's `formatTranscriptText`
-                  // HTML-escapes its input and wraps `Agent:` / `Customer:`
-                  // labels in <strong> itself, so embedding HTML here would
-                  // be escaped and rendered as literal markup to the user.
-                  const prefix = phrase.participantPurpose === 'external'
-                    ? 'Customer: '
-                    : 'Agent: ';
-                  return prefix + phrase.text;
-                })
-                .join('\n') || ''
-            )
-            .join('\n\n---\n\n');
-        }
-        return t.transcript;
-      } catch (error) {
-        logger.warn('[CALLS ROUTE] Failed to parse transcript JSON:', error);
-        return t.transcript;
-      }
-    })
-    .join('\n\n---\n\n');
+  if (transcripts.length === 1) return transcripts[0].transcript || null;
+  try {
+    const parsedLegs = transcripts.map((t) => JSON.parse(t.transcript));
+    return JSON.stringify(parsedLegs);
+  } catch (error) {
+    logger.warn('[CALLS ROUTE] Multi-leg transcript JSON.parse failed, falling back to text join:', error);
+    return transcripts.map((t) => t.transcript).join('\n\n---\n\n');
+  }
 }
 
 /**
