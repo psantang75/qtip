@@ -320,8 +320,14 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                                 </span>
                               </td>
                               {isText ? (
-                                <td colSpan={3} className="px-3 py-2.5 text-slate-600">
-                                  {q.answer === 'No answer' ? <span className="text-slate-300">—</span> : q.answer}
+                                <td colSpan={3} className="px-3 py-2.5 text-slate-600 align-top [overflow-wrap:anywhere]">
+                                  {q.answer === 'No answer' ? (
+                                    <span className="text-slate-300">—</span>
+                                  ) : (q.answer || '').trimStart().startsWith('<') ? (
+                                    <RichTextDisplay html={q.answer} className="whitespace-pre-wrap [overflow-wrap:anywhere]" />
+                                  ) : (
+                                    <div className="whitespace-pre-wrap [overflow-wrap:anywhere]">{q.answer}</div>
+                                  )}
                                 </td>
                               ) : (
                                 <>
@@ -369,7 +375,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               <div className="bg-white px-4 py-3">
                 <p className="text-[12px] font-semibold text-slate-500 mb-1">AI Reviewer Feedback</p>
                 {aiReviewerFeedback.text
-                  ? <RichTextDisplay html={aiReviewerFeedback.text} className="whitespace-pre-wrap" />
+                  ? <RichTextDisplay html={aiReviewerFeedback.text} className="whitespace-pre-wrap [overflow-wrap:anywhere]" />
                   : <p className="text-[13px] text-slate-300">—</p>}
               </div>
             </div>
