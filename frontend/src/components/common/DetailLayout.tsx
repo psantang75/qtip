@@ -124,9 +124,11 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div>
+    // min-w-0 lets the row shrink inside grid cells; [overflow-wrap:anywhere]
+    // breaks unbroken strings (URLs, ids) instead of overflowing the card.
+    <div className="min-w-0">
       <p className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
-      <div className="text-[14px] font-semibold text-slate-900">
+      <div className="text-[14px] font-semibold text-slate-900 [overflow-wrap:anywhere]">
         {value ?? <span className="text-slate-400 font-normal">—</span>}
       </div>
     </div>

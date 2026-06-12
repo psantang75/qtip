@@ -52,15 +52,3 @@ export interface ManagerCSRActivityRow {
   coachingCompleted_month: number
 }
 
-/** Whitelist of valid `coaching_type` values used during create/update. */
-export const VALID_COACHING_TYPES = [
-  'Classroom',
-  'Side-by-Side',
-  'Team Session',
-  '1-on-1',
-  'PIP',
-  'Verbal Warning',
-  'Written Warning',
-] as const
-
-export type CoachingType = (typeof VALID_COACHING_TYPES)[number]

@@ -19,6 +19,7 @@ import {
   signWriteUp as signWriteUpService,
   setFollowUp as setFollowUpService,
 } from '../../services/writeups'
+import { checkLegacyLock } from '../../services/legacyLock'
 import { respondWithError } from './respond'
 
 const requireWriteUpId = (raw: string, res: Response): number | null => {
@@ -28,6 +29,16 @@ const requireWriteUpId = (raw: string, res: Response): number | null => {
     return null
   }
   return id
+}
+
+/** Blocks mutations on legacy (imported) write-ups for non-admins. */
+const passesLegacyLock = async (req: AuthReq, res: Response, writeUpId: number): Promise<boolean> => {
+  const lock = await checkLegacyLock('write_up', writeUpId, req.user!.user_id, req.user!.role)
+  if (!lock.allowed) {
+    res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' })
+    return false
+  }
+  return true
 }
 
 /** POST /api/writeups */
@@ -45,6 +56,7 @@ export const updateWriteUp = async (req: AuthReq, res: Response) => {
   try {
     const writeUpId = requireWriteUpId(req.params.id, res)
     if (writeUpId === null) return
+    if (!(await passesLegacyLock(req, res, writeUpId))) return
     await updateWriteUpService(writeUpId, req.body, req.user!.user_id, req.user!.role)
     res.json({ success: true })
   } catch (error) {
@@ -57,6 +69,7 @@ export const updateInternalNotes = async (req: AuthReq, res: Response) => {
   try {
     const writeUpId = requireWriteUpId(req.params.id, res)
     if (writeUpId === null) return
+    if (!(await passesLegacyLock(req, res, writeUpId))) return
     await updateInternalNotesService(writeUpId, req.body)
     res.json({ success: true })
   } catch (error) {
@@ -69,6 +82,7 @@ export const updateFollowUpNotes = async (req: AuthReq, res: Response) => {
   try {
     const writeUpId = requireWriteUpId(req.params.id, res)
     if (writeUpId === null) return
+    if (!(await passesLegacyLock(req, res, writeUpId))) return
     await updateFollowUpNotesService(writeUpId, req.body?.follow_up_notes)
     res.json({ success: true })
   } catch (error) {
@@ -81,6 +95,7 @@ export const transitionStatus = async (req: AuthReq, res: Response) => {
   try {
     const writeUpId = requireWriteUpId(req.params.id, res)
     if (writeUpId === null) return
+    if (!(await passesLegacyLock(req, res, writeUpId))) return
     const data = await transitionStatusService(writeUpId, req.body, req.user!.role)
     res.json({ success: true, data })
   } catch (error) {
@@ -93,6 +108,7 @@ export const signWriteUp = async (req: AuthReq, res: Response) => {
   try {
     const writeUpId = requireWriteUpId(req.params.id, res)
     if (writeUpId === null) return
+    if (!(await passesLegacyLock(req, res, writeUpId))) return
     const clientIp = String(req.ip || req.headers['x-forwarded-for'] || 'unknown')
     const data = await signWriteUpService(
       writeUpId,
@@ -111,6 +127,7 @@ export const setFollowUp = async (req: AuthReq, res: Response) => {
   try {
     const writeUpId = requireWriteUpId(req.params.id, res)
     if (writeUpId === null) return
+    if (!(await passesLegacyLock(req, res, writeUpId))) return
     await setFollowUpService(writeUpId, req.body)
     res.json({ success: true })
   } catch (error) {

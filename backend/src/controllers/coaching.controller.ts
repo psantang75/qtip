@@ -4,6 +4,7 @@ import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { hasCsrRequirements, applyAutoAdvance } from '../utils/coachingAutoAdvance';
 import { buildCoachingSessionScope } from '../services/coachingSessionsReport';
+import { checkLegacyLock } from '../services/legacyLock';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
 import logger from '../config/logger';
 const fs = require('fs').promises;
@@ -455,6 +456,9 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
     if (!existing.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
     if (['CLOSED', 'CANCELED'].includes(existing[0].status)) return res.status(400).json({ success: false, message: 'Cannot edit a closed or canceled session' });
 
+    const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
+    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
+
     const parts: Prisma.Sql[] = [];
     if (session_date     !== undefined) parts.push(Prisma.sql`session_date = ${session_date}`);
     if (coaching_purpose !== undefined) parts.push(Prisma.sql`coaching_purpose = ${coaching_purpose}`);
@@ -595,6 +599,9 @@ export const deliverCoachingSession = async (req: AuthReq, res: Response) => {
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
     if (rows[0].status !== 'DRAFT') return res.status(400).json({ success: false, message: 'Can only schedule a DRAFT session' });
 
+    const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
+    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
+
     const needsCSR = await hasCsrRequirements(sessionId);
     const deliveredStatus = needsCSR ? 'AWAITING_CSR_ACTION' : 'SCHEDULED';
 
@@ -620,6 +627,9 @@ export const completeCoachingSession = async (req: AuthReq, res: Response) => {
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
     if (['COMPLETED', 'CLOSED', 'CANCELED'].includes(rows[0].status)) return res.status(400).json({ success: false, message: 'Session is already completed or closed' });
 
+    const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
+    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
+
     await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'COMPLETED', completed_at = NOW() WHERE id = ${sessionId}`);
     await prisma.auditLog.create({ data: { user_id: userId, action: 'COMPLETE', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
     res.json({ success: true, message: 'Session marked as completed' });
@@ -641,6 +651,9 @@ export const flagFollowUp = async (req: AuthReq, res: Response) => {
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.id FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
 
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
+
+    const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
+    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
 
     await prisma.$executeRaw(
       Prisma.sql`UPDATE coaching_sessions SET follow_up_required = 1, status = 'FOLLOW_UP_REQUIRED', follow_up_date = ${follow_up_date || null} WHERE id = ${sessionId}`
@@ -665,6 +678,9 @@ export const closeCoachingSession = async (req: AuthReq, res: Response) => {
 
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
     if (['CLOSED', 'CANCELED'].includes(rows[0].status)) return res.status(400).json({ success: false, message: 'Session is already closed' });
+
+    const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
+    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
 
     await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'CLOSED', closed_at = NOW() WHERE id = ${sessionId}`);
     await prisma.auditLog.create({ data: { user_id: userId, action: 'CLOSE', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
@@ -737,6 +753,9 @@ export const setSessionStatus = async (req: AuthReq, res: Response) => {
     if (status === current) {
       return res.json({ success: true, message: 'Status unchanged' });
     }
+
+    const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
+    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
 
     const parts: Prisma.Sql[] = [Prisma.sql`status = ${status}`];
     if (status === 'SCHEDULED') parts.push(Prisma.sql`delivered_at = COALESCE(delivered_at, NOW())`);

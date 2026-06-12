@@ -20,7 +20,7 @@ export default function WriteUpDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { toast } = useToast()
-  const { canManage: canEdit } = useWriteUpRole()
+  const { canManage, isAdmin } = useWriteUpRole()
 
   const { writeup, isLoading, isError, refetch, invalidate, pdfLoading, handleViewPdf } =
     useWriteUpDetail(id, [['writeups']])
@@ -51,6 +51,11 @@ export default function WriteUpDetailPage() {
     </ListPageShell>
   )
 
+  // Legacy (imported) records are read-only for everyone except Admins —
+  // mirrors the backend LEGACY_LOCKED guard. Duplicate stays available so
+  // legacy warnings remain usable as the basis for new ones.
+  const isLegacyLocked = Boolean(Number(writeup.is_legacy)) && !isAdmin
+  const canEdit    = canManage && !isLegacyLocked
   const isEditable = !LOCKED_STATUSES.includes(writeup.status as typeof LOCKED_STATUSES[number])
 
   return (
@@ -74,7 +79,7 @@ export default function WriteUpDetailPage() {
                   ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating…</>
                   : <><FileText className="h-3.5 w-3.5 mr-1.5" /> View PDF</>}
               </Button>
-              {canEdit && (
+              {canManage && (
                 <Button variant="outline" size="sm"
                   onClick={() => duplicateMut.mutate()} disabled={duplicateMut.isPending}>
                   <Copy className="h-3.5 w-3.5 mr-1.5" />
@@ -95,10 +100,10 @@ export default function WriteUpDetailPage() {
       <div className="flex-1 min-h-0 px-6 pb-6">
         <div className="grid grid-cols-3 gap-6 h-full">
           <div className="col-span-2 overflow-y-auto space-y-4 pr-2">
-            <ContentSections writeup={writeup} id={Number(id)} onInvalidate={invalidate} />
+            <ContentSections writeup={writeup} id={Number(id)} onInvalidate={invalidate} readOnly={isLegacyLocked} />
           </div>
           <div className="col-span-1 overflow-y-auto space-y-4 pl-2">
-            <StatusPanel writeup={writeup} id={Number(id)} onInvalidate={invalidate} />
+            <StatusPanel writeup={writeup} id={Number(id)} onInvalidate={invalidate} readOnly={isLegacyLocked} />
           </div>
         </div>
       </div>

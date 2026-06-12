@@ -350,10 +350,15 @@ export default function CoachingSessionDetailPage() {
     </div>
   )
 
-  const canEditSession     = session.status === 'DRAFT'
-  const canEditActions     = ['DRAFT', 'SCHEDULED'].includes(session.status)
-  const canEditAttachment  = session.status === 'DRAFT'
-  const canEditInternal    = canSeeInternal && !['CLOSED', 'CANCELED'].includes(session.status)
+  // Legacy (imported) records are read-only for everyone except Admins —
+  // mirrors the backend LEGACY_LOCKED guard in coaching.controller.ts.
+  const isAdmin        = (user?.role_id ?? 0) === ROLE_IDS.ADMIN
+  const isLegacyLocked = Boolean(Number(session.is_legacy)) && !isAdmin
+
+  const canEditSession     = !isLegacyLocked && session.status === 'DRAFT'
+  const canEditActions     = !isLegacyLocked && ['DRAFT', 'SCHEDULED'].includes(session.status)
+  const canEditAttachment  = !isLegacyLocked && session.status === 'DRAFT'
+  const canEditInternal    = !isLegacyLocked && canSeeInternal && !['CLOSED', 'CANCELED'].includes(session.status)
   const recentSessions     = session.recent_sessions ?? []
   const priorYearSessions  = session.prior_year_sessions ?? []
   const repeatTopics       = session.repeat_topics ?? []
@@ -578,7 +583,12 @@ export default function CoachingSessionDetailPage() {
           {/* Status panel */}
           <SideCard>
             <SideTitle>Status</SideTitle>
-            {session.status === 'CLOSED' ? (
+            {isLegacyLocked ? (
+              <div className="space-y-2">
+                <p className="text-[14px] font-semibold text-slate-900">{STATUS_LABELS[session.status] ?? session.status}</p>
+                <p className="text-[12px] text-slate-400 italic">Legacy record imported from the previous system — read-only.</p>
+              </div>
+            ) : session.status === 'CLOSED' ? (
               <p className="text-[12px] text-slate-400 italic">This session is closed and archived.</p>
             ) : session.status === 'CANCELED' ? (
               <p className="text-[12px] text-slate-400 italic">This session was canceled.</p>

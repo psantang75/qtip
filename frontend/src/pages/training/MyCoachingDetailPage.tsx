@@ -86,7 +86,8 @@ export default function MyCoachingDetailPage() {
   const require_action_plan    = !!session.require_action_plan
   const require_acknowledgment = !!session.require_acknowledgment
   const quizzes          = session.quizzes ?? []
-  const isReadOnly       = ['COMPLETED', 'CLOSED', 'CANCELED'].includes(status)
+  // Legacy (imported) sessions cannot accept CSR responses — backend rejects with LEGACY_LOCKED.
+  const isReadOnly       = ['COMPLETED', 'CLOSED', 'CANCELED'].includes(status) || Boolean(Number(session.is_legacy))
   const isScheduled      = status === 'SCHEDULED'
   const alreadySubmitted = !!session.csr_action_plan
 

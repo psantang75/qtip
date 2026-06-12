@@ -18,7 +18,18 @@ import {
   resolveAttachmentForDownload,
   deleteAttachment as deleteAttachmentService,
 } from '../../services/writeups'
+import { checkLegacyLock } from '../../services/legacyLock'
 import { respondWithError } from './respond'
+
+/** Blocks mutations on legacy (imported) write-ups for non-admins. */
+const passesLegacyLock = async (req: AuthReq, res: Response, writeUpId: number): Promise<boolean> => {
+  const lock = await checkLegacyLock('write_up', writeUpId, req.user!.user_id, req.user!.role)
+  if (!lock.allowed) {
+    res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' })
+    return false
+  }
+  return true
+}
 
 const requirePair = (idRaw: string, attachmentIdRaw: string, res: Response): { writeUpId: number; attachmentId: number } | null => {
   const writeUpId    = parseInt(idRaw)
@@ -37,6 +48,8 @@ export const uploadAttachment = async (req: AuthReq, res: Response) => {
     if (isNaN(writeUpId)) {
       return res.status(400).json({ success: false, message: 'Invalid write-up ID' })
     }
+
+    if (!(await passesLegacyLock(req, res, writeUpId))) return
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const file = (req as any).file
@@ -69,6 +82,7 @@ export const deleteAttachment = async (req: AuthReq, res: Response) => {
   try {
     const ids = requirePair(req.params.id, req.params.attachmentId, res)
     if (ids === null) return
+    if (!(await passesLegacyLock(req, res, ids.writeUpId))) return
     await deleteAttachmentService(ids.writeUpId, ids.attachmentId)
     res.json({ success: true })
   } catch (error) {

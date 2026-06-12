@@ -11,6 +11,7 @@ import {
   generateCoachingSessionsXlsx,
 } from '../services/coachingSessionsReport';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
+import { checkLegacyLock } from '../services/legacyLock';
 import logger from '../config/logger';
 // Local `escapeFilename` removed during pre-production review (item #26).
 // `utils/contentDisposition.formatFilename` is the canonical implementation.
@@ -953,6 +954,10 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
       res.status(404).json({ success: false, message: 'Coaching session not found' });
       return;
     }
+
+    // Admin-only route: the lock always allows here, but audit-logs the
+    // override when the target is a legacy (imported) record.
+    await checkLegacyLock('coaching_session', sessionId, adminId, req.user?.role);
 
     const currentSession = sessionRows[0];
 

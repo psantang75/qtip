@@ -14,13 +14,13 @@
  * Audit performed 2026-04-24:
  *   - `manager.dashboard.service.ts`         — dept-id IN clauses, parameterized.
  *   - `manager.audits.list.service.ts`       — dept-id IN clauses, parameterized.
- *   - `manager.coaching.{list,detail,export,update,transitions,shared}.ts`
- *                                            — dept-id IN clauses + dynamic
- *                                              UPDATE column list (whitelisted),
- *                                              all values parameterized.
  *   - `manager.disputes.{list,detail,export,resolve}.service.ts`
  *                                            — same pattern, parameterized.
  *   - `manager.team.service.ts`              — dept-id IN clause only.
+ *
+ * 2026-06-12: the `manager.coaching.*` services were removed (dead code on
+ * the dropped `coaching_type` column; coaching lives in the trainer/admin
+ * controllers).
  *
  * **When adding new dynamic SQL here:** prefer `Prisma.sql` tagged templates
  * with `Prisma.join(...)`; only fall back to `$queryRawUnsafe` when the
@@ -34,13 +34,6 @@ export * from './manager.disputes.list.service'
 export * from './manager.disputes.export.service'
 export * from './manager.disputes.detail.service'
 export * from './manager.disputes.resolve.service'
-export * from './manager.coaching.list.service'
-export * from './manager.coaching.export.service'
-export * from './manager.coaching.detail.service'
-export * from './manager.coaching.attachment.service'
-export * from './manager.coaching.create.service'
-export * from './manager.coaching.update.service'
-export * from './manager.coaching.transitions.service'
 export * from './manager.audits.list.service'
 export * from './manager.audits.detail.service'
 export * from './manager.team.service'

@@ -401,10 +401,16 @@ interface ContentSectionsProps {
   isAgentView?: boolean
   id?: number
   onInvalidate?: () => void
+  /** Legacy (imported) record viewed by a non-admin — render all sections read-only. */
+  readOnly?: boolean
 }
 
-export function ContentSections({ writeup, isAgentView, id, onInvalidate }: ContentSectionsProps) {
-  const showActionCard = !isAgentView && id !== undefined && onInvalidate
+export function ContentSections({ writeup, isAgentView, id, onInvalidate, readOnly = false }: ContentSectionsProps) {
+  const showActionCard = !readOnly && !isAgentView && id !== undefined && onInvalidate
+  // Withholding id/onInvalidate collapses the editable sections to their
+  // read-only rendering without touching their internals.
+  const editId         = readOnly ? undefined : id
+  const editInvalidate = readOnly ? undefined : onInvalidate
   return (
     <>
       <OverviewSection                writeup={writeup} isAgentView={isAgentView} />
@@ -416,8 +422,8 @@ export function ContentSections({ writeup, isAgentView, id, onInvalidate }: Cont
       {showActionCard && (
         <ActionCard writeup={writeup} id={id!} onInvalidate={onInvalidate!} />
       )}
-      <FollowUpEditableSection        writeup={writeup} isAgentView={isAgentView} id={id} onInvalidate={onInvalidate} />
-      <InternalNotesEditableSection   writeup={writeup} isAgentView={isAgentView} id={id} onInvalidate={onInvalidate} />
+      <FollowUpEditableSection        writeup={writeup} isAgentView={isAgentView} id={editId} onInvalidate={editInvalidate} />
+      <InternalNotesEditableSection   writeup={writeup} isAgentView={isAgentView} id={editId} onInvalidate={editInvalidate} />
     </>
   )
 }

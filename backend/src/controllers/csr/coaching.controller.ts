@@ -2,6 +2,7 @@
 import prisma from '../../config/prisma';
 import { Prisma } from '../../generated/prisma/client';
 import { applyAutoAdvance } from '../../utils/coachingAutoAdvance';
+import { checkLegacyLock } from '../../services/legacyLock';
 import { formatFilename as escapeFilename } from '../../utils/contentDisposition';
 import logger from '../../config/logger';
 
@@ -579,6 +580,9 @@ export const submitCSRResponse = async (req: Request, res: Response) => {
     );
 
     if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
+
+    const lock = await checkLegacyLock('coaching_session', sessionId, userId, req.user!.role);
+    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
 
     const session = rows[0];
     if (!['SCHEDULED', 'AWAITING_CSR_ACTION'].includes(session.status)) {

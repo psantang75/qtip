@@ -1,5 +1,20 @@
 # Manager Coaching Sessions
 
+> **STATUS: REMOVED (2026-06-12).**
+> This screen was superseded by the Training section's coaching module and
+> the code was deleted: the `/api/manager/coaching-sessions` routes,
+> `backend/src/services/manager/manager.coaching.*`,
+> `backend/src/controllers/manager/coaching.controller.ts`,
+> `backend/src/middleware/coachingUpload.ts`, and
+> `frontend/src/services/managerService.ts` no longer exist.
+> The live coaching UI is `/app/training/coaching/...`, which calls
+> `/api/trainer/coaching-sessions` (`backend/src/controllers/coaching.controller.ts`)
+> on the `coaching_purpose` / `coaching_format` schema. Admin screens use
+> `/api/admin/coaching-sessions`. Other `/api/manager/*` endpoints
+> (dashboard-stats, csr-activity, team-audits, team-csrs, disputes) remain
+> live via `qaService.ts`.
+> This document is retained for historical reference only.
+
 ## 📜 Purpose
 The Manager Coaching Sessions screen enables Managers to log, track, and review one-on-one coaching sessions with their team’s CSRs, documenting performance discussions and improvement plans. This screen supports personalized development in the QTIP platform.
 

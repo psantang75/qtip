@@ -369,9 +369,11 @@ interface StatusPanelProps {
   writeup: WriteUpDetail
   id: number
   onInvalidate: () => void
+  /** Legacy (imported) record viewed by a non-admin — hide all actions. */
+  readOnly?: boolean
 }
 
-export function StatusPanel({ writeup, id, onInvalidate }: StatusPanelProps) {
+export function StatusPanel({ writeup, id, onInvalidate, readOnly = false }: StatusPanelProps) {
   const { toast } = useToast()
   const qc        = useQueryClient()
 
@@ -410,7 +412,15 @@ export function StatusPanel({ writeup, id, onInvalidate }: StatusPanelProps) {
         <StatusTimeline writeup={writeup} />
       </div>
 
-      {writeup.status !== 'CLOSED' && (
+      {readOnly && writeup.status !== 'CLOSED' && (
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-[12px] text-slate-400 italic">
+            Legacy record imported from the previous system — read-only.
+          </p>
+        </div>
+      )}
+
+      {!readOnly && writeup.status !== 'CLOSED' && (
         <div className="border-t border-slate-100 pt-4">
           <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Actions</p>
 

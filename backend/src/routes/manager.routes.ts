@@ -11,12 +11,15 @@
  *       GET  /audits, GET /forms, POST /team/reports, GET /team/goals,
  *       GET  /team/export/:reportId, GET /team/filters,
  *       PUT  /disputes/:disputeId/resolve (frontend uses POST).
- *   - Inline multer config moved to `middleware/coachingUpload.ts`.
  *   - Duplicate `app.use(authenticate)` removed.
+ *
+ * 2026-06-12: the `/coaching-sessions` route family was removed. It predated
+ * the Training coaching module, still referenced the dropped `coaching_type`
+ * column, and had no frontend consumers — coaching CRUD lives at
+ * `/api/trainer/coaching-sessions` and `/api/admin/coaching-sessions`.
  */
 import express, { RequestHandler } from 'express'
 import { authenticate, authorizeManager } from '../middleware/auth'
-import { coachingUpload } from '../middleware/coachingUpload'
 import {
   dashboardStatsHandler,
   csrActivityHandler,
@@ -27,14 +30,6 @@ import {
   exportDisputesHandler,
   disputeDetailHandler,
   resolveDisputeHandler,
-  listCoachingHandler,
-  exportCoachingHandler,
-  coachingDetailHandler,
-  createCoachingHandler,
-  updateCoachingHandler,
-  completeCoachingHandler,
-  reopenCoachingHandler,
-  downloadCoachingAttachmentHandler,
 } from '../controllers/manager'
 
 const router = express.Router()
@@ -59,32 +54,5 @@ router.get('/disputes', listDisputesHandler as unknown as RequestHandler)
 router.get('/disputes/export', exportDisputesHandler as unknown as RequestHandler)
 router.get('/disputes/:disputeId', disputeDetailHandler as unknown as RequestHandler)
 router.post('/disputes/:disputeId/resolve', resolveDisputeHandler as unknown as RequestHandler)
-
-// Coaching sessions
-router.get('/coaching-sessions', listCoachingHandler as unknown as RequestHandler)
-router.get('/coaching-sessions/export', exportCoachingHandler as unknown as RequestHandler)
-router.get('/coaching-sessions/:sessionId', coachingDetailHandler as unknown as RequestHandler)
-router.get(
-  '/coaching-sessions/:sessionId/attachment',
-  downloadCoachingAttachmentHandler as unknown as RequestHandler,
-)
-router.post(
-  '/coaching-sessions',
-  coachingUpload.single('attachment'),
-  createCoachingHandler as unknown as RequestHandler,
-)
-router.put(
-  '/coaching-sessions/:sessionId',
-  coachingUpload.single('attachment'),
-  updateCoachingHandler as unknown as RequestHandler,
-)
-router.patch(
-  '/coaching-sessions/:sessionId/complete',
-  completeCoachingHandler as unknown as RequestHandler,
-)
-router.patch(
-  '/coaching-sessions/:sessionId/reopen',
-  reopenCoachingHandler as unknown as RequestHandler,
-)
 
 export default router
