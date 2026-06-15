@@ -1,30 +1,30 @@
 /**
  * PM2 configuration for the QTIP monorepo.
  *
- * ── Nightly worker schedule (runbook — pre-production review item #95) ────
+ * ── Insights worker schedule ─────────────────────────────────────────────
  *
- * All insights workers run as one-shot cron jobs within the 01:00–02:00 UTC
- * window and `autorestart: false`, so their timing is fire-and-forget:
+ * All four data-refresh workers run every 30 minutes as one-shot cron jobs
+ * (`autorestart: false`), staggered by 5-minute offsets within each
+ * half-hour so the ordering dept → emp → calendar → rollup is preserved:
  *
- *     01:00 UTC   ie-dept-sync            ← department dimension sync
- *     01:10 UTC   ie-emp-sync             ← employee dimension sync
- *     01:20 UTC   ie-calendar-sync        ← calendar / schedule dimension
- *     02:00 UTC   ie-rollup               ← nightly KPI rollups
+ *     :00 / :30   ie-dept-sync            ← department dimension sync
+ *     :05 / :35   ie-emp-sync             ← employee dimension sync
+ *     :10 / :40   ie-calendar-sync        ← calendar / schedule dimension
+ *     :15 / :45   ie-rollup               ← KPI rollups (drives dashboards)
  *     00:00 UTC (monthly) ie-partition-manager ← partition housekeeping
  *
- * Ten-minute gaps between the three dimension syncs are intentional: they
- * all pound the same source MySQL instance, and dept must finish before
- * emp (dept ids feed employee rows). The rollup runs at 02:00 so it sees
- * the refreshed dimensions from the earlier jobs.
- *
- * If a worker routinely exceeds its next sibling's start time:
+ * 5-minute gaps between the three dimension syncs are intentional: dept
+ * must finish before emp (dept ids feed employee rows), and the rollup
+ * runs last so it sees the refreshed dimensions. At current row counts
+ * each worker finishes in well under a minute; if a worker routinely
+ * exceeds its next sibling's start time:
  *   1. Tail the worker log in `logs/` to confirm it's running, not stuck.
- *   2. Push its sibling out by ≥15 minutes here and redeploy.
- *   3. For persistent slowness, add a dedicated off-peak window rather
- *      than stacking more work into 01:00–02:00.
+ *   2. Push its sibling out by ≥5 more minutes here and redeploy.
+ *   3. For persistent slowness, drop to hourly (`0,30` -> `0`) rather
+ *      than stacking more work into each half-hour window.
  *
- * All timestamps are server-local per PM2 convention; deploy the prod
- * host in UTC to keep this comment accurate.
+ * Cron expressions are interpreted in the server's local timezone per PM2
+ * convention; the prod and stage hosts run in UTC.
  */
 module.exports = {
   apps: [
@@ -48,7 +48,7 @@ module.exports = {
     {
       name: 'ie-dept-sync',
       script: './backend/dist/workers/run-dept-sync.js',
-      cron_restart: '0 1 * * *',
+      cron_restart: '0,30 * * * *',
       watch: false,
       autorestart: false,
       env: { NODE_ENV: 'production' }
@@ -56,7 +56,7 @@ module.exports = {
     {
       name: 'ie-emp-sync',
       script: './backend/dist/workers/run-emp-sync.js',
-      cron_restart: '10 1 * * *',
+      cron_restart: '5,35 * * * *',
       watch: false,
       autorestart: false,
       env: { NODE_ENV: 'production' }
@@ -64,7 +64,7 @@ module.exports = {
     {
       name: 'ie-calendar-sync',
       script: './backend/dist/workers/run-calendar-sync.js',
-      cron_restart: '20 1 * * *',
+      cron_restart: '10,40 * * * *',
       watch: false,
       autorestart: false,
       env: { NODE_ENV: 'production' }
@@ -80,7 +80,7 @@ module.exports = {
     {
       name: 'ie-rollup',
       script: './backend/dist/workers/run-rollup.js',
-      cron_restart: '0 2 * * *',
+      cron_restart: '15,45 * * * *',
       watch: false,
       autorestart: false,
       env: { NODE_ENV: 'production' }
