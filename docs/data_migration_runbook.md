@@ -147,22 +147,73 @@ Outputs `[OK] <table>: N rows` for each table. Row counts should match
 the source legacy DB exactly (with the documented coaching-sessions split:
 coaching_sessions + write_ups should sum to legacy's coaching_sessions).
 
+### Phase 5b — Seed Insights dimensions (first-time on a host)
+
+`migrate-production-data.ts` only handles the transactional/legacy
+tables. The Insights warehouse has two reference tables the loader
+does NOT populate, and the Insights rollup worker produces empty KPIs
+(audits assigned, etc.) until both are present:
+
+| Table | Source | One-time setup |
+| --- | --- | --- |
+| `business_calendar_days` | manual admin entry / copied from sibling env | `mysqldump --replace ... business_calendar_days` from stage, scp, `mysql < dump.sql` on target |
+| `ie_dim_date`             | derived (`seed-date-dimension.ts`) | `npx ts-node src/scripts/seed-date-dimension.ts` |
+
+```bash
+# 1. business_calendar_days  (copy from a healthy sibling env if blank)
+ssh $SRC_HOST "mysqldump -h \$(grep '^DB_HOST=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  -u \$(grep '^DB_USER=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  -p\$(grep '^DB_PASSWORD=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  --no-create-info --skip-triggers --no-tablespaces --replace --single-transaction \
+  \$(grep '^DB_NAME=' /opt/qtip/backend/.env | cut -d= -f2-) business_calendar_days \
+  2>/tmp/mysqldump.stderr" > business_calendar_days.sql
+scp business_calendar_days.sql $HOST:/tmp/
+ssh $HOST "mysql -h \$(grep '^DB_HOST=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  -u \$(grep '^DB_USER=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  -p\$(grep '^DB_PASSWORD=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  \$(grep '^DB_NAME=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  < /tmp/business_calendar_days.sql"
+
+# 2. ie_dim_date  (idempotent — the script no-ops if already populated)
+ssh $HOST "cd /opt/qtip/backend && npx ts-node src/scripts/seed-date-dimension.ts"
+
+# 3. trigger Insights workers immediately (skip the wait for the next :15/:45 cron)
+ssh $HOST "pm2 restart ie-calendar-sync --update-env --no-autorestart && \
+           sleep 5 && \
+           pm2 restart ie-rollup        --update-env --no-autorestart"
+```
+
+> NEVER `mysqldump` with `> file 2>&1` — the warning lines end up
+> inside the SQL file and the next `mysql < file` parse-fails on them.
+> Always send stderr to a separate file (or `/dev/null`).
+
+> Truncation (Phase 4) leaves both of these tables alone, so on
+> subsequent re-loads of the same host you can skip Phase 5b entirely.
+
 ### Phase 6 — Validate
 
 1. **Row-count parity** vs the legacy DB you exported from.
-2. **FK integrity** — run `scripts/backups/fk_integrity_checks.sql`; 16
+2. **Insights dimensions populated** —
+   `SELECT COUNT(*) FROM business_calendar_days; SELECT COUNT(*) FROM ie_dim_date;`
+   should both be non-zero on first-time hosts; `ie_dim_date` is 1827 rows
+   for the current 2024-2028 window.
+3. **FK integrity** — run `scripts/backups/fk_integrity_checks.sql`; 16
    checks should each return 0 orphans.
-3. **Coaching/write-up split** — `19 ONE_ON_ONE + 90 SIDE_BY_SIDE` coaching
+4. **Coaching/write-up split** — `19 ONE_ON_ONE + 90 SIDE_BY_SIDE` coaching
    + `5 VERBAL_WARNING + 7 WRITTEN_WARNING` write-ups for the 3/23 dataset.
    These counts will differ on a fresher export; spot-check that legacy's
    `Verbal Warning` / `Written Warning` row count matches new
    `write_ups`, and that legacy's other coaching types match new
    `coaching_sessions`.
-4. **AUTO_INCREMENT reset** — confirmed automatically by the loader's
+5. **AUTO_INCREMENT reset** — confirmed automatically by the loader's
    final "Resetting AUTO_INCREMENT values..." block.
-5. **Live upload smoke** —
+6. **Live upload smoke** —
    `ssh $HOST "cd /opt/qtip && npx ts-node scripts/backups/smoke_uploads.ts"`.
    Should print matching SHAs for both write-up and coaching upload paths.
+7. **Insights dashboards** — after the next `ie-rollup` tick (every
+   `:15`/`:45`), at least one cell in the Audits-Assigned KPI must be
+   non-zero for a date in the current window. Empty grids here usually
+   trace back to a skipped Phase 5b on a first-time host.
 
 ### Phase 7 — Restart the API + UI spot-check
 
