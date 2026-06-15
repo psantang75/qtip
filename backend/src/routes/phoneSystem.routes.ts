@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authorizeRecordingAccess } from '../middleware/auth';
 import {
   getAudioUrlByConversationId,
   getAudioUrlsByConversationIds,
@@ -23,6 +23,14 @@ const router = express.Router();
 
 // Apply authentication middleware to all routes
 router.use(authenticate);
+
+// Recording endpoints are forbidden for CSRs/Agents (role_id=3). They can
+// see call metadata + transcripts on their own audit-detail page, but the
+// underlying audio (and any URL that resolves to it) is restricted to QA
+// reviewers and supervisors. Frontend hides the audio player for the same
+// roles; this middleware is the real enforcement so direct API calls
+// (curl, DevTools) also get rejected.
+router.use(authorizeRecordingAccess);
 
 /**
  * @route GET /api/phone-system/recording/:conversationId

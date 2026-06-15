@@ -4,7 +4,10 @@ import cacheService from './CacheService';
 import { handleDatabaseError, createNotFoundError, createValidationError } from '../utils/errorHandler';
 import { dbPerformanceTracker } from '../middleware/performance';
 import logger from '../config/logger';
-import { attachPhoneSystemRecordings } from './callRecordingEnrichment';
+// `attachPhoneSystemRecordings` is intentionally NOT imported here: this
+// service is CSR-only, and CSRs are blocked from recording access. Audit
+// details still include the call's metadata + transcript so the reviewee
+// can see what was scored, just not play the audio back.
 
 export interface CSRAudit {
   id: number;
@@ -382,7 +385,7 @@ export class CSRService {
           categories: categoriesWithQuestions
         },
         metadata: metadataArray,
-        calls: await attachPhoneSystemRecordings(calls as any[]),
+        calls: (calls as any[]).map((c) => ({ ...c, recording_url: null, recordings: [] })),
         ticket_tasks: ticket_tasks.map((r: any) => ({
           kind: r.kind,
           external_id: Number(r.external_id),

@@ -175,6 +175,25 @@ export const authorizeCoachingUser = (req: Request, res: Response, next: NextFun
 };
 
 /**
+ * Recording access authorization — allows everyone EXCEPT CSR/Agent to
+ * fetch call audio (and the PhoneSystem metadata that exposes recording
+ * URLs). Mirrors the policy enforced in the UI: CSRs reviewing their own
+ * audits can see call_id, date, and transcript text, but not play back
+ * the original conversation. Applied at `routes/phoneSystem.routes.ts`
+ * so even direct API calls from a CSR session get a 403.
+ */
+export const authorizeRecordingAccess = (req: Request, res: Response, next: NextFunction): void => {
+  if (!req.user) { ApiErrors.unauthorized(res); return; }
+  const allowed = ['Admin', 'QA', 'Trainer', 'Manager', 'Director'];
+  if (!allowed.includes(req.user.role)) {
+    securityLogger.accessDenied(req.ip || 'unknown', req.originalUrl, 'CSR access to recordings is forbidden', req.user.user_id);
+    ApiErrors.forbidden(res, 'Access denied. Recording access is restricted to QA reviewers and supervisors.');
+    return;
+  }
+  next();
+};
+
+/**
  * Manager role authorization middleware
  */
 export const authorizeManager = (req: Request, res: Response, next: NextFunction): void => {
@@ -197,4 +216,4 @@ export const authorizeManager = (req: Request, res: Response, next: NextFunction
   next();
 };
 
-export default { authenticate, authorizeAdmin, authorizeTrainer, authorizeQA, authorizeQAOrTrainer, authorizeManager, authorizeCoachingUser }; 
+export default { authenticate, authorizeAdmin, authorizeTrainer, authorizeQA, authorizeQAOrTrainer, authorizeManager, authorizeCoachingUser, authorizeRecordingAccess };

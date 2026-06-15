@@ -5,6 +5,7 @@ import { formatTranscriptText } from '@/utils/transcriptUtils'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
 import { InfoRow } from '@/components/common/DetailLayout'
 import { AudioPlayer } from '@/components/common/AudioPlayer'
+import { useQualityRole } from '@/hooks/useQualityRole'
 import { type CallRecording } from '@/services/callService'
 
 interface SubmissionCall {
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export function CallDetailsPanel({ calls }: Props) {
+  const { isAgent } = useQualityRole()
   const [activeCallIndex, setActiveCallIndex] = useState(0)
   const [transcriptOpen,  setTranscriptOpen]  = useState(false)
 
@@ -86,7 +88,7 @@ export function CallDetailsPanel({ calls }: Props) {
             {call.call_date && <InfoRow label="Call Date" value={fmtDate(call.call_date)} />}
           </div>
 
-          {(() => {
+          {!isAgent && (() => {
             const recs = callRecordings(call)
             if (recs.length === 0) {
               return (
@@ -145,7 +147,7 @@ export function CallDetailsPanel({ calls }: Props) {
       {calls.length > 1 && (
         <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center gap-3">
           <span className="text-[11px] text-slate-400">{calls.length} calls</span>
-          {calls.filter((c: SubmissionCall) => callRecordings(c).length > 0).length > 0 && (
+          {!isAgent && calls.filter((c: SubmissionCall) => callRecordings(c).length > 0).length > 0 && (
             <span className="text-[11px] text-emerald-600">
               {calls.filter((c: SubmissionCall) => callRecordings(c).length > 0).length} with audio
             </span>
