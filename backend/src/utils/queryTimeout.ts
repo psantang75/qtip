@@ -3,10 +3,12 @@
  *
  * Two layers protect long-running reads:
  *
- *   1) MariaDB session timeout — `database.ts` runs
- *      `SET SESSION max_statement_time = ...` on every new mysql2 pool
- *      connection. Caps SELECTs at the engine level so a runaway query
- *      gets terminated by the server even if Node never times it out.
+ *   1) Engine-side session timeout — `database.ts` applies a per-connection
+ *      statement-execution cap to every new mysql2 pool connection. It
+ *      tries MySQL syntax first (`SET SESSION max_execution_time = <ms>`)
+ *      and falls back to MariaDB (`SET SESSION max_statement_time = <s>`).
+ *      A runaway query is killed by the server even if Node never times
+ *      it out.
  *
  *   2) Application-level wrapper — `withQueryTimeout()` here wraps any
  *      `Promise<T>` (Prisma queries, Promise.all batches, raw fetches) in
@@ -24,12 +26,15 @@
 /** Default timeout (ms) for analytics / insights / on-demand report queries. */
 export const ANALYTICS_QUERY_TIMEOUT_MS = 30_000
 
-/** Default timeout (ms) the engine enforces — passed to `SET SESSION
- *  max_statement_time` (MariaDB takes seconds, double). Must be slightly
- *  shorter than `ANALYTICS_QUERY_TIMEOUT_MS` so the DB kills the query
- *  before Node decides to give up, leaving the connection clean for the
- *  pool to reuse. */
+/** Engine-side per-statement cap, in seconds. Must be slightly shorter than
+ *  `ANALYTICS_QUERY_TIMEOUT_MS` so the DB kills the query before Node gives
+ *  up, leaving the connection clean for the pool to reuse. Used as the
+ *  MariaDB `max_statement_time` value (seconds, double). */
 export const DB_SESSION_TIMEOUT_SECONDS = 25
+
+/** Same cap as `DB_SESSION_TIMEOUT_SECONDS`, in milliseconds. Used as the
+ *  MySQL `max_execution_time` value (ms, integer). */
+export const DB_SESSION_TIMEOUT_MS = DB_SESSION_TIMEOUT_SECONDS * 1000
 
 export class QueryTimeoutError extends Error {
   readonly statusCode = 504
@@ -48,6 +53,10 @@ export class QueryTimeoutError extends Error {
  *
  * `operation` is included in the error message and is plain text — keep
  * it short and stable so it's safe to log / surface to the client.
+ *
+ * Pair with `database.ts`'s engine-side cap (MySQL `max_execution_time`
+ * or MariaDB `max_statement_time`) so the server actually cancels the
+ * underlying query when the Node-side race fires.
  */
 export async function withQueryTimeout<T>(
   promise: Promise<T>,

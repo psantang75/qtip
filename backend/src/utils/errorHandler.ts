@@ -192,7 +192,7 @@ export const errorHandler = (
   // QueryTimeoutError from `withQueryTimeout()` — surface as 504 so the
   // client knows to retry / narrow filters rather than treating it as a
   // generic 500. The underlying query is also killed engine-side by
-  // MariaDB's `max_statement_time`.
+  // MySQL's `max_execution_time` (or MariaDB's `max_statement_time`).
   if (error instanceof QueryTimeoutError) {
     logger.warn('Query timeout', {
       error: { operation: error.operation, timeoutMs: error.timeoutMs, message: error.message },

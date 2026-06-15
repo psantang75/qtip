@@ -1,6 +1,6 @@
 import mysql from 'mysql2/promise';
 import { databaseConfig, phoneDatabaseConfig, crmDatabaseConfig } from './environment';
-import { DB_SESSION_TIMEOUT_SECONDS } from '../utils/queryTimeout';
+import { DB_SESSION_TIMEOUT_SECONDS, DB_SESSION_TIMEOUT_MS } from '../utils/queryTimeout';
 import logger from './logger';
 
 /**
@@ -15,11 +15,13 @@ import logger from './logger';
  * a clear error so callers can detect "feature not configured" without
  * connecting against half-set credentials.
  *
- * Every new physical connection has a per-session statement timeout applied
- * via `SET SESSION max_statement_time`. MariaDB takes the value as seconds
- * (double); any SELECT that exceeds it gets killed by the engine
- * (ER_STATEMENT_TIMEOUT). This is the engine-side counterpart to
- * `withQueryTimeout()` in `utils/queryTimeout.ts`.
+ * Every new physical connection has a per-session statement timeout applied.
+ * MySQL and MariaDB use different names for the same idea, so we try MySQL
+ * syntax first (`SET SESSION max_execution_time = <ms>`) and fall back to
+ * MariaDB (`SET SESSION max_statement_time = <seconds>`) if it errors. Any
+ * SELECT that exceeds the cap is killed by the engine. This is the
+ * engine-side counterpart to `withQueryTimeout()` in
+ * `utils/queryTimeout.ts`.
  */
 export type DatabasePoolName = 'primary' | 'phone' | 'crm';
 
@@ -57,17 +59,33 @@ class DatabasePoolFactory {
       // Apply the session statement timeout once per physical connection. The
       // mysql2 pool emits 'connection' the first time a given socket is
       // borrowed; subsequent re-uses reuse the existing session settings.
-      // We swallow the error here because (a) the pool will just hand out a
-      // working connection without the cap if SET fails on one node, and
-      // (b) the application-level `withQueryTimeout` wrapper still protects
-      // the request from hanging indefinitely.
+      // We swallow per-connection errors because (a) the pool will just hand
+      // out a working connection without the cap if SET fails, and (b) the
+      // application-level `withQueryTimeout` wrapper still protects the
+      // request from hanging indefinitely.
+      //
+      // To avoid noisy logs on every new socket on engines that don't support
+      // either variable name, we remember the outcome at the pool level and
+      // only log once (at debug, not warn) if neither variant works.
       const corePool = (pool as unknown as { pool: { on: (e: string, cb: (c: { query: (sql: string, cb: (err: unknown) => void) => void }) => void) => void } }).pool;
+      let unsupportedLogged = false;
       corePool.on('connection', (conn) => {
-        conn.query(`SET SESSION max_statement_time = ${DB_SESSION_TIMEOUT_SECONDS}`, (err) => {
-          if (err) {
-            // MariaDB-only — MySQL uses a different syntax. Log once and move on.
-            logger.warn('[db] SET SESSION max_statement_time failed', { error: (err as Error).message });
-          }
+        // Try MySQL first (vars-by-name lookup is faster than try/catch on
+        // the wire, but mysql2 doesn't expose server version pre-handshake,
+        // so a single throwaway SET is the cheapest probe).
+        conn.query(`SET SESSION max_execution_time = ${DB_SESSION_TIMEOUT_MS}`, (mysqlErr) => {
+          if (!mysqlErr) return;
+          conn.query(`SET SESSION max_statement_time = ${DB_SESSION_TIMEOUT_SECONDS}`, (mariaErr) => {
+            if (!mariaErr) return;
+            if (!unsupportedLogged) {
+              unsupportedLogged = true;
+              logger.debug('[db] engine accepts neither max_execution_time nor max_statement_time; relying on app-level withQueryTimeout only', {
+                connection: connectionName,
+                mysqlError: (mysqlErr as Error).message,
+                mariaError: (mariaErr as Error).message,
+              });
+            }
+          });
         });
       });
 
