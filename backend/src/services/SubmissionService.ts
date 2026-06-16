@@ -17,6 +17,7 @@ import { calculateFormScoreBySubmissionId, recalculateScores, getScoreBreakdown 
 import { deriveRollupAnswers, type RollupQuestionShape, type RollupAnswerShape } from '../utils/rollupEngine';
 import prisma from '../config/prisma';
 import logger from '../config/logger';
+import { notifySubmissionGraded } from './qa/qa.submissions.notify';
 
 /**
  * Custom error class for submission service business logic errors
@@ -375,6 +376,11 @@ export class SubmissionService implements ISubmissionService {
       // Update submission with calculated score
       await this.submissionRepository.updateSubmissionScore(submission_id, scoreResult.total_score);
 
+      // Notify the CSR (and manager) that a review was done. Fires here on
+      // SUBMITTED — not on finalize — so the agent learns of the review when
+      // it happens. Reviewer kind drives cadence (human=immediate, AI=digest).
+      await notifySubmissionGraded(submission_id, qa_id);
+
       return {
         submission_id,
         total_score: scoreResult.total_score,
@@ -531,6 +537,10 @@ export class SubmissionService implements ISubmissionService {
       `[SUBMISSION SERVICE] Promoted DRAFT submission_id=${submission_id} to SUBMITTED ` +
         `(scored ${scoreResult.total_score}); attributed to user ${human_user_id}.`
     );
+
+    // A human promoting an AI draft = the review is now done by a human;
+    // notify the CSR immediately (reviewer kind resolves to qa).
+    await notifySubmissionGraded(submission_id, human_user_id);
 
     return {
       submission_id,
