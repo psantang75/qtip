@@ -10,6 +10,16 @@ import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 
 /**
+ * Fires the coaching status-change email. Imported lazily so this util
+ * (pulled in by several controllers) doesn't create an import cycle with
+ * the notification stack. Mirrors the writeup transition pattern.
+ */
+async function notifyStatus(sessionId: number, status: string): Promise<void> {
+  const { notifyCoachingStatus } = await import('../services/coaching/coaching.notify');
+  await notifyCoachingStatus(sessionId, status);
+}
+
+/**
  * Returns true if the session has ANY pending CSR requirement
  * (action plan, acknowledgment, or assigned quizzes).
  */
@@ -99,6 +109,7 @@ export async function applyAutoAdvance(sessionId: number, userId: number): Promi
         details: JSON.stringify({ to: nextStatus }),
       },
     });
+    await notifyStatus(sessionId, nextStatus);
     return nextStatus;
   }
 
@@ -121,6 +132,7 @@ export async function applyAutoAdvance(sessionId: number, userId: number): Promi
           details: JSON.stringify({ to: 'AWAITING_CSR_ACTION', reason: 'pending_requirements' }),
         },
       });
+      await notifyStatus(sessionId, 'AWAITING_CSR_ACTION');
       return 'AWAITING_CSR_ACTION';
     }
   }

@@ -130,7 +130,7 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['admins'],
     default_recipient_roles: ['admins'],
     digest_eligible: false,
-    deep_link_target: 'Admin user management for the locked user (/app/admin/users/{userId}).' },
+    deep_link_target: 'Admin user management, where the locked user can be unlocked (/app/admin/users).' },
 
   // ── Submissions ────────────────────────────────────────────────────
   { template_key: 'submission.audit_finalized_by_qa', category: 'Submissions', name: 'QA review finalized',
@@ -248,7 +248,7 @@ const SEEDS: SeedSpec[] = [
     default_recipient_roles: ['agent'],
     fixed_roles: ['agent'],
     digest_eligible: false,
-    deep_link_target: 'Quiz page for the coaching session (/app/training/coaching/{sessionId}/quiz).' },
+    deep_link_target: 'Coaching session detail where the CSR takes the quiz (/app/training/coaching/{sessionId}).' },
 
   { template_key: 'coaching.completed', category: 'Coaching', name: 'Coaching completed',
     description: 'A coaching session was marked complete.',
@@ -280,7 +280,7 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     default_recipient_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     digest_eligible: false,
-    deep_link_target: 'Write-up detail page (/app/writeups/{writeupId}).' },
+    deep_link_target: 'Write-up detail page (/app/performancewarnings/{writeupId}).' },
 
   { template_key: 'writeup.awaiting_signature', category: 'Write-ups', name: 'Write-up — awaiting signature',
     description: 'Write-up document is awaiting agent acknowledgment.',
@@ -290,7 +290,7 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     default_recipient_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     digest_eligible: false,
-    deep_link_target: 'Write-up document for signing (/app/writeups/{writeupId}).' },
+    deep_link_target: 'Write-up document for signing (/app/performancewarnings/{writeupId}).' },
 
   { template_key: 'writeup.signed', category: 'Write-ups', name: 'Write-up — signed',
     description: 'Write-up document was signed.',
@@ -300,7 +300,7 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     default_recipient_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     digest_eligible: false,
-    deep_link_target: 'Write-up detail page (/app/writeups/{writeupId}).' },
+    deep_link_target: 'Write-up detail page (/app/performancewarnings/{writeupId}).' },
 
   { template_key: 'writeup.refused', category: 'Write-ups', name: 'Write-up — signature refused',
     description: 'Agent refused to sign the write-up.',
@@ -310,7 +310,7 @@ const SEEDS: SeedSpec[] = [
     available_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     default_recipient_roles: ['agent', 'direct_manager', 'creator', 'hr_witness'],
     digest_eligible: false,
-    deep_link_target: 'Write-up detail page (/app/writeups/{writeupId}).' },
+    deep_link_target: 'Write-up detail page (/app/performancewarnings/{writeupId}).' },
 
   { template_key: 'writeup.followup_pending', category: 'Write-ups', name: 'Write-up — follow-up pending',
     description: 'A write-up follow-up is assigned.',
@@ -321,7 +321,7 @@ const SEEDS: SeedSpec[] = [
     default_recipient_roles: ['assignee'],
     fixed_roles: ['assignee'],
     digest_eligible: false,
-    deep_link_target: 'Write-up follow-up task (/app/writeups/{writeupId}/followup).' },
+    deep_link_target: 'Write-up detail page (/app/performancewarnings/{writeupId}).' },
 
   // ── Digests ────────────────────────────────────────────────────────
   { template_key: 'digest.csr_daily', category: 'Digests', name: 'Daily CSR digest',
@@ -336,7 +336,7 @@ const SEEDS: SeedSpec[] = [
     default_recipient_roles: ['agent'],
     fixed_roles: ['agent'],
     digest_eligible: false,
-    deep_link_target: 'CSR personal dashboard (/app/dashboard).' },
+    deep_link_target: 'CSR personal dashboard (/app/insights/dashboard).' },
 
   { template_key: 'digest.manager_weekly', category: 'Digests', name: 'Weekly manager digest',
     description: 'Team-wide AI review rollup, delivered Mondays at 8am ET.',
@@ -351,7 +351,7 @@ const SEEDS: SeedSpec[] = [
     default_recipient_roles: ['direct_manager'],
     fixed_roles: ['direct_manager'],
     digest_eligible: false,
-    deep_link_target: 'Manager team dashboard (/app/manager/dashboard).' },
+    deep_link_target: 'Manager team dashboard (/app/insights/team).' },
 
   // ── System ─────────────────────────────────────────────────────────
   { template_key: 'system.circuit_tripped', category: 'System', name: 'Email circuit-breaker tripped',

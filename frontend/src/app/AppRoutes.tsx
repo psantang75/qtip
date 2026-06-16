@@ -1,7 +1,8 @@
 import React from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 
 import { ROLE_IDS } from '../hooks/useQualityRole'
+import { useAuth } from '../contexts/AuthContext'
 
 // Shell components — NOT lazy (load immediately)
 import AppShell from '../components/shell/AppShell'
@@ -95,20 +96,52 @@ const NotFoundPage           = React.lazy(() => import('../pages/NotFoundPage'))
 
 // Convenience — every role that can operate on coaching sessions as a
 // reviewer (not an agent). Inlined previously in 4 spots.
-const COACHING_REVIEWER_ROLES = [
+const COACHING_REVIEWER_ROLES: number[] = [
   ROLE_IDS.ADMIN,
   ROLE_IDS.QA,
   ROLE_IDS.TRAINER,
   ROLE_IDS.MANAGER,
 ]
 
-const PERFORMANCE_WARNING_EDITOR_ROLES = [
+const PERFORMANCE_WARNING_EDITOR_ROLES: number[] = [
   ROLE_IDS.ADMIN,
   ROLE_IDS.QA,
   ROLE_IDS.MANAGER,
 ]
 
 const ON_DEMAND_REPORT_ROLES = [ROLE_IDS.ADMIN, ROLE_IDS.MANAGER]
+
+/**
+ * Performance-warning detail entry point. Editors (admin/QA/manager) get the
+ * full editor view; everyone else — notably the employee the warning is about,
+ * who receives the same notification email — is sent to their read-only
+ * `/my/:id` view instead of being bounced to the app root.
+ */
+function PerformanceWarningDetailRoute(): React.ReactElement | null {
+  const { user } = useAuth()
+  const { id } = useParams()
+  if (!user) return null
+  if (!PERFORMANCE_WARNING_EDITOR_ROLES.includes(user.role_id)) {
+    return <Navigate to={`/app/performancewarnings/my/${id}`} replace />
+  }
+  return <PageLoader><WriteUpDetailPage /></PageLoader>
+}
+
+/**
+ * Coaching session detail entry point. Reviewers (admin/QA/trainer/manager)
+ * get the full session page; the CSR the session is about — who receives the
+ * coaching emails — is sent to their read-only `/my-coaching/:id` view instead
+ * of being bounced to the my-coaching list.
+ */
+function CoachingDetailRoute(): React.ReactElement | null {
+  const { user } = useAuth()
+  const { id } = useParams()
+  if (!user) return null
+  if (!COACHING_REVIEWER_ROLES.includes(user.role_id)) {
+    return <Navigate to={`/app/training/my-coaching/${id}`} replace />
+  }
+  return <PageLoader><CoachingSessionDetailPage /></PageLoader>
+}
 
 export default function AppRoutes(): React.ReactElement {
   return (
@@ -182,7 +215,7 @@ export default function AppRoutes(): React.ReactElement {
             {/* Trainer/manager/admin routes — CSRs are redirected to my-coaching */}
             <Route path="coaching"         element={<RequireRole allowed={COACHING_REVIEWER_ROLES} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionsPage /></PageLoader></RequireRole>} />
             <Route path="coaching/new"     element={<RequireRole allowed={COACHING_REVIEWER_ROLES} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequireRole>} />
-            <Route path="coaching/:id"     element={<RequireRole allowed={COACHING_REVIEWER_ROLES} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionDetailPage /></PageLoader></RequireRole>} />
+            <Route path="coaching/:id"     element={<CoachingDetailRoute />} />
             <Route path="coaching/:id/edit" element={<RequireRole allowed={COACHING_REVIEWER_ROLES} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequireRole>} />
             <Route path="my-coaching"       element={<PageLoader><MyCoachingPage /></PageLoader>} />
             <Route path="my-coaching/:id"   element={<PageLoader><MyCoachingDetailPage /></PageLoader>} />
@@ -218,14 +251,7 @@ export default function AppRoutes(): React.ReactElement {
                 </RequireRole>
               }
             />
-            <Route
-              path=":id"
-              element={
-                <RequireRole allowed={PERFORMANCE_WARNING_EDITOR_ROLES} fallback="/app">
-                  <PageLoader><WriteUpDetailPage /></PageLoader>
-                </RequireRole>
-              }
-            />
+            <Route path=":id" element={<PerformanceWarningDetailRoute />} />
             <Route
               path=":id/edit"
               element={

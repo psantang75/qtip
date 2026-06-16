@@ -4,6 +4,7 @@ import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { hasCsrRequirements, applyAutoAdvance } from '../utils/coachingAutoAdvance';
 import { buildCoachingSessionScope } from '../services/coachingSessionsReport';
+import { notifyCoachingStatus } from '../services/coaching/coaching.notify';
 import { checkLegacyLock } from '../services/legacyLock';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
 import logger from '../config/logger';
@@ -571,6 +572,7 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
       if (needsCSR && currentStatus === 'SCHEDULED') {
         await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'AWAITING_CSR_ACTION' WHERE id = ${sessionId}`);
         await prisma.auditLog.create({ data: { user_id: userId, action: 'AUTO_STATUS_ADVANCE', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ from: 'SCHEDULED', to: 'AWAITING_CSR_ACTION', reason: 'requirements_added_on_edit' }) } });
+        await notifyCoachingStatus(sessionId, 'AWAITING_CSR_ACTION');
       } else if (!needsCSR && currentStatus === 'AWAITING_CSR_ACTION') {
         await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'SCHEDULED' WHERE id = ${sessionId}`);
         await prisma.auditLog.create({ data: { user_id: userId, action: 'AUTO_STATUS_REVERT', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ from: 'AWAITING_CSR_ACTION', to: 'SCHEDULED', reason: 'requirements_removed_on_edit' }) } });
@@ -607,6 +609,7 @@ export const deliverCoachingSession = async (req: AuthReq, res: Response) => {
 
     await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = ${deliveredStatus}, delivered_at = NOW() WHERE id = ${sessionId}`);
     await prisma.auditLog.create({ data: { user_id: userId, action: 'DELIVERED', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ status: deliveredStatus }) } });
+    await notifyCoachingStatus(sessionId, deliveredStatus);
     res.json({ success: true, message: `Session scheduled — status: ${deliveredStatus}` });
   } catch (error) {
     logger.error('[COACHING] deliverCoachingSession error:', error);
@@ -632,6 +635,7 @@ export const completeCoachingSession = async (req: AuthReq, res: Response) => {
 
     await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'COMPLETED', completed_at = NOW() WHERE id = ${sessionId}`);
     await prisma.auditLog.create({ data: { user_id: userId, action: 'COMPLETE', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
+    await notifyCoachingStatus(sessionId, 'COMPLETED');
     res.json({ success: true, message: 'Session marked as completed' });
   } catch (error) {
     logger.error('[COACHING] completeCoachingSession error:', error);
@@ -768,6 +772,8 @@ export const setSessionStatus = async (req: AuthReq, res: Response) => {
       data: { user_id: userId, action: 'STATUS_CHANGE', target_id: sessionId, target_type: 'coaching_session',
               details: JSON.stringify({ from: current, to: status }) },
     });
+
+    await notifyCoachingStatus(sessionId, status);
 
     res.json({ success: true, message: `Status changed to ${status}` });
   } catch (error) {

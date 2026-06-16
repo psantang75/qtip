@@ -263,7 +263,7 @@ class NotificationService {
       threshold: 1000,
       count: 0,
       trippedAt: new Date(),
-    });
+    }, { deepLinkPath: '/app/admin/email-templates' });
   }
 }
 

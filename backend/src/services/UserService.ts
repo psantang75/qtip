@@ -1,6 +1,8 @@
 ﻿import bcrypt from 'bcrypt';
 import { User, CreateUserDTO, UpdateUserDTO } from '../models/User';
 import logger from '../config/logger';
+import prisma from '../config/prisma';
+import { AuthRepository } from '../repositories/AuthRepository';
 
 // User service specific interfaces
 export interface UserFilters {
@@ -70,6 +72,7 @@ export class UserServiceError extends Error {
 export class UserService {
   private readonly repository: IUserRepository;
   private readonly saltRounds: number = 10;
+  private readonly authRepository = new AuthRepository();
 
   constructor(repository: IUserRepository) {
     this.repository = repository;
@@ -96,7 +99,13 @@ export class UserService {
       }
 
       const result = await this.repository.findAll(page, limit, filters);
-      
+
+      // Flag which accounts are currently locked out so admins can act on them.
+      const lockedEmails = await this.authRepository.getLockedEmails(
+        result.users.map((u) => u.email),
+      );
+      result.users = result.users.map((u) => ({ ...u, is_locked: lockedEmails.has(u.email) }));
+
       logger.info(`[NEW USER] UserService: Found ${result.users.length} users`);
       return result;
     } catch (error) {
@@ -312,6 +321,53 @@ export class UserService {
       
       logger.error('[NEW USER] UserService: Error toggling user status:', error);
       throw new UserServiceError('Failed to toggle user status', 'TOGGLE_STATUS_ERROR', 500);
+    }
+  }
+
+  /**
+   * Clears the failed-login lockout on a user's account (admin action).
+   * Safe to call on an account that isn't locked — it simply clears any
+   * recent failed attempts. The override is written to audit_logs.
+   */
+  async unlockAccount(id: number, unlockedBy: number): Promise<UserWithDetails> {
+    logger.info(`[NEW USER] UserService: Unlocking account ID: ${id}`);
+
+    try {
+      if (!id || id <= 0) {
+        throw new UserServiceError('Invalid user ID', 'INVALID_USER_ID', 400);
+      }
+
+      const user = await this.repository.findById(id);
+      if (!user) {
+        throw new UserServiceError('User not found', 'USER_NOT_FOUND', 404);
+      }
+
+      const cleared = await this.authRepository.clearFailedAttempts(user.email);
+
+      try {
+        await prisma.auditLog.create({
+          data: {
+            user_id: unlockedBy,
+            action: 'ACCOUNT_UNLOCK',
+            target_id: id,
+            target_type: 'user',
+            details: JSON.stringify({ email: user.email, clearedAttempts: cleared }),
+          },
+        });
+      } catch (auditErr) {
+        // Auditing must never block the unlock itself.
+        logger.warn(`[NEW USER] UserService: failed to audit account unlock for ${id}:`, auditErr);
+      }
+
+      logger.info(`[NEW USER] UserService: Account unlocked: ${user.username} (${cleared} attempts cleared)`);
+      return { ...user, is_locked: false };
+    } catch (error) {
+      if (error instanceof UserServiceError) {
+        throw error;
+      }
+
+      logger.error('[NEW USER] UserService: Error unlocking account:', error);
+      throw new UserServiceError('Failed to unlock account', 'UNLOCK_ACCOUNT_ERROR', 500);
     }
   }
 

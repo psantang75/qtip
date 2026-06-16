@@ -179,6 +179,25 @@ export const toggleUserStatus = async (req: Request, res: Response, next: NextFu
 };
 
 /**
+ * Unlock a user account (clear failed-login lockout)
+ * @route PUT /api/users/:id/unlock
+ */
+export const unlockUser = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    logger.info('[USER CONTROLLER] Unlocking user account');
+
+    const user_id = parseInt(req.params.id);
+    const unlockedBy = req.user?.user_id || 0;
+
+    const updatedUser = await userService.unlockAccount(user_id, unlockedBy);
+    return res.status(200).json(updatedUser);
+  } catch (error) {
+    logger.error('[USER CONTROLLER] Error in unlockUser:', error);
+    next(error); // Let the global error handler handle it
+  }
+};
+
+/**
  * Change password
  * @route PUT /api/users/change-password
  */

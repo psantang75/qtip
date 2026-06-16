@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, ChevronLeft, ChevronRight,
-  ChevronDown, ChevronsUpDown, ChevronUp,
+  ChevronDown, ChevronsUpDown, ChevronUp, Lock, LockOpen,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import userService from '@/services/userService'
@@ -114,6 +114,16 @@ export default function AdminUsersPage() {
     onError:    () => toast({ title: 'Failed to update status', variant: 'destructive' }),
   })
 
+  // ── Unlock account mutation ───────────────────────────────────────────────
+  const unlockMutation = useMutation({
+    mutationFn: (id: number) => userService.unlockUser(id),
+    onSuccess:  () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      toast({ title: 'Account unlocked' })
+    },
+    onError:    () => toast({ title: 'Failed to unlock account', variant: 'destructive' }),
+  })
+
   return (
     <div className="space-y-5">
 
@@ -174,20 +184,37 @@ export default function AdminUsersPage() {
                 <TableCell className="text-[13px] text-slate-600">{ROLE_NAMES[u.role_id] ?? '—'}</TableCell>
                 <TableCell className="text-[13px] text-slate-500">{formatDate(u.last_login)}</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="sm"
-                    className="h-auto px-0 gap-1.5 text-[12px] hover:bg-transparent"
-                    disabled={u.id === me?.id}
-                    title={u.id === me?.id ? "Can't deactivate yourself" : undefined}
-                    onClick={() => toggleMutation.mutate({ id: u.id, active: !u.is_active })}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                    <span className={u.is_active ? 'text-emerald-700' : 'text-slate-500'}>{u.is_active ? 'Active' : 'Inactive'}</span>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm"
+                      className="h-auto px-0 gap-1.5 text-[12px] hover:bg-transparent"
+                      disabled={u.id === me?.id}
+                      title={u.id === me?.id ? "Can't deactivate yourself" : undefined}
+                      onClick={() => toggleMutation.mutate({ id: u.id, active: !u.is_active })}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                      <span className={u.is_active ? 'text-emerald-700' : 'text-slate-500'}>{u.is_active ? 'Active' : 'Inactive'}</span>
+                    </Button>
+                    {u.is_locked && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive"
+                        title="Locked out from repeated failed sign-ins">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
-                  <RowActionButton icon={Pencil}
-                    onClick={() => { setEditUser(u); setSheetOpen(true) }}>
-                    Edit
-                  </RowActionButton>
+                  <div className="flex items-center justify-end gap-1">
+                    {u.is_locked && (
+                      <RowActionButton icon={LockOpen}
+                        disabled={unlockMutation.isPending}
+                        onClick={() => unlockMutation.mutate(u.id)}>
+                        Unlock
+                      </RowActionButton>
+                    )}
+                    <RowActionButton icon={Pencil}
+                      onClick={() => { setEditUser(u); setSheetOpen(true) }}>
+                      Edit
+                    </RowActionButton>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

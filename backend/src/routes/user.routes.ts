@@ -8,6 +8,7 @@ import {
   updateUser, 
   deleteUser, 
   toggleUserStatus, 
+  unlockUser,
   changePassword,
   getManagers, 
   getDirectors,
@@ -33,6 +34,7 @@ router.put('/change-password', rh(changePassword));
 router.post('/',               rh(authorizeAdmin), rh(createUser));
 router.put('/:id',             rh(authorizeAdmin), rh(updateUser));
 router.put('/:id/status',      rh(authorizeAdmin), rh(toggleUserStatus));
+router.put('/:id/unlock',      rh(authorizeAdmin), rh(unlockUser));
 router.delete('/:id',          rh(authorizeAdmin), rh(deleteUser));
 
 export default router; 

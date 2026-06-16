@@ -138,6 +138,11 @@ async function processGroup(
     ? templateKey
     : pickDigestTemplate(templateKey);
 
+  // Land each digest on the dashboard it summarizes, not the generic home.
+  const digestDeepLink = digestKey === 'digest.manager_weekly'
+    ? '/app/insights/team'
+    : '/app/insights/dashboard';
+
   const rendered = await renderTemplate({
     templateKey: digestKey,
     data: {
@@ -145,7 +150,7 @@ async function processGroup(
       items: filteredItems,
       itemCount: filteredItems.length,
       hasMore: rows.length > filteredItems.length,
-      deepLinkPath: '/',
+      deepLinkPath: digestDeepLink,
     },
   });
   if (!rendered) return 'skipped';

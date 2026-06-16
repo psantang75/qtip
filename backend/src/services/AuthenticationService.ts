@@ -17,6 +17,7 @@ import { tokenBlacklistService } from './TokenBlacklistService';
 import { getJwtSecret, getJwtRefreshSecret } from '../config/environment';
 import prisma from '../config/prisma';
 import notificationService from './notifications/NotificationService';
+import { LOCK_THRESHOLD, LOCK_WINDOW_MS } from '../repositories/AuthRepository';
 
 // Authentication-specific repository interface (simplified for auth needs)
 interface IAuthRepository {
@@ -446,8 +447,6 @@ export class AuthenticationService {
    * already locked.
    */
   private async maybeNotifyLockout(email: string, userId: number, clientIp: string): Promise<void> {
-    const LOCK_THRESHOLD = 5;
-    const LOCK_WINDOW_MS = 15 * 60 * 1000;
     const since = new Date(Date.now() - LOCK_WINDOW_MS);
     const failed = await prisma.authLog.count({
       where: { email, success: false, attempted_at: { gt: since } },
@@ -472,7 +471,7 @@ export class AuthenticationService {
         user, lockedAt, unlocksAt,
         failedAttempts: failed,
         lastFailedIp: clientIp,
-      }, { ...ctx, deepLinkPath: `/admin/users/${user.id}` }),
+      }, { ...ctx, deepLinkPath: '/app/admin/users' }),
     ]);
   }
 

@@ -3,6 +3,15 @@ import { User } from '../models/User';
 import logger from '../config/logger';
 
 /**
+ * Account-lockout policy. An account is considered "locked" when it has
+ * accumulated at least LOCK_THRESHOLD failed sign-ins within LOCK_WINDOW_MS.
+ * Shared so the lock check, the admin lockout notification, and the admin
+ * unlock action all agree on the same rule.
+ */
+export const LOCK_THRESHOLD = 5;
+export const LOCK_WINDOW_MS = 15 * 60 * 1000;
+
+/**
  * Authentication Repository
  * Simplified repository focused on auth-specific operations
  */
@@ -88,16 +97,16 @@ export class AuthRepository {
     try {
       logger.info(`[NEW AUTH] AuthRepository: Checking if account is locked for email: ${email}`);
 
-      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+      const windowStart = new Date(Date.now() - LOCK_WINDOW_MS);
       const failedAttempts = await prisma.authLog.count({
         where: {
           email,
           success: false,
-          attempted_at: { gt: fifteenMinutesAgo },
+          attempted_at: { gt: windowStart },
         },
       });
 
-      const isLocked = failedAttempts >= 5;
+      const isLocked = failedAttempts >= LOCK_THRESHOLD;
 
       if (isLocked) {
         logger.info(`[NEW AUTH] AuthRepository: Account is LOCKED for email: ${email} (${failedAttempts} failed attempts)`);
@@ -110,6 +119,41 @@ export class AuthRepository {
       logger.error('[NEW AUTH] AuthRepository: Error checking account lock status:', error);
       return false;
     }
+  }
+
+  /**
+   * Returns the subset of the given emails whose accounts are currently
+   * locked. One grouped query, used to flag locked users in admin lists.
+   */
+  async getLockedEmails(emails: string[]): Promise<Set<string>> {
+    if (!emails.length) return new Set();
+    try {
+      const windowStart = new Date(Date.now() - LOCK_WINDOW_MS);
+      const grouped = await prisma.authLog.groupBy({
+        by: ['email'],
+        where: { email: { in: emails }, success: false, attempted_at: { gt: windowStart } },
+        _count: { _all: true },
+      });
+      return new Set(
+        grouped.filter((g) => g._count._all >= LOCK_THRESHOLD).map((g) => g.email),
+      );
+    } catch (error) {
+      logger.error('[NEW AUTH] AuthRepository: Error resolving locked emails:', error);
+      return new Set();
+    }
+  }
+
+  /**
+   * Clears the recent failed sign-ins that keep an account locked, so the
+   * user can sign in again immediately. Returns the number of cleared rows.
+   */
+  async clearFailedAttempts(email: string): Promise<number> {
+    const windowStart = new Date(Date.now() - LOCK_WINDOW_MS);
+    const result = await prisma.authLog.deleteMany({
+      where: { email, success: false, attempted_at: { gt: windowStart } },
+    });
+    logger.info(`[NEW AUTH] AuthRepository: Cleared ${result.count} failed attempts for ${email}`);
+    return result.count;
   }
 
   async getUserPermissions(user_id: number): Promise<string[]> {

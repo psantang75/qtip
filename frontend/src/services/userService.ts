@@ -13,6 +13,7 @@ export interface User {
   manager_id?: number | null;
   title?: string | null;
   is_active: boolean;
+  is_locked?: boolean;
   last_login?: string | null;
   created_at: string;
 }
@@ -137,6 +138,13 @@ const userService = {
 
   toggleUserStatus: async (userId: number, isActive: boolean): Promise<User> => {
     const response = await api.put(`/users/${userId}/status`, { is_active: isActive })
+    if (response.data?.success && response.data?.data) return response.data.data
+    if (response.data) return response.data
+    throw new Error('Invalid response format from server')
+  },
+
+  unlockUser: async (userId: number): Promise<User> => {
+    const response = await api.put(`/users/${userId}/unlock`)
     if (response.data?.success && response.data?.data) return response.data.data
     if (response.data) return response.data
     throw new Error('Invalid response format from server')

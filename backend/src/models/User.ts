@@ -12,6 +12,8 @@ export interface User {
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
+  /** True when the account is currently locked out from repeated failed sign-ins. Populated by admin list queries only. */
+  is_locked?: boolean;
 }
 
 /**
