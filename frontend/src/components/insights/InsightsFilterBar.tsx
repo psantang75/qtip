@@ -110,18 +110,6 @@ export default function InsightsFilterBar({
     <StickyFilterBar infoRow={infoRow}>
       <StickyFilterBar.Row>
 
-        {!hideDeptFilter && (
-          <StickyFilterField label="Department">
-            <StagedMultiSelect
-              options={availableDepts}
-              selected={selectedDepts}
-              onApply={onDeptsChange}
-              placeholder="All Departments"
-              width="w-[200px]"
-            />
-          </StickyFilterField>
-        )}
-
         {showUserFilter && (
           <StickyFilterField label="Agent">
             <StagedMultiSelect
@@ -130,6 +118,18 @@ export default function InsightsFilterBar({
               onApply={(v) => onUsersChange?.(v)}
               placeholder="All Agents"
               width="w-[220px]"
+            />
+          </StickyFilterField>
+        )}
+
+        {!hideDeptFilter && (
+          <StickyFilterField label="Department">
+            <StagedMultiSelect
+              options={availableDepts}
+              selected={selectedDepts}
+              onApply={onDeptsChange}
+              placeholder="All Departments"
+              width="w-[200px]"
             />
           </StickyFilterField>
         )}

@@ -1,6 +1,6 @@
 import { InsightsFilterBar } from '@/components/insights'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
-import { SAMPLE_AGENTS } from './placeholderData'
+import { SAMPLE_AGENTS, SAMPLE_BUSINESS_DAYS, SAMPLE_PRIOR_BUSINESS_DAYS, SAMPLE_PRIOR_DATE_RANGE } from './placeholderData'
 
 /**
  * Shared scaffold for the Agent Activity - Sales report pages. Owns the
@@ -26,10 +26,20 @@ interface ActivityReportShellProps {
   description: string
   /** Business days in the selected range — shown as the calculation basis. */
   businessDays?: number
+  /** Business days in the prior comparison range (defaults to the sample value). */
+  priorBusinessDays?: number
+  /** Prior comparison date range (defaults to the sample range). */
+  priorDateRange?: { start: string; end: string }
   children: React.ReactNode
 }
 
-export default function ActivityReportShell({ title, description, businessDays, children }: ActivityReportShellProps) {
+export default function ActivityReportShell({
+  title, description,
+  businessDays = SAMPLE_BUSINESS_DAYS,
+  priorBusinessDays = SAMPLE_PRIOR_BUSINESS_DAYS,
+  priorDateRange = SAMPLE_PRIOR_DATE_RANGE,
+  children,
+}: ActivityReportShellProps) {
   const {
     users, setUsers, departments, setDepartments, period, setPeriod,
     customStart, setCustomStart, customEnd, setCustomEnd, resetFilters,
@@ -52,6 +62,8 @@ export default function ActivityReportShell({ title, description, businessDays, 
         onCustomStartChange={setCustomStart}
         onCustomEndChange={setCustomEnd}
         businessDays={businessDays}
+        priorBusinessDays={priorBusinessDays}
+        priorDateRange={priorDateRange}
         onReset={resetFilters}
       />
 
