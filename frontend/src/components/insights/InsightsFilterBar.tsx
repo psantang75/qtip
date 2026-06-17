@@ -31,6 +31,11 @@ interface InsightsFilterBarProps {
   availableDepts?: string[]
   /** Hide the Department selector entirely (e.g. agent screens). */
   hideDeptFilter?: boolean
+  /** Show an Agent/User multi-select (e.g. Agent Activity reports). */
+  showUserFilter?: boolean
+  selectedUsers?: string[]
+  onUsersChange?: (v: string[]) => void
+  availableUsers?: string[]
   period: string
   onPeriodChange: (v: string) => void
   customStart?: string
@@ -54,6 +59,10 @@ export default function InsightsFilterBar({
   onDeptsChange,
   availableDepts = [],
   hideDeptFilter = false,
+  showUserFilter = false,
+  selectedUsers = [],
+  onUsersChange,
+  availableUsers = [],
   period,
   onPeriodChange,
   customStart,
@@ -109,6 +118,18 @@ export default function InsightsFilterBar({
               onApply={onDeptsChange}
               placeholder="All Departments"
               width="w-[200px]"
+            />
+          </StickyFilterField>
+        )}
+
+        {showUserFilter && (
+          <StickyFilterField label="Agent">
+            <StagedMultiSelect
+              options={availableUsers}
+              selected={selectedUsers}
+              onApply={(v) => onUsersChange?.(v)}
+              placeholder="All Agents"
+              width="w-[220px]"
             />
           </StickyFilterField>
         )}

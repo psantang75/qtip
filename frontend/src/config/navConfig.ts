@@ -98,6 +98,15 @@ export const NAV_CONFIG: SectionConfig[] = [
       // Import Center / Import History still exist in the router but are no
       // longer surfaced in navigation. Agent (role 3) gets no Reports group.
       { label: 'On Demand Reports', path: '/app/insights/on-demand-reports', icon: 'FileSpreadsheet', roles: [1,5], group: 'Reports' },
+      // ── Agent Activity - Sales ──
+      // `roles` is ignored when `pageKey` is set — visibility comes from
+      // /api/insights/navigation (i.e. ie_page_role_access). The section only
+      // renders when the user can access at least one page under it.
+      { label: 'Call Activity',   path: '/app/insights/aa-call',    icon: 'Phone',      roles: [], pageKey: 'aa_sales_call',    group: 'Agent Activity - Sales' },
+      { label: 'Leads',           path: '/app/insights/aa-leads',   icon: 'Target',     roles: [], pageKey: 'aa_sales_leads',   group: 'Agent Activity - Sales' },
+      { label: 'Margin',          path: '/app/insights/aa-margin',  icon: 'DollarSign', roles: [], pageKey: 'aa_sales_margin',  group: 'Agent Activity - Sales' },
+      { label: 'Tickets & Tasks', path: '/app/insights/aa-tickets', icon: 'Ticket',     roles: [], pageKey: 'aa_sales_tickets', group: 'Agent Activity - Sales' },
+      { label: 'Email Activity',  path: '/app/insights/aa-email',   icon: 'Mail',       roles: [], pageKey: 'aa_sales_email',   group: 'Agent Activity - Sales' },
     ],
   },
 ]
