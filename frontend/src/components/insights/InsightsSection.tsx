@@ -23,6 +23,26 @@ interface InsightsSectionProps {
   className?: string
 }
 
+/**
+ * The API ships `lastUpdated` as an ISO-8601 UTC timestamp (e.g.
+ * "2026-06-19T11:42:29Z"). Render it in the viewer's local timezone so the
+ * stamp matches the wall clock of whoever is looking at the page. Falls back
+ * to the raw value if it isn't a parseable timestamp.
+ */
+function formatLastUpdatedLocal(value: string): string {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  const ampm = d.getHours() < 12 ? 'AM' : 'PM'
+  let hr = d.getHours() % 12
+  if (hr === 0) hr = 12
+  const hh = String(hr).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return `${mm}-${dd}-${yyyy} ${hh}:${min} ${ampm}`
+}
+
 export default function InsightsSection({
   title,
   description,
@@ -77,7 +97,7 @@ export default function InsightsSection({
         </div>
         {lastUpdated && (
           <span className="shrink-0 whitespace-nowrap text-[11px] text-slate-400 mt-0.5">
-            Data last updated: {lastUpdated}
+            Data last updated: {formatLastUpdatedLocal(lastUpdated)}
           </span>
         )}
       </div>}

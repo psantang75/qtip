@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import logger from '../config/logger';
+import { InsightsPermissionService } from '../services/InsightsPermissionService';
+import { getInsightsRoleId } from '../utils/insightsRoleMap';
 import {
   listSourceReports,
   getEmailActivity as svcGetEmailActivity,
@@ -8,6 +10,29 @@ import {
   getLeads as svcGetLeads,
   getMargin as svcGetMargin,
 } from '../services/insightsAgentActivity.service';
+
+const permissionService = new InsightsPermissionService();
+
+/**
+ * Resolve Insights page access for an Agent Activity endpoint, mirroring the
+ * QC controller. Writes the 401/403 response and returns null when the caller
+ * has no grant. On success returns the SELF-scope employee key (or null for
+ * ALL scope). A SELF grant with no conformed employee row resolves to -1 (an
+ * impossible key) so the viewer sees nothing rather than everything.
+ */
+async function resolveAaScope(
+  req: Request,
+  res: Response,
+  pageKey: string,
+): Promise<{ selfEmployeeKey: number | null } | null> {
+  if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return null; }
+  const roleId = getInsightsRoleId(req.user.role);
+  if (roleId === null) { res.status(403).json({ error: 'Unknown role' }); return null; }
+  const access = await permissionService.resolveAccess(req.user.user_id, roleId, pageKey);
+  if (!access.canAccess) { res.status(403).json({ error: 'Access denied' }); return null; }
+  const selfEmployeeKey = access.dataScope === 'SELF' ? (access.employeeKey ?? -1) : null;
+  return { selfEmployeeKey };
+}
 
 /**
  * GET /api/insights/agent-activity/status
@@ -32,7 +57,8 @@ export const getAgentActivityStatus = async (req: Request, res: Response): Promi
  */
 export const getEmailActivity = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }
+    const scope = await resolveAaScope(req, res, 'aa_sales_email');
+    if (!scope) return;
     const { period, start, end, users, departments } = req.query as Record<string, string | undefined>;
     const result = await svcGetEmailActivity({
       period: period || 'current_month',
@@ -40,6 +66,7 @@ export const getEmailActivity = async (req: Request, res: Response): Promise<voi
       customEnd: end,
       users: users ? users.split(',').filter(Boolean) : undefined,
       departments: departments ? departments.split(',').filter(Boolean) : undefined,
+      selfEmployeeKey: scope.selfEmployeeKey,
     });
     res.json(result);
   } catch (error) {
@@ -54,7 +81,8 @@ export const getEmailActivity = async (req: Request, res: Response): Promise<voi
  */
 export const getCallActivity = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }
+    const scope = await resolveAaScope(req, res, 'aa_sales_call');
+    if (!scope) return;
     const { period, start, end, users, departments } = req.query as Record<string, string | undefined>;
     const result = await svcGetCallActivity({
       period: period || 'current_month',
@@ -62,6 +90,7 @@ export const getCallActivity = async (req: Request, res: Response): Promise<void
       customEnd: end,
       users: users ? users.split(',').filter(Boolean) : undefined,
       departments: departments ? departments.split(',').filter(Boolean) : undefined,
+      selfEmployeeKey: scope.selfEmployeeKey,
     });
     res.json(result);
   } catch (error) {
@@ -77,11 +106,13 @@ export const getCallActivity = async (req: Request, res: Response): Promise<void
  */
 export const getTicketsTasks = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }
+    const scope = await resolveAaScope(req, res, 'aa_sales_tickets');
+    if (!scope) return;
     const { users, departments } = req.query as Record<string, string | undefined>;
     const result = await svcGetTicketsTasks({
       users: users ? users.split(',').filter(Boolean) : undefined,
       departments: departments ? departments.split(',').filter(Boolean) : undefined,
+      selfEmployeeKey: scope.selfEmployeeKey,
     });
     res.json(result);
   } catch (error) {
@@ -97,7 +128,8 @@ export const getTicketsTasks = async (req: Request, res: Response): Promise<void
  */
 export const getLeads = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }
+    const scope = await resolveAaScope(req, res, 'aa_sales_leads');
+    if (!scope) return;
     const { period, start, end, users, departments } = req.query as Record<string, string | undefined>;
     const result = await svcGetLeads({
       period: period || 'current_month',
@@ -105,6 +137,7 @@ export const getLeads = async (req: Request, res: Response): Promise<void> => {
       customEnd: end,
       users: users ? users.split(',').filter(Boolean) : undefined,
       departments: departments ? departments.split(',').filter(Boolean) : undefined,
+      selfEmployeeKey: scope.selfEmployeeKey,
     });
     res.json(result);
   } catch (error) {
@@ -120,7 +153,8 @@ export const getLeads = async (req: Request, res: Response): Promise<void> => {
  */
 export const getMargin = async (req: Request, res: Response): Promise<void> => {
   try {
-    if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }
+    const scope = await resolveAaScope(req, res, 'aa_sales_margin');
+    if (!scope) return;
     const { period, start, end, users, departments } = req.query as Record<string, string | undefined>;
     const result = await svcGetMargin({
       period: period || 'current_month',
@@ -128,6 +162,7 @@ export const getMargin = async (req: Request, res: Response): Promise<void> => {
       customEnd: end,
       users: users ? users.split(',').filter(Boolean) : undefined,
       departments: departments ? departments.split(',').filter(Boolean) : undefined,
+      selfEmployeeKey: scope.selfEmployeeKey,
     });
     res.json(result);
   } catch (error) {

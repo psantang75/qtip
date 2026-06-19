@@ -29,6 +29,27 @@ const SENT_DIRECTION = 'Outbound';
 const AGENT_ROLE = 'CSR';
 const SALES_DEPT_ROOT_PATH = '/Sales Department - All';
 
+/**
+ * Apply a SELF data-scope restriction to a report's BASE predicate. When a
+ * salesperson (CSR) is granted a page with data_scope='SELF', the controller
+ * passes their conformed `employee_key` here so every query — the data tables
+ * AND the filter dropdowns — is limited to that one employee. Injected into the
+ * base (not the layered) predicate so the user can never widen past themselves.
+ * No-op for ALL scope (selfEmployeeKey == null), leaving admin/manager views
+ * unchanged. Every AA fact table conforms on `f.employee_key`, so this is the
+ * single uniform hook across all five reports.
+ */
+function applySelfScope(
+  baseWhere: string[],
+  baseParams: (string | number)[],
+  selfEmployeeKey?: number | null,
+): void {
+  if (selfEmployeeKey != null) {
+    baseWhere.push('f.employee_key = ?');
+    baseParams.push(selfEmployeeKey);
+  }
+}
+
 export interface SourceReportStatus {
   report_code: string;
   report_name: string;
@@ -83,6 +104,12 @@ export interface EmailActivityFilters {
   users?: string[];
   /** Department names (ie_dim_department.department_name). */
   departments?: string[];
+  /**
+   * When set (SELF data-scope), restrict every query — data AND dropdowns — to
+   * this single conformed employee so a salesperson only ever sees their own
+   * numbers. Resolved from ie_page_role_access via InsightsPermissionService.
+   */
+  selfEmployeeKey?: number | null;
 }
 
 export interface EmailSummaryRow { agent: string; department: string; totalSent: number; }
@@ -152,6 +179,8 @@ export async function getEmailActivity(filters: EmailActivityFilters): Promise<E
 
   // Filters layered on top of the base for the data tables (not the dropdowns,
   // so the option lists stay stable as the user narrows the selection).
+  applySelfScope(baseWhere, baseParams, filters.selfEmployeeKey);
+
   const where = [...baseWhere];
   const params = [...baseParams];
   if (filters.departments?.length) {
@@ -213,7 +242,7 @@ export async function getEmailActivity(filters: EmailActivityFilters): Promise<E
   );
 
   const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(MAX(loaded_at), '%m-%d-%Y %h:%i %p') AS last FROM ie_fact_email_activity`,
+    `SELECT DATE_FORMAT(MAX(loaded_at), '%Y-%m-%dT%H:%i:%sZ') AS last FROM ie_fact_email_activity`,
   );
 
   const summary: EmailSummaryRow[] = summaryRows.map((r) => ({
@@ -250,6 +279,12 @@ export interface CallActivityFilters {
   users?: string[];
   /** Department names (ie_dim_department.department_name). */
   departments?: string[];
+  /**
+   * When set (SELF data-scope), restrict every query — data AND dropdowns — to
+   * this single conformed employee so a salesperson only ever sees their own
+   * numbers. Resolved from ie_page_role_access via InsightsPermissionService.
+   */
+  selfEmployeeKey?: number | null;
 }
 
 export interface CallSummaryRow {
@@ -325,6 +360,8 @@ export async function getCallActivity(filters: CallActivityFilters): Promise<Cal
     "(dpt.hierarchy_path = ? OR dpt.hierarchy_path LIKE CONCAT(?, '/%'))",
   ];
   const baseParams: (string | number)[] = [fromKey, toKey, AGENT_ROLE, SALES_DEPT_ROOT_PATH, SALES_DEPT_ROOT_PATH];
+
+  applySelfScope(baseWhere, baseParams, filters.selfEmployeeKey);
 
   const where = [...baseWhere];
   const params = [...baseParams];
@@ -436,7 +473,7 @@ export async function getCallActivity(filters: CallActivityFilters): Promise<Cal
   );
 
   const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(MAX(loaded_at), '%m-%d-%Y %h:%i %p') AS last FROM ie_fact_call_activity`,
+    `SELECT DATE_FORMAT(MAX(loaded_at), '%Y-%m-%dT%H:%i:%sZ') AS last FROM ie_fact_call_activity`,
   );
 
   // Minutes are displayed as whole numbers; keep the raw (decimal) sums for the
@@ -544,6 +581,12 @@ export interface TicketTaskFilters {
   users?: string[];
   /** Department names (ie_dim_department.department_name). */
   departments?: string[];
+  /**
+   * When set (SELF data-scope), restrict every query — data AND dropdowns — to
+   * this single conformed employee so a salesperson only ever sees their own
+   * numbers. Resolved from ie_page_role_access via InsightsPermissionService.
+   */
+  selfEmployeeKey?: number | null;
 }
 
 export interface TicketRow {
@@ -593,6 +636,8 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
   ];
   const baseParams: (string | number)[] = [AGENT_ROLE, SALES_DEPT_ROOT_PATH, SALES_DEPT_ROOT_PATH];
 
+  applySelfScope(baseWhere, baseParams, filters.selfEmployeeKey);
+
   const where = [...baseWhere];
   const params = [...baseParams];
   if (filters.departments?.length) {
@@ -640,7 +685,7 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
   );
 
   const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(MAX(loaded_at), '%m-%d-%Y %h:%i %p') AS last FROM ie_fact_ticket_task`,
+    `SELECT DATE_FORMAT(MAX(loaded_at), '%Y-%m-%dT%H:%i:%sZ') AS last FROM ie_fact_ticket_task`,
   );
 
   const grandTotal = { current: 0, dueToday: 0, pastDue: 0 };
@@ -683,6 +728,12 @@ export interface LeadsFilters {
   users?: string[];
   /** Department names (ie_dim_department.department_name). */
   departments?: string[];
+  /**
+   * When set (SELF data-scope), restrict every query — data AND dropdowns — to
+   * this single conformed employee so a salesperson only ever sees their own
+   * numbers. Resolved from ie_page_role_access via InsightsPermissionService.
+   */
+  selfEmployeeKey?: number | null;
 }
 
 export interface LeadCatSourceRow {
@@ -749,6 +800,8 @@ export async function getLeads(filters: LeadsFilters): Promise<LeadsResult> {
   ];
   const baseParams: (string | number)[] = [fromKey, toKey, AGENT_ROLE, SALES_DEPT_ROOT_PATH, SALES_DEPT_ROOT_PATH];
 
+  applySelfScope(baseWhere, baseParams, filters.selfEmployeeKey);
+
   const where = [...baseWhere];
   const params = [...baseParams];
   if (filters.departments?.length) {
@@ -798,7 +851,7 @@ export async function getLeads(filters: LeadsFilters): Promise<LeadsResult> {
   );
 
   const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(MAX(loaded_at), '%m-%d-%Y %h:%i %p') AS last FROM ie_fact_lead`,
+    `SELECT DATE_FORMAT(MAX(loaded_at), '%Y-%m-%dT%H:%i:%sZ') AS last FROM ie_fact_lead`,
   );
 
   const rows: LeadCatSourceRow[] = catRows.map((r) => {
@@ -846,6 +899,12 @@ export interface MarginFilters {
   users?: string[];
   /** Department names (ie_dim_department.department_name). */
   departments?: string[];
+  /**
+   * When set (SELF data-scope), restrict every query — data AND dropdowns — to
+   * this single conformed employee so a salesperson only ever sees their own
+   * numbers. Resolved from ie_page_role_access via InsightsPermissionService.
+   */
+  selfEmployeeKey?: number | null;
 }
 
 export interface MarginLeadsRow { agent: string; totalLeads: number; totalConversions: number; conversionPct: number }
@@ -921,6 +980,8 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
     "(dpt.hierarchy_path = ? OR dpt.hierarchy_path LIKE CONCAT(?, '/%'))",
   ];
   const baseParams: (string | number)[] = [fromKey, toKey, AGENT_ROLE, SALES_DEPT_ROOT_PATH, SALES_DEPT_ROOT_PATH];
+
+  applySelfScope(baseWhere, baseParams, filters.selfEmployeeKey);
 
   const where = [...baseWhere];
   const params = [...baseParams];
@@ -999,7 +1060,7 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
   );
 
   const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(MAX(loaded_at), '%m-%d-%Y %h:%i %p') AS last FROM ie_fact_order_margin`,
+    `SELECT DATE_FORMAT(MAX(loaded_at), '%Y-%m-%dT%H:%i:%sZ') AS last FROM ie_fact_order_margin`,
   );
 
   // Table 1 — Leads by Salesperson, from ie_fact_lead over the same period and
