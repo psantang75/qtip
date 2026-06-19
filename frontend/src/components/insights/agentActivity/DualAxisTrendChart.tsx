@@ -28,6 +28,12 @@ interface DualAxisTrendChartProps {
   leftColor?: string
   rightColor?: string
   height?: number
+  /**
+   * When false, the right (average-per-agent) series and its axis are hidden.
+   * With a single agent in scope the per-agent average equals the total, so
+   * the right line/scale is redundant noise — the page passes `false` then.
+   */
+  showRight?: boolean
 }
 
 export default function DualAxisTrendChart({
@@ -37,20 +43,23 @@ export default function DualAxisTrendChart({
   leftColor = '#00aeef',
   rightColor = '#1abc9c',
   height = 200,
+  showRight = true,
 }: DualAxisTrendChartProps) {
   // The two series are often correlated (a total and its per-period average),
   // so on shared 0-based scales they overlap. Offset each axis domain into a
   // distinct vertical band — total rides high, average rides low — so both
-  // lines are always visible and clearly separated.
-  const band = (vals: number[], placement: 'top' | 'bottom'): [number, number] => {
+  // lines are always visible and clearly separated. With only the total shown
+  // ('center'), let it use the full plot height instead of hugging the top.
+  const band = (vals: number[], placement: 'top' | 'bottom' | 'center'): [number, number] => {
     const lo = Math.min(...vals)
     const hi = Math.max(...vals)
     const range = hi - lo || Math.max(Math.abs(hi), 1)
+    if (placement === 'center') return [lo - range * 0.15, hi + range * 0.15]
     return placement === 'top'
       ? [lo - range * 0.8, hi + range * 0.15]
       : [lo - range * 0.15, hi + range * 0.8]
   }
-  const leftDomain  = band(data.map(d => d.left),  'top')
+  const leftDomain  = band(data.map(d => d.left), showRight ? 'top' : 'center')
   const rightDomain = band(data.map(d => d.right), 'bottom')
 
   return (
@@ -72,16 +81,18 @@ export default function DualAxisTrendChart({
           axisLine={false}
           tickCount={5}
         />
-        <YAxis
-          yAxisId="right"
-          orientation="right"
-          domain={rightDomain}
-          allowDecimals={false}
-          tick={{ fontSize: 10, fill: rightColor }}
-          tickLine={false}
-          axisLine={false}
-          tickCount={5}
-        />
+        {showRight && (
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            domain={rightDomain}
+            allowDecimals={false}
+            tick={{ fontSize: 10, fill: rightColor }}
+            tickLine={false}
+            axisLine={false}
+            tickCount={5}
+          />
+        )}
         <Tooltip
           contentStyle={{ fontSize: 11, border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 8px' }}
           labelStyle={{ color: '#64748b', fontSize: 10 }}
@@ -98,18 +109,20 @@ export default function DualAxisTrendChart({
           activeDot={{ r: 5 }}
           connectNulls
         />
-        <Line
-          yAxisId="right"
-          name={rightName}
-          type="monotone"
-          dataKey="right"
-          stroke={rightColor}
-          strokeWidth={2}
-          strokeDasharray="5 3"
-          dot={{ r: 3, fill: rightColor, strokeWidth: 0 }}
-          activeDot={{ r: 5 }}
-          connectNulls
-        />
+        {showRight && (
+          <Line
+            yAxisId="right"
+            name={rightName}
+            type="monotone"
+            dataKey="right"
+            stroke={rightColor}
+            strokeWidth={2}
+            strokeDasharray="5 3"
+            dot={{ r: 3, fill: rightColor, strokeWidth: 0 }}
+            activeDot={{ r: 5 }}
+            connectNulls
+          />
+        )}
       </LineChart>
     </ResponsiveContainer>
   )

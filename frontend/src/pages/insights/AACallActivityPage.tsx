@@ -28,6 +28,10 @@ export default function AACallActivityPage() {
   const summaryTotal = data?.summaryTotal
   const byDay        = data?.byDay ?? []
 
+  // With a single agent in scope the per-agent average equals the total, so the
+  // green "Avg / Agent" line and its right axis are redundant — drop them.
+  const showAvgPerAgent = summary.length > 1
+
   return (
     <ActivityReportShell
       title="Call Activity"
@@ -50,6 +54,7 @@ export default function AACallActivityPage() {
             data={data?.dailyCalls ?? []}
             leftName="Total Calls"
             rightName="Avg Calls / Agent"
+            showRight={showAvgPerAgent}
           />
         </InsightsSection>
 
@@ -58,6 +63,7 @@ export default function AACallActivityPage() {
             data={data?.dailyMinutes ?? []}
             leftName="Total Min"
             rightName="Avg Min / Agent"
+            showRight={showAvgPerAgent}
           />
         </InsightsSection>
       </div>
