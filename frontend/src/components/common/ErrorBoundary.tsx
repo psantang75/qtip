@@ -54,10 +54,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <h2 className="text-sm font-semibold text-red-800">Something went wrong</h2>
+              <h2 className="text-sm font-semibold text-red-800">Something went wrong on this page</h2>
               <p className="text-xs text-red-700">
-                The page ran into an unexpected error. You can try again, or refresh to
-                reload the latest version.
+                Try again, or refresh to load the latest version.
               </p>
               {import.meta.env.DEV && (
                 <pre className="mt-2 text-[11px] text-red-700 whitespace-pre-wrap break-words">

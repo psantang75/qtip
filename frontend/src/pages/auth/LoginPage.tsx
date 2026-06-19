@@ -43,11 +43,19 @@ export default function LoginPage() {
       await login({ email: values.email, password: values.password })
       navigate('/')
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { message?: string } }; message?: string }
+      // Login API returns the flat auth envelope `{ error, code, message }`
+      // (see backend `utils/apiError.ts`). Read whichever field carries the
+      // human-readable text, then fall back to the canonical "Sign-in failed"
+      // wording from `docs/error-messages-catalog.md`.
+      const error = err as {
+        response?: { data?: { error?: string; message?: string; code?: string } }
+        message?: string
+      }
+      const data = error?.response?.data
       const message =
-        error?.response?.data?.message ??
-        error?.message ??
-        'Login failed. Please check your credentials.'
+        data?.message ??
+        data?.error ??
+        'The email or password you entered is incorrect.'
       setApiError(message)
     }
   }

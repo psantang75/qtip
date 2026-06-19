@@ -80,7 +80,11 @@ export default function LibraryQuizzesPage() {
   const toggleMut = useMutation({
     mutationFn: (id: number) => trainingService.toggleQuizStatus(id),
     onSuccess: invalidate,
-    onError: () => toast({ title: 'Failed to update status', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't update quiz status",
+      description: 'Try again.',
+    }),
   })
 
   const [previewQuiz, setPreviewQuiz] = useState<{ id?: number; quiz_title: string; pass_score: number; questions: { question_text: string; options: string[]; correct_option: number }[] } | null>(null)
@@ -88,7 +92,11 @@ export default function LibraryQuizzesPage() {
   const previewMut = useMutation({
     mutationFn: (id: number) => trainingService.getLibraryQuizDetail(id),
     onSuccess: (detail) => { setPreviewQuiz(detail); setPreviewOpen(true) },
-    onError: () => toast({ title: 'Failed to load quiz preview', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't load quiz preview",
+      description: 'Try again.',
+    }),
   })
 
   const openPreview = (id: number) => previewMut.mutate(id)
@@ -130,7 +138,7 @@ export default function LibraryQuizzesPage() {
 
       <ListCard>
         {isLoading ? <ListLoadingSkeleton rows={6} /> : isError ? (
-          <TableErrorState message="Failed to load quizzes." onRetry={refetch} />
+          <TableErrorState message="Couldn't load quizzes. Refresh to try again." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>

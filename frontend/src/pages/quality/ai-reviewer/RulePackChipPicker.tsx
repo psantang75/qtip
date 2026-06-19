@@ -61,9 +61,9 @@ export function RulePackChipPicker({ formId }: RulePackChipPickerProps) {
     },
     onError: (e: any) => {
       toast({
-        title: 'Save failed',
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again',
         variant: 'destructive',
+        title: "Couldn't save assignments",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       })
     },
   })
@@ -115,7 +115,7 @@ export function RulePackChipPicker({ formId }: RulePackChipPickerProps) {
       <div className="p-4 space-y-4">
         {packsQ.isLoading && <p className="text-[12px] text-slate-500">Loading packs…</p>}
         {packsQ.isError && (
-          <p className="text-[12px] text-rose-600">Could not load rule packs. Check backend logs.</p>
+          <p className="text-[12px] text-rose-600">Couldn't load rule packs. Refresh to try again.</p>
         )}
         {!packsQ.isLoading && (packsQ.data ?? []).length === 0 && (
           <p className="text-[12px] text-slate-500">

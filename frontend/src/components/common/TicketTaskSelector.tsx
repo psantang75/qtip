@@ -122,7 +122,7 @@ export default function TicketTaskSelector({
         return
       }
     } catch {
-      setError('Could not reach CRM. Try again.')
+      setError("We can't reach the CRM. Try again.")
       return
     }
 
@@ -188,7 +188,7 @@ export default function TicketTaskSelector({
             <p className="text-[12px] text-slate-400">Loading notes…</p>
           )}
           {notesQuery.isError && (
-            <p className="text-[12px] text-red-600">Failed to load notes.</p>
+            <p className="text-[12px] text-red-600">Couldn't load notes.</p>
           )}
 
           {notesQuery.data && (() => {
@@ -352,7 +352,7 @@ function ActiveHeader({
     return <p className="text-[12px] text-slate-400">Loading…</p>
   }
   if (headerQuery.isError) {
-    return <p className="text-[12px] text-red-600">Failed to load CRM data.</p>
+    return <p className="text-[12px] text-red-600">Couldn't load CRM data.</p>
   }
   const data = headerQuery.data
   if (!data) {

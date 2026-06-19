@@ -38,7 +38,7 @@ export function useAISettingsMutation(formId: number) {
     },
     onError: (e: any) => {
       toast({
-        title: 'Save failed',
+        title: "Couldn't save settings",
         description: e?.response?.data?.error ?? e?.message ?? 'Try again',
         variant: 'destructive',
       })

@@ -207,7 +207,7 @@ export default function SubmissionsPage() {
         {isLoading ? (
           <ListLoadingSkeleton rows={8} />
         ) : isError ? (
-          <TableErrorState message="Failed to load submissions." onRetry={refetch} />
+          <TableErrorState message="Couldn't load submissions. Refresh to try again." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>

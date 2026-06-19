@@ -162,7 +162,11 @@ export default function LibraryResourcesPage() {
         : trainingService.createResource(payload)
     },
     onSuccess: () => { invalidate(); setEditing(null); toast({ title: editingRes ? 'Resource updated' : 'Resource added' }) },
-    onError: (err: Error) => toast({ title: 'Save failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({
+      variant: 'destructive',
+      title: "Couldn't save resource",
+      description: err?.message ?? 'Try again.',
+    }),
   })
 
   const handleSave = () => {
@@ -212,7 +216,7 @@ export default function LibraryResourcesPage() {
 
       <ListCard>
         {isLoading ? <ListLoadingSkeleton rows={6} />
-        : isError ? <TableErrorState message="Failed to load resources." onRetry={refetch} />
+        : isError ? <TableErrorState message="Couldn't load resources. Refresh to try again." onRetry={refetch} />
         : (
           <Table>
             <TableHeader>

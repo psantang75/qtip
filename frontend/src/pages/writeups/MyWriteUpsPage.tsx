@@ -139,7 +139,7 @@ export default function MyWriteUpsPage() {
         {isLoading ? (
           <ListLoadingSkeleton rows={5} />
         ) : isError ? (
-          <TableErrorState message="Failed to load performance warnings." onRetry={refetch} />
+          <TableErrorState message="Couldn't load write-ups. Refresh to try again." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>

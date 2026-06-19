@@ -224,16 +224,16 @@ export default function WriteUpFormPage() {
     if (fields && fields.length > 0) {
       const lines = fields.map(f => (f.path ? `${prettifyPath(f.path)}: ${f.message}` : f.message))
       toast({
-        title: 'Please fix the following',
-        description: lines.join('\n'),
         variant: 'destructive',
+        title: `Please fix ${fields.length} field${fields.length === 1 ? '' : 's'} and try again`,
+        description: lines.join('\n'),
       })
       return
     }
     toast({
-      title: 'Save failed',
-      description: err?.response?.data?.message ?? err?.message ?? 'Please try again.',
       variant: 'destructive',
+      title: "Couldn't save write-up",
+      description: err?.response?.data?.message ?? err?.message ?? 'Try again.',
     })
   }
 
@@ -312,7 +312,7 @@ export default function WriteUpFormPage() {
   if (isEdit && loadError) {
     return (
       <ListPageShell>
-        <TableErrorState message="Failed to load performance warning." onRetry={loadRefetch} />
+        <TableErrorState message="Couldn't load this write-up. Refresh to try again." onRetry={loadRefetch} />
       </ListPageShell>
     )
   }

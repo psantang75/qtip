@@ -105,7 +105,7 @@ export function BasePromptCard({ formId }: Props) {
           {previewQ.isLoading ? (
             <div className="text-[13px] text-slate-500">Loading…</div>
           ) : previewQ.error ? (
-            <div className="text-[13px] text-rose-600">Failed to load: {(previewQ.error as Error).message}</div>
+            <div className="text-[13px] text-rose-600">Couldn't build prompt preview. Refresh to try again.</div>
           ) : !baseText ? (
             <div className="text-[13px] text-slate-500">Base text unavailable.</div>
           ) : (

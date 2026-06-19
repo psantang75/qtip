@@ -11,6 +11,7 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { Card, CardContent } from '@/components/ui/card'
+import { toast } from '@/hooks/use-toast'
 
 const schema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
@@ -26,8 +27,20 @@ export default function ForgotPasswordPage() {
   })
 
   const onSubmit = async (values: Values) => {
-    await authService.forgotPassword(values.email)
-    setSubmitted(true)
+    try {
+      await authService.forgotPassword(values.email)
+      setSubmitted(true)
+    } catch {
+      // The endpoint returns 200 even when the email isn't registered (to
+      // prevent enumeration), so any thrown error here is a true failure
+      // (network down, server 5xx). Surface a canonical toast so the user
+      // isn't left wondering whether anything happened.
+      toast({
+        variant: 'destructive',
+        title: "Couldn't send reset email",
+        description: 'Try again in a moment. If this keeps happening, contact support.',
+      })
+    }
   }
 
   return (

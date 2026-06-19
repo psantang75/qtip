@@ -154,7 +154,11 @@ function EditableDescription({ kpi, fallback }: { kpi: IeKpi; fallback?: string 
       toast({ title: 'Description updated' })
       setEditing(false)
     },
-    onError: () => toast({ title: 'Failed to save description', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't save description",
+      description: 'Try again.',
+    }),
   })
 
   const startEdit = () => {

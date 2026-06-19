@@ -151,7 +151,7 @@ export default function KbIndexSchedulerCard() {
       {error ? (
         <div className="px-5 py-6 flex items-center gap-2 text-destructive">
           <AlertCircle size={16} />
-          <span className="text-sm">Failed to load settings: {(error as Error).message}</span>
+          <span className="text-sm">Couldn't load settings. Refresh to try again.</span>
         </div>
       ) : isLoading || !data ? (
         <div className="px-5 py-12 text-center text-muted-foreground text-sm">Loading...</div>
@@ -212,7 +212,7 @@ export default function KbIndexSchedulerCard() {
           )}
           {intervalMutation.isError && (
             <div className="px-5 py-2.5 bg-red-50 border-y border-red-100 text-[12px] text-red-800">
-              Failed to save interval: {(intervalMutation.error as Error)?.message ?? 'unknown error'}
+              Couldn't save changes. Try again.
             </div>
           )}
 

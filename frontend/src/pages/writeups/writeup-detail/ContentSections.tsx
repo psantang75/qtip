@@ -153,7 +153,11 @@ function FollowUpEditableSection({
       qc.invalidateQueries({ queryKey: ['writeups'] })
       qc.invalidateQueries({ queryKey: ['my-writeups'] })
     },
-    onError: (err: Error) => toast({ title: 'Save failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({
+      variant: 'destructive',
+      title: "Couldn't save follow-up notes",
+      description: err?.message ?? 'Try again.',
+    }),
   })
 
   const completeMut = useMutation({
@@ -169,7 +173,11 @@ function FollowUpEditableSection({
       qc.invalidateQueries({ queryKey: ['writeups'] })
       qc.invalidateQueries({ queryKey: ['my-writeups'] })
     },
-    onError: (err: Error) => toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({
+      variant: 'destructive',
+      title: "Couldn't mark follow-up complete",
+      description: err?.message ?? 'Try again.',
+    }),
   })
 
   if (!visible) return null
@@ -307,7 +315,11 @@ function InternalNotesEditableSection({
       onInvalidate?.()
       qc.invalidateQueries({ queryKey: ['writeups'] })
     },
-    onError: (err: Error) => toast({ title: 'Save failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({
+      variant: 'destructive',
+      title: "Couldn't save internal notes",
+      description: err?.message ?? 'Try again.',
+    }),
   })
 
   const saveAndCloseMut = useMutation({
@@ -321,7 +333,11 @@ function InternalNotesEditableSection({
       qc.invalidateQueries({ queryKey: ['writeups'] })
       qc.invalidateQueries({ queryKey: ['my-writeups'] })
     },
-    onError: (err: Error) => toast({ title: 'Close failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({
+      variant: 'destructive',
+      title: "Couldn't close write-up",
+      description: err?.message ?? 'Try again.',
+    }),
   })
 
   const busy = saveMut.isPending || saveAndCloseMut.isPending

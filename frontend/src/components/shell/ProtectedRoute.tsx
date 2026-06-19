@@ -85,9 +85,9 @@ export function RoleRoute({ allowedRoles }: RoleRouteProps) {
               <AlertTriangle size={28} className="text-destructive" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold">Access Restricted</h2>
+              <h2 className="text-lg font-semibold">You don't have access</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                You don't have permission to view this page.
+                Ask your administrator if you need access to this section.
               </p>
             </div>
             <Button

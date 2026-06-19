@@ -252,7 +252,7 @@ export default function QualityAnalyticsPage() {
 
       {reportError && (
         <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <TableErrorState message="Failed to generate report." onRetry={runReport} />
+          <TableErrorState message="Couldn't run report. Adjust your filters and try again." onRetry={runReport} />
         </div>
       )}
 

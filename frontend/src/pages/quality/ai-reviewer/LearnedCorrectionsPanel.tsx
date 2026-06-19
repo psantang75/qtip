@@ -109,7 +109,7 @@ export function LearnedCorrectionsPanel({ formId }: Props) {
         {activeQ.isLoading ? (
           <div className="h-12 bg-slate-100 animate-pulse rounded" />
         ) : activeQ.isError ? (
-          <p className="text-[13px] text-red-600">Failed to load corrections preview.</p>
+          <p className="text-[13px] text-red-600">Couldn't load corrections. Refresh to try again.</p>
         ) : activeItems.length === 0 ? (
           <p className="text-[12px] text-slate-400 italic">
             No corrections injected yet. Promote an AI draft (Calibrating mode) or re-audit a sampled AI submission
@@ -137,7 +137,7 @@ export function LearnedCorrectionsPanel({ formId }: Props) {
             {absorbedQ.isLoading ? (
               <div className="h-12 bg-slate-100 animate-pulse rounded" />
             ) : absorbedQ.isError ? (
-              <p className="text-[13px] text-red-600">Failed to load absorbed corrections.</p>
+              <p className="text-[13px] text-red-600">Couldn't load absorbed corrections. Refresh to try again.</p>
             ) : absorbedItems.length === 0 ? (
               <p className="text-[12px] text-slate-400 italic">No absorbed corrections yet.</p>
             ) : (

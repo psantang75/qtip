@@ -216,7 +216,7 @@ export default function CoachingSessionsPage() {
         {isLoading ? (
           <ListLoadingSkeleton rows={8} />
         ) : isError ? (
-          <TableErrorState message="Failed to load training sessions." onRetry={refetch} />
+          <TableErrorState message="Couldn't load sessions. Refresh to try again." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>

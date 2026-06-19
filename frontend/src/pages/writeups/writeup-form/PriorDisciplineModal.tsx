@@ -45,7 +45,11 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
 
   const fetchMut = useMutation({
     mutationFn: () => writeupService.getPriorDiscipline(csrId),
-    onError: () => toast({ title: 'Failed to load discipline history', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't load discipline history",
+      description: 'Try again.',
+    }),
   })
   const data = fetchMut.data
 

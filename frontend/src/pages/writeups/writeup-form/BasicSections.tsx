@@ -41,7 +41,11 @@ export function AttachmentsSection({
       await writeupService.deleteAttachment(writeUpId, attachmentId)
       update('existing_attachments', form.existing_attachments.filter(a => a.id !== attachmentId))
     } catch {
-      toast({ title: 'Delete failed', description: 'Could not remove attachment.', variant: 'destructive' })
+      toast({
+        variant: 'destructive',
+        title: "Couldn't remove attachment",
+        description: 'Try again.',
+      })
     } finally {
       setDeleting(null)
     }

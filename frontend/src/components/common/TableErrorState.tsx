@@ -7,7 +7,7 @@ interface TableErrorStateProps {
 }
 
 export function TableErrorState({
-  message = 'Failed to load data.',
+  message = "Couldn't load this view. Refresh to try again.",
   onRetry,
 }: TableErrorStateProps) {
   return (

@@ -64,7 +64,11 @@ function useTransitionMut(id: number, onInvalidate: () => void) {
       writeupService.transitionStatus(id, { status, ...extra }),
     onSuccess: (_d, v) => onSuccess(`Status updated to ${STATUS_LABELS[v.status]}`),
     onError: (err: Error) =>
-      toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
+      toast({
+        variant: 'destructive',
+        title: "Couldn't update status",
+        description: err?.message ?? 'Try again.',
+      }),
   })
 }
 

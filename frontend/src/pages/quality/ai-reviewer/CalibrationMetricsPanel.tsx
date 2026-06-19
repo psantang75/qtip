@@ -54,7 +54,7 @@ export function CalibrationMetricsPanel({ formId }: Props) {
         {metricsQ.isLoading ? (
           <div className="h-12 bg-slate-100 animate-pulse rounded" />
         ) : metricsQ.isError ? (
-          <p className="text-[13px] text-red-600">Failed to load metrics.</p>
+          <p className="text-[13px] text-red-600">Couldn't load metrics. Refresh to try again.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             <Stat

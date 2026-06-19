@@ -81,7 +81,7 @@ export default function ReviewFormsPage() {
         {isLoading ? (
           <ListLoadingSkeleton rows={6} />
         ) : isError ? (
-          <TableErrorState message="Failed to load forms." onRetry={refetch} />
+          <TableErrorState message="Couldn't load forms. Refresh to try again." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>

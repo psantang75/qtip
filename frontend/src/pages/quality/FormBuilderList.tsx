@@ -87,7 +87,7 @@ export function FormBuilderList() {
         {isLoading ? (
           <ListLoadingSkeleton rows={5} />
         ) : isError ? (
-          <TableErrorState message="Failed to load forms." onRetry={refetch} />
+          <TableErrorState message="Couldn't load forms. Refresh to try again." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>

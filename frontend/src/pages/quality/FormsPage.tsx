@@ -142,7 +142,11 @@ export default function FormsPage() {
       setHasChanges(false)
       setTimeout(() => navigate(FORMS_BASE), 1500)
     } catch (e: any) {
-      toast({ title: 'Save failed', description: e.message || 'Please try again.', variant: 'destructive' })
+      toast({
+        variant: 'destructive',
+        title: "Couldn't save form",
+        description: e.message || "Your changes weren't saved. Try again.",
+      })
     } finally { setSaving(false) }
   }
 

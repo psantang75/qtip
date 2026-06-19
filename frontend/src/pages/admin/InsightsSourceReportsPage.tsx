@@ -106,7 +106,11 @@ export default function InsightsSourceReportsPage() {
       setEditing(null)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Try again.'
-      toast({ title: 'Update failed', description: msg, variant: 'destructive' })
+      toast({
+        variant: 'destructive',
+        title: "Couldn't save schedule",
+        description: msg,
+      })
     }
   }
 
@@ -120,7 +124,11 @@ export default function InsightsSourceReportsPage() {
       window.setTimeout(() => { void refetch() }, 8000)
       window.setTimeout(() => { void refetch() }, 30000)
     } catch {
-      toast({ title: 'Failed', description: `Could not start ${name}.`, variant: 'destructive' })
+      toast({
+        variant: 'destructive',
+        title: `Couldn't start ${name}`,
+        description: 'Try again.',
+      })
     } finally {
       setRunTarget(null)
     }

@@ -84,7 +84,7 @@ export default function AIReviewerFormsList() {
       />
 
       {isLoading && <ListLoadingSkeleton rows={4} />}
-      {isError && <TableErrorState message="Failed to load AI-enabled forms." onRetry={refetch} />}
+      {isError && <TableErrorState message="Couldn't load AI forms. Refresh to try again." onRetry={refetch} />}
 
       {!isLoading && !isError && (
         <ListCard>

@@ -39,7 +39,7 @@ export function PromptPreviewPanel({ formId, mode = 'inline' }: Props) {
   if (previewQ.error) {
     return (
       <div className="text-[13px] text-rose-600 py-6">
-        Failed to load: {(previewQ.error as Error).message}
+        Couldn't build prompt preview. Refresh to try again.
       </div>
     )
   }

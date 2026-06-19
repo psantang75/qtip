@@ -70,7 +70,7 @@ export function KbCoverageCard({ formId }: Props) {
 
       {coverageQ.isError && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          Failed to load KB coverage. Try again in a moment.
+          Couldn't load KB coverage. Refresh to try again.
         </div>
       )}
 

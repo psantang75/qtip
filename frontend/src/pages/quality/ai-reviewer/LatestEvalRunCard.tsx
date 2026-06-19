@@ -72,9 +72,9 @@ export function LatestEvalRunCard({ formId }: Props) {
     },
     onError: (e: any) =>
       toast({
-        title: 'Eval failed',
-        description: e?.response?.data?.error ?? e?.message ?? 'Unknown error',
         variant: 'destructive',
+        title: "Couldn't run eval",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       }),
   })
 

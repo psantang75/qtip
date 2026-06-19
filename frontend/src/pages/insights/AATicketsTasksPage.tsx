@@ -38,7 +38,7 @@ export default function AATicketsTasksPage() {
         {isLoading ? (
           <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
         ) : isError ? (
-          <p className="text-sm text-danger text-center py-6">Failed to load tickets &amp; tasks.</p>
+          <p className="text-sm text-danger text-center py-6">Couldn't load tickets and tasks. Refresh to try again.</p>
         ) : groups.length === 0 ? (
           <p className="text-sm text-slate-400 text-center py-6">No data for the selected filters.</p>
         ) : (

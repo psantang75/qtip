@@ -203,7 +203,11 @@ export default function OnDemandReportViewPage() {
   const handleRun = () => {
     const err = validateDraft()
     if (err) {
-      toast({ title: 'Filter required', description: err, variant: 'destructive' })
+      toast({
+        variant: 'destructive',
+        title: 'Filter required',
+        description: err,
+      })
       return
     }
     setPage(1)
@@ -224,9 +228,9 @@ export default function OnDemandReportViewPage() {
       await downloadReport(reportId, toFilterParams(applied), `${reportId}.xlsx`)
     } catch (err: any) {
       toast({
-        title: 'Download failed',
-        description: err?.response?.data?.message || err?.message || 'Could not download report.',
         variant: 'destructive',
+        title: "Couldn't download report",
+        description: err?.response?.data?.message || err?.message || 'Try again.',
       })
     } finally {
       setDownloading(false)
@@ -490,7 +494,7 @@ export default function OnDemandReportViewPage() {
             </div>
           ) : dataQuery.isError ? (
             <div className="py-10 text-center text-sm text-red-600">
-              Failed to run the report. Adjust your filters and try again.
+              Couldn't run report. Adjust your filters and try again.
             </div>
           ) : !dataQuery.data?.rows?.length ? (
             <div className="py-10 text-center text-sm text-slate-400">

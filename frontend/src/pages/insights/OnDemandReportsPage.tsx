@@ -26,7 +26,7 @@ export default function OnDemandReportsPage() {
           </div>
         ) : isError ? (
           <div className="py-10 text-center text-sm text-red-600">
-            Failed to load reports. Please try again.
+            Couldn't load reports. Refresh to try again.
           </div>
         ) : !reports || reports.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-400">

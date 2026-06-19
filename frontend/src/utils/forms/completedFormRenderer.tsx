@@ -97,7 +97,7 @@ const CompletedFormRenderer: React.FC<CompletedFormProps> = ({
 
   // Propagate errors to parent if needed
   if (isError && onError) {
-    onError('Failed to load form data');
+    onError("Couldn't load form data. Refresh to try again.");
   }
 
   if (isLoading) {
@@ -111,7 +111,7 @@ const CompletedFormRenderer: React.FC<CompletedFormProps> = ({
   if (isError) {
     return (
       <div className="bg-red-50 p-4 rounded-lg border border-red-200 text-red-700">
-        <p>Failed to load form data. Please try again.</p>
+        <p>Couldn't load form data. Refresh to try again.</p>
       </div>
     );
   }

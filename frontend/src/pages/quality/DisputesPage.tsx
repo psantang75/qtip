@@ -220,7 +220,7 @@ function DisputeListView() {
         {isLoading ? (
           <ListLoadingSkeleton rows={8} />
         ) : isError ? (
-          <TableErrorState message="Failed to load disputes." onRetry={refetch} />
+          <TableErrorState message="Couldn't load disputes. Refresh to try again." onRetry={refetch} />
         ) : (
           <Table>
             <TableHeader>

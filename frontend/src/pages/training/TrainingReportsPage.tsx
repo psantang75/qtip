@@ -178,7 +178,7 @@ export default function TrainingReportsPage() {
 
       {summaryError && (
         <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <TableErrorState message="Failed to load summary metrics." onRetry={summaryRefetch} />
+          <TableErrorState message="Couldn't load summary metrics. Refresh to try again." onRetry={summaryRefetch} />
         </div>
       )}
 
@@ -297,7 +297,7 @@ export default function TrainingReportsPage() {
         {agentLoading ? (
           <ListLoadingSkeleton rows={8} />
         ) : agentError ? (
-          <TableErrorState message="Failed to load coaching data." onRetry={agentRefetch} />
+          <TableErrorState message="Couldn't load coaching data. Refresh to try again." onRetry={agentRefetch} />
         ) : (
           <Table>
             <TableHeader>

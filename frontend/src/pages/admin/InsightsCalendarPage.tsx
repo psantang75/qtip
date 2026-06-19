@@ -163,7 +163,7 @@ export default function InsightsCalendarPage() {
       )}
       {isError && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center text-sm text-red-600">
-          Failed to load calendar. Please refresh.
+          Couldn't load calendar. Refresh to try again.
         </div>
       )}
 

@@ -57,7 +57,7 @@ export function QCPageSkeleton({ tiles = 5 }: { tiles?: number }) {
 
 /** Error card with optional retry */
 export function ErrorCard({
-  message = 'Unable to load data. Please try again.',
+  message = "Couldn't load this view. Refresh to try again.",
   onRetry,
   className,
 }: {

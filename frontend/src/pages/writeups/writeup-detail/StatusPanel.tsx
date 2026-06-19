@@ -388,7 +388,11 @@ export function StatusPanel({ writeup, id, onInvalidate, readOnly = false }: Sta
     mutationFn: ({ status, extra }: { status: WriteUpStatus; extra?: TransitionExtra }) =>
       writeupService.transitionStatus(id, { status, ...extra }),
     onSuccess: (_data, variables) => onSuccess(`Status updated to ${STATUS_LABELS[variables.status]}`),
-    onError: (err: Error) => toast({ title: 'Update failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({
+      variant: 'destructive',
+      title: "Couldn't update status",
+      description: err?.message ?? 'Try again.',
+    }),
   })
 
   const transition = (status: WriteUpStatus, extra?: TransitionExtra) =>

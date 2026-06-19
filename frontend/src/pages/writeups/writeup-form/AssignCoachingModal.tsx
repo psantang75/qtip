@@ -162,9 +162,9 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
     }),
     onSuccess: ({ id, label }) => { onCreated(id, label); onClose() },
     onError: (err: any) => toast({
-      title: 'Failed to create session',
-      description: err?.response?.data?.message ?? err?.message ?? 'Please try again.',
       variant: 'destructive',
+      title: "Couldn't create coaching session",
+      description: err?.response?.data?.message ?? err?.message ?? 'Try again.',
     }),
   })
 

@@ -78,9 +78,9 @@ export function QuestionRubricsCard({ form }: Props) {
     },
     onError: (e: any) =>
       toast({
-        title: 'Save failed',
-        description: e?.response?.data?.error ?? e?.message,
         variant: 'destructive',
+        title: "Couldn't save rubric",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       }),
   })
 
@@ -92,9 +92,9 @@ export function QuestionRubricsCard({ form }: Props) {
     },
     onError: (e: any) =>
       toast({
-        title: 'Remove failed',
-        description: e?.response?.data?.error ?? e?.message,
         variant: 'destructive',
+        title: "Couldn't remove rubric",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       }),
   })
 
@@ -133,7 +133,7 @@ export function QuestionRubricsCard({ form }: Props) {
 
       {rubricsQ.isError && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          Failed to load rubrics. Try again in a moment.
+          Couldn't load rubrics. Refresh to try again.
         </div>
       )}
 

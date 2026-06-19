@@ -42,7 +42,11 @@ export default function LibraryTopicsPage() {
   const previewMut = useMutation({
     mutationFn: (quizId: number) => trainingService.getLibraryQuizDetail(quizId),
     onSuccess: (detail) => { setPreviewQuiz(detail); setPreviewOpen(true) },
-    onError:   () => toast({ title: 'Failed to load quiz preview', variant: 'destructive' }),
+    onError:   () => toast({
+      variant: 'destructive',
+      title: "Couldn't load quiz preview",
+      description: 'Try again.',
+    }),
   })
 
   const { data: topicItems = [], isLoading, isError, refetch } = useQuery({
@@ -146,7 +150,11 @@ export default function LibraryTopicsPage() {
       }
     },
     onSuccess: () => { invalidateAll(); setModalOpen(false); toast({ title: 'Topic updated' }) },
-    onError:   () => toast({ title: 'Failed to save topic', variant: 'destructive' }),
+    onError:   () => toast({
+      variant: 'destructive',
+      title: "Couldn't save topic",
+      description: 'Try again.',
+    }),
   })
 
   const openEdit = (topic: ListItem) => {
@@ -269,7 +277,7 @@ export default function LibraryTopicsPage() {
         </ListCard>
       ) : isError ? (
         <ListCard>
-          <TableErrorState message="Failed to load topics." onRetry={refetch} />
+          <TableErrorState message="Couldn't load topics. Refresh to try again." onRetry={refetch} />
         </ListCard>
       ) : filtered.length === 0 ? (
         <ListCard>

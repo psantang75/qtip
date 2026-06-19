@@ -267,15 +267,16 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
 
   const invalidate = () => { qc.invalidateQueries({ queryKey: ['list-items', listType] }); setLocalItems(null) }
 
-  const saveMut      = useMutation({ mutationFn: ({ id, label, category }: { id: number; label: string; category: string }) => listService.updateItem(id, { label, category: category || undefined }), onSuccess: () => { invalidate(); toast({ title: 'Saved' }) }, onError: () => toast({ title: 'Save failed', variant: 'destructive' }) })
-  const toggleMut    = useMutation({ mutationFn: (id: number) => listService.toggleStatus(id), onSuccess: invalidate, onError: () => toast({ title: 'Update failed', variant: 'destructive' }) })
-  const addMut       = useMutation({ mutationFn: ({ label, category }: { label: string; category?: string }) => listService.createItem({ list_type: listType, label, category }), onSuccess: () => { invalidate(); toast({ title: 'Added' }) }, onError: () => toast({ title: 'Add failed', variant: 'destructive' }) })
-  const reorderMut   = useMutation({ mutationFn: (payload: { id: number; sort_order: number }[]) => listService.reorder(payload), onSuccess: invalidate, onError: () => { setLocalItems(null); toast({ title: 'Reorder failed', variant: 'destructive' }) } })
-  const deleteMut    = useMutation({ mutationFn: (id: number) => listService.deleteItem(id), onSuccess: () => { invalidate(); toast({ title: 'Deleted' }) }, onError: () => toast({ title: 'Delete failed', variant: 'destructive' }) })
+  // Mutation onError uses canonical wording from docs/error-messages-catalog.md.
+  const saveMut      = useMutation({ mutationFn: ({ id, label, category }: { id: number; label: string; category: string }) => listService.updateItem(id, { label, category: category || undefined }), onSuccess: () => { invalidate(); toast({ title: 'Saved' }) }, onError: () => toast({ variant: 'destructive', title: "Couldn't save item", description: 'Try again.' }) })
+  const toggleMut    = useMutation({ mutationFn: (id: number) => listService.toggleStatus(id), onSuccess: invalidate, onError: () => toast({ variant: 'destructive', title: "Couldn't update item", description: 'Try again.' }) })
+  const addMut       = useMutation({ mutationFn: ({ label, category }: { label: string; category?: string }) => listService.createItem({ list_type: listType, label, category }), onSuccess: () => { invalidate(); toast({ title: 'Added' }) }, onError: () => toast({ variant: 'destructive', title: "Couldn't add item", description: 'Try again.' }) })
+  const reorderMut   = useMutation({ mutationFn: (payload: { id: number; sort_order: number }[]) => listService.reorder(payload), onSuccess: invalidate, onError: () => { setLocalItems(null); toast({ variant: 'destructive', title: "Couldn't save new order", description: 'Try again.' }) } })
+  const deleteMut    = useMutation({ mutationFn: (id: number) => listService.deleteItem(id), onSuccess: () => { invalidate(); toast({ title: 'Deleted' }) }, onError: () => toast({ variant: 'destructive', title: "Couldn't delete item", description: 'Try again.' }) })
   const clearCatMut  = useMutation({
     mutationFn: (ids: number[]) => Promise.all(ids.map(id => listService.updateItem(id, { category: '' }))),
     onSuccess:  () => { invalidate(); toast({ title: 'Category removed' }) },
-    onError:    () => toast({ title: 'Failed to remove category', variant: 'destructive' }),
+    onError:    () => toast({ variant: 'destructive', title: "Couldn't remove category", description: 'Try again.' }),
   })
 
   const commit = (newItems: ListItem[]) => { setLocalItems(newItems); reorderMut.mutate(newItems.map((it, idx) => ({ id: it.id, sort_order: idx + 1 }))) }
@@ -324,7 +325,7 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
   }
 
   if (isLoading) return <div className="bg-white rounded-xl border border-slate-200 overflow-hidden"><ListLoadingSkeleton rows={4} /></div>
-  if (isError)   return <div className="bg-white rounded-xl border border-slate-200 p-4"><TableErrorState message="Failed to load list items." onRetry={refetch} /></div>
+  if (isError)   return <div className="bg-white rounded-xl border border-slate-200 p-4"><TableErrorState message="Couldn't load list. Refresh to try again." onRetry={refetch} /></div>
 
   return (
     <div className="space-y-3">

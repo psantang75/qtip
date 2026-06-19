@@ -25,7 +25,11 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
       qc.invalidateQueries({ queryKey: ['agent-dispute-history'] })
       onSuccess()
     },
-    onError: () => toast({ title: 'Error', description: 'Failed to submit dispute.', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't submit dispute",
+      description: "Try again. Your reason hasn't been lost.",
+    }),
   })
 
   const minLen = 10
@@ -78,7 +82,11 @@ export function EditDisputeForm({
       onSuccess()
     },
     onError: (err: any) =>
-      toast({ title: 'Error', description: err?.response?.data?.message ?? 'Failed to update dispute.', variant: 'destructive' }),
+      toast({
+        variant: 'destructive',
+        title: "Couldn't update dispute",
+        description: err?.response?.data?.message ?? 'Try again.',
+      }),
   })
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,7 +124,7 @@ export function EditDisputeForm({
       </div>
       {error && (
         <p className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded p-2">
-          {(error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to update dispute.'}
+          {(error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Couldn't update dispute. Try again."}
         </p>
       )}
       <div className="flex gap-2 justify-end pt-1">

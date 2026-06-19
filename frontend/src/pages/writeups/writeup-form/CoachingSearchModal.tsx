@@ -53,7 +53,11 @@ export function CoachingSearchModal({ csrId, onImport, onImportRefs, onClose }: 
   const searchMut = useMutation({
     mutationFn: () => writeupService.searchCoachingSessions({ csr_id: csrId, date_from: dateFrom || undefined, date_to: dateTo || undefined, topic_names: selectedTopics.size > 0 ? Array.from(selectedTopics) : undefined }),
     onSuccess: (data) => { setResults(data); setSelected(new Set()) },
-    onError: () => toast({ title: 'Search failed', description: 'Could not load coaching sessions.', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't search coaching sessions",
+      description: 'Try again.',
+    }),
   })
 
   const toggleResult = (idx: number) => setSelected(prev => { const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next })

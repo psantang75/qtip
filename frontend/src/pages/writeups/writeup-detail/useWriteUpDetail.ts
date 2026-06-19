@@ -31,7 +31,13 @@ export function useWriteUpDetail(id: string | undefined, extraInvalidateKeys?: s
     if (!writeup) return
     setPdfLoading(true)
     try { await openWriteUpPdf(writeup) }
-    catch { toast({ title: 'PDF generation failed', variant: 'destructive' }) }
+    catch {
+      toast({
+        variant: 'destructive',
+        title: "Couldn't generate PDF",
+        description: 'Try again.',
+      })
+    }
     finally { setPdfLoading(false) }
   }
 

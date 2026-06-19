@@ -70,17 +70,27 @@ export default function MyCoachingDetailPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },
     onError: (err: any) =>
-      toast({ title: 'Submit failed', description: err?.message ?? 'Please try again.', variant: 'destructive' }),
+      toast({
+        variant: 'destructive',
+        title: "Couldn't submit",
+        description: err?.message ?? 'Try again.',
+      }),
   })
 
   const handleDownload = async () => {
     if (!session?.attachment_filename) return
     try { await downloadSessionAttachment(Number(id), session.attachment_filename) }
-    catch { toast({ title: 'Download failed', variant: 'destructive' }) }
+    catch {
+      toast({
+        variant: 'destructive',
+        title: "Couldn't download attachment",
+        description: 'Try again.',
+      })
+    }
   }
 
   if (isLoading) return <div className="p-6"><ListLoadingSkeleton rows={8} /></div>
-  if (isError || !session) return <div className="p-6"><TableErrorState message="Failed to load training session." onRetry={refetch} /></div>
+  if (isError || !session) return <div className="p-6"><TableErrorState message="Couldn't load this session. Refresh to try again." onRetry={refetch} /></div>
 
   const { status } = session
   const require_action_plan    = !!session.require_action_plan

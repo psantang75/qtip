@@ -208,7 +208,7 @@ export default function AALeadsPage() {
                 <tr><td colSpan={columns.length} className="py-8 text-center text-sm text-slate-400">Loading…</td></tr>
               )}
               {isError && (
-                <tr><td colSpan={columns.length} className="py-8 text-center text-sm text-danger">Failed to load leads.</td></tr>
+                <tr><td colSpan={columns.length} className="py-8 text-center text-sm text-danger">Couldn't load leads. Refresh to try again.</td></tr>
               )}
             </tbody>
           </table>

@@ -54,9 +54,9 @@ export function CalibrationMapPanel({ formId }: Props) {
     },
     onError: (e: any) =>
       toast({
-        title: 'Fit failed',
-        description: e?.response?.data?.error ?? e?.message,
         variant: 'destructive',
+        title: "Couldn't fit calibration",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       }),
   })
 
@@ -68,9 +68,9 @@ export function CalibrationMapPanel({ formId }: Props) {
     },
     onError: (e: any) =>
       toast({
-        title: 'Activate failed',
-        description: e?.response?.data?.error ?? e?.message,
         variant: 'destructive',
+        title: "Couldn't activate calibration",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       }),
   })
 

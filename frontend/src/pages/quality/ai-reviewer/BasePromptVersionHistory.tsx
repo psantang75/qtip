@@ -73,9 +73,9 @@ export function BasePromptVersionHistory({ open, base, onClose, onRolledBack }: 
     },
     onError: (e: any) =>
       toast({
-        title: 'Rollback failed',
-        description: e?.response?.data?.error ?? e?.message,
         variant: 'destructive',
+        title: "Couldn't roll back",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       }),
   })
 

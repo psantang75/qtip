@@ -219,7 +219,11 @@ export default function CoachingSessionDetailPage() {
       invalidate()
       qc.invalidateQueries({ queryKey: ['coaching-sessions'] })
     },
-    onError: () => toast({ title: 'Save failed', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't save section",
+      description: 'Try again.',
+    }),
   })
 
   const invalidate = () => {
@@ -242,7 +246,11 @@ export default function CoachingSessionDetailPage() {
       setAttachmentFile(null)
       invalidate()
     },
-    onError: () => toast({ title: 'Save failed', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't save attachment",
+      description: 'Try again.',
+    }),
   })
 
   const startEditInternal = () => {
@@ -276,7 +284,11 @@ export default function CoachingSessionDetailPage() {
       setInternalApplyBatch(false)
       invalidate()
     },
-    onError: () => toast({ title: 'Save failed', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't save section",
+      description: 'Try again.',
+    }),
   })
 
   const internalSaveAndCloseMut = useMutation({
@@ -297,7 +309,11 @@ export default function CoachingSessionDetailPage() {
       setInternalApplyBatch(false)
       invalidate()
     },
-    onError: () => toast({ title: 'Save & close failed', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't save and close",
+      description: 'Try again.',
+    }),
   })
 
   useEffect(() => { if (session) setPendingStatus(session.status) }, [session?.status])
@@ -326,26 +342,40 @@ export default function CoachingSessionDetailPage() {
       toast({ title: `Status updated to ${STATUS_LABELS[status] ?? status}` })
       invalidate()
     },
-    onError: () => toast({ title: 'Error', description: 'Could not update status.', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't update status",
+      description: 'Try again.',
+    }),
   })
 
   const deliverMut = useMutation({
     mutationFn: () => trainingService.deliverSession(Number(id)),
     onSuccess: () => { toast({ title: 'Training session scheduled' }); invalidate() },
-    onError: () => toast({ title: 'Error', description: 'Could not deliver session.', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't schedule session",
+      description: 'Try again.',
+    }),
   })
 
 
   const handleDownload = async () => {
     if (!session?.attachment_filename) return
     try { await downloadSessionAttachment(Number(id), session.attachment_filename) }
-    catch { toast({ title: 'Download failed', variant: 'destructive' }) }
+    catch {
+      toast({
+        variant: 'destructive',
+        title: "Couldn't download attachment",
+        description: 'Try again.',
+      })
+    }
   }
 
   if (isLoading) return <div className="p-6"><ListLoadingSkeleton rows={10} /></div>
   if (isError || !session) return (
     <div className="p-6">
-      <TableErrorState message="Failed to load session."
+      <TableErrorState message="Couldn't load this session. Refresh to try again."
         onRetry={() => qc.invalidateQueries({ queryKey: ['coaching-session', id] })} />
     </div>
   )

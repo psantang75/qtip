@@ -41,13 +41,17 @@ export default function WriteUpDetailPage() {
       toast({ title: 'Performance Warning duplicated as new draft' })
       navigate(`/app/performancewarnings/${newId}`)
     },
-    onError: () => toast({ title: 'Duplicate failed', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't duplicate write-up",
+      description: 'Try again.',
+    }),
   })
 
   if (isLoading) return <ListPageShell><ListLoadingSkeleton rows={10} /></ListPageShell>
   if (isError || !writeup) return (
     <ListPageShell>
-      <TableErrorState message="Failed to load performance warning." onRetry={refetch} />
+      <TableErrorState message="Couldn't load this write-up. Refresh to try again." onRetry={refetch} />
     </ListPageShell>
   )
 

@@ -117,7 +117,11 @@ function PageDetailSection({ page }: { page: IePage }) {
       return updatePageAccess(page.id, roles)
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['ie-pages'] }); toast({ title: 'Access updated' }) },
-    onError: (e: Error) => toast({ title: 'Failed to save access', description: e.message, variant: 'destructive' }),
+    onError: (e: Error) => toast({
+      variant: 'destructive',
+      title: "Couldn't save access",
+      description: e.message ?? 'Try again.',
+    }),
   })
 
   return (
@@ -204,7 +208,11 @@ function DepartmentAccessSection({ page }: { page: IePage }) {
       return updatePageDepartmentAccess(page.id, payload)
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['ie-pages'] }); toast({ title: 'Department access updated' }) },
-    onError: (e: Error) => toast({ title: 'Failed to save department access', description: e.message, variant: 'destructive' }),
+    onError: (e: Error) => toast({
+      variant: 'destructive',
+      title: "Couldn't save department access",
+      description: e.message ?? 'Try again.',
+    }),
   })
 
   const deptName = (key: number) =>

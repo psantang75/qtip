@@ -33,18 +33,21 @@ function formatDate(d?: string | null) {
 
 // ── Profile update schema ─────────────────────────────────────────────────────
 const profileSchema = z.object({
-  username: z.string().min(3, 'Min 3 characters'),
-  email:    z.string().email('Valid email required'),
+  username: z.string().min(3, 'Must be at least 3 characters'),
+  email:    z.string().email('Enter a valid email address'),
   title:    z.string().optional(),
 })
 
 // ── Password change schema ────────────────────────────────────────────────────
+// Frontend rules mirror the server-side requirement in `UserService.changePassword`
+// (≥8 chars + upper + lower + number + symbol). Keeping them in sync here so the
+// inline message matches what the API will accept on submit.
 const passwordSchema = z.object({
-  currentPassword: z.string().min(1, 'Required'),
-  newPassword:     z.string().min(6, 'Min 6 characters'),
-  confirmPassword: z.string().min(1, 'Required'),
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword:     z.string().min(8, 'Must be at least 8 characters with upper, lower, number, and a symbol'),
+  confirmPassword: z.string().min(1, 'Confirm your new password'),
 }).refine(d => d.newPassword === d.confirmPassword, {
-  message: 'Passwords do not match',
+  message: "Passwords don't match",
   path:    ['confirmPassword'],
 })
 

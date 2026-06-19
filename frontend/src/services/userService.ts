@@ -129,7 +129,7 @@ const userService = {
       const response = await api.put(`/users/${userId}`, userData)
       if (response.data?.success && response.data?.data) return response.data.data
       if (response.data) return response.data
-      throw new Error('Invalid response format from server')
+      throw new Error('Couldn't read the server response. Refresh and try again.')
     } catch (error: unknown) {
       const e = error as { response?: { data?: { error?: unknown; code?: string } } }
       const apiError = e?.response?.data?.error
@@ -153,14 +153,14 @@ const userService = {
     const response = await api.put(`/users/${userId}/status`, { is_active: isActive })
     if (response.data?.success && response.data?.data) return response.data.data
     if (response.data) return response.data
-    throw new Error('Invalid response format from server')
+    throw new Error('Couldn't read the server response. Refresh and try again.')
   },
 
   unlockUser: async (userId: number): Promise<User> => {
     const response = await api.put(`/users/${userId}/unlock`)
     if (response.data?.success && response.data?.data) return response.data.data
     if (response.data) return response.data
-    throw new Error('Invalid response format from server')
+    throw new Error('Couldn't read the server response. Refresh and try again.')
   },
 
   changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {

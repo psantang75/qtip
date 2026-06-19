@@ -91,7 +91,7 @@ export default function RulePackLibrary() {
       toast({ title: 'Pack archived' })
     },
     onError: (e: any) =>
-      toast({ title: 'Archive failed', description: e?.message, variant: 'destructive' }),
+      toast({ variant: 'destructive', title: "Couldn't archive rule pack", description: e?.message ?? 'Try again.' }),
   })
 
   const restoreMut = useMutation({
@@ -101,7 +101,7 @@ export default function RulePackLibrary() {
       toast({ title: 'Pack restored' })
     },
     onError: (e: any) =>
-      toast({ title: 'Restore failed', description: e?.message, variant: 'destructive' }),
+      toast({ variant: 'destructive', title: "Couldn't restore rule pack", description: e?.message ?? 'Try again.' }),
   })
 
   const columns = useMemo<ColumnDef<RulePack>[]>(
@@ -240,7 +240,7 @@ export default function RulePackLibrary() {
 
         {packsQ.isError && (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            Failed to load rule packs.
+            Couldn't load rule packs. Refresh to try again.
           </div>
         )}
 
@@ -342,9 +342,9 @@ function RulePackEditorSheet({ state, onClose, onSaved }: RulePackEditorSheetPro
     },
     onError: (e: any) =>
       toast({
-        title: 'Save failed',
-        description: e?.response?.data?.error ?? e?.message,
         variant: 'destructive',
+        title: "Couldn't save rule pack",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       }),
   })
 

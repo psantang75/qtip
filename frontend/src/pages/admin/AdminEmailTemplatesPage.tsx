@@ -297,7 +297,11 @@ function TemplateEditor({
       void queryClient.invalidateQueries({ queryKey: ['emailTemplates'] })
     },
     onError: (err: any) =>
-      toast({ title: 'Save failed', description: err?.response?.data?.message ?? 'Try again.', variant: 'destructive' }),
+      toast({
+        variant: 'destructive',
+        title: "Couldn't save template",
+        description: err?.response?.data?.message ?? 'Try again.',
+      }),
   })
 
   const previewMut = useMutation({
@@ -314,7 +318,11 @@ function TemplateEditor({
         toast({ title: 'Test sent', description: `Message ID: ${r.messageId ?? '—'}` })
         setShowTestDialog(false); setTestTo('')
       } else {
-        toast({ title: 'Test failed', description: r.error ?? 'Send error.', variant: 'destructive' })
+        toast({
+          variant: 'destructive',
+          title: "Couldn't send test",
+          description: r.error ?? 'Check the recipient address and try again.',
+        })
       }
     },
   })
@@ -539,7 +547,7 @@ function RecentSendsTable({ templateKey }: { templateKey: string }) {
     mutationFn: (id: number) => emailTemplatesService.resend(id),
     onSuccess: (r) => {
       toast({
-        title: r.ok ? 'Resent' : 'Resend failed',
+        title: r.ok ? 'Resent' : "Couldn't resend email",
         description: r.ok ? `Message ID: ${r.messageId ?? '—'}` : (r.error ?? 'Try again.'),
         variant: r.ok ? 'default' : 'destructive',
       })

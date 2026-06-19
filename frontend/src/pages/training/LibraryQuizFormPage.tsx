@@ -88,7 +88,11 @@ export default function LibraryQuizFormPage() {
       toast({ title: isEdit ? 'Quiz updated' : 'Quiz created' })
       navigate('/app/training/library/quizzes')
     },
-    onError: (err: any) => toast({ title: 'Save failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: any) => toast({
+      variant: 'destructive',
+      title: "Couldn't save quiz",
+      description: err?.message ?? 'Try again.',
+    }),
   })
 
   const handleSave = () => {
@@ -101,7 +105,7 @@ export default function LibraryQuizFormPage() {
   if (isEdit && detailError) {
     return (
       <ListPageShell>
-        <TableErrorState message="Failed to load quiz." onRetry={detailRefetch} />
+        <TableErrorState message="Couldn't load quiz. Refresh to try again." onRetry={detailRefetch} />
       </ListPageShell>
     )
   }

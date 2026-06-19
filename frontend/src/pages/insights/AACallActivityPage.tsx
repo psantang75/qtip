@@ -72,7 +72,7 @@ export default function AACallActivityPage() {
         {isLoading ? (
           <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
         ) : isError ? (
-          <p className="text-sm text-danger text-center py-6">Failed to load call activity.</p>
+          <p className="text-sm text-danger text-center py-6">Couldn't load call activity. Refresh to try again.</p>
         ) : summary.length === 0 ? (
           <p className="text-sm text-slate-400 text-center py-6">No data for the selected filters.</p>
         ) : (

@@ -62,12 +62,14 @@ export function handleErrorIfAuthentication(error: any): boolean {
  * @param defaultMessage - Default message if no specific message is found
  * @returns User-friendly error message
  */
-export function getErrorMessage(error: any, defaultMessage: string = 'An error occurred. Please try again.'): string {
-  // Check for authentication errors
+export function getErrorMessage(error: any, defaultMessage: string = "Something went wrong. Try again."): string {
+  // Authentication: keep the canonical "Session expired" wording in sync with
+  // P10 in `lib/errorMessages.ts` so this util stays usable from non-toast
+  // contexts (inline error banners) without drifting from the catalog.
   if (isAuthenticationError(error)) {
-    return 'Your session has expired. Please log in again.';
+    return 'Session expired. Sign in again to continue.';
   }
-  
+
   // Check for specific error messages in the response
   if (error?.response?.data?.error) {
     const apiError = error.response.data.error;

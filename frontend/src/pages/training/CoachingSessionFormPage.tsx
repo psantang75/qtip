@@ -201,7 +201,11 @@ export default function CoachingSessionFormPage() {
     },
     onError: (err: Error) => {
       if (err?.message !== 'validation')
-        toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
+        toast({
+          variant: 'destructive',
+          title: "Couldn't save session",
+          description: err?.message ?? 'Try again.',
+        })
     },
   })
 
@@ -240,7 +244,11 @@ export default function CoachingSessionFormPage() {
     },
     onError: (err: Error) => {
       if (err?.message !== 'validation')
-        toast({ title: 'Save failed', description: err?.message ?? 'Please try again.', variant: 'destructive' })
+        toast({
+          variant: 'destructive',
+          title: "Couldn't schedule session",
+          description: err?.message ?? 'Try again.',
+        })
     },
   })
 
@@ -252,7 +260,7 @@ export default function CoachingSessionFormPage() {
   if (isEdit && existingError) {
     return (
       <ListPageShell>
-        <TableErrorState message="Failed to load training session." onRetry={existingRefetch} />
+        <TableErrorState message="Couldn't load this session. Refresh to try again." onRetry={existingRefetch} />
       </ListPageShell>
     )
   }

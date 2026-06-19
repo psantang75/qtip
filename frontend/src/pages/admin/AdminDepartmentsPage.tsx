@@ -171,7 +171,11 @@ export default function AdminDepartmentsPage() {
     mutationFn: ({ id, active }: { id: number; active: boolean }) =>
       departmentService.toggleDepartmentStatus(id, active),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-departments'] }),
-    onError:   () => toast({ title: 'Failed to update status', variant: 'destructive' }),
+    onError:   () => toast({
+      variant: 'destructive',
+      title: "Couldn't update department",
+      description: 'Try again.',
+    }),
   })
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -305,7 +309,7 @@ export default function AdminDepartmentsPage() {
                 <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">Loading…</TableCell>
               </TableRow>
             ) : isError ? (
-              <TableRow><TableCell colSpan={6} className="py-4"><TableErrorState message="Failed to load departments." onRetry={refetch} /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="py-4"><TableErrorState message="Couldn't load departments. Refresh to try again." onRetry={refetch} /></TableCell></TableRow>
             ) : departments.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No departments found</TableCell>

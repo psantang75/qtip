@@ -127,7 +127,11 @@ export default function SubmissionDetailPage() {
       qc.invalidateQueries({ queryKey: ['submission-detail', id] })
       qc.invalidateQueries({ queryKey: ['submissions'] })
     },
-    onError: () => toast({ title: 'Failed to accept review', description: 'Please try again.', variant: 'destructive' }),
+    onError: () => toast({
+      variant: 'destructive',
+      title: "Couldn't accept review",
+      description: 'Try again.',
+    }),
   })
 
   if (isLoading) {
@@ -141,7 +145,7 @@ export default function SubmissionDetailPage() {
     return (
       <div className="p-6">
         <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-[13px] text-red-700">
-          Failed to load submission details.
+          Couldn't load this submission. Refresh to try again.
         </div>
       </div>
     )

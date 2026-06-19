@@ -159,7 +159,7 @@ export default function AuditFormPage() {
       }
     }
     return {
-      title: 'Failed to load the AI draft',
+      title: "Couldn't load AI draft",
       body: serverMsg ?? e?.message ?? 'Unknown error.',
     }
   }, [aiPrefillError, aiPrefillErrorObj, aiSubmissionId])
@@ -255,7 +255,7 @@ export default function AuditFormPage() {
   const { mutate: doSaveDraft, isPending: isSavingDraft } = useMutation({
     mutationFn: (payload: any) => submissionService.saveDraft(payload),
     onSuccess: () => navigate('/app/quality/submissions', { state: { message: 'Draft saved.' } }),
-    onError: () => setErrorMessage('Failed to save draft. Please try again.'),
+    onError: () => setErrorMessage("Couldn't save draft. Try again."),
   })
   const [metadataValues, setMetadataValues] = useState<Record<string, string>>({})
   const [selectedCalls, setSelectedCalls] = useState<Call[]>([])
@@ -535,7 +535,7 @@ export default function AuditFormPage() {
   if (formError) {
     return (
       <div className="p-6">
-        <TableErrorState message="Failed to load review form." onRetry={refetchForm} />
+        <TableErrorState message="Couldn't load this form. Refresh to try again." onRetry={refetchForm} />
       </div>
     )
   }

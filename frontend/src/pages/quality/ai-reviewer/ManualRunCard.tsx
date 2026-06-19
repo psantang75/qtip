@@ -191,7 +191,7 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
       // (e.g. INTERACTION_NOT_CLOSED) without digging through server logs.
       const code = e?.response?.data?.code ?? null
       setLastError({ message: desc, code: typeof code === 'string' ? code : null })
-      toast({ title: 'Run failed', description: desc, variant: 'destructive' })
+      toast({ variant: 'destructive', title: "Couldn't run AI review", description: desc })
     },
   })
 

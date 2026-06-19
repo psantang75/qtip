@@ -21,7 +21,7 @@ export default function MyWriteUpDetailPage() {
   if (isLoading) return <ListPageShell><ListLoadingSkeleton rows={8} /></ListPageShell>
   if (isError || !writeup) return (
     <ListPageShell>
-      <TableErrorState message="Failed to load performance warning." onRetry={refetch} />
+      <TableErrorState message="Couldn't load this write-up. Refresh to try again." onRetry={refetch} />
     </ListPageShell>
   )
 

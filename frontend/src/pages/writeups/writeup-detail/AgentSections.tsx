@@ -76,7 +76,11 @@ export function SignatureSection({ id, csrName, onSigned }: { id: number; csrNam
       toast({ title: 'Document signed successfully. A copy has been saved to your personnel record.' })
       onSigned()
     },
-    onError: (err: Error) => toast({ title: 'Signing failed', description: err?.message, variant: 'destructive' }),
+    onError: (err: Error) => toast({
+      variant: 'destructive',
+      title: "Couldn't sign write-up",
+      description: err?.message ?? 'Try again.',
+    }),
   })
 
   return (

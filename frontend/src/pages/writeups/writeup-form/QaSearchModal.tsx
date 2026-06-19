@@ -153,7 +153,11 @@ export function QaSearchModal({ csrId, onImport, onClose }: QaSearchModalProps) 
   const searchMut = useMutation({
     mutationFn: () => writeupService.searchQaRecords({ csr_id: csrId, form_id: formId ? Number(formId) : undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined, question_filters: completeFilters.map(f => ({ question_id: f.questionId, answer_value: f.answerValue })) }),
     onSuccess: (data) => { setRawResults(data); setSelected(new Set()) },
-    onError: (err: any) => toast({ title: 'Search failed', description: err?.response?.data?.message ?? err?.message ?? 'Could not fetch QA records.', variant: 'destructive' }),
+    onError: (err: any) => toast({
+      variant: 'destructive',
+      title: "Couldn't search QA records",
+      description: err?.response?.data?.message ?? err?.message ?? 'Try again.',
+    }),
   })
 
   const handleImport = () => {

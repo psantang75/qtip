@@ -64,7 +64,7 @@ export default function AdminRolesPage() {
     </div>
   )
 
-  if (isError) return <TableErrorState message="Failed to load user counts." onRetry={refetch} />
+  if (isError) return <TableErrorState message="Couldn't load roles. Refresh to try again." onRetry={refetch} />
 
   return (
     <div className="space-y-5">

@@ -73,7 +73,7 @@ export default function AIReviewInbox() {
       )}
 
       {isLoading && <ListLoadingSkeleton rows={5} />}
-      {isError && <TableErrorState message="Failed to load AI inbox." onRetry={refetch} />}
+      {isError && <TableErrorState message="Couldn't load AI inbox. Refresh to try again." onRetry={refetch} />}
 
       {!isLoading && !isError && (
         <>

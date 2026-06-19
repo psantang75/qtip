@@ -117,9 +117,9 @@ export default function BasePromptLibrary() {
     },
     onError: (e: any) =>
       toast({
-        title: 'Archive failed',
-        description: e?.response?.data?.error ?? e?.message,
         variant: 'destructive',
+        title: "Couldn't archive base prompt",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       }),
   })
 
@@ -135,9 +135,9 @@ export default function BasePromptLibrary() {
     },
     onError: (e: any) =>
       toast({
-        title: 'Set default failed',
-        description: e?.response?.data?.error ?? e?.message,
         variant: 'destructive',
+        title: "Couldn't set default",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       }),
   })
 
@@ -296,7 +296,7 @@ export default function BasePromptLibrary() {
 
         {basesQ.isError && (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            Failed to load base prompts.
+            Couldn't load base prompts. Refresh to try again.
           </div>
         )}
 
@@ -491,9 +491,9 @@ function BasePromptEditorSheet({ state, onClose, onSaved }: BasePromptEditorShee
     },
     onError: (e: any) =>
       toast({
-        title: 'Save failed',
-        description: e?.response?.data?.error ?? e?.message,
         variant: 'destructive',
+        title: "Couldn't save base prompt",
+        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
       }),
   })
 

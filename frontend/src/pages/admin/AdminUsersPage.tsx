@@ -111,7 +111,11 @@ export default function AdminUsersPage() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, active }: { id: number; active: boolean }) => userService.toggleUserStatus(id, active),
     onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['admin-users'] }),
-    onError:    () => toast({ title: 'Failed to update status', variant: 'destructive' }),
+    onError:    () => toast({
+      variant: 'destructive',
+      title: "Couldn't update user",
+      description: 'Try again.',
+    }),
   })
 
   // ── Unlock account mutation ───────────────────────────────────────────────
@@ -121,7 +125,11 @@ export default function AdminUsersPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       toast({ title: 'Account unlocked' })
     },
-    onError:    () => toast({ title: 'Failed to unlock account', variant: 'destructive' }),
+    onError:    () => toast({
+      variant: 'destructive',
+      title: "Couldn't unlock account",
+      description: 'Try again.',
+    }),
   })
 
   return (
@@ -173,7 +181,7 @@ export default function AdminUsersPage() {
             {isLoading ? (
               <TableRow><TableCell colSpan={7} className="p-0"><ListLoadingSkeleton rows={6} /></TableCell></TableRow>
             ) : isError ? (
-              <TableRow><TableCell colSpan={7} className="py-4"><TableErrorState message="Failed to load users." onRetry={refetch} /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="py-4"><TableErrorState message="Couldn't load users. Refresh to try again." onRetry={refetch} /></TableCell></TableRow>
             ) : pagedUsers.length === 0 ? (
               <TableEmptyState colSpan={7} title="No users found" description="Try adjusting your search or filters." />
             ) : pagedUsers.map(u => (
