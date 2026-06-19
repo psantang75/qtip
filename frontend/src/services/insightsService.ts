@@ -259,3 +259,146 @@ export const saveCalendarMonthDefaults = async (
   const response = await api.post('/insights/admin/calendar/save-month', { year, month })
   return response.data
 }
+
+// ── Agent Activity — Email (Phase 1 live data) ────────────────────────────────
+
+export interface AAParams {
+  users?:       string   // CSV of agent names
+  departments?: string   // CSV of department names
+  period:       string
+  start?:       string
+  end?:         string
+}
+
+export interface EmailSummaryRow { agent: string; department: string; totalSent: number }
+export interface EmailByDayRow   { agent: string; date: string; totalSent: number }
+export interface EmailByDayGroup { agent: string; department: string; rows: EmailByDayRow[]; total: { totalSent: number } }
+
+export interface EmailActivityResponse {
+  summary:              EmailSummaryRow[]
+  summaryTotal:         EmailSummaryRow
+  byDay:                EmailByDayGroup[]
+  availableUsers:       string[]
+  availableDepartments: string[]
+  dataLastUpdated:      string | null
+}
+
+export const getEmailActivity = async (p: AAParams): Promise<EmailActivityResponse> => {
+  const response = await api.get('/insights/agent-activity/email', { params: p })
+  return response.data
+}
+
+// ── Agent Activity — Call (Phase 2 live data) ─────────────────────────────────
+
+export interface CallSummaryRow {
+  agent: string; department: string; businessDays: number; totalCalls: number
+  avgCallsPerDay: number; totalMin: number; avgMinPerDay: number; avgMinPerCall: number
+  callsOver3Min: number
+}
+export interface CallByDayRow {
+  agent: string; date: string; inbound: number; outbound: number; total: number
+  inboundMin: number; outboundMin: number; totalMin: number; callsOver3Min: number
+}
+export interface CallByDayGroup {
+  agent: string; department: string; rows: CallByDayRow[]
+  total: { inbound: number; outbound: number; total: number; inboundMin: number; outboundMin: number; totalMin: number; callsOver3Min: number }
+}
+export interface CallDualPoint { label: string; left: number; right: number }
+
+export interface CallActivityResponse {
+  businessDays:         number
+  kpis:                 Record<string, number>
+  dailyCalls:           CallDualPoint[]
+  dailyMinutes:         CallDualPoint[]
+  summary:              CallSummaryRow[]
+  summaryTotal:         CallSummaryRow
+  byDay:                CallByDayGroup[]
+  availableUsers:       string[]
+  availableDepartments: string[]
+  dataLastUpdated:      string | null
+}
+
+export const getCallActivity = async (p: AAParams): Promise<CallActivityResponse> => {
+  const response = await api.get('/insights/agent-activity/call', { params: p })
+  return response.data
+}
+
+// ── Agent Activity — Tickets & Tasks (Phase 3 live data) ──────────────────────
+// SNAPSHOT report: no period — only the agent/department filters are sent.
+
+export interface TicketRow {
+  agent: string; department: string; classification: string
+  current: number; dueToday: number; pastDue: number
+}
+export interface TicketGroup {
+  agent: string; department: string; rows: TicketRow[]
+  total: { current: number; dueToday: number; pastDue: number }
+}
+
+export interface TicketsTasksResponse {
+  groups:               TicketGroup[]
+  grandTotal:           { current: number; dueToday: number; pastDue: number }
+  availableUsers:       string[]
+  availableDepartments: string[]
+  dataLastUpdated:      string | null
+}
+
+export const getTicketsTasks = async (p: AAParams): Promise<TicketsTasksResponse> => {
+  const { users, departments } = p
+  const response = await api.get('/insights/agent-activity/tickets', { params: { users, departments } })
+  return response.data
+}
+
+// ── Agent Activity — Leads (Phase 4 live data) ────────────────────────────────
+
+export interface LeadCatSourceRow {
+  category: string; source: string; totalLeads: number; conversions: number
+  pctConverted: number; bizDaysElapsed: number; leadPace: number; conversionPace: number
+}
+
+export interface LeadsResponse {
+  businessDays:         number
+  kpis:                 Record<string, number>
+  rows:                 LeadCatSourceRow[]
+  availableUsers:       string[]
+  availableDepartments: string[]
+  dataLastUpdated:      string | null
+}
+
+export const getLeads = async (p: AAParams): Promise<LeadsResponse> => {
+  const response = await api.get('/insights/agent-activity/leads', { params: p })
+  return response.data
+}
+
+// ── Agent Activity — Sales Margin (Phase 5 live data) ─────────────────────────
+// Four tables: Leads by Salesperson (reuses the lead fact), Deals & Subs, Margin
+// by Salesperson, and a Margin-by-Customer leaderboard.
+
+export interface MarginLeadsRow { agent: string; totalLeads: number; totalConversions: number; conversionPct: number }
+export interface MarginDealsRow {
+  agent: string; deals: number; totalSubs: number; subPace: number
+  subOnlyDeals: number; subOnly: number; subOnlyPct: number
+}
+export interface MarginRow {
+  agent: string; product: number; install: number; shipping: number; warranty: number
+  total: number; pace: number; perDeal: number; perSub: number; warrantyPct: number; shippingPct: number
+}
+export interface MarginCustomerRow {
+  agent: string; customer: string; product: number; install: number; shipping: number
+  warranty: number; total: number; deals: number; subs: number
+}
+
+export interface MarginResponse {
+  leads:                MarginLeadsRow[]
+  deals:                MarginDealsRow[]
+  margin:               MarginRow[]
+  customers:            MarginCustomerRow[]
+  availableUsers:       string[]
+  availableDepartments: string[]
+  dataLastUpdated:      string | null
+}
+
+export const getMargin = async (p: AAParams): Promise<MarginResponse> => {
+  const response = await api.get('/insights/agent-activity/margin', { params: p })
+  return response.data
+}

@@ -11,7 +11,7 @@ import { useQCFilters } from '@/hooks/useQCFilters'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { useAuth } from '@/contexts/AuthContext'
 import { getKpiDef } from '@/constants/kpiDefs'
-import { getQCAgents, getFilterOptions } from '@/services/insightsQCService'
+import { getQCAgents, getFilterOptions, getQCKpis } from '@/services/insightsQCService'
 import type { AgentSummary } from '@/services/insightsQCService'
 import { useToast } from '@/hooks/use-toast'
 import QCAgentProfile from './QCAgentProfile'
@@ -147,6 +147,11 @@ function AdminAgentsList({
   const deptOptions = filterOpts?.departments ?? []
   const formOptions = filterOpts?.forms ?? []
   const { data: agents = [], isLoading, isError, refetch } = useQuery({ queryKey: ['qc-agents', apiParams], queryFn: () => getQCAgents(apiParams) })
+  // Reuse the standard QC KPI call purely for the business-days / prior-range
+  // basis shown in the filter bar (same meta every other Insights page uses).
+  const { data: kpiData } = useQuery({ queryKey: ['qc-kpis', apiParams], queryFn: () => getQCKpis(apiParams) })
+  const meta      = kpiData?.meta
+  const priorMeta = kpiData?.priorMeta
 
   const selectedAgent = useMemo(() => {
     if (!agentId) return null
@@ -221,6 +226,8 @@ function AdminAgentsList({
         onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
         showFormFilter selectedForms={forms} onFormsChange={setForms}
         availableForms={formOptions}
+        businessDays={meta?.businessDays} priorBusinessDays={priorMeta?.businessDays}
+        priorDateRange={priorMeta?.startDate ? { start: priorMeta.startDate, end: priorMeta.endDate } : undefined}
         onReset={resetFilters}
       />
       <div className="space-y-4">

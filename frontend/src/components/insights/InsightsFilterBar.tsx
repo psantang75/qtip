@@ -31,8 +31,15 @@ interface InsightsFilterBarProps {
   availableDepts?: string[]
   /** Hide the Department selector entirely (e.g. agent screens). */
   hideDeptFilter?: boolean
+  /** Show an Agent/User multi-select (e.g. Agent Activity reports). */
+  showUserFilter?: boolean
+  selectedUsers?: string[]
+  onUsersChange?: (v: string[]) => void
+  availableUsers?: string[]
   period: string
   onPeriodChange: (v: string) => void
+  /** Hide the Period/Date-Range selector entirely (e.g. snapshot reports). */
+  hidePeriod?: boolean
   customStart?: string
   customEnd?: string
   onCustomStartChange?: (v: string) => void
@@ -54,8 +61,13 @@ export default function InsightsFilterBar({
   onDeptsChange,
   availableDepts = [],
   hideDeptFilter = false,
+  showUserFilter = false,
+  selectedUsers = [],
+  onUsersChange,
+  availableUsers = [],
   period,
   onPeriodChange,
+  hidePeriod = false,
   customStart,
   customEnd,
   onCustomStartChange,
@@ -101,6 +113,18 @@ export default function InsightsFilterBar({
     <StickyFilterBar infoRow={infoRow}>
       <StickyFilterBar.Row>
 
+        {showUserFilter && (
+          <StickyFilterField label="Agent">
+            <StagedMultiSelect
+              options={availableUsers}
+              selected={selectedUsers}
+              onApply={(v) => onUsersChange?.(v)}
+              placeholder="All Agents"
+              width="w-[220px]"
+            />
+          </StickyFilterField>
+        )}
+
         {!hideDeptFilter && (
           <StickyFilterField label="Department">
             <StagedMultiSelect
@@ -125,20 +149,22 @@ export default function InsightsFilterBar({
           </StickyFilterField>
         )}
 
-        <StickyFilterField label="Period">
-          <Select value={period} onValueChange={onPeriodChange}>
-            <SelectTrigger className="h-8 text-xs w-[175px] bg-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PERIOD_OPTIONS.map(p => (
-                <SelectItem key={p} value={p}>{p}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </StickyFilterField>
+        {!hidePeriod && (
+          <StickyFilterField label="Period">
+            <Select value={period} onValueChange={onPeriodChange}>
+              <SelectTrigger className="h-8 text-xs w-[175px] bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PERIOD_OPTIONS.map(p => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </StickyFilterField>
+        )}
 
-        {isCustom && (
+        {!hidePeriod && isCustom && (
           <div className="flex items-center gap-1.5">
             <Input
               type="date"
