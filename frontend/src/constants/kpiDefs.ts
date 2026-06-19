@@ -427,6 +427,106 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     formulaPlain: 'COUNT(write_ups), COUNT(closed), closed/total*100 GROUP BY department_id over write_ups in range',
     source:       'write_ups, departments, users',
   },
+  // ── Agent Activity · Call Activity ──────────────────────────────────────────
+  aa_business_days: {
+    code: 'aa_business_days', name: 'Business Days',
+    format: 'NUMBER', direction: 'NEUTRAL', scope: 'non_filtered',
+    description: 'Business days in the selected date range, per the Business Calendar. This is the basis for all per-day averages on the page.',
+    formulaPlain: 'COUNT(calendar days WHERE is_business_day = true AND calendar_date IN range)',
+    source: 'business calendar (/app/admin/insights/calendar)',
+  },
+  aa_avg_calls_per_day: {
+    code: 'aa_avg_calls_per_day', name: 'Avg Calls / Day',
+    format: 'NUMBER', direction: 'UP_IS_GOOD', scope: 'department',
+    description: 'Total calls divided by the number of business days in the range.',
+    formulaPlain: 'total_calls / business_days', source: 'call activity (source phone system), business calendar',
+  },
+  aa_avg_min_per_day: {
+    code: 'aa_avg_min_per_day', name: 'Avg Min / Day',
+    format: 'NUMBER', direction: 'NEUTRAL', scope: 'department',
+    description: 'Total talk minutes divided by the number of business days in the range.',
+    formulaPlain: 'total_talk_minutes / business_days', source: 'call activity (source phone system), business calendar',
+  },
+  aa_inbound_calls: {
+    code: 'aa_inbound_calls', name: 'Inbound Calls',
+    format: 'NUMBER', direction: 'NEUTRAL', scope: 'department',
+    description: 'Total inbound calls handled by the agent in the period.',
+    formulaPlain: 'SUM(call_count) WHERE call_direction = Inbound', source: 'call activity (source phone system)',
+  },
+  aa_outbound_calls: {
+    code: 'aa_outbound_calls', name: 'Outbound Calls',
+    format: 'NUMBER', direction: 'NEUTRAL', scope: 'department',
+    description: 'Total outbound calls placed by the agent in the period.',
+    formulaPlain: 'SUM(call_count) WHERE call_direction = Outbound', source: 'call activity (source phone system)',
+  },
+  aa_inbound_minutes: {
+    code: 'aa_inbound_minutes', name: 'Inbound Min',
+    format: 'NUMBER', direction: 'NEUTRAL', scope: 'department',
+    description: 'Total talk minutes on inbound calls in the period.',
+    formulaPlain: 'SUM(call_mins) WHERE call_direction = Inbound', source: 'call activity (source phone system)',
+  },
+  aa_outbound_minutes: {
+    code: 'aa_outbound_minutes', name: 'Outbound Min',
+    format: 'NUMBER', direction: 'NEUTRAL', scope: 'department',
+    description: 'Total talk minutes on outbound calls in the period.',
+    formulaPlain: 'SUM(call_mins) WHERE call_direction = Outbound', source: 'call activity (source phone system)',
+  },
+  aa_total_calls: {
+    code: 'aa_total_calls', name: 'Total Calls',
+    format: 'NUMBER', direction: 'UP_IS_GOOD', scope: 'department',
+    description: 'Total calls (inbound + outbound) handled by the agent in the period.',
+    formulaPlain: 'SUM(call_count)', source: 'call activity (source phone system)',
+  },
+  aa_total_talk_minutes: {
+    code: 'aa_total_talk_minutes', name: 'Total Talk Time',
+    format: 'NUMBER', direction: 'NEUTRAL', scope: 'department',
+    description: 'Total talk minutes across all calls in the period.',
+    formulaPlain: 'SUM(call_mins)', source: 'call activity (source phone system)',
+  },
+  aa_avg_handle_time: {
+    code: 'aa_avg_handle_time', name: 'Avg Min / Call',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD', scope: 'department',
+    description: 'Average minutes per call — average handle time (talk minutes divided by total calls).',
+    formulaPlain: 'SUM(call_mins) / SUM(call_count)', source: 'call activity (source phone system)',
+  },
+  // ── Agent Activity · Leads ──────────────────────────────────────────────────
+  aa_total_leads: {
+    code: 'aa_total_leads', name: 'Total Leads',
+    format: 'NUMBER', direction: 'UP_IS_GOOD', scope: 'department',
+    description: 'Total leads generated for the salesperson in the period (by lead generated date).',
+    formulaPlain: 'SUM(lead_total)', source: 'lead / sales margin (source CRM)',
+  },
+  aa_total_conversions: {
+    code: 'aa_total_conversions', name: 'Total Conversions',
+    format: 'NUMBER', direction: 'UP_IS_GOOD', scope: 'department',
+    description: 'Total converted leads in the period.',
+    formulaPlain: 'SUM(lead_converted_total)', source: 'lead / sales margin (source CRM)',
+  },
+  aa_conversion_rate: {
+    code: 'aa_conversion_rate', name: 'Lead Conversion %',
+    format: 'PERCENT', direction: 'UP_IS_GOOD', goal: 30, warn: 20, crit: 10, scope: 'department',
+    description: 'Percentage of leads that converted in the period.',
+    formulaPlain: '(total_conversions / total_leads) * 100', source: 'lead / sales margin (source CRM)',
+  },
+  aa_lead_pace: {
+    code: 'aa_lead_pace', name: 'Lead Pace',
+    format: 'NUMBER', direction: 'UP_IS_GOOD', scope: 'department',
+    description: 'Projected total leads for the full period based on the run rate through the business days elapsed so far.',
+    formulaPlain: '(total_leads / business_days_elapsed) * business_days_in_period', source: 'lead / sales margin (source CRM), business calendar',
+  },
+  aa_conversion_pace: {
+    code: 'aa_conversion_pace', name: 'Conversion Pace',
+    format: 'NUMBER', direction: 'UP_IS_GOOD', scope: 'department',
+    description: 'Projected total conversions for the full period based on the run rate through the business days elapsed so far.',
+    formulaPlain: '(total_conversions / business_days_elapsed) * business_days_in_period', source: 'lead / sales margin (source CRM), business calendar',
+  },
+  // ── Agent Activity · Email Activity ─────────────────────────────────────────
+  aa_emails_sent: {
+    code: 'aa_emails_sent', name: 'Total Sent Emails',
+    format: 'NUMBER', direction: 'UP_IS_GOOD', scope: 'department',
+    description: 'Total emails sent by the agent in the period.',
+    formulaPlain: 'SUM(email_count) WHERE email_direction = Outbound', source: 'email stats (source mail system)',
+  },
 }
 
 /** Resolves thresholds for a KPI tile — falls back to the static defaults from kpiDefs */

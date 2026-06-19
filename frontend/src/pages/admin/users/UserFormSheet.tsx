@@ -22,11 +22,20 @@ import { useToast } from '@/hooks/use-toast'
 
 type AdminUser = User
 
+// Mirror the backend password policy (UserService.validateUserData) so the
+// form blocks weak passwords before the round-trip instead of surfacing a 400.
+const passwordRules = z.string()
+  .min(8, 'Min 8 characters')
+  .regex(/[A-Z]/, 'Add an uppercase letter')
+  .regex(/[a-z]/, 'Add a lowercase letter')
+  .regex(/[0-9]/, 'Add a number')
+  .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/, 'Add a special character')
+
 const makeSchema = (isCreate: boolean) =>
   z.object({
     username:      z.string().min(3, 'Min 3 characters'),
     email:         z.string().email('Valid email required'),
-    password:      isCreate ? z.string().min(6, 'Min 6 characters') : z.string().optional(),
+    password:      isCreate ? passwordRules : z.string().optional(),
     title:         z.string().optional(),
     role_id:       z.coerce.number().min(1, 'Role required'),
     department_id: z.coerce.number().nullable().optional(),
@@ -150,7 +159,7 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
                 <FormControl>
                   <div className="relative">
                     <Input type={showPass ? 'text' : 'password'}
-                      placeholder={isCreate ? 'Min 6 characters' : 'Leave blank to keep current'}
+                      placeholder={isCreate ? '8+ chars, mixed case, number, symbol' : 'Leave blank to keep current'}
                       className="pr-9" {...field} />
                     <button type="button" tabIndex={-1} onClick={() => setShowPass(v => !v)}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">

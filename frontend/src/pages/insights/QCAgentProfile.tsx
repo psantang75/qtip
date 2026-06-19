@@ -43,6 +43,8 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
 
   const cur             = bundle?.kpis.current ?? {}
   const prv             = bundle?.kpis.prior   ?? {}
+  const meta            = bundle?.kpis.meta
+  const priorMeta       = bundle?.kpis.priorMeta
   const profile         = bundle?.profile
   const trendData       = bundle?.trends
   const formScoresData  = bundle?.formScores ?? []
@@ -74,6 +76,8 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
         onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
         showFormFilter selectedForms={selectedForms} onFormsChange={onFormsChange}
         availableForms={availableForms}
+        businessDays={meta?.businessDays} priorBusinessDays={priorMeta?.businessDays}
+        priorDateRange={priorMeta?.startDate ? { start: priorMeta.startDate, end: priorMeta.endDate } : undefined}
         showBackButton={showBackButton} onBack={onBack}
       />
 

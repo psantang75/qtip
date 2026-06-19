@@ -13,6 +13,12 @@ interface InsightsSectionProps {
    * tooltip content must come from the KPI registry so it can be edited in one place.
    */
   infoKpiCodes?: string[]
+  /**
+   * When set, renders a muted "Data last updated: {value}" stamp on the right
+   * of the section header so users always see the freshness of the data behind
+   * the table/chart. Phase 2 sources this from the ingestion log per dataset.
+   */
+  lastUpdated?: string
   children: React.ReactNode
   className?: string
 }
@@ -21,49 +27,58 @@ export default function InsightsSection({
   title,
   description,
   infoKpiCodes,
+  lastUpdated,
   children,
   className,
 }: InsightsSectionProps) {
   const hasInfo = !!(infoKpiCodes && infoKpiCodes.length > 0)
+  const hasHeader = !!(title || description || lastUpdated)
 
   return (
     <div className={cn('bg-white border border-slate-200 rounded-xl p-5 mb-4', className)}>
-      {(title || description) && <div className="mb-3">
-        <div className="flex items-center gap-1.5">
-          {title && <h3 className="text-sm font-semibold text-slate-800">{title}</h3>}
-          {hasInfo && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={`About ${title}`}
-                  className="text-slate-400 hover:text-primary transition-colors focus:outline-none"
-                  onClick={(e) => e.stopPropagation()}
+      {hasHeader && <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-1.5">
+            {title && <h3 className="text-sm font-semibold text-slate-800">{title}</h3>}
+            {hasInfo && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`About ${title}`}
+                    className="text-slate-400 hover:text-primary transition-colors focus:outline-none"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  side="top"
+                  className="w-96 max-h-[70vh] overflow-y-auto"
                 >
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="start"
-                side="top"
-                className="w-96 max-h-[70vh] overflow-y-auto"
-              >
-                <div className="space-y-3">
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                    {infoKpiCodes!.length === 1 ? 'KPI used in this section' : 'KPIs used in this section'}
-                  </p>
-                  {infoKpiCodes!.map((code) => (
-                    <div key={code} className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2.5">
-                      <KpiInfoCard kpiCode={code} />
-                    </div>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
+                  <div className="space-y-3">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400">
+                      {infoKpiCodes!.length === 1 ? 'KPI used in this section' : 'KPIs used in this section'}
+                    </p>
+                    {infoKpiCodes!.map((code) => (
+                      <div key={code} className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2.5">
+                        <KpiInfoCard kpiCode={code} />
+                      </div>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
+          {description && (
+            <p className="text-xs text-slate-500 mt-0.5">{description}</p>
           )}
         </div>
-        {description && (
-          <p className="text-xs text-slate-500 mt-0.5">{description}</p>
+        {lastUpdated && (
+          <span className="shrink-0 whitespace-nowrap text-[11px] text-slate-400 mt-0.5">
+            Data last updated: {lastUpdated}
+          </span>
         )}
       </div>}
       {children}

@@ -92,6 +92,15 @@ export const NAV_CONFIG: SectionConfig[] = [
       { label: 'Coaching',             path: '/app/insights/qc-coaching', icon: 'BookOpen',        roles: [], pageKey: 'qc_coaching', group: 'Quality, Coaching & Performance Warnings' },
       { label: 'Performance Warnings', path: '/app/insights/qc-warnings', icon: 'AlertTriangle',   roles: [], pageKey: 'qc_warnings', group: 'Quality, Coaching & Performance Warnings' },
       { label: 'Agent Performance',    path: '/app/insights/qc-agents',   icon: 'Users',           roles: [], pageKey: 'qc_agents',   group: 'Quality, Coaching & Performance Warnings' },
+      // ── Agent Activity ──
+      // `roles` is ignored when `pageKey` is set — visibility comes from
+      // /api/insights/navigation (i.e. ie_page_role_access). The section only
+      // renders when the user can access at least one page under it.
+      { label: 'Call Activity',   path: '/app/insights/aa-call',    icon: 'Phone',      roles: [], pageKey: 'aa_sales_call',    group: 'Agent Activity' },
+      { label: 'Leads',           path: '/app/insights/aa-leads',   icon: 'Target',     roles: [], pageKey: 'aa_sales_leads',   group: 'Agent Activity' },
+      { label: 'Margin',          path: '/app/insights/aa-margin',  icon: 'DollarSign', roles: [], pageKey: 'aa_sales_margin',  group: 'Agent Activity' },
+      { label: 'Tickets & Tasks', path: '/app/insights/aa-tickets', icon: 'Ticket',     roles: [], pageKey: 'aa_sales_tickets', group: 'Agent Activity' },
+      { label: 'Email Activity',  path: '/app/insights/aa-email',   icon: 'Mail',       roles: [], pageKey: 'aa_sales_email',   group: 'Agent Activity' },
       // ── Reports ──
       // Only On Demand Reports is exposed via the sidebar today; the underlying
       // routes for Report Builder / Saved Reports / Data Explorer / Raw Export /

@@ -20,7 +20,7 @@ export abstract class BaseInsightsWorker {
     this.sourceSystem = sourceSystem;
   }
 
-  async run(): Promise<void> {
+  async run(): Promise<WorkerResult | null> {
     let logId: number | null = null;
 
     try {
@@ -30,7 +30,7 @@ export abstract class BaseInsightsWorker {
           service: 'InsightsWorker',
           worker: this.workerName,
         });
-        return;
+        return null;
       }
 
       logId = await this.createLogEntry();
@@ -51,6 +51,7 @@ export abstract class BaseInsightsWorker {
         rowsSkipped: result.rowsSkipped,
         rowsErrored: result.rowsErrored,
       });
+      return result;
     } catch (error: any) {
       logger.error('Insights worker failed', {
         service: 'InsightsWorker',

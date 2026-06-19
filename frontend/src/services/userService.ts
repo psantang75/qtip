@@ -107,8 +107,21 @@ const userService = {
   },
 
   createUser: async (userData: UserCreateDTO): Promise<User> => {
-    const response = await api.post('/users', userData)
-    return response.data
+    try {
+      const response = await api.post('/users', userData)
+      return response.data
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { error?: unknown; code?: string } } }
+      const apiError = e?.response?.data?.error
+      if (typeof apiError === 'string') throw new Error(apiError)
+      if (apiError && typeof apiError === 'object' && 'message' in apiError) {
+        throw new Error((apiError as { message: string }).message)
+      }
+      const code = e?.response?.data?.code
+      if (code === 'EMAIL_EXISTS')    throw new Error('This email address is already in use.')
+      if (code === 'USERNAME_EXISTS') throw new Error('This username is already taken.')
+      throw error
+    }
   },
 
   updateUser: async (userId: number, userData: UserUpdateDTO): Promise<User> => {

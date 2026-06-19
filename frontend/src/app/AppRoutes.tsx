@@ -91,6 +91,11 @@ const QCQualityPage          = React.lazy(() => import('../pages/insights/QCQual
 const QCCoachingPage         = React.lazy(() => import('../pages/insights/QCCoachingPage'))
 const QCWarningsPage         = React.lazy(() => import('../pages/insights/QCWarningsPage'))
 const QCAgentsPage           = React.lazy(() => import('../pages/insights/QCAgentsPage'))
+const AACallActivityPage     = React.lazy(() => import('../pages/insights/AACallActivityPage'))
+const AALeadsPage            = React.lazy(() => import('../pages/insights/AALeadsPage'))
+const AAMarginPage           = React.lazy(() => import('../pages/insights/AAMarginPage'))
+const AATicketsTasksPage     = React.lazy(() => import('../pages/insights/AATicketsTasksPage'))
+const AAEmailActivityPage    = React.lazy(() => import('../pages/insights/AAEmailActivityPage'))
 
 const NotFoundPage           = React.lazy(() => import('../pages/NotFoundPage'))
 
@@ -272,6 +277,12 @@ export default function AppRoutes(): React.ReactElement {
             <Route path="qc-coaching" element={<RequireInsightsAccess pageKey="qc_coaching"><PageLoader><QCCoachingPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="qc-warnings" element={<RequireInsightsAccess pageKey="qc_warnings"><PageLoader><QCWarningsPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="qc-agents"   element={<RequireInsightsAccess pageKey="qc_agents"><PageLoader><QCAgentsPage /></PageLoader></RequireInsightsAccess>} />
+            {/* Agent Activity - Sales */}
+            <Route path="aa-call"     element={<RequireInsightsAccess pageKey="aa_sales_call"><PageLoader><AACallActivityPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="aa-leads"    element={<RequireInsightsAccess pageKey="aa_sales_leads"><PageLoader><AALeadsPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="aa-margin"   element={<RequireInsightsAccess pageKey="aa_sales_margin"><PageLoader><AAMarginPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="aa-tickets"  element={<RequireInsightsAccess pageKey="aa_sales_tickets"><PageLoader><AATicketsTasksPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="aa-email"    element={<RequireInsightsAccess pageKey="aa_sales_email"><PageLoader><AAEmailActivityPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="dashboard" element={<PageLoader><DashboardPage /></PageLoader>} />
             <Route path="team"      element={<PageLoader><TeamDashboardPage /></PageLoader>} />
             <Route path="builder"   element={<PageLoader><ReportBuilderPage /></PageLoader>} />
