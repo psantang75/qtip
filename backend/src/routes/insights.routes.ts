@@ -6,6 +6,7 @@ import {
   getDataFreshness,
   getKpiConfig,
 } from '../controllers/insights.controller';
+import { getAgentActivityStatus, getEmailActivity, getCallActivity, getTicketsTasks, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
 import qcRouter from './insightsQC.routes';
 
 const router = express.Router();
@@ -28,6 +29,38 @@ router.get('/data-freshness',
 router.get('/kpi-config',
   authenticate as unknown as RequestHandler,
   getKpiConfig as unknown as RequestHandler
+);
+
+// Agent Activity (Phase 2 data layer) — ingestion registry/status surface.
+// Per-report data endpoints are added one phase at a time as fact tables land.
+router.get('/agent-activity/status',
+  authenticate as unknown as RequestHandler,
+  getAgentActivityStatus as unknown as RequestHandler
+);
+
+router.get('/agent-activity/email',
+  authenticate as unknown as RequestHandler,
+  getEmailActivity as unknown as RequestHandler
+);
+
+router.get('/agent-activity/call',
+  authenticate as unknown as RequestHandler,
+  getCallActivity as unknown as RequestHandler
+);
+
+router.get('/agent-activity/tickets',
+  authenticate as unknown as RequestHandler,
+  getTicketsTasks as unknown as RequestHandler
+);
+
+router.get('/agent-activity/leads',
+  authenticate as unknown as RequestHandler,
+  getLeads as unknown as RequestHandler
+);
+
+router.get('/agent-activity/margin',
+  authenticate as unknown as RequestHandler,
+  getMargin as unknown as RequestHandler
 );
 
 // QC analytics — authenticate applied per-handler (via qcHandler wrapper)

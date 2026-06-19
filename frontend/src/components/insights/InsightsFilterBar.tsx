@@ -38,6 +38,8 @@ interface InsightsFilterBarProps {
   availableUsers?: string[]
   period: string
   onPeriodChange: (v: string) => void
+  /** Hide the Period/Date-Range selector entirely (e.g. snapshot reports). */
+  hidePeriod?: boolean
   customStart?: string
   customEnd?: string
   onCustomStartChange?: (v: string) => void
@@ -65,6 +67,7 @@ export default function InsightsFilterBar({
   availableUsers = [],
   period,
   onPeriodChange,
+  hidePeriod = false,
   customStart,
   customEnd,
   onCustomStartChange,
@@ -146,20 +149,22 @@ export default function InsightsFilterBar({
           </StickyFilterField>
         )}
 
-        <StickyFilterField label="Period">
-          <Select value={period} onValueChange={onPeriodChange}>
-            <SelectTrigger className="h-8 text-xs w-[175px] bg-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PERIOD_OPTIONS.map(p => (
-                <SelectItem key={p} value={p}>{p}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </StickyFilterField>
+        {!hidePeriod && (
+          <StickyFilterField label="Period">
+            <Select value={period} onValueChange={onPeriodChange}>
+              <SelectTrigger className="h-8 text-xs w-[175px] bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PERIOD_OPTIONS.map(p => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </StickyFilterField>
+        )}
 
-        {isCustom && (
+        {!hidePeriod && isCustom && (
           <div className="flex items-center gap-1.5">
             <Input
               type="date"

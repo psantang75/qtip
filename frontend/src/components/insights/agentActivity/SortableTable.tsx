@@ -68,7 +68,7 @@ export default function SortableTable<T>({
       </div>
 
       <div className="overflow-x-auto">
-        <table className={`w-full text-sm table-fixed ${minWidth}`}>
+        <table className={`w-full text-sm table-fixed ${minWidth} [&_th:first-child]:pl-4 [&_td:first-child]:pl-4 [&_th:last-child]:pr-4 [&_td:last-child]:pr-4`}>
           <thead>
             {table.getHeaderGroups().map(hg => (
               <tr key={hg.id} className="text-xs text-slate-400 border-b border-slate-200">

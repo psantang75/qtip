@@ -9,7 +9,7 @@
     "dev": "ts-node src/index.ts",
     "build": "tsc && npm run copy:assets",
     "build:clean": "rimraf dist && npm run build",
-    "copy:assets": "node scripts/copy_email_templates.js",
+    "copy:assets": "node scripts/copy_email_templates.js && node scripts/copy_worker_sql.js",
     "prod": "npm run build && npm start",
     "test": "vitest run",
     "test:watch": "vitest",

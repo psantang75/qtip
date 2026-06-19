@@ -2,6 +2,8 @@ import { InsightsFilterBar } from '@/components/insights'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
 import { SAMPLE_AGENTS, SAMPLE_BUSINESS_DAYS, SAMPLE_PRIOR_BUSINESS_DAYS, SAMPLE_PRIOR_DATE_RANGE } from './placeholderData'
 
+type ActivityFilters = ReturnType<typeof useActivityFilters>
+
 /**
  * Shared scaffold for the Agent Activity - Sales report pages. Owns the
  * standard Insights filter bar (Agent + Department + Period/Date Range) and the
@@ -30,6 +32,21 @@ interface ActivityReportShellProps {
   priorBusinessDays?: number
   /** Prior comparison date range (defaults to the sample range). */
   priorDateRange?: { start: string; end: string }
+  /**
+   * Controlled filter state. When provided (live pages), the shell renders the
+   * filter bar against it so the page can query with the same values. When
+   * omitted (pages still on sample data), the shell owns its own filter state.
+   */
+  filters?: ActivityFilters
+  /** Real options for the Agent/Department dropdowns (defaults to sample data). */
+  availableUsers?: string[]
+  availableDepts?: string[]
+  /** Live data is wired — hides the "Preview · sample data" badge. */
+  live?: boolean
+  /** Hide the Business-Days info row (reports that don't use a per-day basis). */
+  hideBusinessDays?: boolean
+  /** Hide the Period/Date-Range selector (snapshot reports have no period). */
+  hidePeriod?: boolean
   children: React.ReactNode
 }
 
@@ -38,12 +55,19 @@ export default function ActivityReportShell({
   businessDays = SAMPLE_BUSINESS_DAYS,
   priorBusinessDays = SAMPLE_PRIOR_BUSINESS_DAYS,
   priorDateRange = SAMPLE_PRIOR_DATE_RANGE,
+  filters,
+  availableUsers = SAMPLE_AGENTS,
+  availableDepts = SAMPLE_DEPTS,
+  live = false,
+  hideBusinessDays = false,
+  hidePeriod = false,
   children,
 }: ActivityReportShellProps) {
+  const internal = useActivityFilters()
   const {
     users, setUsers, departments, setDepartments, period, setPeriod,
     customStart, setCustomStart, customEnd, setCustomEnd, resetFilters,
-  } = useActivityFilters()
+  } = filters ?? internal
 
   return (
     <div>
@@ -51,19 +75,20 @@ export default function ActivityReportShell({
         showUserFilter
         selectedUsers={users}
         onUsersChange={setUsers}
-        availableUsers={SAMPLE_AGENTS}
+        availableUsers={availableUsers}
         selectedDepts={departments}
         onDeptsChange={setDepartments}
-        availableDepts={SAMPLE_DEPTS}
+        availableDepts={availableDepts}
         period={period}
         onPeriodChange={setPeriod}
+        hidePeriod={hidePeriod}
         customStart={customStart}
         customEnd={customEnd}
         onCustomStartChange={setCustomStart}
         onCustomEndChange={setCustomEnd}
-        businessDays={businessDays}
-        priorBusinessDays={priorBusinessDays}
-        priorDateRange={priorDateRange}
+        businessDays={hideBusinessDays ? undefined : businessDays}
+        priorBusinessDays={hideBusinessDays ? undefined : priorBusinessDays}
+        priorDateRange={hideBusinessDays ? undefined : priorDateRange}
         onReset={resetFilters}
       />
 
@@ -73,9 +98,11 @@ export default function ActivityReportShell({
             <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
             <p className="text-sm text-slate-500 mt-0.5">{description}</p>
           </div>
-          <span className="shrink-0 mt-1 inline-flex items-center rounded-full bg-warning/10 text-warning px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide">
-            Preview · sample data
-          </span>
+          {!live && (
+            <span className="shrink-0 mt-1 inline-flex items-center rounded-full bg-warning/10 text-warning px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide">
+              Preview · sample data
+            </span>
+          )}
         </div>
 
         {children}

@@ -11,7 +11,11 @@
  *     :05 / :35   ie-emp-sync             ← employee dimension sync
  *     :10 / :40   ie-calendar-sync        ← calendar / schedule dimension
  *     :15 / :45   ie-rollup               ← KPI rollups (drives dashboards)
+ *     :20 / :50   ie-source-dispatch      ← DB-driven source-report ingestion
  *     00:00 UTC (monthly) ie-partition-manager ← partition housekeeping
+ *
+ * ie-source-dispatch is a fixed 30-min floor only; which reports actually run
+ * (and how often) is data in ie_source_report.frequency_minutes — not cron.
  *
  * 5-minute gaps between the three dimension syncs are intentional: dept
  * must finish before emp (dept ids feed employee rows), and the rollup
@@ -81,6 +85,19 @@ module.exports = {
       name: 'ie-rollup',
       script: './backend/dist/workers/run-rollup.js',
       cron_restart: '15,45 * * * *',
+      watch: false,
+      autorestart: false,
+      env: { NODE_ENV: 'production' }
+    },
+    {
+      // DB-driven source-report ingestion dispatcher. Ticks every 30 minutes
+      // and runs only the ie_source_report rows that are due. Per-report cadence
+      // lives in the DB (frequency_minutes / run_only_hours) — retune a report
+      // by editing its row, no redeploy. This is the single entrypoint for all
+      // Agent Activity report ingestion (call/email/leads/margin/tickets).
+      name: 'ie-source-dispatch',
+      script: './backend/dist/workers/run-source-dispatch.js',
+      cron_restart: '20,50 * * * *',
       watch: false,
       autorestart: false,
       env: { NODE_ENV: 'production' }

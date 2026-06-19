@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, type SortingState } from '@tanstack/react-table'
 import { InsightsSection } from '@/components/insights'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import ActivityReportShell from '@/components/insights/agentActivity/ActivityReportShell'
 import SortableTable from '@/components/insights/agentActivity/SortableTable'
 import { fmtNum, fmtAmount, fmtPct, fmtPctInt } from '@/components/insights/agentActivity/format'
+import { useActivityFilters } from '@/hooks/useActivityFilters'
 import {
-  marginLeadsRows, marginDealsRows, marginRows, marginCustomerRows, DATA_LAST_UPDATED,
+  getMargin,
   type MarginLeadsRow, type MarginDealsRow, type MarginRow, type MarginCustomerRow,
-} from '@/components/insights/agentActivity/placeholderData'
+} from '@/services/insightsService'
 
 const sum = <T,>(rows: T[], pick: (r: T) => number) => rows.reduce((a, r) => a + pick(r), 0)
 
@@ -22,14 +24,6 @@ const leadsColumns = [
   lc.accessor('totalConversions', { header: 'Total Conversions', cell: i => fmtNum(i.getValue()),       meta: { width: 'w-[22%]' } }),
   lc.accessor('conversionPct',    { header: 'Lead Conversion %', cell: i => fmtPct(i.getValue(), 1),    meta: { width: 'w-[22%]' } }),
 ]
-const leadsTotalLeads = sum(marginLeadsRows, r => r.totalLeads)
-const leadsTotalConv  = sum(marginLeadsRows, r => r.totalConversions)
-const leadsTotalRow = {
-  agent: `Total: ${marginLeadsRows.length}`,
-  totalLeads: fmtNum(leadsTotalLeads),
-  totalConversions: fmtNum(leadsTotalConv),
-  conversionPct: fmtPct(leadsTotalConv / leadsTotalLeads * 100, 1),
-}
 
 // ── Table 2 — Deals and Subscriptions by Salesperson ────────────────────────────
 const dc = createColumnHelper<MarginDealsRow>()
@@ -42,17 +36,6 @@ const dealsColumns = [
   dc.accessor('subOnly',      { header: 'Sub Only',      cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
   dc.accessor('subOnlyPct',   { header: 'Sub Only %',    cell: i => fmtPct(i.getValue(), 1), meta: { width: 'w-[13%]' } }),
 ]
-const dealsSubsTotal = sum(marginDealsRows, r => r.totalSubs)
-const dealsSubOnly   = sum(marginDealsRows, r => r.subOnly)
-const dealsTotalRow = {
-  agent: `Total: ${marginDealsRows.length}`,
-  deals: fmtNum(sum(marginDealsRows, r => r.deals)),
-  totalSubs: fmtNum(dealsSubsTotal),
-  subPace: fmtNum(sum(marginDealsRows, r => r.subPace)),
-  subOnlyDeals: fmtNum(sum(marginDealsRows, r => r.subOnlyDeals)),
-  subOnly: fmtNum(dealsSubOnly),
-  subOnlyPct: fmtPct(dealsSubOnly / dealsSubsTotal * 100, 1),
-}
 
 // ── Table 3 — Margin by Salesperson ─────────────────────────────────────────────
 const mc = createColumnHelper<MarginRow>()
@@ -70,20 +53,6 @@ const marginColumns = [
   mc.accessor('warrantyPct', { header: 'Warranty Margin %',   cell: i => fmtPctInt(i.getValue()),    meta: { width: W } }),
   mc.accessor('shippingPct', { header: 'Shipping Margin %',   cell: i => fmtPctInt(i.getValue()),    meta: { width: W } }),
 ]
-const marginTotal = sum(marginRows, r => r.total)
-const marginTotalRow = {
-  agent: `Total: ${marginRows.length}`,
-  product: fmtAmount(sum(marginRows, r => r.product)),
-  install: fmtAmount(sum(marginRows, r => r.install)),
-  shipping: fmtAmount(sum(marginRows, r => r.shipping)),
-  warranty: fmtAmount(sum(marginRows, r => r.warranty)),
-  total: fmtAmount(marginTotal),
-  pace: fmtAmount(sum(marginRows, r => r.pace)),
-  perDeal: fmtAmount(marginTotal / sum(marginDealsRows, r => r.deals)),
-  perSub: fmtAmount(marginTotal / sum(marginDealsRows, r => r.totalSubs)),
-  warrantyPct: fmtPctInt(sum(marginRows, r => r.warranty) / marginTotal * 100),
-  shippingPct: fmtPctInt(sum(marginRows, r => r.shipping) / marginTotal * 100),
-}
 
 // ── Table 4 — Margin by Customer Leaderboard ────────────────────────────────────
 const cc = createColumnHelper<MarginCustomerRow>()
@@ -98,44 +67,111 @@ const customerColumns = [
   cc.accessor('deals',    { header: 'Total Deals',     cell: i => fmtNum(i.getValue()),    meta: { width: 'w-[9%]' } }),
   cc.accessor('subs',     { header: 'Total Subs',      cell: i => fmtNum(i.getValue()),    meta: { width: 'w-[9%]' } }),
 ]
-// Leaderboard is ranked by total margin desc; the dropdown caps how many of the
-// top customers are shown (default 15, up to 50 by 5).
+
+// Leaderboard is ranked by total margin desc (server-sorted); the dropdown caps
+// how many of the top customers are shown (default 15, up to 50 by 5).
 const LEADERBOARD_LIMITS = [15, 20, 25, 30, 35, 40, 45, 50]
-const customersByMargin = [...marginCustomerRows].sort((a, b) => b.total - a.total)
 
 export default function AAMarginPage() {
+  const filters = useActivityFilters()
   const [leaderboardLimit, setLeaderboardLimit] = useState(15)
+
+  const { data } = useQuery({
+    queryKey: ['aa-margin', filters.params],
+    queryFn:  () => getMargin(filters.params),
+    // Filter-driven report; data also refreshes server-side nightly. Don't lean
+    // on the global 5-min staleTime, which can serve a pre-change cached list.
+    staleTime: 0,
+  })
+
+  const leadsRows    = useMemo(() => data?.leads ?? [],     [data])
+  const dealsRows    = useMemo(() => data?.deals ?? [],     [data])
+  const marginRows   = useMemo(() => data?.margin ?? [],    [data])
+  const customerRows = useMemo(() => data?.customers ?? [], [data])
+  const lastUpdated  = data?.dataLastUpdated ?? undefined
+
+  const leadsTotalRow = useMemo(() => {
+    const tl = sum(leadsRows, r => r.totalLeads)
+    const tc = sum(leadsRows, r => r.totalConversions)
+    return {
+      agent: `Total: ${leadsRows.length}`,
+      totalLeads: fmtNum(tl),
+      totalConversions: fmtNum(tc),
+      conversionPct: fmtPct(tl ? tc / tl * 100 : 0, 1),
+    }
+  }, [leadsRows])
+
+  const dealsTotalRow = useMemo(() => {
+    const subs = sum(dealsRows, r => r.totalSubs)
+    const subOnly = sum(dealsRows, r => r.subOnly)
+    return {
+      agent: `Total: ${dealsRows.length}`,
+      deals: fmtNum(sum(dealsRows, r => r.deals)),
+      totalSubs: fmtNum(subs),
+      subPace: fmtNum(sum(dealsRows, r => r.subPace)),
+      subOnlyDeals: fmtNum(sum(dealsRows, r => r.subOnlyDeals)),
+      subOnly: fmtNum(subOnly),
+      subOnlyPct: fmtPct(subs ? subOnly / subs * 100 : 0, 1),
+    }
+  }, [dealsRows])
+
+  const marginTotalRow = useMemo(() => {
+    const total = sum(marginRows, r => r.total)
+    const warranty = sum(marginRows, r => r.warranty)
+    const shipping = sum(marginRows, r => r.shipping)
+    const totalDeals = sum(dealsRows, r => r.deals)
+    const totalSubs = sum(dealsRows, r => r.totalSubs)
+    return {
+      agent: `Total: ${marginRows.length}`,
+      product: fmtAmount(sum(marginRows, r => r.product)),
+      install: fmtAmount(sum(marginRows, r => r.install)),
+      shipping: fmtAmount(shipping),
+      warranty: fmtAmount(warranty),
+      total: fmtAmount(total),
+      pace: fmtAmount(sum(marginRows, r => r.pace)),
+      perDeal: fmtAmount(totalDeals ? total / totalDeals : 0),
+      perSub: fmtAmount(totalSubs ? total / totalSubs : 0),
+      warrantyPct: fmtPctInt(total ? warranty / total * 100 : 0),
+      shippingPct: fmtPctInt(total ? shipping / total * 100 : 0),
+    }
+  }, [marginRows, dealsRows])
+
   const topCustomers = useMemo(
-    () => customersByMargin.slice(0, leaderboardLimit),
-    [leaderboardLimit],
+    () => customerRows.slice(0, leaderboardLimit),
+    [customerRows, leaderboardLimit],
   )
 
   return (
     <ActivityReportShell
       title="Sales Margin"
       description="Leads, deals, subscriptions, and margin by salesperson and customer."
+      filters={filters}
+      availableUsers={data?.availableUsers ?? []}
+      availableDepts={data?.availableDepartments ?? []}
+      hideBusinessDays
+      live
     >
-      <InsightsSection title="Leads by Salesperson — Based on Lead Created Date" lastUpdated={DATA_LAST_UPDATED}>
+      <InsightsSection title="Leads by Salesperson — Based on Lead Created Date" lastUpdated={lastUpdated}>
         <SortableTable
           columns={leadsColumns}
-          data={marginLeadsRows}
+          data={leadsRows}
           initialSorting={BY_AGENT}
           totalRow={leadsTotalRow}
           minWidth="min-w-[560px]"
         />
       </InsightsSection>
 
-      <InsightsSection title="Deals and Subscriptions by Salesperson — Based on Margin Eligibility Date" lastUpdated={DATA_LAST_UPDATED}>
+      <InsightsSection title="Deals and Subscriptions by Salesperson — Based on Margin Eligibility Date" lastUpdated={lastUpdated}>
         <SortableTable
           columns={dealsColumns}
-          data={marginDealsRows}
+          data={dealsRows}
           initialSorting={BY_AGENT}
           totalRow={dealsTotalRow}
           minWidth="min-w-[760px]"
         />
       </InsightsSection>
 
-      <InsightsSection title="Margin by Salesperson" lastUpdated={DATA_LAST_UPDATED}>
+      <InsightsSection title="Margin by Salesperson — Based on Margin Eligibility Date" lastUpdated={lastUpdated}>
         <SortableTable
           columns={marginColumns}
           data={marginRows}
@@ -145,7 +181,7 @@ export default function AAMarginPage() {
         />
       </InsightsSection>
 
-      <InsightsSection title="Margin by Customer Leaderboard" lastUpdated={DATA_LAST_UPDATED}>
+      <InsightsSection title="Margin by Customer Leaderboard — Based on Margin Eligibility Date" lastUpdated={lastUpdated}>
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-medium text-slate-500">Show Top</span>
           <Select value={String(leaderboardLimit)} onValueChange={v => setLeaderboardLimit(Number(v))}>

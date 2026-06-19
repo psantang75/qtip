@@ -255,3 +255,128 @@ Both used the 3/23/2026 CSV bundle that shipped with the cutover plan
 rather than re-exporting from the legacy DB. Today's procedure replaces
 Phase 1 of that pattern with a live `export-legacy-qtip.ts` run against
 `rubicon.dm.local`.
+
+---
+
+# Additive feature deploy: Agent Activity - Sales (Insights)
+
+This is a **feature push**, not the wipe-and-reload above. It is **purely
+additive**: ship code, apply additive Prisma migrations, idempotently add the
+sales reference data, then regenerate the Insights facts by running the jobs.
+It does **NOT** truncate, drop, or modify any existing user, department, QA
+form, submission, or other data. Run **stage end-to-end first**, validate, then
+repeat on prod.
+
+> Do NOT use `prisma db push` (it diffs against `schema.prisma` and can drop
+> columns) and do NOT use `scripts/deploy_database.ps1` here (it `source`s the
+> full `database/qtip_database_schema_*.sql`, which is destructive on a
+> populated DB). Schema changes go through `prisma migrate deploy` only.
+
+```
+HOST=qtip-admin@10.90.15.6     # stage; use 10.90.15.5 for prod
+```
+
+### Step 1 — Backup (rollback target)
+
+Same dump as Phase 3 above. Abort if the dump is implausibly small.
+
+### Step 2 — Deploy + build code
+
+```bash
+ssh $HOST "set -e; cd /opt/qtip; git fetch && git checkout <branch> && git pull; \
+  cd backend && npm ci && npm run build; \
+  cd ../frontend && npm ci && npm run build"
+```
+
+`backend` build runs `copy:assets`, which copies `src/workers/sql/*.sql`
+(incl. the fixed `order_margin.extract.sql` / `order_margin.transform.sql`)
+into `dist/`.
+
+### Step 3 — Apply additive migrations
+
+```bash
+ssh $HOST "cd /opt/qtip/backend && npx prisma migrate deploy"
+```
+
+Pre-check: stage must have a `_prisma_migrations` history (i.e. was previously
+migrated, not `db push`-ed). If the `ie_*` tables exist but history is missing,
+baseline first with `npx prisma migrate resolve --applied <name>` for the
+already-present migrations, then re-run `migrate deploy`. All pending June-2026
+migrations are `ie_*`-scoped only (CREATE TABLE IF NOT EXISTS + INSERT into
+`ie_kpi`/`ie_page`/`ie_source_report`).
+
+### Step 4 — Idempotent sales users + departments
+
+```bash
+scp scripts/stage_seed_sales_users_departments.sql $HOST:/tmp/
+ssh $HOST "mysql -h \$(grep '^DB_HOST=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  -u \$(grep '^DB_USER=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  -p\$(grep '^DB_PASSWORD=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  \$(grep '^DB_NAME=' /opt/qtip/backend/.env | cut -d= -f2-) \
+  -e 'source /tmp/stage_seed_sales_users_departments.sql'"
+```
+
+`INSERT IGNORE` keyed on unique `department_name` / `email` / `username`:
+existing rows are skipped and never modified. Adds the `Sales Department - All`
+hierarchy (+ 3 teams) and 8 sales CSRs; resolves `role_id`/`department_id` by
+name (stage ids differ from dev). Safe to re-run. The trailing verification
+SELECTs print the resulting departments + users.
+
+### Step 5 — Dimensions (order: dept -> emp -> calendar)
+
+Employee/department dims are built from the primary DB (`users`, `departments`),
+so they must run **after** Step 4. On a host where `ie_dim_*` is already
+populated, restart the sync workers; on a fresh host, run the one-time
+bootstraps first.
+
+```bash
+# fresh host only:
+ssh $HOST "cd /opt/qtip/backend && npx ts-node src/scripts/seed-department-dimension.ts && \
+           npx ts-node src/scripts/seed-employee-dimension.ts && \
+           npx ts-node src/scripts/seed-date-dimension.ts"
+
+# every host (pick up the new users/departments now, don't wait for cron):
+ssh $HOST "pm2 restart ie-dept-sync --update-env --no-autorestart && sleep 5 && \
+           pm2 restart ie-emp-sync  --update-env --no-autorestart && sleep 5 && \
+           pm2 restart ie-calendar-sync --update-env --no-autorestart"
+```
+
+Verify `ie_dim_department.hierarchy_path` contains `/Sales Department - All`
+and the new employees have a non-null `department_key`.
+
+### Step 6 — Backfill the touched report sections
+
+Requires the `crm` and `phone` source-pool connections in stage `backend/.env`.
+
+```bash
+ssh $HOST "cd /opt/qtip/backend; \
+  npx ts-node src/workers/run-source-backfill.ts call_activity 2026-01-01 <today> 10; \
+  npx ts-node src/workers/run-source-backfill.ts email_activity 2026-01-01 <today> 10; \
+  npx ts-node src/workers/run-source-backfill.ts lead <24mo-ago> <today> 31; \
+  npx ts-node src/workers/run-source-backfill.ts order_margin <24mo-ago> <today> 31; \
+  npx ts-node src/workers/run-source-backfill.ts ticket_open <today> <today> 1; \
+  npx ts-node src/workers/run-source-backfill.ts task_open <today> <today> 1"
+```
+
+`ticket_open`/`task_open` are SNAPSHOT (single current run). The dispatcher
+(`ie-source-dispatch`) keeps everything fresh afterward on its DB-driven
+cadence.
+
+### Step 7 — Restart + validate
+
+```bash
+ssh $HOST "pm2 restart qtip-backend --update-env; sleep 5; curl -fsS http://localhost:5000/health"
+```
+
+- The 5 Agent Activity - Sales pages render with data.
+- Sales Margin subs/warranty match the authoritative "Margin Report - By Month"
+  (spot-check a month, e.g. Megan 114 subs / warranty 2,659.46 for 2026-05).
+- Existing data untouched: `users` / `departments` / `forms` row counts equal
+  the pre-deploy counts plus only the added sales rows; open one pre-existing QA
+  form.
+
+### Rollback
+
+Restore the Step 1 dump (same command as the `## Rollback` section above). The
+migrations and seed are additive, so a code revert + dump restore fully backs
+the change out.
