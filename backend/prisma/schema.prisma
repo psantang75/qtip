@@ -1239,10 +1239,11 @@ model IeDimDepartment {
   effective_to    DateTime? @db.Date
   is_current      Boolean   @default(true)
 
-  parent     IeDimDepartment?  @relation("DimDeptHierarchy", fields: [parent_id], references: [department_key], onDelete: SetNull)
-  children   IeDimDepartment[] @relation("DimDeptHierarchy")
-  employees  IeDimEmployee[]
-  thresholds IeKpiThreshold[]
+  parent      IeDimDepartment?         @relation("DimDeptHierarchy", fields: [parent_id], references: [department_key], onDelete: SetNull)
+  children    IeDimDepartment[]        @relation("DimDeptHierarchy")
+  employees   IeDimEmployee[]
+  thresholds  IeKpiThreshold[]
+  page_access IePageDepartmentAccess[]
 
   @@index([is_current, is_active], name: "idx_dim_dept_current")
   @@index([department_id], name: "idx_dim_dept_qtip_id")
@@ -1330,8 +1331,9 @@ model IePage {
   requires_section String?  @db.VarChar(50)
   created_at       DateTime @default(now())
 
-  role_access    IePageRoleAccess[]
-  user_overrides IePageUserOverride[]
+  role_access       IePageRoleAccess[]
+  user_overrides    IePageUserOverride[]
+  department_access IePageDepartmentAccess[]
 
   @@map("ie_page")
 }
@@ -1367,6 +1369,21 @@ model IePageUserOverride {
 
   @@unique([page_id, user_id], name: "uq_page_user")
   @@map("ie_page_user_override")
+}
+
+model IePageDepartmentAccess {
+  id             Int     @id @default(autoincrement())
+  page_id        Int
+  department_key Int
+  can_access     Boolean @default(false)
+  data_scope     String  @default("DEPARTMENT") @db.VarChar(10)
+
+  page       IePage          @relation(fields: [page_id], references: [id], onDelete: Cascade)
+  department IeDimDepartment @relation(fields: [department_key], references: [department_key], onDelete: Cascade)
+
+  @@unique([page_id, department_key], name: "uq_page_department")
+  @@index([department_key], name: "idx_page_dept_dept")
+  @@map("ie_page_department_access")
 }
 
 // ── Insights Engine — Ingestion & Configuration ──────────────────────────────

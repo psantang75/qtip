@@ -12,6 +12,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { InsightsPermissionService } from '../InsightsPermissionService'
+import { getAncestorDepartmentKeys } from '../../utils/departmentHierarchy'
 import pool, { closeDatabaseConnections } from '../../config/database'
 import { RowDataPacket } from 'mysql2'
 import { DB_TESTS_ENABLED } from '../../__tests__/setup'
@@ -37,11 +38,18 @@ const PAGE_KEYS = {
   ovrDeny:   '__test_perm_ovr_deny',
   ovrAll:    '__test_perm_ovr_all',
   ovrExp:    '__test_perm_ovr_expired',
+  // department-grant fixtures (additive access by department)
+  deptOwn:    '__test_perm_dept_own',
+  deptParent: '__test_perm_dept_parent',
+  deptOther:  '__test_perm_dept_other',
+  deptUnion:  '__test_perm_dept_union',
 }
 
 let pageIds: Record<string, number> = {}
 let employeeKey: number | null = null
 let departmentKey: number | null = null
+let parentDeptKey: number | null = null
+let otherDeptKey: number | null = null
 
 async function insertPage(key: string): Promise<number> {
   await pool.query(
@@ -118,6 +126,54 @@ beforeAll(async () => {
   if (emp.length > 0) {
     employeeKey = emp[0].employee_key as number
     departmentKey = (emp[0].department_key as number | null) ?? null
+  }
+
+  // ── Department-grant fixtures ──────────────────────────────────────────────
+  // Resolve the user's ancestor-inclusive department set to pick:
+  //   parentDeptKey — an ancestor of the user's dept (grant here must cascade)
+  //   otherDeptKey  — a current dept NOT in the chain (grant here must NOT apply)
+  if (departmentKey != null) {
+    const ancSet = new Set(await getAncestorDepartmentKeys(departmentKey))
+    parentDeptKey = [...ancSet].find(k => k !== departmentKey) ?? null
+
+    const [allDepts] = await pool.execute<RowDataPacket[]>(
+      'SELECT department_key FROM ie_dim_department WHERE is_current = 1'
+    )
+    otherDeptKey = (allDepts
+      .map(d => d.department_key as number)
+      .find(k => !ancSet.has(k))) ?? null
+
+    // Grant on the user's OWN department, DEPARTMENT scope, no role grant.
+    await pool.query(
+      `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'DEPARTMENT')`,
+      [pageIds.deptOwn, departmentKey]
+    )
+
+    // Union case: CSR role grant SELF + own-dept grant ALL → broadest = ALL.
+    await pool.query(
+      `INSERT INTO ie_page_role_access (page_id, role_id, can_access, data_scope) VALUES (?, ?, 1, 'SELF')`,
+      [pageIds.deptUnion, ROLE_CSR]
+    )
+    await pool.query(
+      `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'ALL')`,
+      [pageIds.deptUnion, departmentKey]
+    )
+
+    // Grant on an ANCESTOR department, ALL scope — must cascade to the child.
+    if (parentDeptKey != null) {
+      await pool.query(
+        `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'ALL')`,
+        [pageIds.deptParent, parentDeptKey]
+      )
+    }
+
+    // Grant on an UNRELATED department — must NOT grant access to this user.
+    if (otherDeptKey != null) {
+      await pool.query(
+        `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'ALL')`,
+        [pageIds.deptOther, otherDeptKey]
+      )
+    }
   }
 })
 
@@ -205,5 +261,78 @@ describeDb('InsightsPermissionService — resolveAccess', () => {
     expect(result.canAccess).toBe(true)
     expect(result.dataScope).toBe('SELF')
     expect(result.employeeKey).toBe(employeeKey)
+  })
+})
+
+describeDb('InsightsPermissionService — department grants (additive)', () => {
+  it('department grant on the user\'s own department allows access', async () => {
+    if (departmentKey == null) return
+    // No role grant exists for this page; access comes purely from the dept grant.
+    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.deptOwn)
+    expect(result.canAccess).toBe(true)
+    expect(result.dataScope).toBe('DEPARTMENT')
+    expect(result.departmentKeys).toEqual([departmentKey])
+  })
+
+  it('parent-department grant cascades down to a child department', async () => {
+    if (parentDeptKey == null) return
+    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.deptParent)
+    expect(result.canAccess).toBe(true)
+    expect(result.dataScope).toBe('ALL')
+  })
+
+  it('department grant outside the user\'s chain does NOT grant access', async () => {
+    if (otherDeptKey == null) return
+    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.deptOther)
+    expect(result.canAccess).toBe(false)
+    expect(result.dataScope).toBeNull()
+    expect(result.pageId).toBe(pageIds.deptOther)
+  })
+
+  it('role + department grant resolves to the broadest scope (ALL > SELF)', async () => {
+    if (departmentKey == null) return
+    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.deptUnion)
+    expect(result.canAccess).toBe(true)
+    expect(result.dataScope).toBe('ALL')
+  })
+
+  it('no-regression: a page with no department grants behaves exactly as before', async () => {
+    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.roleSelf)
+    expect(result.canAccess).toBe(true)
+    expect(result.dataScope).toBe('SELF')
+    expect(result.employeeKey).toBe(employeeKey)
+  })
+})
+
+describeDb('InsightsPermissionService — resolveAccessForAllPages (batch, dept grants)', () => {
+  it('honors role+dept union, parent inheritance, and chain exclusion in one pass', async () => {
+    const all = await SVC.resolveAccessForAllPages(TEST_USER, ROLE_CSR)
+
+    if (departmentKey != null) {
+      const own = all.get(PAGE_KEYS.deptOwn)!
+      expect(own.canAccess).toBe(true)
+      expect(own.dataScope).toBe('DEPARTMENT')
+
+      const union = all.get(PAGE_KEYS.deptUnion)!
+      expect(union.canAccess).toBe(true)
+      expect(union.dataScope).toBe('ALL')
+    }
+
+    if (parentDeptKey != null) {
+      const parent = all.get(PAGE_KEYS.deptParent)!
+      expect(parent.canAccess).toBe(true)
+      expect(parent.dataScope).toBe('ALL')
+    }
+
+    if (otherDeptKey != null) {
+      const other = all.get(PAGE_KEYS.deptOther)!
+      expect(other.canAccess).toBe(false)
+      expect(other.dataScope).toBeNull()
+    }
+
+    // No-regression: a plain role-SELF page still resolves identically.
+    const roleSelf = all.get(PAGE_KEYS.roleSelf)!
+    expect(roleSelf.canAccess).toBe(true)
+    expect(roleSelf.dataScope).toBe('SELF')
   })
 })

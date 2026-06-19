@@ -24,6 +24,17 @@ const createOverrideSchema = z.object({
   reason: z.string().nullish(),
 });
 
+const pageAccessDepartmentSchema = z.object({
+  department_key: z.number().int().positive(),
+  can_access: z.boolean(),
+  data_scope: z.enum(VALID_DATA_SCOPES).default('DEPARTMENT'),
+});
+
+// Empty array is valid — it clears all department grants for the page.
+const updatePageDepartmentAccessBodySchema = z.object({
+  departments: z.array(pageAccessDepartmentSchema),
+});
+
 /**
  * GET /api/insights/admin/pages
  */
@@ -37,15 +48,29 @@ export const listPages = async (_req: Request, res: Response): Promise<void> => 
       `SELECT a.*, r.role_name FROM ie_page_role_access a JOIN roles r ON a.role_id = r.id ORDER BY a.page_id, r.id`
     );
 
+    const [deptAccess] = await pool.execute<RowDataPacket[]>(
+      `SELECT da.*, d.department_name, d.hierarchy_path
+       FROM ie_page_department_access da
+       JOIN ie_dim_department d ON da.department_key = d.department_key
+       ORDER BY da.page_id, d.department_name`
+    );
+
     const accessByPage = new Map<number, RowDataPacket[]>();
     for (const row of access) {
       if (!accessByPage.has(row.page_id)) accessByPage.set(row.page_id, []);
       accessByPage.get(row.page_id)!.push(row);
     }
 
+    const deptAccessByPage = new Map<number, RowDataPacket[]>();
+    for (const row of deptAccess) {
+      if (!deptAccessByPage.has(row.page_id)) deptAccessByPage.set(row.page_id, []);
+      deptAccessByPage.get(row.page_id)!.push(row);
+    }
+
     const result = pages.map((p) => ({
       ...p,
       role_access: accessByPage.get(p.id) ?? [],
+      department_access: deptAccessByPage.get(p.id) ?? [],
     }));
 
     res.json(result);
@@ -95,6 +120,72 @@ export const updatePageAccess = async (req: Request, res: Response): Promise<voi
   } catch (error) {
     logger.error('updatePageAccess error:', error);
     res.status(500).json({ error: 'Failed to update page access' });
+  }
+};
+
+/**
+ * PUT /api/insights/admin/pages/:id/department-access
+ * Body: { departments: [{ department_key, can_access, data_scope }] }
+ *
+ * Replace-set of the page's department grants, mirroring updatePageAccess.
+ * Additive to role access: a user can open the page if their role grant OR any
+ * matching department grant (their dept or an ancestor) allows it.
+ */
+export const updatePageDepartmentAccess = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const pageId = parseInt(req.params.id);
+    if (isNaN(pageId)) { res.status(400).json({ error: 'Invalid page id' }); return; }
+
+    const parsed = updatePageDepartmentAccessBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation error', details: parsed.error.errors.map(e => ({ path: e.path.join('.'), message: e.message })) });
+      return;
+    }
+
+    const { departments } = parsed.data;
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('DELETE FROM ie_page_department_access WHERE page_id = ?', [pageId]);
+
+      for (const d of departments) {
+        await conn.execute(
+          'INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, ?, ?)',
+          [pageId, d.department_key, d.can_access ? 1 : 0, d.data_scope]
+        );
+      }
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('updatePageDepartmentAccess error:', error);
+    res.status(500).json({ error: 'Failed to update page department access' });
+  }
+};
+
+/**
+ * GET /api/insights/admin/departments
+ * Current (is_current) conformed departments for the access picker.
+ */
+export const listDepartments = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT department_key, department_id, department_name, parent_id, hierarchy_path
+       FROM ie_dim_department
+       WHERE is_current = 1
+       ORDER BY department_name`
+    );
+    res.json(rows);
+  } catch (error) {
+    logger.error('listDepartments error:', error);
+    res.status(500).json({ error: 'Failed to list departments' });
   }
 };
 

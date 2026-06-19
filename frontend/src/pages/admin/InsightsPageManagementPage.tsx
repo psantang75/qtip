@@ -3,11 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
-  listPages, updatePageAccess, listOverrides, createOverride, deleteOverride,
+  listPages, updatePageAccess, updatePageDepartmentAccess, listInsightsDepartments,
+  listOverrides, createOverride, deleteOverride,
 } from '@/services/insightsService'
-import type { IePage, IePageRoleAccess, IePageUserOverride } from '@/services/insightsService'
+import type {
+  IePage, IePageRoleAccess, IePageDepartmentAccess, IePageUserOverride, DataScope,
+} from '@/services/insightsService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -155,7 +159,113 @@ function PageDetailSection({ page }: { page: IePage }) {
         </Table>
       </div>
 
+      <DepartmentAccessSection page={page} />
+
       <OverridesSection pageId={page.id} />
+    </div>
+  )
+}
+
+function DepartmentAccessSection({ page }: { page: IePage }) {
+  const qc = useQueryClient()
+  const { toast } = useToast()
+
+  const { data: departments = [] } = useQuery({ queryKey: ['ie-departments'], queryFn: listInsightsDepartments })
+
+  // Edit state keyed by department_key. Seeded from the page's existing grants;
+  // MySQL returns TINYINT(1) as 0/1, so coerce to a real boolean.
+  const [deptEdits, setDeptEdits] = useState<Record<number, { can_access: boolean; data_scope: DataScope }>>(() => {
+    const map: Record<number, { can_access: boolean; data_scope: DataScope }> = {}
+    for (const d of (page.department_access ?? []) as IePageDepartmentAccess[]) {
+      map[d.department_key] = { can_access: Boolean(d.can_access), data_scope: d.data_scope ?? 'DEPARTMENT' }
+    }
+    return map
+  })
+
+  const selectedIds = Object.keys(deptEdits).map(Number)
+
+  const handleSelectionChange = (ids: number[]) => {
+    setDeptEdits(prev => {
+      const next: Record<number, { can_access: boolean; data_scope: DataScope }> = {}
+      for (const id of ids) {
+        next[id] = prev[id] ?? { can_access: true, data_scope: 'DEPARTMENT' }
+      }
+      return next
+    })
+  }
+
+  const deptMut = useMutation({
+    mutationFn: () => {
+      const payload = Object.entries(deptEdits).map(([key, v]) => ({
+        department_key: Number(key),
+        can_access: Boolean(v.can_access),
+        data_scope: v.data_scope,
+      }))
+      return updatePageDepartmentAccess(page.id, payload)
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ie-pages'] }); toast({ title: 'Department access updated' }) },
+    onError: (e: Error) => toast({ title: 'Failed to save department access', description: e.message, variant: 'destructive' }),
+  })
+
+  const deptName = (key: number) =>
+    departments.find(d => d.department_key === key)?.department_name ?? `Department #${key}`
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-slate-700">Department Access</h4>
+        <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => deptMut.mutate()} disabled={deptMut.isPending}>
+          {deptMut.isPending ? 'Saving...' : 'Save Department Access'}
+        </Button>
+      </div>
+      <p className="text-[12px] text-muted-foreground">
+        Additive to role access — a user can open this page if their role OR their department grants it.
+        Granting a parent department includes all departments beneath it.
+      </p>
+      <SearchableMultiSelect
+        items={departments.map(d => ({ id: d.department_key, label: d.department_name }))}
+        selectedIds={selectedIds}
+        onChange={handleSelectionChange}
+        placeholder="Add departments…"
+        width="w-[280px]"
+        emptyMessage="No departments found"
+      />
+      {selectedIds.length === 0 ? (
+        <p className="text-[13px] text-muted-foreground">No department grants.</p>
+      ) : (
+        <Table>
+          <TableHeader><TableRow className="bg-white">
+            <TableHead className="py-2 text-[12px]">Department</TableHead>
+            <TableHead className="py-2 text-[12px]">Can Access</TableHead>
+            <TableHead className="py-2 text-[12px]">Data Scope</TableHead>
+            <TableHead className="py-2 w-8" />
+          </TableRow></TableHeader>
+          <TableBody>
+            {selectedIds.map(key => (
+              <TableRow key={key}>
+                <TableCell className="text-[13px] font-medium">{deptName(key)}</TableCell>
+                <TableCell>
+                  <button type="button"
+                    onClick={() => setDeptEdits(prev => ({ ...prev, [key]: { ...prev[key], can_access: !prev[key].can_access } }))}
+                    className={`w-9 h-5 rounded-full transition-colors relative ${deptEdits[key].can_access ? 'bg-primary' : 'bg-slate-300'}`}>
+                    <span className={`absolute top-1/2 left-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow transition-transform ${deptEdits[key].can_access ? 'translate-x-[18px]' : 'translate-x-[2px]'}`} />
+                  </button>
+                </TableCell>
+                <TableCell>
+                  <Select value={deptEdits[key].data_scope}
+                    onValueChange={v => setDeptEdits(prev => ({ ...prev, [key]: { ...prev[key], data_scope: v as DataScope } }))}>
+                    <SelectTrigger className="h-7 w-[140px] text-[12px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>{SCOPES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell>
+                  <button onClick={() => handleSelectionChange(selectedIds.filter(k => k !== key))} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
     </div>
   )
 }

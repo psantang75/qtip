@@ -75,6 +75,7 @@ export interface IePage {
   is_active: boolean
   requires_section: string | null
   role_access: IePageRoleAccess[]
+  department_access: IePageDepartmentAccess[]
 }
 
 export interface IePageRoleAccess {
@@ -84,6 +85,24 @@ export interface IePageRoleAccess {
   role_name: string
   can_access: boolean
   data_scope: DataScope
+}
+
+export interface IePageDepartmentAccess {
+  id: number
+  page_id: number
+  department_key: number
+  department_name: string
+  hierarchy_path: string | null
+  can_access: boolean
+  data_scope: DataScope
+}
+
+export interface IeDepartmentOption {
+  department_key: number
+  department_id: number
+  department_name: string
+  parent_id: number | null
+  hierarchy_path: string | null
 }
 
 export interface IePageUserOverride {
@@ -190,6 +209,18 @@ export const updatePageAccess = async (
   roles: Array<{ role_id: number; can_access: boolean; data_scope: DataScope }>
 ): Promise<void> => {
   await api.put(`/insights/admin/pages/${pageId}/access`, { roles })
+}
+
+export const updatePageDepartmentAccess = async (
+  pageId: number,
+  departments: Array<{ department_key: number; can_access: boolean; data_scope: DataScope }>
+): Promise<void> => {
+  await api.put(`/insights/admin/pages/${pageId}/department-access`, { departments })
+}
+
+export const listInsightsDepartments = async (): Promise<IeDepartmentOption[]> => {
+  const response = await api.get('/insights/admin/departments')
+  return response.data
 }
 
 export const listOverrides = async (pageId: number): Promise<IePageUserOverride[]> => {
