@@ -1,6 +1,7 @@
 import { Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import KpiInfoCard from './KpiInfoCard'
 
 interface InsightsSectionProps {
@@ -19,8 +20,26 @@ interface InsightsSectionProps {
    * the table/chart. Phase 2 sources this from the ingestion log per dataset.
    */
   lastUpdated?: string
+  /**
+   * When set with `lastUpdated`, the freshness stamp gains a hover tooltip
+   * showing the ingestion cadence and the next expected refresh. Both are
+   * sourced from `ie_source_report` (frequency_minutes + next_run_at) via the
+   * report endpoint and rendered in the viewer's local timezone.
+   */
+  nextUpdate?: string
+  updateEveryMinutes?: number | null
   children: React.ReactNode
   className?: string
+}
+
+/** Human cadence label: 60 -> "1h", 120 -> "2h", 1440 -> "daily". */
+function formatEvery(minutes: number): string {
+  if (minutes <= 0) return ''
+  if (minutes === 1440) return 'daily'
+  if (minutes % 1440 === 0) return `every ${minutes / 1440}d`
+  if (minutes % 60 === 0) return `every ${minutes / 60}h`
+  if (minutes < 60) return `every ${minutes}m`
+  return `every ${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }
 
 /**
@@ -48,9 +67,14 @@ export default function InsightsSection({
   description,
   infoKpiCodes,
   lastUpdated,
+  nextUpdate,
+  updateEveryMinutes,
   children,
   className,
 }: InsightsSectionProps) {
+  const cadence = updateEveryMinutes ? formatEvery(updateEveryMinutes) : ''
+  const nextLabel = nextUpdate ? formatLastUpdatedLocal(nextUpdate) : ''
+  const hasFreshnessTip = !!(lastUpdated && (cadence || nextLabel))
   const hasInfo = !!(infoKpiCodes && infoKpiCodes.length > 0)
   const hasHeader = !!(title || description || lastUpdated)
 
@@ -96,9 +120,25 @@ export default function InsightsSection({
           )}
         </div>
         {lastUpdated && (
-          <span className="shrink-0 whitespace-nowrap text-[11px] text-slate-400 mt-0.5">
-            Data last updated: {formatLastUpdatedLocal(lastUpdated)}
-          </span>
+          hasFreshnessTip ? (
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="shrink-0 whitespace-nowrap text-[11px] text-slate-400 mt-0.5 cursor-help">
+                    Data last updated: {formatLastUpdatedLocal(lastUpdated)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="end" className="text-[11px]">
+                  {cadence && <div>Refreshes {cadence}</div>}
+                  {nextLabel && <div>Next update ~{nextLabel}</div>}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <span className="shrink-0 whitespace-nowrap text-[11px] text-slate-400 mt-0.5">
+              Data last updated: {formatLastUpdatedLocal(lastUpdated)}
+            </span>
+          )
         )}
       </div>}
       {children}

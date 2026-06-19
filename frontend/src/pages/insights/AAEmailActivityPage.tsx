@@ -31,7 +31,7 @@ export default function AAEmailActivityPage() {
       live
       hideBusinessDays
     >
-      <InsightsSection title="Sales - All Summary" lastUpdated={data?.dataLastUpdated ?? undefined}>
+      <InsightsSection title="Sales - All Summary" lastUpdated={data?.dataLastUpdated ?? undefined} nextUpdate={data?.dataNextUpdate ?? undefined} updateEveryMinutes={data?.updateEveryMinutes ?? undefined}>
         {isLoading ? (
           <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
         ) : isError ? (
@@ -64,7 +64,7 @@ export default function AAEmailActivityPage() {
         )}
       </InsightsSection>
 
-      <InsightsSection title="Sales - All Detail" lastUpdated={data?.dataLastUpdated ?? undefined}>
+      <InsightsSection title="Sales - All Detail" lastUpdated={data?.dataLastUpdated ?? undefined} nextUpdate={data?.dataNextUpdate ?? undefined} updateEveryMinutes={data?.updateEveryMinutes ?? undefined}>
         {isLoading ? (
           <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
         ) : byDay.length === 0 ? (

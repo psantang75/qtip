@@ -49,7 +49,7 @@ export default function AACallActivityPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <InsightsSection title="Total Calls vs Avg Calls per Period" className="mb-0" infoKpiCodes={['aa_total_calls', 'aa_avg_calls_per_day']} lastUpdated={data?.dataLastUpdated ?? undefined}>
+        <InsightsSection title="Total Calls vs Avg Calls per Period" className="mb-0" infoKpiCodes={['aa_total_calls', 'aa_avg_calls_per_day']} lastUpdated={data?.dataLastUpdated ?? undefined} nextUpdate={data?.dataNextUpdate ?? undefined} updateEveryMinutes={data?.updateEveryMinutes ?? undefined}>
           <DualAxisTrendChart
             data={data?.dailyCalls ?? []}
             leftName="Total Calls"
@@ -58,7 +58,7 @@ export default function AACallActivityPage() {
           />
         </InsightsSection>
 
-        <InsightsSection title="Total Min vs Avg Min per Period" className="mb-0" infoKpiCodes={['aa_total_talk_minutes', 'aa_avg_min_per_day']} lastUpdated={data?.dataLastUpdated ?? undefined}>
+        <InsightsSection title="Total Min vs Avg Min per Period" className="mb-0" infoKpiCodes={['aa_total_talk_minutes', 'aa_avg_min_per_day']} lastUpdated={data?.dataLastUpdated ?? undefined} nextUpdate={data?.dataNextUpdate ?? undefined} updateEveryMinutes={data?.updateEveryMinutes ?? undefined}>
           <DualAxisTrendChart
             data={data?.dailyMinutes ?? []}
             leftName="Total Min"
@@ -68,7 +68,7 @@ export default function AACallActivityPage() {
         </InsightsSection>
       </div>
 
-      <InsightsSection title="Call Activity Summary" lastUpdated={data?.dataLastUpdated ?? undefined}>
+      <InsightsSection title="Call Activity Summary" lastUpdated={data?.dataLastUpdated ?? undefined} nextUpdate={data?.dataNextUpdate ?? undefined} updateEveryMinutes={data?.updateEveryMinutes ?? undefined}>
         {isLoading ? (
           <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
         ) : isError ? (
@@ -119,7 +119,7 @@ export default function AACallActivityPage() {
         )}
       </InsightsSection>
 
-      <InsightsSection title="Call Activity by Day" lastUpdated={data?.dataLastUpdated ?? undefined}>
+      <InsightsSection title="Call Activity by Day" lastUpdated={data?.dataLastUpdated ?? undefined} nextUpdate={data?.dataNextUpdate ?? undefined} updateEveryMinutes={data?.updateEveryMinutes ?? undefined}>
         {isLoading ? (
           <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
         ) : byDay.length === 0 ? (

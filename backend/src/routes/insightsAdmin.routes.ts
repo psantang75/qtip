@@ -9,6 +9,9 @@ import {
 } from '../controllers/insightsAdminPage.controller';
 import { getIngestionLog } from '../controllers/insightsAdminIngestion.controller';
 import { getCalendar, updateCalendarDay, saveCalendarMonth } from '../controllers/insightsAdminCalendar.controller';
+import {
+  listSourceReportsAdmin, updateSourceReport, runSourceReportNow,
+} from '../controllers/insightsAdminSourceReport.controller';
 
 const router = express.Router();
 
@@ -29,6 +32,10 @@ router.post('/pages/:id/overrides', authenticate as unknown as RequestHandler, a
 router.delete('/pages/:id/overrides/:overrideId', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, deleteOverride as unknown as RequestHandler);
 
 router.get('/ingestion-log', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, getIngestionLog as unknown as RequestHandler);
+
+router.get('/source-reports', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, listSourceReportsAdmin as unknown as RequestHandler);
+router.put('/source-reports/:id', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, updateSourceReport as unknown as RequestHandler);
+router.post('/source-reports/:id/run-now', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, runSourceReportNow as unknown as RequestHandler);
 
 // ── Business Calendar ─────────────────────────────────────────────────────────
 const auth = [authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler];

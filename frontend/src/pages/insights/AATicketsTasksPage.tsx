@@ -34,7 +34,7 @@ export default function AATicketsTasksPage() {
       hideBusinessDays
       hidePeriod
     >
-      <InsightsSection title="Tickets and Tasks by Agent" lastUpdated={data?.dataLastUpdated ?? undefined}>
+      <InsightsSection title="Tickets and Tasks by Agent" lastUpdated={data?.dataLastUpdated ?? undefined} nextUpdate={data?.dataNextUpdate ?? undefined} updateEveryMinutes={data?.updateEveryMinutes ?? undefined}>
         {isLoading ? (
           <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
         ) : isError ? (

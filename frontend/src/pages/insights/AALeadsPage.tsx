@@ -103,6 +103,8 @@ export default function AALeadsPage() {
   })
 
   const lastUpdated = data?.dataLastUpdated ?? undefined
+  const nextUpdate = data?.dataNextUpdate ?? undefined
+  const updateEveryMinutes = data?.updateEveryMinutes ?? undefined
 
   return (
     <ActivityReportShell
@@ -121,15 +123,15 @@ export default function AALeadsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <InsightsSection title="Leads by Source" lastUpdated={lastUpdated} className="mb-0">
+        <InsightsSection title="Leads by Source" lastUpdated={lastUpdated} nextUpdate={nextUpdate} updateEveryMinutes={updateEveryMinutes} className="mb-0">
           <CategoryPieChart data={leadsBySource} unit="leads" />
         </InsightsSection>
-        <InsightsSection title="Conversions by Lead Source" lastUpdated={lastUpdated} className="mb-0">
+        <InsightsSection title="Conversions by Lead Source" lastUpdated={lastUpdated} nextUpdate={nextUpdate} updateEveryMinutes={updateEveryMinutes} className="mb-0">
           <CategoryPieChart data={conversionsBySource} unit="conversions" />
         </InsightsSection>
       </div>
 
-      <InsightsSection title="Lead Conversions by Category and Lead Source" lastUpdated={lastUpdated}>
+      <InsightsSection title="Lead Conversions by Category and Lead Source" lastUpdated={lastUpdated} nextUpdate={nextUpdate} updateEveryMinutes={updateEveryMinutes}>
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <span className="text-xs font-medium text-slate-500">Filter:</span>
           <StagedMultiSelect

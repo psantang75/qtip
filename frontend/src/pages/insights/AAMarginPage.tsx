@@ -89,6 +89,8 @@ export default function AAMarginPage() {
   const marginRows   = useMemo(() => data?.margin ?? [],    [data])
   const customerRows = useMemo(() => data?.customers ?? [], [data])
   const lastUpdated  = data?.dataLastUpdated ?? undefined
+  const nextUpdate   = data?.dataNextUpdate ?? undefined
+  const updateEveryMinutes = data?.updateEveryMinutes ?? undefined
 
   const leadsTotalRow = useMemo(() => {
     const tl = sum(leadsRows, r => r.totalLeads)
@@ -151,7 +153,7 @@ export default function AAMarginPage() {
       hideBusinessDays
       live
     >
-      <InsightsSection title="Leads by Salesperson — Based on Lead Created Date" lastUpdated={lastUpdated}>
+      <InsightsSection title="Leads by Salesperson — Based on Lead Created Date" lastUpdated={lastUpdated} nextUpdate={nextUpdate} updateEveryMinutes={updateEveryMinutes}>
         <SortableTable
           columns={leadsColumns}
           data={leadsRows}
@@ -161,7 +163,7 @@ export default function AAMarginPage() {
         />
       </InsightsSection>
 
-      <InsightsSection title="Deals and Subscriptions by Salesperson — Based on Margin Eligibility Date" lastUpdated={lastUpdated}>
+      <InsightsSection title="Deals and Subscriptions by Salesperson — Based on Margin Eligibility Date" lastUpdated={lastUpdated} nextUpdate={nextUpdate} updateEveryMinutes={updateEveryMinutes}>
         <SortableTable
           columns={dealsColumns}
           data={dealsRows}
@@ -171,7 +173,7 @@ export default function AAMarginPage() {
         />
       </InsightsSection>
 
-      <InsightsSection title="Margin by Salesperson — Based on Margin Eligibility Date" lastUpdated={lastUpdated}>
+      <InsightsSection title="Margin by Salesperson — Based on Margin Eligibility Date" lastUpdated={lastUpdated} nextUpdate={nextUpdate} updateEveryMinutes={updateEveryMinutes}>
         <SortableTable
           columns={marginColumns}
           data={marginRows}
@@ -181,7 +183,7 @@ export default function AAMarginPage() {
         />
       </InsightsSection>
 
-      <InsightsSection title="Margin by Customer Leaderboard — Based on Margin Eligibility Date" lastUpdated={lastUpdated}>
+      <InsightsSection title="Margin by Customer Leaderboard — Based on Margin Eligibility Date" lastUpdated={lastUpdated} nextUpdate={nextUpdate} updateEveryMinutes={updateEveryMinutes}>
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-medium text-slate-500">Show Top</span>
           <Select value={String(leaderboardLimit)} onValueChange={v => setLeaderboardLimit(Number(v))}>

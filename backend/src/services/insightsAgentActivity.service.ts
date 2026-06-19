@@ -94,6 +94,44 @@ export async function listSourceReports(): Promise<SourceReportStatus[]> {
   }));
 }
 
+/**
+ * Convert a DATETIME value read from MySQL into a true ISO-8601 UTC string the
+ * frontend can localize. mysql2 parses DATETIME columns into JS Date objects in
+ * the Node process timezone (same tz the DB writes NOW()/CURRENT_TIMESTAMP in),
+ * so `.toISOString()` yields the correct instant. Do NOT format these in SQL
+ * with a literal 'Z' — that mislabels the local wall-clock as UTC and the
+ * frontend then shifts it by the offset (the ~4h-off "Data last updated" bug).
+ */
+function toIso(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const d = value instanceof Date ? value : new Date(value as string);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/**
+ * Scheduling info for a report, used to power the "next update" tooltip on the
+ * freshness stamp. `nextUpdate` is emitted in the same ISO-8601 UTC shape as
+ * `dataLastUpdated` so the frontend converts both to local time identically.
+ * Null-safe: returns nulls if the report isn't registered.
+ */
+export interface ReportSchedule {
+  dataNextUpdate: string | null;
+  updateEveryMinutes: number | null;
+}
+
+export async function getReportSchedule(reportCode: string): Promise<ReportSchedule> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT frequency_minutes, next_run_at AS nextRun
+     FROM ie_source_report WHERE report_code = ? AND is_active = 1 LIMIT 1`,
+    [reportCode],
+  );
+  const r = rows[0];
+  return {
+    dataNextUpdate: toIso(r?.nextRun),
+    updateEveryMinutes: r ? Number(r.frequency_minutes) : null,
+  };
+}
+
 // ── Email Activity (Phase 1) ────────────────────────────────────────────────
 
 export interface EmailActivityFilters {
@@ -123,6 +161,8 @@ export interface EmailActivityResult {
   availableUsers: string[];
   availableDepartments: string[];
   dataLastUpdated: string | null;
+  dataNextUpdate: string | null;
+  updateEveryMinutes: number | null;
 }
 
 /** YYYYMMDD integer matching ie_dim_date.date_key. */
@@ -155,6 +195,7 @@ export async function getEmailActivity(filters: EmailActivityFilters): Promise<E
   const empty: EmailActivityResult = {
     summary: [], summaryTotal: { agent: 'Total', department: '', totalSent: 0 }, byDay: [],
     availableUsers: [], availableDepartments: [], dataLastUpdated: null,
+    dataNextUpdate: null, updateEveryMinutes: null,
   };
   if (!(await factTableExists('ie_fact_email_activity'))) return empty;
 
@@ -242,8 +283,9 @@ export async function getEmailActivity(filters: EmailActivityFilters): Promise<E
   );
 
   const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(MAX(loaded_at), '%Y-%m-%dT%H:%i:%sZ') AS last FROM ie_fact_email_activity`,
+    `SELECT MAX(loaded_at) AS last FROM ie_fact_email_activity`,
   );
+  const schedule = await getReportSchedule('email_activity');
 
   const summary: EmailSummaryRow[] = summaryRows.map((r) => ({
     agent: r.agent, department: r.department ?? '', totalSent: Number(r.totalSent),
@@ -265,7 +307,9 @@ export async function getEmailActivity(filters: EmailActivityFilters): Promise<E
     byDay: [...groups.values()],
     availableUsers: userRows.map((r) => r.mailbox_name as string),
     availableDepartments: deptRows.map((r) => r.department_name as string),
-    dataLastUpdated: freshRows[0]?.last ?? null,
+    dataLastUpdated: toIso(freshRows[0]?.last),
+    dataNextUpdate: schedule.dataNextUpdate,
+    updateEveryMinutes: schedule.updateEveryMinutes,
   };
 }
 
@@ -313,6 +357,8 @@ export interface CallActivityResult {
   availableUsers: string[];
   availableDepartments: string[];
   dataLastUpdated: string | null;
+  dataNextUpdate: string | null;
+  updateEveryMinutes: number | null;
 }
 
 /** Round to one decimal place. */
@@ -337,6 +383,7 @@ export async function getCallActivity(filters: CallActivityFilters): Promise<Cal
     businessDays: 0, kpis: {}, dailyCalls: [], dailyMinutes: [],
     summary: [], summaryTotal: emptyTotal, byDay: [],
     availableUsers: [], availableDepartments: [], dataLastUpdated: null,
+    dataNextUpdate: null, updateEveryMinutes: null,
   };
   if (!(await factTableExists('ie_fact_call_activity'))) return empty;
 
@@ -473,8 +520,9 @@ export async function getCallActivity(filters: CallActivityFilters): Promise<Cal
   );
 
   const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(MAX(loaded_at), '%Y-%m-%dT%H:%i:%sZ') AS last FROM ie_fact_call_activity`,
+    `SELECT MAX(loaded_at) AS last FROM ie_fact_call_activity`,
   );
+  const schedule = await getReportSchedule('call_activity');
 
   // Minutes are displayed as whole numbers; keep the raw (decimal) sums for the
   // avg-min-per-call ratio (the only figure shown with a decimal) and round
@@ -570,7 +618,9 @@ export async function getCallActivity(filters: CallActivityFilters): Promise<Cal
     byDay: [...groups.values()],
     availableUsers: userRows.map((r) => r.agent_name as string),
     availableDepartments: deptRows.map((r) => r.department_name as string),
-    dataLastUpdated: freshRows[0]?.last ?? null,
+    dataLastUpdated: toIso(freshRows[0]?.last),
+    dataNextUpdate: schedule.dataNextUpdate,
+    updateEveryMinutes: schedule.updateEveryMinutes,
   };
 }
 
@@ -604,6 +654,8 @@ export interface TicketsTasksResult {
   availableUsers: string[];
   availableDepartments: string[];
   dataLastUpdated: string | null;
+  dataNextUpdate: string | null;
+  updateEveryMinutes: number | null;
 }
 
 /**
@@ -619,6 +671,7 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
   const empty: TicketsTasksResult = {
     groups: [], grandTotal: { current: 0, dueToday: 0, pastDue: 0 },
     availableUsers: [], availableDepartments: [], dataLastUpdated: null,
+    dataNextUpdate: null, updateEveryMinutes: null,
   };
   if (!(await factTableExists('ie_fact_ticket_task'))) return empty;
 
@@ -685,8 +738,9 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
   );
 
   const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(MAX(loaded_at), '%Y-%m-%dT%H:%i:%sZ') AS last FROM ie_fact_ticket_task`,
+    `SELECT MAX(loaded_at) AS last FROM ie_fact_ticket_task`,
   );
+  const schedule = await getReportSchedule('ticket_open');
 
   const grandTotal = { current: 0, dueToday: 0, pastDue: 0 };
   const groups = new Map<string, TicketGroup>();
@@ -714,7 +768,9 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
     grandTotal,
     availableUsers: userRows.map((r) => r.agent_name as string),
     availableDepartments: deptRows.map((r) => r.department_name as string),
-    dataLastUpdated: freshRows[0]?.last ?? null,
+    dataLastUpdated: toIso(freshRows[0]?.last),
+    dataNextUpdate: schedule.dataNextUpdate,
+    updateEveryMinutes: schedule.updateEveryMinutes,
   };
 }
 
@@ -748,6 +804,8 @@ export interface LeadsResult {
   availableUsers: string[];
   availableDepartments: string[];
   dataLastUpdated: string | null;
+  dataNextUpdate: string | null;
+  updateEveryMinutes: number | null;
 }
 
 /**
@@ -763,6 +821,7 @@ export async function getLeads(filters: LeadsFilters): Promise<LeadsResult> {
   const empty: LeadsResult = {
     businessDays: 0, kpis: {}, rows: [],
     availableUsers: [], availableDepartments: [], dataLastUpdated: null,
+    dataNextUpdate: null, updateEveryMinutes: null,
   };
   if (!(await factTableExists('ie_fact_lead'))) return empty;
 
@@ -851,8 +910,9 @@ export async function getLeads(filters: LeadsFilters): Promise<LeadsResult> {
   );
 
   const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(MAX(loaded_at), '%Y-%m-%dT%H:%i:%sZ') AS last FROM ie_fact_lead`,
+    `SELECT MAX(loaded_at) AS last FROM ie_fact_lead`,
   );
+  const schedule = await getReportSchedule('lead');
 
   const rows: LeadCatSourceRow[] = catRows.map((r) => {
     const totalLeads = Number(r.totalLeads);
@@ -885,7 +945,9 @@ export async function getLeads(filters: LeadsFilters): Promise<LeadsResult> {
     rows,
     availableUsers: userRows.map((r) => r.salesperson_name as string).filter(Boolean),
     availableDepartments: deptRows.map((r) => r.department_name as string),
-    dataLastUpdated: freshRows[0]?.last ?? null,
+    dataLastUpdated: toIso(freshRows[0]?.last),
+    dataNextUpdate: schedule.dataNextUpdate,
+    updateEveryMinutes: schedule.updateEveryMinutes,
   };
 }
 
@@ -929,6 +991,8 @@ export interface MarginResult {
   availableUsers: string[];
   availableDepartments: string[];
   dataLastUpdated: string | null;
+  dataNextUpdate: string | null;
+  updateEveryMinutes: number | null;
 }
 
 /** Top N customers shown on the margin leaderboard (page caps at 50). */
@@ -951,6 +1015,7 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
   const empty: MarginResult = {
     leads: [], deals: [], margin: [], customers: [],
     availableUsers: [], availableDepartments: [], dataLastUpdated: null,
+    dataNextUpdate: null, updateEveryMinutes: null,
   };
   if (!(await factTableExists('ie_fact_order_margin'))) return empty;
 
@@ -1060,8 +1125,9 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
   );
 
   const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(MAX(loaded_at), '%Y-%m-%dT%H:%i:%sZ') AS last FROM ie_fact_order_margin`,
+    `SELECT MAX(loaded_at) AS last FROM ie_fact_order_margin`,
   );
+  const schedule = await getReportSchedule('order_margin');
 
   // Table 1 — Leads by Salesperson, from ie_fact_lead over the same period and
   // the same user/department filters (Non-Sales category excluded, like the
@@ -1141,6 +1207,8 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
     customers,
     availableUsers: userRows.map((r) => r.salesperson_name as string).filter(Boolean),
     availableDepartments: deptRows.map((r) => r.department_name as string),
-    dataLastUpdated: freshRows[0]?.last ?? null,
+    dataLastUpdated: toIso(freshRows[0]?.last),
+    dataNextUpdate: schedule.dataNextUpdate,
+    updateEveryMinutes: schedule.updateEveryMinutes,
   };
 }

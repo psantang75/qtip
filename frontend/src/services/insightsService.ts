@@ -312,6 +312,8 @@ export interface EmailActivityResponse {
   availableUsers:       string[]
   availableDepartments: string[]
   dataLastUpdated:      string | null
+  dataNextUpdate:       string | null
+  updateEveryMinutes:   number | null
 }
 
 export const getEmailActivity = async (p: AAParams): Promise<EmailActivityResponse> => {
@@ -347,6 +349,8 @@ export interface CallActivityResponse {
   availableUsers:       string[]
   availableDepartments: string[]
   dataLastUpdated:      string | null
+  dataNextUpdate:       string | null
+  updateEveryMinutes:   number | null
 }
 
 export const getCallActivity = async (p: AAParams): Promise<CallActivityResponse> => {
@@ -372,6 +376,8 @@ export interface TicketsTasksResponse {
   availableUsers:       string[]
   availableDepartments: string[]
   dataLastUpdated:      string | null
+  dataNextUpdate:       string | null
+  updateEveryMinutes:   number | null
 }
 
 export const getTicketsTasks = async (p: AAParams): Promise<TicketsTasksResponse> => {
@@ -394,6 +400,8 @@ export interface LeadsResponse {
   availableUsers:       string[]
   availableDepartments: string[]
   dataLastUpdated:      string | null
+  dataNextUpdate:       string | null
+  updateEveryMinutes:   number | null
 }
 
 export const getLeads = async (p: AAParams): Promise<LeadsResponse> => {
@@ -427,9 +435,54 @@ export interface MarginResponse {
   availableUsers:       string[]
   availableDepartments: string[]
   dataLastUpdated:      string | null
+  dataNextUpdate:       string | null
+  updateEveryMinutes:   number | null
 }
 
 export const getMargin = async (p: AAParams): Promise<MarginResponse> => {
   const response = await api.get('/insights/agent-activity/margin', { params: p })
+  return response.data
+}
+
+// ── Admin: Source Report Schedules (ie_source_report) ─────────────────────────
+
+export type SourceReportLoadMode = 'INCREMENTAL_WINDOW' | 'FULL_RELOAD_WINDOW' | 'SNAPSHOT'
+export type SourceReportStatusValue = 'SUCCESS' | 'PARTIAL' | 'FAILED'
+
+export interface SourceReport {
+  id:                number
+  report_code:       string
+  report_name:       string
+  source_pool:       string
+  load_mode:         SourceReportLoadMode
+  window_months:     number
+  incremental_days:  number
+  frequency_minutes: number
+  run_only_hours:    string | null
+  is_active:         boolean
+  target_fact_table: string
+  last_run_at:       string | null
+  next_run_at:       string | null
+  last_status:       SourceReportStatusValue | null
+}
+
+export interface SourceReportUpdate {
+  frequency_minutes?: number
+  run_only_hours?:    string | null
+  is_active?:         boolean
+}
+
+export const getSourceReports = async (): Promise<SourceReport[]> => {
+  const response = await api.get('/insights/admin/source-reports')
+  return response.data
+}
+
+export const updateSourceReport = async (id: number, data: SourceReportUpdate): Promise<SourceReport> => {
+  const response = await api.put(`/insights/admin/source-reports/${id}`, data)
+  return response.data
+}
+
+export const runSourceReportNow = async (id: number): Promise<{ started: boolean }> => {
+  const response = await api.post(`/insights/admin/source-reports/${id}/run-now`)
   return response.data
 }
