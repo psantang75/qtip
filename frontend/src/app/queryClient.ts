@@ -22,7 +22,7 @@ import { mapErrorToToast } from '@/lib/errorMessages'
  * Opt-out / override (see module augmentation below):
  *   useMutation({ ..., meta: { silent: true } })
  *     └─ disables the auto-toast entirely (e.g. background polling)
- *   useMutation({ ..., meta: { errorTitle: 'Couldn't archive prompt' } })
+ *   useMutation({ ..., meta: { errorTitle: "Couldn't archive prompt" } })
  *     └─ replaces the canonical title; description still derives from the
  *        HTTP status / backend envelope
  *   useMutation({ ..., onError: (e) => { ... } })
