@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "check:errors": "node scripts/check-error-messages.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/form'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from '@/hooks/use-toast'
+import { t } from '@/lib/t'
 
 const schema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
@@ -35,11 +36,7 @@ export default function ForgotPasswordPage() {
       // prevent enumeration), so any thrown error here is a true failure
       // (network down, server 5xx). Surface a canonical toast so the user
       // isn't left wondering whether anything happened.
-      toast({
-        variant: 'destructive',
-        title: "Couldn't send reset email",
-        description: 'Try again in a moment. If this keeps happening, contact support.',
-      })
+      toast(t.msg.auth.forgotPasswordFailed())
     }
   }
 

@@ -11,6 +11,7 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form'
 import { Card, CardContent } from '@/components/ui/card'
+import { t } from '@/lib/t'
 
 const schema = z.object({
   newPassword: z.string()
@@ -88,10 +89,10 @@ export default function ResetPasswordPage() {
               </h1>
               <p className="text-[13px] text-muted-foreground mb-4">
                 {tokenState === 'expired'
-                  ? 'This reset link has expired. Request a new one.'
+                  ? t.msg.auth.resetLinkExpired
                   : tokenState === 'used'
-                  ? 'This reset link has already been used. Request a new one if needed.'
-                  : "We couldn't verify this link. Try requesting a new one."}
+                  ? t.msg.auth.resetLinkUsed
+                  : t.msg.auth.resetLinkInvalid}
               </p>
               <Link to="/forgot-password" className="text-[13px] text-primary hover:underline">
                 Request a new link

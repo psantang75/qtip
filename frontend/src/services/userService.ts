@@ -1,4 +1,5 @@
 import { api } from './authService';
+import { t } from '@/lib/t';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -118,8 +119,8 @@ const userService = {
         throw new Error((apiError as { message: string }).message)
       }
       const code = e?.response?.data?.code
-      if (code === 'EMAIL_EXISTS')    throw new Error('This email address is already in use.')
-      if (code === 'USERNAME_EXISTS') throw new Error('This username is already taken.')
+      if (code === 'EMAIL_EXISTS')    throw new Error(t.msg.users.emailExists)
+      if (code === 'USERNAME_EXISTS') throw new Error(t.msg.users.usernameExists)
       throw error
     }
   },
@@ -129,7 +130,7 @@ const userService = {
       const response = await api.put(`/users/${userId}`, userData)
       if (response.data?.success && response.data?.data) return response.data.data
       if (response.data) return response.data
-      throw new Error("Couldn't read the server response. Refresh and try again.")
+      throw new Error(t.msg.users.serverFormat)
     } catch (error: unknown) {
       const e = error as { response?: { data?: { error?: unknown; code?: string } } }
       const apiError = e?.response?.data?.error
@@ -138,9 +139,9 @@ const userService = {
         throw new Error((apiError as { message: string }).message)
       }
       const code = e?.response?.data?.code
-      if (code === 'EMAIL_EXISTS')    throw new Error('This email address is already in use.')
-      if (code === 'USERNAME_EXISTS') throw new Error('This username is already taken.')
-      if (code === 'USER_NOT_FOUND')  throw new Error('User not found. Please refresh and try again.')
+      if (code === 'EMAIL_EXISTS')    throw new Error(t.msg.users.emailExists)
+      if (code === 'USERNAME_EXISTS') throw new Error(t.msg.users.usernameExists)
+      if (code === 'USER_NOT_FOUND')  throw new Error(t.msg.users.userNotFound)
       throw error
     }
   },
@@ -153,14 +154,14 @@ const userService = {
     const response = await api.put(`/users/${userId}/status`, { is_active: isActive })
     if (response.data?.success && response.data?.data) return response.data.data
     if (response.data) return response.data
-    throw new Error("Couldn't read the server response. Refresh and try again.")
+    throw new Error(t.msg.users.serverFormat)
   },
 
   unlockUser: async (userId: number): Promise<User> => {
     const response = await api.put(`/users/${userId}/unlock`)
     if (response.data?.success && response.data?.data) return response.data.data
     if (response.data) return response.data
-    throw new Error("Couldn't read the server response. Refresh and try again.")
+    throw new Error(t.msg.users.serverFormat)
   },
 
   changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/hooks/use-toast'
+import { t } from '@/lib/t'
 import writeupService from '@/services/writeupService'
 import { openWriteUpPdf } from '../writeup-pdf/openPdf'
 
@@ -32,11 +33,7 @@ export function useWriteUpDetail(id: string | undefined, extraInvalidateKeys?: s
     setPdfLoading(true)
     try { await openWriteUpPdf(writeup) }
     catch {
-      toast({
-        variant: 'destructive',
-        title: "Couldn't generate PDF",
-        description: 'Try again.',
-      })
+      toast(t.msg.writeups.pdfFailed())
     }
     finally { setPdfLoading(false) }
   }

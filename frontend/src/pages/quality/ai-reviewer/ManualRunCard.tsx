@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import { t } from '@/lib/t'
 import {
   canRunManual,
   nextAttachedDefault,
@@ -178,7 +179,7 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
       // Normalize to a string so the toast never gets an object as a
       // child (which crashes React).
       const raw = e?.response?.data?.error
-      const desc =
+      const fallback =
         typeof raw === 'string'
           ? raw
           : raw?.message
@@ -190,7 +191,10 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
       // code in the inline strip so operators can recognise repeat issues
       // (e.g. INTERACTION_NOT_CLOSED) without digging through server logs.
       const code = e?.response?.data?.code ?? null
-      setLastError({ message: desc, code: typeof code === 'string' ? code : null })
+      const codeStr = typeof code === 'string' ? code : null
+      // Translate known codes to user-facing wording; fall back to backend text.
+      const desc = t.msg.aiReviewer.runCodeToDescription(codeStr, fallback)
+      setLastError({ message: desc, code: codeStr })
       toast({ variant: 'destructive', title: "Couldn't run AI review", description: desc })
     },
   })

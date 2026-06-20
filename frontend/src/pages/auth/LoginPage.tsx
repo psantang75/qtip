@@ -16,6 +16,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Card, CardContent } from '@/components/ui/card'
+import { t } from '@/lib/t'
 
 const loginSchema = z.object({
   email:    z.string().min(1, 'Email is required').email('Enter a valid email address'),
@@ -55,7 +56,7 @@ export default function LoginPage() {
       const message =
         data?.message ??
         data?.error ??
-        'The email or password you entered is incorrect.'
+        t.msg.auth.wrongCredentials
       setApiError(message)
     }
   }

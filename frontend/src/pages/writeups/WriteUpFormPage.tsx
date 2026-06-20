@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/hooks/use-toast'
+import { t } from '@/lib/t'
 import writeupService, { type WriteUpPayload } from '@/services/writeupService'
 import listService from '@/services/listService'
 import { ListPageShell } from '@/components/common/ListPageShell'
@@ -223,11 +224,7 @@ export default function WriteUpFormPage() {
     const fields = err?.response?.data?.errors as Array<{ path: string; message: string }> | undefined
     if (fields && fields.length > 0) {
       const lines = fields.map(f => (f.path ? `${prettifyPath(f.path)}: ${f.message}` : f.message))
-      toast({
-        variant: 'destructive',
-        title: `Please fix ${fields.length} field${fields.length === 1 ? '' : 's'} and try again`,
-        description: lines.join('\n'),
-      })
+      toast(t.msg.writeups.fixFields(fields.length, lines))
       return
     }
     toast({

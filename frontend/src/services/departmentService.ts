@@ -1,5 +1,6 @@
 import { api } from './authService';
 import type { User } from './userService';
+import { t } from '@/lib/t';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ const departmentService = {
     const response = await api.put(`/departments/${departmentId}`, departmentData)
     if (response.data?.success && response.data?.data) return response.data.data
     if (response.data) return response.data
-    throw new Error("Couldn't read the server response. Refresh and try again.")
+    throw new Error(t.msg.users.serverFormat)
   },
 
   deleteDepartment: async (departmentId: number): Promise<void> => {
@@ -97,7 +98,7 @@ const departmentService = {
     const response = await api.put(`/departments/${departmentId}/status`, { is_active: isActive })
     if (response.data?.success && response.data?.data) return response.data.data
     if (response.data) return response.data
-    throw new Error("Couldn't read the server response. Refresh and try again.")
+    throw new Error(t.msg.users.serverFormat)
   },
 
   assignUsers: async (departmentId: number, userIds: number[]): Promise<void> => {

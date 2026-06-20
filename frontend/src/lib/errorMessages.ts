@@ -1,4 +1,5 @@
 import type { AxiosError } from 'axios'
+import { logError } from '@/utils/errorHandling'
 
 /**
  * Canonical user-facing error messages for QTIP.
@@ -166,8 +167,31 @@ function readBackendMessage(data: unknown): string | undefined {
  *
  * Used by the global `MutationCache.onError` for mutations that don't supply
  * their own `onError`, and as a fallback any caller can reach for.
+ *
+ * Side effect: in non-prod environments, calls `logError` with the canonical
+ * title and correlation ID so the dev-tools console / future Sentry-style
+ * logger can be searched by the same words the user reports. `logError` is a
+ * no-op in production (see `utils/errorHandling.ts`).
  */
 export function mapErrorToToast(error: unknown): ErrorToast {
+  const toast = projectErrorToToast(error)
+  // Searchable handoff: canonical title + correlation ID + status. Stays
+  // dev-only via logError; if/when we wire Sentry, swap logError for the
+  // SDK's captureMessage + tags.
+  const status =
+    (error as { response?: { status?: number } })?.response?.status
+  const cid =
+    isAxiosError(error) ? extractCorrelationId(error) : undefined
+  logError('mapErrorToToast', {
+    title: toast.title,
+    status: status ?? null,
+    correlationId: cid ?? null,
+  })
+  return toast
+}
+
+/** Pure projection — separated so the side-effecting logger lives in one spot. */
+function projectErrorToToast(error: unknown): ErrorToast {
   if (!isAxiosError(error)) {
     if (error instanceof Error && /network|ECONNREFUSED|fetch/i.test(error.message)) {
       return eNetwork()

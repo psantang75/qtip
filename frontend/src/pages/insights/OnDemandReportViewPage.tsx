@@ -9,6 +9,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
+import { t } from '@/lib/t'
 import { ListPagination } from '@/components/common/ListPagination'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { StickyFilterBar, StickyFilterField } from '@/components/common/StickyFilterBar'
@@ -216,11 +217,7 @@ export default function OnDemandReportViewPage() {
 
   const handleDownload = async () => {
     if (!applied) {
-      toast({
-        title: 'Run the report first',
-        description: 'Apply your filters with Run before downloading.',
-        variant: 'destructive',
-      })
+      toast(t.msg.insights.runBeforeDownload())
       return
     }
     try {
