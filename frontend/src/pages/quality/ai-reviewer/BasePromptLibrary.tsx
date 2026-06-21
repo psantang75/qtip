@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   useReactTable,
@@ -119,7 +120,7 @@ export default function BasePromptLibrary() {
       toast({
         variant: 'destructive',
         title: "Couldn't archive base prompt",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       }),
   })
 
@@ -137,7 +138,7 @@ export default function BasePromptLibrary() {
       toast({
         variant: 'destructive',
         title: "Couldn't set default",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       }),
   })
 
@@ -493,7 +494,7 @@ function BasePromptEditorSheet({ state, onClose, onSaved }: BasePromptEditorShee
       toast({
         variant: 'destructive',
         title: "Couldn't save base prompt",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       }),
   })
 

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -164,7 +165,7 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
     onError: (err: any) => toast({
       variant: 'destructive',
       title: "Couldn't create coaching session",
-      description: err?.response?.data?.message ?? err?.message ?? 'Try again.',
+      description: getErrorMessage(err, 'Try again.'),
     }),
   })
 

@@ -21,6 +21,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   useReactTable,
@@ -91,7 +92,7 @@ export default function RulePackLibrary() {
       toast({ title: 'Pack archived' })
     },
     onError: (e: any) =>
-      toast({ variant: 'destructive', title: "Couldn't archive rule pack", description: e?.message ?? 'Try again.' }),
+      toast({ variant: 'destructive', title: "Couldn't archive rule pack", description: getErrorMessage(e, 'Try again.') }),
   })
 
   const restoreMut = useMutation({
@@ -101,7 +102,7 @@ export default function RulePackLibrary() {
       toast({ title: 'Pack restored' })
     },
     onError: (e: any) =>
-      toast({ variant: 'destructive', title: "Couldn't restore rule pack", description: e?.message ?? 'Try again.' }),
+      toast({ variant: 'destructive', title: "Couldn't restore rule pack", description: getErrorMessage(e, 'Try again.') }),
   })
 
   const columns = useMemo<ColumnDef<RulePack>[]>(
@@ -344,7 +345,7 @@ function RulePackEditorSheet({ state, onClose, onSaved }: RulePackEditorSheetPro
       toast({
         variant: 'destructive',
         title: "Couldn't save rule pack",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       }),
   })
 

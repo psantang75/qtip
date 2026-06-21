@@ -17,6 +17,7 @@
  */
 
 import { useMemo, useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CheckCircle2,
@@ -80,7 +81,7 @@ export function QuestionRubricsCard({ form }: Props) {
       toast({
         variant: 'destructive',
         title: "Couldn't save rubric",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       }),
   })
 
@@ -94,7 +95,7 @@ export function QuestionRubricsCard({ form }: Props) {
       toast({
         variant: 'destructive',
         title: "Couldn't remove rubric",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       }),
   })
 

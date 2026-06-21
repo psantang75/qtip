@@ -8,6 +8,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { Archive, Sparkles } from 'lucide-react'
 import aiReviewerService, { type GoldenSetItem } from '@/services/aiReviewerService'
 import { Button } from '@/components/ui/button'
@@ -44,7 +45,7 @@ export function GoldenSetCard({ formId }: Props) {
     onError: (e: any) => toast({
       variant: 'destructive',
       title: "Couldn't archive item",
-      description: e?.message ?? 'Try again.',
+      description: getErrorMessage(e, 'Try again.'),
     }),
   })
 

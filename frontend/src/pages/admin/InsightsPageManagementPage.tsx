@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
@@ -120,7 +121,7 @@ function PageDetailSection({ page }: { page: IePage }) {
     onError: (e: Error) => toast({
       variant: 'destructive',
       title: "Couldn't save access",
-      description: e.message ?? 'Try again.',
+      description: getErrorMessage(e, 'Try again.'),
     }),
   })
 
@@ -211,7 +212,7 @@ function DepartmentAccessSection({ page }: { page: IePage }) {
     onError: (e: Error) => toast({
       variant: 'destructive',
       title: "Couldn't save department access",
-      description: e.message ?? 'Try again.',
+      description: getErrorMessage(e, 'Try again.'),
     }),
   })
 

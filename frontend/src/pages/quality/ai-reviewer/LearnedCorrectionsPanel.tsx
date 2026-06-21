@@ -15,6 +15,7 @@
  */
 
 import { useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, GraduationCap, Loader2 } from 'lucide-react'
 import aiReviewerService, {
@@ -64,7 +65,7 @@ export function LearnedCorrectionsPanel({ formId }: Props) {
     onError: (e: any) => {
       toast({
         title: 'Could not mark absorbed',
-        description: e?.response?.data?.error ?? e?.message ?? 'Unknown error',
+        description: getErrorMessage(e, 'Try again.'),
         variant: 'destructive',
       })
     },

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation } from '@tanstack/react-query'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import SignatureCanvas from 'react-signature-canvas'
@@ -79,7 +80,7 @@ export function SignatureSection({ id, csrName, onSigned }: { id: number; csrNam
     onError: (err: Error) => toast({
       variant: 'destructive',
       title: "Couldn't sign write-up",
-      description: err?.message ?? 'Try again.',
+      description: getErrorMessage(err, 'Try again.'),
     }),
   })
 

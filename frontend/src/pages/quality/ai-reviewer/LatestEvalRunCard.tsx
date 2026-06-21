@@ -13,6 +13,7 @@
  */
 
 import { useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -74,7 +75,7 @@ export function LatestEvalRunCard({ formId }: Props) {
       toast({
         variant: 'destructive',
         title: "Couldn't run eval",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       }),
   })
 

@@ -10,6 +10,7 @@
  */
 
 import { useMemo, useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { History, Loader2, RotateCcw } from 'lucide-react'
 import aiReviewerService, {
@@ -75,7 +76,7 @@ export function BasePromptVersionHistory({ open, base, onClose, onRolledBack }: 
       toast({
         variant: 'destructive',
         title: "Couldn't roll back",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       }),
   })
 

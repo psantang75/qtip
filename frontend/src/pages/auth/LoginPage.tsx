@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/form'
 import { Card, CardContent } from '@/components/ui/card'
 import { t } from '@/lib/t'
+import { getBackendMessage, getErrorMessage } from '@/utils/errorHandling'
 
 const loginSchema = z.object({
   email:    z.string().min(1, 'Email is required').email('Enter a valid email address'),
@@ -44,20 +45,20 @@ export default function LoginPage() {
       await login({ email: values.email, password: values.password })
       navigate('/')
     } catch (err: unknown) {
-      // Login API returns the flat auth envelope `{ error, code, message }`
-      // (see backend `utils/apiError.ts`). Read whichever field carries the
-      // human-readable text, then fall back to the canonical "Sign-in failed"
-      // wording from `docs/error-messages-catalog.md`.
-      const error = err as {
-        response?: { data?: { error?: string; message?: string; code?: string } }
-        message?: string
+      // On the login page a 401 means "wrong email/password" — NOT an expired
+      // session — so we show the friendly canonical credentials message and
+      // ignore the backend's terse "Invalid credentials" label. For any other
+      // failure (lockout, rate-limit, server error) we surface a curated
+      // backend message when present, else the canonical status wording.
+      // Either path is guaranteed never to leak "Request failed with status
+      // code 401" (see getErrorMessage).
+      const status = (err as { response?: { status?: number } })?.response?.status
+      const backend = getBackendMessage(err)
+      if (status === 401 && (!backend || /invalid credentials/i.test(backend))) {
+        setApiError(t.msg.auth.wrongCredentials)
+      } else {
+        setApiError(backend ?? getErrorMessage(err, t.msg.auth.wrongCredentials))
       }
-      const data = error?.response?.data
-      const message =
-        data?.message ??
-        data?.error ??
-        t.msg.auth.wrongCredentials
-      setApiError(message)
     }
   }
 

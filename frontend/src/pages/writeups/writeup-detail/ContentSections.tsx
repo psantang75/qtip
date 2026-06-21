@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Paperclip } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -156,7 +157,7 @@ function FollowUpEditableSection({
     onError: (err: Error) => toast({
       variant: 'destructive',
       title: "Couldn't save follow-up notes",
-      description: err?.message ?? 'Try again.',
+      description: getErrorMessage(err, 'Try again.'),
     }),
   })
 
@@ -176,7 +177,7 @@ function FollowUpEditableSection({
     onError: (err: Error) => toast({
       variant: 'destructive',
       title: "Couldn't mark follow-up complete",
-      description: err?.message ?? 'Try again.',
+      description: getErrorMessage(err, 'Try again.'),
     }),
   })
 
@@ -318,7 +319,7 @@ function InternalNotesEditableSection({
     onError: (err: Error) => toast({
       variant: 'destructive',
       title: "Couldn't save internal notes",
-      description: err?.message ?? 'Try again.',
+      description: getErrorMessage(err, 'Try again.'),
     }),
   })
 
@@ -336,7 +337,7 @@ function InternalNotesEditableSection({
     onError: (err: Error) => toast({
       variant: 'destructive',
       title: "Couldn't close write-up",
-      description: err?.message ?? 'Try again.',
+      description: getErrorMessage(err, 'Try again.'),
     }),
   })
 

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Search, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -156,7 +157,7 @@ export function QaSearchModal({ csrId, onImport, onClose }: QaSearchModalProps) 
     onError: (err: any) => toast({
       variant: 'destructive',
       title: "Couldn't search QA records",
-      description: err?.response?.data?.message ?? err?.message ?? 'Try again.',
+      description: getErrorMessage(err, 'Try again.'),
     }),
   })
 

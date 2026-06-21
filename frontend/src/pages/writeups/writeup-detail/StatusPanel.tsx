@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Circle } from 'lucide-react'
@@ -391,7 +392,7 @@ export function StatusPanel({ writeup, id, onInvalidate, readOnly = false }: Sta
     onError: (err: Error) => toast({
       variant: 'destructive',
       title: "Couldn't update status",
-      description: err?.message ?? 'Try again.',
+      description: getErrorMessage(err, 'Try again.'),
     }),
   })
 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { AlertTriangle, X } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import qaService from '@/services/qaService'
@@ -85,7 +86,7 @@ export function EditDisputeForm({
       toast({
         variant: 'destructive',
         title: "Couldn't update dispute",
-        description: err?.response?.data?.message ?? 'Try again.',
+        description: getErrorMessage(err, 'Try again.'),
       }),
   })
 

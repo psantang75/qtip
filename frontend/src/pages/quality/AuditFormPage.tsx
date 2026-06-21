@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, Send, AlertCircle, Calculator } from 'lucide-react'
@@ -160,7 +161,7 @@ export default function AuditFormPage() {
     }
     return {
       title: "Couldn't load AI draft",
-      body: serverMsg ?? e?.message ?? 'Unknown error.',
+      body: serverMsg ?? getErrorMessage(e, 'Try again.'),
     }
   }, [aiPrefillError, aiPrefillErrorObj, aiSubmissionId])
 

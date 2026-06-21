@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Edit3, X } from 'lucide-react'
@@ -264,7 +265,7 @@ export default function SubmissionDetailPage() {
       setResolutionMode(false)
       setResNotes('')
     } catch (err: any) {
-      setResError(err?.response?.data?.message ?? err?.message ?? 'Failed to resolve dispute.')
+      setResError(getErrorMessage(err, "Couldn't resolve the dispute. Try again."))
     } finally {
       setResSubmitting(false)
     }

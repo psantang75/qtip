@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useForm, type FieldError } from 'react-hook-form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -204,7 +205,7 @@ export default function CoachingSessionFormPage() {
         toast({
           variant: 'destructive',
           title: "Couldn't save session",
-          description: err?.message ?? 'Try again.',
+          description: getErrorMessage(err, 'Try again.'),
         })
     },
   })
@@ -247,7 +248,7 @@ export default function CoachingSessionFormPage() {
         toast({
           variant: 'destructive',
           title: "Couldn't schedule session",
-          description: err?.message ?? 'Try again.',
+          description: getErrorMessage(err, 'Try again.'),
         })
     },
   })

@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, FileText, Image, FileSpreadsheet, Film, Link, File } from 'lucide-react'
 import trainingService, { type TrainingResource, type ResourceType } from '@/services/trainingService'
@@ -165,7 +166,7 @@ export default function LibraryResourcesPage() {
     onError: (err: Error) => toast({
       variant: 'destructive',
       title: "Couldn't save resource",
-      description: err?.message ?? 'Try again.',
+      description: getErrorMessage(err, 'Try again.'),
     }),
   })
 

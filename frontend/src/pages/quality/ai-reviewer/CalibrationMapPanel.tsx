@@ -13,6 +13,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { Activity, Loader2, PlayCircle } from 'lucide-react'
 import aiReviewerService, {
   type CalibrationBin,
@@ -56,7 +57,7 @@ export function CalibrationMapPanel({ formId }: Props) {
       toast({
         variant: 'destructive',
         title: "Couldn't fit calibration",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       }),
   })
 
@@ -70,7 +71,7 @@ export function CalibrationMapPanel({ formId }: Props) {
       toast({
         variant: 'destructive',
         title: "Couldn't activate calibration",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       }),
   })
 

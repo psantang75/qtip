@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -73,7 +74,7 @@ export default function MyCoachingDetailPage() {
       toast({
         variant: 'destructive',
         title: "Couldn't submit",
-        description: err?.message ?? 'Try again.',
+        description: getErrorMessage(err, 'Try again.'),
       }),
   })
 

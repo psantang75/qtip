@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle, CheckCircle2, Lock, Loader2, Send, History,
@@ -300,7 +301,7 @@ function TemplateEditor({
       toast({
         variant: 'destructive',
         title: "Couldn't save template",
-        description: err?.response?.data?.message ?? 'Try again.',
+        description: getErrorMessage(err, 'Try again.'),
       }),
   })
 

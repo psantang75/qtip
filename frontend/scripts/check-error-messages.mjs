@@ -114,12 +114,33 @@ function* walk(dir) {
 }
 
 const titleRe = /title:\s*["'`]([^"'`\n]+)["'`]/g
+
+// ── 4. Raw-error leak patterns ───────────────────────────────────────────────
+// These surface the raw axios message ("Request failed with status code 401")
+// or a backend machine label to end users. Everything must go through
+// `getErrorMessage(err, …)` / `t.fromError(err)` instead. A few files are
+// allowed to read `.message` directly (the util that does the safe mapping,
+// react-hook-form field errors, and a service that throws curated Errors).
+const LEAK_ALLOWED = new Set([
+  'src/utils/errorHandling.ts',
+  'src/lib/errorMessages.ts',
+  'src/components/ui/form.tsx',
+  'src/services/formService.ts',
+])
+const LEAK_PATTERNS = [
+  /\?\.message\s*(\?\?|\|\|)\s*['"]Try again/,
+  /\?\.message\s*(\?\?|\|\|)\s*['"]Unknown error/,
+  /\.data\?\.(error|message)\s*(\?\?|\|\|)\s*\w+\?\.message/,
+  /Request failed with status code/,
+]
+
 let scanned = 0
 for (const file of walk(SRC_DIR)) {
   const rel = relative(FRONTEND_ROOT, file).replaceAll('\\', '/')
   if (REGISTRY_FILES.has(rel)) continue
   scanned++
   const src = readFileSync(file, 'utf8')
+
   let m
   while ((m = titleRe.exec(src))) {
     const title = m[1]
@@ -129,6 +150,18 @@ for (const file of walk(SRC_DIR)) {
         errors.push(`${rel}:${line}  forbidden title  "${title}"  — use t.eX(...) or canonical wording`)
       }
     }
+  }
+
+  if (!LEAK_ALLOWED.has(rel)) {
+    const lines = src.split('\n')
+    lines.forEach((text, i) => {
+      for (const re of LEAK_PATTERNS) {
+        if (re.test(text)) {
+          errors.push(`${rel}:${i + 1}  raw-error leak  — use getErrorMessage(err, '…') or t.fromError(err) instead of a bare .message fallback`)
+          break
+        }
+      }
+    })
   }
 }
 

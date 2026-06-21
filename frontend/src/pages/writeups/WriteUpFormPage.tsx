@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/hooks/use-toast'
@@ -230,7 +231,7 @@ export default function WriteUpFormPage() {
     toast({
       variant: 'destructive',
       title: "Couldn't save write-up",
-      description: err?.response?.data?.message ?? err?.message ?? 'Try again.',
+      description: getErrorMessage(err, 'Try again.'),
     })
   }
 

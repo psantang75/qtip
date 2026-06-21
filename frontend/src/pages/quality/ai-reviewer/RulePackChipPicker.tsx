@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, Save } from 'lucide-react'
 import aiReviewerService from '@/services/aiReviewerService'
@@ -63,7 +64,7 @@ export function RulePackChipPicker({ formId }: RulePackChipPickerProps) {
       toast({
         variant: 'destructive',
         title: "Couldn't save assignments",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again.',
+        description: getErrorMessage(e, 'Try again.'),
       })
     },
   })

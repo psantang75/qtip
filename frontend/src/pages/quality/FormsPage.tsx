@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronRight, ChevronLeft } from 'lucide-react'
@@ -145,7 +146,7 @@ export default function FormsPage() {
       toast({
         variant: 'destructive',
         title: "Couldn't save form",
-        description: e.message || "Your changes weren't saved. Try again.",
+        description: getErrorMessage(e, "Your changes weren't saved. Try again."),
       })
     } finally { setSaving(false) }
   }

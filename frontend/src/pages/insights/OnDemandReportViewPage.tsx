@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Download, Loader2, Play, Search } from 'lucide-react'
@@ -227,7 +228,7 @@ export default function OnDemandReportViewPage() {
       toast({
         variant: 'destructive',
         title: "Couldn't download report",
-        description: err?.response?.data?.message || err?.message || 'Try again.',
+        description: getErrorMessage(err, 'Try again.'),
       })
     } finally {
       setDownloading(false)

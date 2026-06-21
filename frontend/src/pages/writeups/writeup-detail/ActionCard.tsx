@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -67,7 +68,7 @@ function useTransitionMut(id: number, onInvalidate: () => void) {
       toast({
         variant: 'destructive',
         title: "Couldn't update status",
-        description: err?.message ?? 'Try again.',
+        description: getErrorMessage(err, 'Try again.'),
       }),
   })
 }

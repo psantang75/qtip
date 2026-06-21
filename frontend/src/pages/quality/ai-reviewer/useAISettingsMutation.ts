@@ -8,6 +8,7 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { getErrorMessage } from '@/utils/errorHandling'
 import aiReviewerService from '@/services/aiReviewerService'
 import { useToast } from '@/hooks/use-toast'
 
@@ -39,7 +40,7 @@ export function useAISettingsMutation(formId: number) {
     onError: (e: any) => {
       toast({
         title: "Couldn't save settings",
-        description: e?.response?.data?.error ?? e?.message ?? 'Try again',
+        description: getErrorMessage(e, 'Try again.'),
         variant: 'destructive',
       })
     },
