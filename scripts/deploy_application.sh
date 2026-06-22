@@ -85,11 +85,26 @@ load_env() {
     return 0
   fi
 
-  # Source everything except NODE_ENV / NPM_CONFIG_PRODUCTION lines.
-  set -a
-  # shellcheck disable=SC1090
-  . <(grep -vE '^(NODE_ENV|NPM_CONFIG_PRODUCTION)=' "$src")
-  set +a
+  # Parse KEY=VALUE literally instead of `source`-ing. Sourcing breaks when a
+  # value contains shell metacharacters (e.g. a ')' in a DB password). We skip
+  # NODE_ENV / NPM_CONFIG_PRODUCTION so they can't force `npm ci` to drop dev
+  # dependencies during the build phase.
+  local line key val
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" == export\ * ]] && line="${line#export }"
+    [[ "$line" != *=* ]] && continue
+    key="${line%%=*}"
+    val="${line#*=}"
+    key="${key%"${key##*[![:space:]]}"}"
+    case "$key" in NODE_ENV|NPM_CONFIG_PRODUCTION) continue ;; esac
+    if [[ "$val" == \"*\" || "$val" == \'*\' ]]; then
+      val="${val:1:${#val}-2}"
+    fi
+    [[ -z "$key" ]] && continue
+    export "$key=$val"
+  done < "$src"
   unset NODE_ENV NPM_CONFIG_PRODUCTION
   # A `production=true` entry in any .npmrc (user/global) also makes `npm ci`
   # omit devDependencies (prisma CLI, tsc) regardless of NODE_ENV, which breaks
@@ -132,12 +147,22 @@ build_app() {
   info "Cleaning previous builds..."
   rm -rf ./backend/dist ./frontend/dist
 
+  # This repo is an npm *workspaces* monorepo (see root package.json
+  # "workspaces": ["frontend","backend"]). Dependencies MUST be installed
+  # once from the repo root so they hoist into the root node_modules.
+  # Running `npm ci` inside a workspace subdir (cd backend && npm ci) wipes
+  # that package's node_modules without repopulating it, which leaves the
+  # backend unable to resolve runtime deps like `dotenv` at startup.
+  info "Installing workspace dependencies (root, incl. dev)..."
+  npm ci --include=dev || { err "Dependency install failed"; return 1; }
+  ok "Dependencies installed"
+
   info "Building backend..."
-  ( cd backend && npm ci --include=dev && npm run build ) || { err "Backend build failed"; return 1; }
+  ( cd backend && npm run build ) || { err "Backend build failed"; return 1; }
   ok "Backend build completed"
 
   info "Building frontend..."
-  ( cd frontend && npm ci --include=dev && npm run build ) || { err "Frontend build failed"; return 1; }
+  ( cd frontend && npm run build ) || { err "Frontend build failed"; return 1; }
   ok "Frontend build completed"
 }
 

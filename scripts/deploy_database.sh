@@ -57,8 +57,26 @@ load_env() {
   local f
   for f in "backend/.env" ".env"; do
     if [[ -f "$f" ]]; then
-      # shellcheck disable=SC1090
-      set -a; . "$f"; set +a
+      # Parse KEY=VALUE literally rather than `source`-ing the file.
+      # Sourcing breaks when a value contains shell metacharacters (e.g. a
+      # ')' in a DB password triggers "syntax error near unexpected token").
+      # Reading line-by-line treats every value as a literal string.
+      local line key val
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line#"${line%%[![:space:]]*}"}"   # ltrim
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        [[ "$line" == export\ * ]] && line="${line#export }"
+        [[ "$line" != *=* ]] && continue
+        key="${line%%=*}"
+        val="${line#*=}"
+        key="${key%"${key##*[![:space:]]}"}"        # rtrim key
+        # strip one layer of matching surrounding quotes
+        if [[ "$val" == \"*\" || "$val" == \'*\' ]]; then
+          val="${val:1:${#val}-2}"
+        fi
+        [[ -z "$key" ]] && continue
+        export "$key=$val"
+      done < "$f"
       ok "Environment loaded from $f"
       return 0
     fi
