@@ -91,7 +91,11 @@ load_env() {
   . <(grep -vE '^(NODE_ENV|NPM_CONFIG_PRODUCTION)=' "$src")
   set +a
   unset NODE_ENV NPM_CONFIG_PRODUCTION
-  ok "${src} loaded (NODE_ENV stripped for build phase)"
+  # A `production=true` entry in any .npmrc (user/global) also makes `npm ci`
+  # omit devDependencies (prisma CLI, tsc) regardless of NODE_ENV, which breaks
+  # the build and `prisma migrate deploy`. Force it off for the build phase.
+  export npm_config_production=false
+  ok "${src} loaded (NODE_ENV + npm production flag stripped for build phase)"
 }
 
 # ---- prereqs --------------------------------------------------------------
@@ -129,11 +133,11 @@ build_app() {
   rm -rf ./backend/dist ./frontend/dist
 
   info "Building backend..."
-  ( cd backend && npm ci && npm run build ) || { err "Backend build failed"; return 1; }
+  ( cd backend && npm ci --include=dev && npm run build ) || { err "Backend build failed"; return 1; }
   ok "Backend build completed"
 
   info "Building frontend..."
-  ( cd frontend && npm ci && npm run build ) || { err "Frontend build failed"; return 1; }
+  ( cd frontend && npm ci --include=dev && npm run build ) || { err "Frontend build failed"; return 1; }
   ok "Frontend build completed"
 }
 
