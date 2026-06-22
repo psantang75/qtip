@@ -3,8 +3,9 @@ import {
   useReactTable, getCoreRowModel, getSortedRowModel, flexRender,
   type SortingState, type ColumnDef,
 } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown, ChevronsUpDown, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import SortHeaderIcon from './SortHeaderIcon'
 
 /** Column meta understood by SortableTable. */
 export interface AgentColMeta {
@@ -83,9 +84,7 @@ export default function SortableTable<T>({
                     >
                       <span className="flex items-center gap-1">
                         {flexRender(header.column.columnDef.header, header.getContext())}
-                        {sorted === 'asc'  ? <ChevronUp size={12} />
-                          : sorted === 'desc' ? <ChevronDown size={12} />
-                          : <ChevronsUpDown size={12} className="opacity-40" />}
+                        <SortHeaderIcon sorted={sorted} canSort={header.column.getCanSort()} />
                       </span>
                     </th>
                   )

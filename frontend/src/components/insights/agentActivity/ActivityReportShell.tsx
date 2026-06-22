@@ -28,6 +28,10 @@ interface ActivityReportShellProps {
   description: string
   /** Business days in the selected range — shown as the calculation basis. */
   businessDays?: number
+  /** Total business days in the period; when set, current renders "X of Y". */
+  businessDaysTotal?: number
+  /** Latest date with data (ISO YYYY-MM-DD); shown as "(through ...)" when set. */
+  dataThroughDate?: string | null
   /** Business days in the prior comparison range (defaults to the sample value). */
   priorBusinessDays?: number
   /** Prior comparison date range (defaults to the sample range). */
@@ -53,6 +57,8 @@ interface ActivityReportShellProps {
 export default function ActivityReportShell({
   title, description,
   businessDays = SAMPLE_BUSINESS_DAYS,
+  businessDaysTotal,
+  dataThroughDate,
   priorBusinessDays = SAMPLE_PRIOR_BUSINESS_DAYS,
   priorDateRange = SAMPLE_PRIOR_DATE_RANGE,
   filters,
@@ -87,6 +93,8 @@ export default function ActivityReportShell({
         onCustomStartChange={setCustomStart}
         onCustomEndChange={setCustomEnd}
         businessDays={hideBusinessDays ? undefined : businessDays}
+        businessDaysTotal={hideBusinessDays ? undefined : businessDaysTotal}
+        dataThroughDate={hideBusinessDays ? undefined : dataThroughDate}
         priorBusinessDays={hideBusinessDays ? undefined : priorBusinessDays}
         priorDateRange={hideBusinessDays ? undefined : priorDateRange}
         onReset={resetFilters}

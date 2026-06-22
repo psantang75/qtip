@@ -1,0 +1,66 @@
+---
+description: Insights data-warehouse conventions (partitioning, workers, adding reports)
+globs: backend/src/workers/**,backend/prisma/migrations/**,backend/src/services/insights*
+alwaysApply: false
+---
+
+# Insights Data Warehouse
+
+The Insights warehouse is **registry-driven**: report ingestion is data in the
+`ie_source_report` table, not code. One generic dispatcher runs all reports.
+Adding a report is normally a migration + 2 SQL files — no new worker code.
+
+## Ingestion pipeline (per report)
+
+```
+ie_source_report row  →  ie-source-dispatch (cron :20/:50, runs only DUE reports)
+  → extract  (<code>.extract.sql)   → ie_stg_<code>  (TRUNCATEd each run)
+  → transform(<code>.transform.sql) → ie_fact_<code> (conformed grain)
+```
+
+- Per-report cadence lives in the row (`frequency_minutes`, `run_only_hours`,
+  `incremental_days`, `load_mode`, `is_active`). Retune by editing the row — no redeploy.
+- Dimension syncs feed fact joins and run before rollup:
+  `ie-dept-sync :00/:30` → `ie-emp-sync :05/:35` → `ie-calendar-sync :10/:40`
+  → `ie-rollup :15/:45` → `ie-source-dispatch :20/:50`. All UTC, one-shot
+  (`autorestart:false`) so "stopped" in `pm2 list` is normal.
+
+## Partitioning — MANDATORY for every ie_fact_/ie_stg_ table
+
+`ie-partition-manager` (monthly, `0 0 1 * *`) auto-creates future monthly
+partitions and drops old ones (staging: `retention_staging_days`=90;
+fact: `retention_fact_years`=3; lookahead 3mo — all in `ie_config`). It ONLY
+works if tables follow this exact shape, so new tables MUST match it:
+
+- **Staging** (`ie_stg_*`): `PARTITION BY RANGE (YEAR(<date_col>)*100 + MONTH(<date_col>))`
+- **Fact** (`ie_fact_*`): `date_key` is `YYYYMMDD INT`; `PARTITION BY RANGE (date_key DIV 100)` (= YYYYMM)
+- Both seeded with a single catch-all: `PARTITION p_future VALUES LESS THAN MAXVALUE`
+- The partition column MUST be in every PK/unique key → `PRIMARY KEY (<surrogate>_key, date_key)`
+
+```sql
+-- Fact table pattern (mirror an existing one, e.g. 20260618140000_create_call_activity_facts)
+CREATE TABLE IF NOT EXISTS `ie_fact_<code>` (
+  `<code>_key` BIGINT NOT NULL AUTO_INCREMENT,
+  `date_key`   INT    NOT NULL,            -- YYYYMMDD
+  /* ...measures/dims... */
+  PRIMARY KEY (`<code>_key`, `date_key`)   -- partition col required in PK
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+PARTITION BY RANGE (`date_key` DIV 100) (
+  PARTITION `p_future` VALUES LESS THAN MAXVALUE
+);
+```
+
+If a fact/stg table is created WITHOUT this partitioning, partition-manager's
+`REORGANIZE PARTITION p_future` errors for that table (caught + logged, not fatal),
+and the table never ages out — so always partition up front.
+
+## Adding a new report — checklist
+
+1. New migration (mirror `2026061814.._create_call_activity_facts`), idempotent
+   (`CREATE TABLE IF NOT EXISTS`, `INSERT ... ON DUPLICATE KEY UPDATE`):
+   create `ie_stg_<code>` + `ie_fact_<code>` (partitioned as above) and INSERT the
+   `ie_source_report` registry row.
+2. Add `backend/src/workers/sql/<code>.extract.sql` (aliases MUST match staging
+   columns by name) and `<code>.transform.sql` (staging → fact at the conformed grain).
+3. No new PM2 process — `ie-source-dispatch` picks it up from the registry row.
+4. Migrations are additive only (never alter/drop existing data per project rules).

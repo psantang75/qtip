@@ -5,8 +5,8 @@ import {
   useReactTable, getCoreRowModel, getSortedRowModel,
   flexRender, createColumnHelper, type SortingState,
 } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown } from 'lucide-react'
 import { InsightsFilterBar, InsightsSection, StatusDot, SkeletonTable, ErrorCard } from '@/components/insights'
+import SortHeaderIcon from '@/components/insights/agentActivity/SortHeaderIcon'
 import { useQCFilters } from '@/hooks/useQCFilters'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { useAuth } from '@/contexts/AuthContext'
@@ -246,8 +246,7 @@ function AdminAgentsList({
                     <th key={header.id} className="text-left pb-2.5 pr-4 text-xs font-semibold text-slate-400 cursor-pointer select-none" onClick={header.column.getToggleSortingHandler()}>
                       <span className="flex items-center gap-1">
                         {flexRender(header.column.columnDef.header, header.getContext())}
-                        {header.column.getIsSorted() === 'asc'  && <ChevronUp size={12} />}
-                        {header.column.getIsSorted() === 'desc' && <ChevronDown size={12} />}
+                        <SortHeaderIcon sorted={header.column.getIsSorted()} canSort={header.column.getCanSort()} />
                       </span>
                     </th>
                   ))}

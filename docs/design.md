@@ -222,6 +222,8 @@ Focus ring 2 px solid var(--color-primary-blue).
 
 Zebra stripe with rgba(0,0,0,0.03).
 
+Sort affordance (3-state): every sortable column shows a neutral up/down icon (lucide ChevronsUpDown, 40% opacity) until it becomes the active sort, then a single directional arrow (ChevronUp / ChevronDown). Non-sortable columns show no icon. Reference implementation: SortHeaderIcon, used by SortableTable (frontend/src/components/insights/agentActivity/).
+
 Sticky header, 12 px cell padding.
 
 6.5 Toasts & Alerts

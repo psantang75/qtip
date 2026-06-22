@@ -339,6 +339,14 @@ export const databaseConfig = {
   acquireTimeout: 60000,
   timeout: 60000,
   reconnect: true,
+  // Read/write DATETIME values as UTC, independent of the host/Node timezone.
+  // Paired with a per-connection `SET time_zone = '+00:00'` (see config/database.ts)
+  // so NOW()/CURRENT_TIMESTAMP are UTC too. This makes `.toISOString()` emit a
+  // correct instant the frontend can render in the browser's local zone — the
+  // same in dev/test/prod — and matches how Prisma already stores timestamps.
+  // Only the primary pool is pinned; phone/crm are external read-only sources
+  // whose DATETIMEs must keep their own timezone semantics.
+  timezone: 'Z' as const,
   charset: 'utf8mb4'
 };
 

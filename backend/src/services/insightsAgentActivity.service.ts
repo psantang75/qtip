@@ -13,7 +13,7 @@
  */
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
-import { resolvePeriod } from '../utils/periodUtils';
+import { resolvePeriod, type DateRange } from '../utils/periodUtils';
 
 /** Direction that counts as a "sent" email on the Email Activity report. */
 const SENT_DIRECTION = 'Outbound';
@@ -96,11 +96,14 @@ export async function listSourceReports(): Promise<SourceReportStatus[]> {
 
 /**
  * Convert a DATETIME value read from MySQL into a true ISO-8601 UTC string the
- * frontend can localize. mysql2 parses DATETIME columns into JS Date objects in
- * the Node process timezone (same tz the DB writes NOW()/CURRENT_TIMESTAMP in),
- * so `.toISOString()` yields the correct instant. Do NOT format these in SQL
- * with a literal 'Z' — that mislabels the local wall-clock as UTC and the
- * frontend then shifts it by the offset (the ~4h-off "Data last updated" bug).
+ * frontend can localize. The primary pool is pinned to UTC (mysql2 `timezone: 'Z'`
+ * + a per-connection `SET time_zone = '+00:00'`; see config/database.ts), so
+ * NOW()/CURRENT_TIMESTAMP are written as UTC and mysql2 parses DATETIME columns
+ * into JS Date objects as UTC — independent of the host/Node timezone. That makes
+ * `.toISOString()` yield the correct instant in every environment. Do NOT format
+ * these in SQL with a literal 'Z' (e.g. DATE_FORMAT(..,'..Z')) — that mislabels a
+ * wall-clock string as UTC and the frontend shifts it by the offset (the old
+ * ~4h-off "Data last updated" bug).
  */
 function toIso(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -183,6 +186,82 @@ function periodNaturalEnd(period: string, start: Date, rangeEnd: Date): Date {
     case 'current_year':    return new Date(start.getFullYear(), 11, 31);
     case 'current_week':    { const e = new Date(start); e.setDate(e.getDate() + 6); return e; }
     default:                return rangeEnd;
+  }
+}
+
+/**
+ * Pace basis from the Business Calendar. `dataThroughKey` is the latest date that
+ * actually has loaded data (capped at today), so an in-progress or not-yet-loaded
+ * day never inflates the elapsed denominator and drags pace down. For a completed
+ * period the natural end is passed as dataThroughKey, yielding
+ * bizElapsed === bizTotal (pace == actual).
+ */
+async function computePaceBasis(fromKey: number, naturalEndKey: number, dataThroughKey: number) {
+  const [bizRows] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS total, SUM(date_key <= ?) AS elapsed
+     FROM ie_dim_date
+     WHERE is_business_day = 1 AND date_key BETWEEN ? AND ?`,
+    [dataThroughKey, fromKey, naturalEndKey],
+  );
+  const bizTotal = Number(bizRows[0]?.total ?? 0);
+  const bizElapsed = Math.max(1, Number(bizRows[0]?.elapsed ?? 0));
+  const project = (v: number): number => Math.round(div(v, bizElapsed) * bizTotal);
+  return { bizTotal, bizElapsed, project };
+}
+
+/**
+ * Latest loaded `date_key` for a fact within the report's scope (the same WHERE the
+ * data tables use), capped at today. Drives the pace "data-through" date so the
+ * elapsed-day denominator only counts days that actually have data — fixing the
+ * "Friday data, Monday run" understatement.
+ */
+async function dataThroughDateKey(
+  table: string, joins: string, whereSql: string, params: (string | number)[], todayKey: number,
+): Promise<number> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT MAX(f.date_key) AS maxKey FROM ${table} f ${joins} ${whereSql}`,
+    params,
+  );
+  const maxKey = Number(rows[0]?.maxKey ?? 0);
+  return maxKey > 0 ? Math.min(todayKey, maxKey) : todayKey;
+}
+
+/** YYYYMMDD int -> 'YYYY-MM-DD' (null for 0/invalid). String math avoids TZ shifts. */
+function dateKeyToIso(key: number): string | null {
+  if (!key || key <= 0) return null;
+  const y = Math.floor(key / 10000);
+  const m = Math.floor((key % 10000) / 100);
+  const d = key % 100;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/** Date -> 'MM-DD-YYYY' to match the filter-bar Prior Date Range display. */
+function fmtMDY(d: Date): string {
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${d.getFullYear()}`;
+}
+
+/**
+ * The FULL natural prior period (entire previous month/quarter/year/week) for the
+ * Business Days comparison display — distinct from resolvePeriod().prior, which
+ * truncates current_* periods to a month-to-date span for % deltas. Completed
+ * periods (prior_* and custom) fall back to resolvePeriod().prior.
+ */
+function priorNaturalRange(period: string, currentStart: Date, fallbackPrior: DateRange): DateRange {
+  const s = currentStart;
+  switch (period.toLowerCase().replace(/\s+/g, '_')) {
+    case 'current_month':
+      return { start: new Date(s.getFullYear(), s.getMonth() - 1, 1), end: new Date(s.getFullYear(), s.getMonth(), 0) };
+    case 'current_quarter':
+      return { start: new Date(s.getFullYear(), s.getMonth() - 3, 1), end: new Date(s.getFullYear(), s.getMonth(), 0) };
+    case 'current_year':
+      return { start: new Date(s.getFullYear() - 1, 0, 1), end: new Date(s.getFullYear() - 1, 11, 31) };
+    case 'current_week': {
+      const start = new Date(s); start.setDate(start.getDate() - 7);
+      const end = new Date(s); end.setDate(end.getDate() - 1);
+      return { start, end };
+    }
+    default:
+      return fallbackPrior;
   }
 }
 
@@ -830,22 +909,6 @@ export async function getLeads(filters: LeadsFilters): Promise<LeadsResult> {
   const toKey = toDateKey(current.end);
   const todayKey = toDateKey(new Date());
 
-  // Pace basis from the Business Calendar. resolvePeriod caps an in-progress
-  // period's range at today, so for pace we need the period's NATURAL end (e.g.
-  // end of the calendar month) as the total, while elapsed stays the business
-  // days already worked (<= today). For a completed period (prior_*/custom) the
-  // natural end equals the range end, so elapsed == total and pace == actual.
-  const naturalEndKey = toDateKey(periodNaturalEnd(filters.period, current.start, current.end));
-  const [bizRows] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS total, SUM(date_key <= ?) AS elapsed
-     FROM ie_dim_date
-     WHERE is_business_day = 1 AND date_key BETWEEN ? AND ?`,
-    [todayKey, fromKey, naturalEndKey],
-  );
-  const bizTotal = Number(bizRows[0]?.total ?? 0);
-  const bizElapsed = Math.max(1, Number(bizRows[0]?.elapsed ?? 0));
-  const project = (v: number): number => Math.round(div(v, bizElapsed) * bizTotal);
-
   const EMP_JOIN = `JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key`;
   const DEPT_JOIN = `JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key`;
   const baseWhere = [
@@ -873,6 +936,16 @@ export async function getLeads(filters: LeadsFilters): Promise<LeadsResult> {
   }
   const whereSql = `WHERE ${where.join(' AND ')}`;
   const baseWhereSql = `WHERE ${baseWhere.join(' AND ')}`;
+
+  // Pace basis from the Business Calendar. resolvePeriod caps an in-progress
+  // period's range at today, so for pace we need the period's NATURAL end (e.g.
+  // end of the calendar month) as the total. Elapsed is counted only through the
+  // latest date that actually has loaded data (capped at today) so an unfinished
+  // or not-yet-loaded day doesn't inflate the denominator and understate pace.
+  // For a completed period (prior_*/custom) elapsed == total and pace == actual.
+  const naturalEndKey = toDateKey(periodNaturalEnd(filters.period, current.start, current.end));
+  const dataThroughKey = await dataThroughDateKey('ie_fact_lead', `${EMP_JOIN} ${DEPT_JOIN}`, whereSql, params, todayKey);
+  const { bizElapsed, project } = await computePaceBasis(fromKey, naturalEndKey, dataThroughKey);
 
   const [catRows] = await pool.query<RowDataPacket[]>(
     `SELECT COALESCE(NULLIF(f.lead_source_category, ''), 'Uncategorized') AS category,
@@ -988,6 +1061,16 @@ export interface MarginResult {
   deals: MarginDealsRow[];
   margin: MarginRow[];
   customers: MarginCustomerRow[];
+  /** Business days with data so far (the pace denominator) for the current period. */
+  businessDaysElapsed: number;
+  /** Total business days in the current period (the pace projection target). */
+  businessDaysTotal: number;
+  /** Latest date that actually has margin data (ISO YYYY-MM-DD); null when empty. */
+  dataThroughDate: string | null;
+  /** Business days in the full natural prior period (e.g. entire previous month). */
+  priorBusinessDays: number;
+  /** Full natural prior period range, formatted MM-DD-YYYY for display. */
+  priorDateRange: { start: string; end: string } | null;
   availableUsers: string[];
   availableDepartments: string[];
   dataLastUpdated: string | null;
@@ -1014,28 +1097,18 @@ const MARGIN_CUSTOMER_LIMIT = 50;
 export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
   const empty: MarginResult = {
     leads: [], deals: [], margin: [], customers: [],
+    businessDaysElapsed: 0, businessDaysTotal: 0, dataThroughDate: null,
+    priorBusinessDays: 0, priorDateRange: null,
     availableUsers: [], availableDepartments: [], dataLastUpdated: null,
     dataNextUpdate: null, updateEveryMinutes: null,
   };
   if (!(await factTableExists('ie_fact_order_margin'))) return empty;
 
-  const { current } = resolvePeriod(filters.period, filters.customStart, filters.customEnd);
+  const { current, prior } = resolvePeriod(filters.period, filters.customStart, filters.customEnd);
   const fromKey = toDateKey(current.start);
   const toKey = toDateKey(current.end);
   const todayKey = toDateKey(new Date());
-
-  // Pace basis from the Business Calendar (see getLeads): elapsed business days
-  // (<= today) vs. the period's natural end. Completed period -> pace == actual.
   const naturalEndKey = toDateKey(periodNaturalEnd(filters.period, current.start, current.end));
-  const [bizRows] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS total, SUM(date_key <= ?) AS elapsed
-     FROM ie_dim_date
-     WHERE is_business_day = 1 AND date_key BETWEEN ? AND ?`,
-    [todayKey, fromKey, naturalEndKey],
-  );
-  const bizTotal = Number(bizRows[0]?.total ?? 0);
-  const bizElapsed = Math.max(1, Number(bizRows[0]?.elapsed ?? 0));
-  const project = (v: number): number => Math.round(div(v, bizElapsed) * bizTotal);
 
   const EMP_JOIN = `JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key`;
   const DEPT_JOIN = `JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key`;
@@ -1060,6 +1133,21 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
   }
   const whereSql = `WHERE ${where.join(' AND ')}`;
   const baseWhereSql = `WHERE ${baseWhere.join(' AND ')}`;
+
+  // Pace basis (see getLeads): total business days run to the period's natural
+  // end, while elapsed only counts business days through the latest date that
+  // actually has margin data (capped at today), so an unfinished or not-yet-loaded
+  // day never drags pace down. Completed periods -> elapsed == total -> pace == actual.
+  const dataThroughKey = await dataThroughDateKey(
+    'ie_fact_order_margin', `${EMP_JOIN} ${DEPT_JOIN}`, whereSql, params, todayKey);
+  const { bizTotal, bizElapsed, project } = await computePaceBasis(fromKey, naturalEndKey, dataThroughKey);
+
+  // Business Days comparison shown in the filter bar: current = elapsed-so-far,
+  // prior = the FULL natural prior period (e.g. entire previous month).
+  const priorRange = priorNaturalRange(filters.period, current.start, prior);
+  const priorEndKey = toDateKey(priorRange.end);
+  const { bizTotal: priorBusinessDays } = await computePaceBasis(
+    toDateKey(priorRange.start), priorEndKey, priorEndKey);
 
   // Tables 2 + 3 — per salesperson. A "deal" is an order row (refund_id = 0);
   // returns are negative-margin/sub rows that net into the sums.
@@ -1205,6 +1293,11 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
     deals,
     margin,
     customers,
+    businessDaysElapsed: bizElapsed,
+    businessDaysTotal: bizTotal,
+    dataThroughDate: dateKeyToIso(dataThroughKey),
+    priorBusinessDays,
+    priorDateRange: { start: fmtMDY(priorRange.start), end: fmtMDY(priorRange.end) },
     availableUsers: userRows.map((r) => r.salesperson_name as string).filter(Boolean),
     availableDepartments: deptRows.map((r) => r.department_name as string),
     dataLastUpdated: toIso(freshRows[0]?.last),

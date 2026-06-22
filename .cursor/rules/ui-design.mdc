@@ -55,6 +55,9 @@ costs the maintainer real review time. Before writing or modifying
   when copying an exact existing utility class (e.g.
   `border-[#00aeef]` from `optionCls`).
 - **NEVER** build a custom data table — use TanStack Table.
+- **ALWAYS** give sortable table columns the 3-state sort affordance (neutral
+  `ChevronsUpDown` until active, then `ChevronUp`/`ChevronDown`) via the shared
+  `SortHeaderIcon` — mirror `SortableTable`.
 - **NEVER** use `useEffect` + `axios`/`fetch` for server state — use
   TanStack Query.
 - **NEVER** introduce another icon library or emojis — only

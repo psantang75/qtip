@@ -53,6 +53,9 @@ class DatabasePoolFactory {
         connectionLimit: config.connectionLimit,
         queueLimit: config.queueLimit ?? 0,
         charset: 'utf8mb4',
+        // Only the primary pool opts into UTC (timezone: 'Z' in databaseConfig);
+        // phone/crm leave this unset so their external DATETIMEs keep native tz.
+        timezone: (config as { timezone?: string }).timezone,
         typeCast: true,
       });
 
@@ -70,6 +73,13 @@ class DatabasePoolFactory {
       const corePool = (pool as unknown as { pool: { on: (e: string, cb: (c: { query: (sql: string, cb: (err: unknown) => void) => void }) => void) => void } }).pool;
       let unsupportedLogged = false;
       corePool.on('connection', (conn) => {
+        // Pin the primary pool's session to UTC so NOW()/CURRENT_TIMESTAMP and any
+        // DB-side date math are UTC, matching the driver's `timezone: 'Z'`. Numeric
+        // offsets work without the named-timezone tables being loaded. Errors are
+        // swallowed: a session left at the server default is still self-consistent.
+        if (connectionName === 'primary') {
+          conn.query(`SET time_zone = '+00:00'`, () => { /* best-effort */ });
+        }
         // Try MySQL first (vars-by-name lookup is faster than try/catch on
         // the wire, but mysql2 doesn't expose server version pre-handshake,
         // so a single throwaway SET is the cheapest probe).

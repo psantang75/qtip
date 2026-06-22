@@ -432,6 +432,16 @@ export interface MarginResponse {
   deals:                MarginDealsRow[]
   margin:               MarginRow[]
   customers:            MarginCustomerRow[]
+  /** Business days with data so far (the pace denominator) for the current period. */
+  businessDaysElapsed:  number
+  /** Total business days in the current period (the pace projection target). */
+  businessDaysTotal:    number
+  /** Latest date that actually has margin data (ISO YYYY-MM-DD); null when empty. */
+  dataThroughDate:      string | null
+  /** Business days in the full natural prior period (e.g. entire previous month). */
+  priorBusinessDays:    number
+  /** Full natural prior period range, formatted MM-DD-YYYY for display. */
+  priorDateRange:       { start: string; end: string } | null
   availableUsers:       string[]
   availableDepartments: string[]
   dataLastUpdated:      string | null

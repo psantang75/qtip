@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, type SortingState } from '@tanstack/react-table'
+import { Info } from 'lucide-react'
 import { InsightsSection } from '@/components/insights'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import ActivityReportShell from '@/components/insights/agentActivity/ActivityReportShell'
 import SortableTable from '@/components/insights/agentActivity/SortableTable'
 import { fmtNum, fmtAmount, fmtPct, fmtPctInt } from '@/components/insights/agentActivity/format'
@@ -15,6 +17,36 @@ import {
 const sum = <T,>(rows: T[], pick: (r: T) => number) => rows.reduce((a, r) => a + pick(r), 0)
 
 const BY_AGENT: SortingState = [{ id: 'agent', desc: false }]
+
+// Pace columns project month-to-date figures to period end. The info icon
+// explains the formula and points at the data-through date in the filter bar.
+// stopPropagation keeps a click on the icon from toggling the column sort.
+function PaceHeader({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {label}
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              className="text-slate-400 hover:text-slate-600"
+              aria-label={`How ${label} is calculated`}
+            >
+              <Info className="h-3 w-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
+            Pace = actual / business days with data x total business days in the period.
+            Business days with data stop at the latest loaded date shown in the filter bar,
+            so an unfinished or not-yet-loaded day doesn't drag the projection down.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </span>
+  )
+}
 
 // ── Table 1 — Leads by Salesperson ─────────────────────────────────────────────
 const lc = createColumnHelper<MarginLeadsRow>()
@@ -31,7 +63,7 @@ const dealsColumns = [
   dc.accessor('agent',        { header: 'Salesperson',   cell: i => i.getValue(),         meta: { width: 'w-[22%]' } }),
   dc.accessor('deals',        { header: 'Deals',         cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
   dc.accessor('totalSubs',    { header: 'Total Subs',    cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
-  dc.accessor('subPace',      { header: 'Sub Pace',      cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
+  dc.accessor('subPace',      { header: () => <PaceHeader label="Sub Pace" />, cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
   dc.accessor('subOnlyDeals', { header: 'Sub Only Deals', cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
   dc.accessor('subOnly',      { header: 'Sub Only',      cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
   dc.accessor('subOnlyPct',   { header: 'Sub Only %',    cell: i => fmtPct(i.getValue(), 1), meta: { width: 'w-[13%]' } }),
@@ -47,7 +79,7 @@ const marginColumns = [
   mc.accessor('shipping',    { header: 'Shipping Margin',     cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('warranty',    { header: 'Warranty Margin',     cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('total',       { header: 'Total Margin',        cell: i => fmtAmount(i.getValue()),    meta: { width: W, bold: true } }),
-  mc.accessor('pace',        { header: 'Margin Pace',         cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
+  mc.accessor('pace',        { header: () => <PaceHeader label="Margin Pace" />, cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('perDeal',     { header: 'Total Margin / Deal', cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('perSub',      { header: 'Total Margin / Sub',  cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('warrantyPct', { header: 'Warranty Margin %',   cell: i => fmtPctInt(i.getValue()),    meta: { width: W } }),
@@ -150,7 +182,11 @@ export default function AAMarginPage() {
       filters={filters}
       availableUsers={data?.availableUsers ?? []}
       availableDepts={data?.availableDepartments ?? []}
-      hideBusinessDays
+      businessDays={data?.businessDaysElapsed}
+      businessDaysTotal={data?.businessDaysTotal}
+      dataThroughDate={data?.dataThroughDate}
+      priorBusinessDays={data?.priorBusinessDays}
+      priorDateRange={data?.priorDateRange ?? undefined}
       live
     >
       <InsightsSection title="Leads by Salesperson — Based on Lead Created Date" lastUpdated={lastUpdated} nextUpdate={nextUpdate} updateEveryMinutes={updateEveryMinutes}>

@@ -4,8 +4,9 @@ import {
   useReactTable, getCoreRowModel, getSortedRowModel,
   flexRender, createColumnHelper, type SortingState,
 } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { KpiTile, InsightsSection } from '@/components/insights'
+import SortHeaderIcon from '@/components/insights/agentActivity/SortHeaderIcon'
 import { Button } from '@/components/ui/button'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import ActivityReportShell from '@/components/insights/agentActivity/ActivityReportShell'
@@ -179,8 +180,7 @@ export default function AALeadsPage() {
                       >
                         <span className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>
                           {flexRender(header.column.columnDef.header, header.getContext())}
-                          {header.column.getIsSorted() === 'asc'  && <ChevronUp size={12} />}
-                          {header.column.getIsSorted() === 'desc' && <ChevronDown size={12} />}
+                          <SortHeaderIcon sorted={header.column.getIsSorted()} canSort={canSort} />
                         </span>
                       </th>
                     )

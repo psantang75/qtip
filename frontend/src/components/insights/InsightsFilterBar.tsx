@@ -51,6 +51,10 @@ interface InsightsFilterBarProps {
   showBackButton?: boolean
   onBack?: () => void
   businessDays?: number
+  /** Total business days in the period; when set, the current count renders "X of Y". */
+  businessDaysTotal?: number
+  /** Latest date with data (ISO YYYY-MM-DD); shown as "(through MM-DD-YYYY)" when set. */
+  dataThroughDate?: string | null
   priorBusinessDays?: number
   priorDateRange?: { start: string; end: string }
   onReset?: () => void
@@ -79,6 +83,8 @@ export default function InsightsFilterBar({
   showBackButton = false,
   onBack,
   businessDays,
+  businessDaysTotal,
+  dataThroughDate,
   priorBusinessDays,
   priorDateRange,
   onReset,
@@ -86,12 +92,24 @@ export default function InsightsFilterBar({
   const isCustom = period === 'Custom'
   const hasInfoRow = businessDays != null || priorDateRange
 
+  // ISO (YYYY-MM-DD) -> MM-DD-YYYY, matching the Prior Date Range display.
+  const fmtThrough = (iso: string) => {
+    const [y, m, d] = iso.split('-')
+    return y && m && d ? `${m}-${d}-${y}` : iso
+  }
+
   const infoRow = hasInfoRow ? (
     <>
       {businessDays != null && (
         <span className="flex items-center gap-1.5">
           <CalendarDays size={13} className="text-primary" />
-          Business Days: <strong className="text-slate-700">{businessDays}</strong> current,{' '}
+          Business Days:{' '}
+          <strong className="text-slate-700">
+            {businessDays}{businessDaysTotal != null ? ` of ${businessDaysTotal}` : ''}
+          </strong>{' '}
+          current
+          {dataThroughDate ? <span className="text-slate-400">{` (through ${fmtThrough(dataThroughDate)})`}</span> : null}
+          {', '}
           <strong className="text-slate-700">{priorBusinessDays ?? '…'}</strong> prior
         </span>
       )}
