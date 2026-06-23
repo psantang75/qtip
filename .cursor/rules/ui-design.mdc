@@ -58,6 +58,17 @@ costs the maintainer real review time. Before writing or modifying
 - **ALWAYS** give sortable table columns the 3-state sort affordance (neutral
   `ChevronsUpDown` until active, then `ChevronUp`/`ChevronDown`) via the shared
   `SortHeaderIcon` — mirror `SortableTable`.
+- **ALWAYS** make the explained element itself the hover trigger for a tooltip
+  — **NEVER** add an info-icon / question-mark button (see `QCCoachingPage`).
+  Content layout must mirror the "Audits Completed" KPI card (`KpiInfoCard`):
+  white card (`rounded-xl border border-slate-200 bg-white p-3 shadow-lg`,
+  `side="bottom"`) with a bold title (`text-[13px] font-semibold`), a
+  description paragraph (`text-[12.5px] text-slate-600`), then labelled rows
+  (uppercase `text-[10px]` label + value) for supporting detail. A metric
+  tooltip must show the **actual basis** it used (e.g. "Days Used: 14 of 21
+  business days"), and must have a **self-scoped agent variant** when the report
+  has one (gate on `useQualityRole().isAgent` — agents get title + description +
+  basis, not the raw formula). Reference: `PaceHeader`. See `docs/design.md` §6.6.
 - **NEVER** use `useEffect` + `axios`/`fetch` for server state — use
   TanStack Query.
 - **NEVER** introduce another icon library or emojis — only

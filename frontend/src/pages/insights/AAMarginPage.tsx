@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, type SortingState } from '@tanstack/react-table'
-import { Info } from 'lucide-react'
 import { InsightsSection } from '@/components/insights'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import ActivityReportShell from '@/components/insights/agentActivity/ActivityReportShell'
 import SortableTable from '@/components/insights/agentActivity/SortableTable'
+import PaceHeader from '@/components/insights/agentActivity/PaceHeader'
 import { fmtNum, fmtAmount, fmtPct, fmtPctInt } from '@/components/insights/agentActivity/format'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
+import { useQualityRole } from '@/hooks/useQualityRole'
 import {
   getMargin,
   type MarginLeadsRow, type MarginDealsRow, type MarginRow, type MarginCustomerRow,
@@ -18,34 +18,15 @@ const sum = <T,>(rows: T[], pick: (r: T) => number) => rows.reduce((a, r) => a +
 
 const BY_AGENT: SortingState = [{ id: 'agent', desc: false }]
 
-// Pace columns project month-to-date figures to period end. The info icon
-// explains the formula and points at the data-through date in the filter bar.
-// stopPropagation keeps a click on the icon from toggling the column sort.
-function PaceHeader({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      {label}
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={(e) => e.stopPropagation()}
-              className="text-slate-400 hover:text-slate-600"
-              aria-label={`How ${label} is calculated`}
-            >
-              <Info className="h-3 w-3" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
-            Pace = actual / business days with data x total business days in the period.
-            Business days with data stop at the latest loaded date shown in the filter bar,
-            so an unfinished or not-yet-loaded day doesn't drag the projection down.
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </span>
-  )
+/**
+ * Day basis + audience for the pace tooltips. Built from the live response so
+ * each pace column can show exactly how many business days the projection used.
+ */
+interface PaceBasis {
+  elapsed?: number
+  total?: number
+  throughDate?: string | null
+  agentView: boolean
 }
 
 // ── Table 1 — Leads by Salesperson ─────────────────────────────────────────────
@@ -59,11 +40,11 @@ const leadsColumns = [
 
 // ── Table 2 — Deals and Subscriptions by Salesperson ────────────────────────────
 const dc = createColumnHelper<MarginDealsRow>()
-const dealsColumns = [
+const buildDealsColumns = (pace: PaceBasis) => [
   dc.accessor('agent',        { header: 'Salesperson',   cell: i => i.getValue(),         meta: { width: 'w-[22%]' } }),
   dc.accessor('deals',        { header: 'Deals',         cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
   dc.accessor('totalSubs',    { header: 'Total Subs',    cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
-  dc.accessor('subPace',      { header: () => <PaceHeader label="Sub Pace" />, cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
+  dc.accessor('subPace',      { header: () => <PaceHeader label="Sub Pace" metric="subscriptions" metricShort="subs" elapsed={pace.elapsed} total={pace.total} throughDate={pace.throughDate} agentView={pace.agentView} />, cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
   dc.accessor('subOnlyDeals', { header: 'Sub Only Deals', cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
   dc.accessor('subOnly',      { header: 'Sub Only',      cell: i => fmtNum(i.getValue()), meta: { width: 'w-[13%]' } }),
   dc.accessor('subOnlyPct',   { header: 'Sub Only %',    cell: i => fmtPct(i.getValue(), 1), meta: { width: 'w-[13%]' } }),
@@ -72,14 +53,14 @@ const dealsColumns = [
 // ── Table 3 — Margin by Salesperson ─────────────────────────────────────────────
 const mc = createColumnHelper<MarginRow>()
 const W = 'w-[8.5%]'
-const marginColumns = [
+const buildMarginColumns = (pace: PaceBasis) => [
   mc.accessor('agent',       { header: 'Salesperson',         cell: i => i.getValue(),               meta: { width: 'w-[15%]' } }),
   mc.accessor('product',     { header: 'Product Margin',      cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('install',     { header: 'Install Margin',      cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('shipping',    { header: 'Shipping Margin',     cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('warranty',    { header: 'Warranty Margin',     cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('total',       { header: 'Total Margin',        cell: i => fmtAmount(i.getValue()),    meta: { width: W, bold: true } }),
-  mc.accessor('pace',        { header: () => <PaceHeader label="Margin Pace" />, cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
+  mc.accessor('pace',        { header: () => <PaceHeader label="Margin Pace" metric="total margin" metricShort="margin" elapsed={pace.elapsed} total={pace.total} throughDate={pace.throughDate} agentView={pace.agentView} />, cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('perDeal',     { header: 'Total Margin / Deal', cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('perSub',      { header: 'Total Margin / Sub',  cell: i => fmtAmount(i.getValue()),    meta: { width: W } }),
   mc.accessor('warrantyPct', { header: 'Warranty Margin %',   cell: i => fmtPctInt(i.getValue()),    meta: { width: W } }),
@@ -106,6 +87,7 @@ const LEADERBOARD_LIMITS = [15, 20, 25, 30, 35, 40, 45, 50]
 
 export default function AAMarginPage() {
   const filters = useActivityFilters()
+  const { isAgent } = useQualityRole()
   const [leaderboardLimit, setLeaderboardLimit] = useState(15)
 
   const { data } = useQuery({
@@ -120,6 +102,18 @@ export default function AAMarginPage() {
   const dealsRows    = useMemo(() => data?.deals ?? [],     [data])
   const marginRows   = useMemo(() => data?.margin ?? [],    [data])
   const customerRows = useMemo(() => data?.customers ?? [], [data])
+
+  // Day basis for the pace tooltips — sourced from the live response so the
+  // tooltip shows exactly which business days the projection used.
+  const pace = useMemo<PaceBasis>(() => ({
+    elapsed:     data?.businessDaysElapsed,
+    total:       data?.businessDaysTotal,
+    throughDate: data?.dataThroughDate ?? null,
+    agentView:   isAgent,
+  }), [data?.businessDaysElapsed, data?.businessDaysTotal, data?.dataThroughDate, isAgent])
+
+  const dealsColumns  = useMemo(() => buildDealsColumns(pace),  [pace])
+  const marginColumns = useMemo(() => buildMarginColumns(pace), [pace])
   const lastUpdated  = data?.dataLastUpdated ?? undefined
   const nextUpdate   = data?.dataNextUpdate ?? undefined
   const updateEveryMinutes = data?.updateEveryMinutes ?? undefined

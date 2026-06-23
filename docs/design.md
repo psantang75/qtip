@@ -232,6 +232,16 @@ Slide‑in from top right.
 
 Alert background tints: primary 10%, danger 10%, etc.
 
+6.6 Tooltips
+
+Canonical behaviour (single source of truth): the element being explained IS the hover trigger — NEVER add a separate info-icon / question-mark button to open an explanatory tooltip (see the Quality coaching tooltips, QCCoachingPage.tsx).
+
+Canonical content layout (single source of truth): the KPI info card shown by the Quality "Audits Completed" tile — KpiInfoCard (frontend/src/components/insights/KpiInfoCard.tsx). Inside a white rounded card (rounded-xl border border-slate-200 bg-white p-3 shadow-lg, side="bottom"), stack: a bold title (text-[13px] font-semibold text-slate-900), a plain-language description paragraph (text-[12.5px] text-slate-600 leading-relaxed), then labelled rows (uppercase tracking-wide label + value) for the supporting detail (Formula, Source/basis, etc.). Always use the shadcn Tooltip/Popover primitives; never hand-roll a box.
+
+Show the math, not just the label: a tooltip explaining a derived metric must state the actual basis it used (e.g. a pace tooltip shows "Using 14 of 21 business days (through MM-DD-YYYY)"), not just the formula. Source these numbers from the live response, never hardcode.
+
+View-appropriate variants: when a report has both an aggregate/team view and a self-scoped Agent (CSR) view, the tooltip copy must have a matching variant (e.g. "your subscriptions so far" vs "subscriptions so far"). Gate the variant off useQualityRole().isAgent — do not show team-framed copy to an agent. Reference implementation: PaceHeader (frontend/src/components/insights/agentActivity/PaceHeader.tsx), used by the Margin report's Sub Pace / Margin Pace columns.
+
 7. Iconography
 
 Library: Lucide‑react 1.2+ (line icons, 24 px default).
