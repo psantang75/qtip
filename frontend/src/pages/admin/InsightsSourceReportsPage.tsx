@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Clock, Pencil, Play, RefreshCw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -62,19 +62,94 @@ function formatDateTime(iso: string | null): string {
   })
 }
 
+// Tickets & Tasks are two ingestion jobs (ticket_open + task_open) that both
+// load ie_fact_ticket_task — split only to stay under the CRM source's 25s
+// session cap. To the user it's ONE report, so we collapse the two registry
+// rows into a single scheduler row here. Edits / Run-now fan out to both ids
+// (see `ids`), keeping their cadence in lockstep. Timing fields use the
+// `ticket_open` member as representative so this row matches the Tickets &
+// Tasks report header (which sources freshness from `ticket_open`).
+const MERGED_GROUP = {
+  codes: ['ticket_open', 'task_open'],
+  representativeCode: 'ticket_open',
+  name: 'Tickets & Tasks',
+}
+
+/** A scheduler table row — either a single report or a merged group (>1 id). */
+interface DisplayRow {
+  key: string
+  ids: number[]
+  report_name: string
+  load_mode: SourceReport['load_mode']
+  frequency_minutes: number
+  run_only_hours: string | null
+  last_run_at: string | null
+  next_run_at: string | null
+  last_status: SourceReport['last_status']
+}
+
+/** Worst-case roll-up of the members' statuses so a failure in either job shows. */
+function combineStatus(statuses: SourceReport['last_status'][]): SourceReport['last_status'] {
+  if (statuses.some(s => s === 'FAILED')) return 'FAILED'
+  if (statuses.some(s => s === 'PARTIAL')) return 'PARTIAL'
+  if (statuses.length > 0 && statuses.every(s => s === 'SUCCESS')) return 'SUCCESS'
+  return null
+}
+
+function buildDisplayRows(reports: SourceReport[]): DisplayRow[] {
+  const rows: DisplayRow[] = []
+  let groupEmitted = false
+
+  for (const r of reports) {
+    if (MERGED_GROUP.codes.includes(r.report_code)) {
+      if (groupEmitted) continue
+      groupEmitted = true
+      const members = reports.filter(m => MERGED_GROUP.codes.includes(m.report_code))
+      const rep = members.find(m => m.report_code === MERGED_GROUP.representativeCode) ?? members[0]
+      rows.push({
+        key: MERGED_GROUP.codes.join('+'),
+        ids: members.map(m => m.id),
+        report_name: MERGED_GROUP.name,
+        load_mode: rep.load_mode,
+        frequency_minutes: rep.frequency_minutes,
+        run_only_hours: rep.run_only_hours,
+        last_run_at: rep.last_run_at,
+        next_run_at: rep.next_run_at,
+        last_status: combineStatus(members.map(m => m.last_status)),
+      })
+    } else {
+      rows.push({
+        key: r.report_code,
+        ids: [r.id],
+        report_name: r.report_name,
+        load_mode: r.load_mode,
+        frequency_minutes: r.frequency_minutes,
+        run_only_hours: r.run_only_hours,
+        last_run_at: r.last_run_at,
+        next_run_at: r.next_run_at,
+        last_status: r.last_status,
+      })
+    }
+  }
+
+  return rows
+}
+
 export default function InsightsSourceReportsPage() {
   const { toast } = useToast()
   const { data: reports = [], isLoading, refetch, dataUpdatedAt } = useSourceReports()
   const updateMut = useUpdateSourceReport()
   const runNowMut = useRunSourceReportNow()
 
-  const [editing, setEditing] = useState<SourceReport | null>(null)
+  const displayRows = useMemo(() => buildDisplayRows(reports), [reports])
+
+  const [editing, setEditing] = useState<DisplayRow | null>(null)
   const [freqValue, setFreqValue] = useState('1')
   const [freqUnit, setFreqUnit] = useState<FreqUnit>('hours')
   const [offPeak, setOffPeak] = useState<'any' | 'offpeak'>('any')
-  const [runTarget, setRunTarget] = useState<SourceReport | null>(null)
+  const [runTarget, setRunTarget] = useState<DisplayRow | null>(null)
 
-  function openEdit(r: SourceReport) {
+  function openEdit(r: DisplayRow) {
     setEditing(r)
     const { value, unit } = decomposeMinutes(r.frequency_minutes)
     setFreqValue(String(value))
@@ -95,13 +170,19 @@ export default function InsightsSourceReportsPage() {
       return
     }
     try {
-      await updateMut.mutateAsync({
-        id: editing.id,
-        data: {
-          frequency_minutes: minutes,
-          run_only_hours: offPeak === 'offpeak' ? OFF_PEAK_VALUE : null,
-        },
-      })
+      // A merged row (Tickets & Tasks) carries >1 id — update both so the two
+      // underlying jobs stay on the same cadence.
+      await Promise.all(
+        editing.ids.map((id) =>
+          updateMut.mutateAsync({
+            id,
+            data: {
+              frequency_minutes: minutes,
+              run_only_hours: offPeak === 'offpeak' ? OFF_PEAK_VALUE : null,
+            },
+          }),
+        ),
+      )
       toast({ title: 'Schedule updated', description: `${editing.report_name} now runs every ${formatEvery(minutes)}.` })
       setEditing(null)
     } catch (err: unknown) {
@@ -118,7 +199,8 @@ export default function InsightsSourceReportsPage() {
     if (!runTarget) return
     const name = runTarget.report_name
     try {
-      await runNowMut.mutateAsync(runTarget.id)
+      // Fan out to every underlying job (Tickets & Tasks = two ids).
+      await Promise.all(runTarget.ids.map((id) => runNowMut.mutateAsync(id)))
       toast({ title: 'Running now', description: `${name} is re-ingesting. Status updates when it finishes — Refresh in a moment.` })
       // Pull updated last_run/status once the run has had time to finish.
       window.setTimeout(() => { void refetch() }, 8000)
@@ -172,30 +254,30 @@ export default function InsightsSourceReportsPage() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
-            ) : reports.length === 0 ? (
+            ) : displayRows.length === 0 ? (
               <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No source reports registered</TableCell></TableRow>
-            ) : reports.map(r => (
-              <TableRow key={r.id} className="hover:bg-slate-50/50">
+            ) : displayRows.map(row => (
+              <TableRow key={row.key} className="hover:bg-slate-50/50">
                 <TableCell className="text-[13px]">
-                  <div className="font-medium text-slate-800">{r.report_name}</div>
+                  <div className="font-medium text-slate-800">{row.report_name}</div>
                 </TableCell>
-                <TableCell className="text-[12px] text-slate-600">{r.load_mode.replace(/_/g, ' ').toLowerCase()}</TableCell>
-                <TableCell className="text-[13px] font-medium text-slate-700">Every {formatEvery(r.frequency_minutes)}</TableCell>
-                <TableCell className="text-[13px] text-slate-600">{r.run_only_hours ? OFF_PEAK_LABEL : 'Any hour'}</TableCell>
-                <TableCell className="text-[13px] text-slate-600">{formatDateTime(r.last_run_at)}</TableCell>
-                <TableCell className="text-[13px] text-slate-600">{formatDateTime(r.next_run_at)}</TableCell>
+                <TableCell className="text-[12px] text-slate-600">{row.load_mode.replace(/_/g, ' ').toLowerCase()}</TableCell>
+                <TableCell className="text-[13px] font-medium text-slate-700">Every {formatEvery(row.frequency_minutes)}</TableCell>
+                <TableCell className="text-[13px] text-slate-600">{row.run_only_hours ? OFF_PEAK_LABEL : 'Any hour'}</TableCell>
+                <TableCell className="text-[13px] text-slate-600">{formatDateTime(row.last_run_at)}</TableCell>
+                <TableCell className="text-[13px] text-slate-600">{formatDateTime(row.next_run_at)}</TableCell>
                 <TableCell>
-                  {r.last_status ? (
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold border ${STATUS_STYLES[r.last_status] ?? 'bg-slate-50 text-slate-600'}`}>
-                      {r.last_status}
+                  {row.last_status ? (
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold border ${STATUS_STYLES[row.last_status] ?? 'bg-slate-50 text-slate-600'}`}>
+                      {row.last_status}
                     </span>
                   ) : <span className="text-[12px] text-slate-400">never run</span>}
                 </TableCell>
                 <TableCell className="text-right whitespace-nowrap">
-                  <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-slate-600" onClick={() => openEdit(r)}>
+                  <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-slate-600" onClick={() => openEdit(row)}>
                     <Pencil size={13} /> Edit
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-primary" onClick={() => setRunTarget(r)}>
+                  <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-primary" onClick={() => setRunTarget(row)}>
                     <Play size={13} /> Run now
                   </Button>
                 </TableCell>

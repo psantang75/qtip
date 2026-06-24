@@ -1,4 +1,4 @@
-import axios, { type AxiosError } from 'axios';
+import apiClient from './apiClient';
 
 export interface User {
   id: number;
@@ -26,90 +26,13 @@ export interface LoginResponse {
   refreshToken?: string;
 }
 
-const api = axios.create({
-  baseURL: '/api',
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 10000,
-});
+// `api` is the shared axios instance (auth token, CSRF, FormData, JWT
+// refresh-on-401, and in-flight GET de-dup all live in apiClient.ts now).
+// Re-exported here so the many `import { api } from './authService'` call
+// sites keep working without change.
+const api = apiClient;
 
 export { api };
-
-api.interceptors.request.use(
-  (config) => {
-    const url = config.url ?? '';
-    const isPublicAuthEndpoint =
-      url.includes('/auth/login') ||
-      url.includes('/csrf-token') ||
-      url.includes('/auth/forgot-password') ||
-      url.includes('/auth/reset-password');
-
-    if (!isPublicAuthEndpoint) {
-      const token = localStorage.getItem('token');
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error: unknown) => Promise.reject(error)
-);
-
-api.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError<{ code?: string }>) => {
-    const originalRequest = error.config as typeof error.config & { _retry?: boolean };
-
-    if (error.response?.status === 401) {
-      const isLoginAttempt = error.config?.url?.includes('/auth/login');
-
-      if (!isLoginAttempt) {
-        const errorCode = error.response.data?.code;
-
-        if (errorCode === 'TOKEN_BLACKLISTED') {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('refreshToken');
-          window.location.href = '/login';
-          return new Promise(() => {});
-        }
-
-        if (originalRequest && !originalRequest._retry) {
-          originalRequest._retry = true;
-          const refreshToken = localStorage.getItem('refreshToken');
-          if (refreshToken) {
-            try {
-              const refreshResponse = await api.post<{
-                success: boolean;
-                token: string;
-                refreshToken?: string;
-              }>('/auth/refresh-token', { refreshToken });
-
-              if (refreshResponse.data.success) {
-                const newToken = refreshResponse.data.token;
-                localStorage.setItem('token', newToken);
-                if (refreshResponse.data.refreshToken) {
-                  localStorage.setItem('refreshToken', refreshResponse.data.refreshToken);
-                }
-                if (originalRequest.headers) {
-                  originalRequest.headers.Authorization = `Bearer ${newToken}`;
-                }
-                return api(originalRequest);
-              }
-            } catch {
-              // refresh failed — fall through to redirect
-            }
-          }
-        }
-
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
-        return new Promise(() => {});
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
 
 const authService = {
   login: async (data: LoginFormData): Promise<User> => {

@@ -279,7 +279,10 @@ export const config: EnvironmentConfig = {
   // Security Configuration
   BCRYPT_ROUNDS: parseInt(process.env.BCRYPT_ROUNDS || '12', 10),
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10), // 15 minutes
-  RATE_LIMIT_MAX_REQUESTS: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
+  // Per-user (JWT) / per-IP cap. This is an authenticated internal SPA where a
+  // single dashboard page legitimately fires 10-30 queries, so 100/15min was far
+  // too low and caused 429 storms. 1000/15min is generous per user/IP.
+  RATE_LIMIT_MAX_REQUESTS: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '1000', 10),
   AUTH_RATE_LIMIT_MAX: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5', 10),
   
   // File Upload Configuration

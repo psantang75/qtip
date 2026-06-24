@@ -1,6 +1,7 @@
 ﻿import { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 import { config } from '../config/environment';
 import logger from '../config/logger';
 
@@ -30,23 +31,48 @@ export const securityHeaders = helmet({
 });
 
 /**
- * Custom key generator for rate limiting
- * Provides fallback when req.ip is undefined (common behind IIS/nginx)
+ * Custom key generator for rate limiting.
+ *
+ * Prefers the authenticated user so that users sitting behind a shared
+ * corporate NAT/VPN egress IP do not all share a single rate-limit bucket
+ * (which previously caused a 429 storm in production). The limiter runs
+ * before the auth middleware, so we read the JWT directly from the
+ * Authorization header. We only need to *decode* it for bucketing — full
+ * signature verification is the auth middleware's job and is not required
+ * to pick a key.
+ *
+ * Falls back to the client IP (handling IIS/nginx X-Forwarded-For) for
+ * unauthenticated requests or tokens we can't read.
  */
 const rateLimitKeyGenerator = (req: Request): string => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.decode(authHeader.slice(7)) as
+        | { user_id?: number; userId?: number }
+        | null;
+      const userId = decoded?.user_id ?? decoded?.userId;
+      if (userId != null) {
+        return `user:${userId}`;
+      }
+    } catch {
+      // Malformed token — fall through to IP-based keying.
+    }
+  }
+
   // Try multiple sources for IP address
-  const ip = req.ip || 
-             req.headers['x-forwarded-for'] as string || 
-             req.headers['x-real-ip'] as string || 
-             req.socket?.remoteAddress || 
+  const ip = req.ip ||
+             req.headers['x-forwarded-for'] as string ||
+             req.headers['x-real-ip'] as string ||
+             req.socket?.remoteAddress ||
              'unknown';
-  
+
   // If x-forwarded-for contains multiple IPs, use the first one (client IP)
   if (typeof ip === 'string' && ip.includes(',')) {
-    return ip.split(',')[0].trim();
+    return `ip:${ip.split(',')[0].trim()}`;
   }
-  
-  return typeof ip === 'string' ? ip : String(ip);
+
+  return `ip:${typeof ip === 'string' ? ip : String(ip)}`;
 };
 
 /**
@@ -63,6 +89,9 @@ export const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: rateLimitKeyGenerator,
+  // We deliberately read X-Forwarded-For ourselves in rateLimitKeyGenerator
+  // (prod sets `trust proxy: true`), so silence v7's permissive-trust-proxy check.
+  validate: { trustProxy: false },
   skip: (req) => {
     // Skip rate limiting for login endpoint
     if (req.path === '/login' || req.path === '/api/auth/login' || req.path.endsWith('/login')) {
@@ -89,6 +118,9 @@ export const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: rateLimitKeyGenerator,
+  // We deliberately read X-Forwarded-For ourselves in rateLimitKeyGenerator
+  // (prod sets `trust proxy: true`), so silence v7's permissive-trust-proxy check.
+  validate: { trustProxy: false },
   skip: (req) => {
     // Skip rate limiting for critical auth endpoints (they have their own rate limiter)
     const authEndpoints = [
@@ -107,12 +139,18 @@ export const apiLimiter = rateLimit({
       return true;
     }
     
-    // Skip rate limiting for frequently accessed read-only endpoints (filters, options, etc.)
+    // Skip rate limiting for frequently accessed read-only endpoints (filters,
+    // options, navigation/config the SPA polls on every page, etc.). These are
+    // cheap GETs that the shell mounts persistently, so throttling them just
+    // breaks navigation without protecting anything meaningful.
     const readOnlyEndpoints = [
       '/filters',
       '/options',
       '/stats',
-      '/dashboard'
+      '/dashboard',
+      '/insights/navigation',
+      '/insights/kpi-config',
+      '/insights/data-freshness'
     ];
     
     if (readOnlyEndpoints.some(endpoint => req.path.includes(endpoint) && req.method === 'GET')) {

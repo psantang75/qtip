@@ -112,24 +112,33 @@ function toIso(value: unknown): string | null {
 }
 
 /**
- * Scheduling info for a report, used to power the "next update" tooltip on the
- * freshness stamp. `nextUpdate` is emitted in the same ISO-8601 UTC shape as
- * `dataLastUpdated` so the frontend converts both to local time identically.
- * Null-safe: returns nulls if the report isn't registered.
+ * Scheduling info for a report, used to power the freshness stamp and its
+ * "next update" tooltip. All three timestamps come straight from the report's
+ * `ie_source_report` row so the report header matches the Source Reports
+ * scheduler exactly:
+ *   - `dataLastUpdated` = `last_run_at` — the last time the schedule ran (i.e.
+ *     the last time the data was updated, or attempted to be). This is the
+ *     single source of truth users see in both places; it does NOT depend on
+ *     whether the run happened to write new rows.
+ *   - `dataNextUpdate`  = `next_run_at`.
+ * Both are emitted as ISO-8601 UTC so the frontend converts to local time
+ * identically. Null-safe: returns nulls if the report isn't registered.
  */
 export interface ReportSchedule {
+  dataLastUpdated: string | null;
   dataNextUpdate: string | null;
   updateEveryMinutes: number | null;
 }
 
 export async function getReportSchedule(reportCode: string): Promise<ReportSchedule> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT frequency_minutes, next_run_at AS nextRun
+    `SELECT frequency_minutes, last_run_at AS lastRun, next_run_at AS nextRun
      FROM ie_source_report WHERE report_code = ? AND is_active = 1 LIMIT 1`,
     [reportCode],
   );
   const r = rows[0];
   return {
+    dataLastUpdated: toIso(r?.lastRun),
     dataNextUpdate: toIso(r?.nextRun),
     updateEveryMinutes: r ? Number(r.frequency_minutes) : null,
   };
@@ -361,9 +370,6 @@ export async function getEmailActivity(filters: EmailActivityFilters): Promise<E
     baseParams,
   );
 
-  const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT MAX(loaded_at) AS last FROM ie_fact_email_activity`,
-  );
   const schedule = await getReportSchedule('email_activity');
 
   const summary: EmailSummaryRow[] = summaryRows.map((r) => ({
@@ -386,7 +392,7 @@ export async function getEmailActivity(filters: EmailActivityFilters): Promise<E
     byDay: [...groups.values()],
     availableUsers: userRows.map((r) => r.mailbox_name as string),
     availableDepartments: deptRows.map((r) => r.department_name as string),
-    dataLastUpdated: toIso(freshRows[0]?.last),
+    dataLastUpdated: schedule.dataLastUpdated,
     dataNextUpdate: schedule.dataNextUpdate,
     updateEveryMinutes: schedule.updateEveryMinutes,
   };
@@ -598,9 +604,6 @@ export async function getCallActivity(filters: CallActivityFilters): Promise<Cal
     baseParams,
   );
 
-  const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT MAX(loaded_at) AS last FROM ie_fact_call_activity`,
-  );
   const schedule = await getReportSchedule('call_activity');
 
   // Minutes are displayed as whole numbers; keep the raw (decimal) sums for the
@@ -697,7 +700,7 @@ export async function getCallActivity(filters: CallActivityFilters): Promise<Cal
     byDay: [...groups.values()],
     availableUsers: userRows.map((r) => r.agent_name as string),
     availableDepartments: deptRows.map((r) => r.department_name as string),
-    dataLastUpdated: toIso(freshRows[0]?.last),
+    dataLastUpdated: schedule.dataLastUpdated,
     dataNextUpdate: schedule.dataNextUpdate,
     updateEveryMinutes: schedule.updateEveryMinutes,
   };
@@ -816,9 +819,6 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
     baseParams,
   );
 
-  const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT MAX(loaded_at) AS last FROM ie_fact_ticket_task`,
-  );
   const schedule = await getReportSchedule('ticket_open');
 
   const grandTotal = { current: 0, dueToday: 0, pastDue: 0 };
@@ -847,7 +847,7 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
     grandTotal,
     availableUsers: userRows.map((r) => r.agent_name as string),
     availableDepartments: deptRows.map((r) => r.department_name as string),
-    dataLastUpdated: toIso(freshRows[0]?.last),
+    dataLastUpdated: schedule.dataLastUpdated,
     dataNextUpdate: schedule.dataNextUpdate,
     updateEveryMinutes: schedule.updateEveryMinutes,
   };
@@ -982,9 +982,6 @@ export async function getLeads(filters: LeadsFilters): Promise<LeadsResult> {
     baseParams,
   );
 
-  const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT MAX(loaded_at) AS last FROM ie_fact_lead`,
-  );
   const schedule = await getReportSchedule('lead');
 
   const rows: LeadCatSourceRow[] = catRows.map((r) => {
@@ -1018,7 +1015,7 @@ export async function getLeads(filters: LeadsFilters): Promise<LeadsResult> {
     rows,
     availableUsers: userRows.map((r) => r.salesperson_name as string).filter(Boolean),
     availableDepartments: deptRows.map((r) => r.department_name as string),
-    dataLastUpdated: toIso(freshRows[0]?.last),
+    dataLastUpdated: schedule.dataLastUpdated,
     dataNextUpdate: schedule.dataNextUpdate,
     updateEveryMinutes: schedule.updateEveryMinutes,
   };
@@ -1212,9 +1209,6 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
     baseParams,
   );
 
-  const [freshRows] = await pool.query<RowDataPacket[]>(
-    `SELECT MAX(loaded_at) AS last FROM ie_fact_order_margin`,
-  );
   const schedule = await getReportSchedule('order_margin');
 
   // Table 1 — Leads by Salesperson, from ie_fact_lead over the same period and
@@ -1300,7 +1294,7 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
     priorDateRange: { start: fmtMDY(priorRange.start), end: fmtMDY(priorRange.end) },
     availableUsers: userRows.map((r) => r.salesperson_name as string).filter(Boolean),
     availableDepartments: deptRows.map((r) => r.department_name as string),
-    dataLastUpdated: toIso(freshRows[0]?.last),
+    dataLastUpdated: schedule.dataLastUpdated,
     dataNextUpdate: schedule.dataNextUpdate,
     updateEveryMinutes: schedule.updateEveryMinutes,
   };

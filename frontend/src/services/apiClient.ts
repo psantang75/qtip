@@ -1,22 +1,46 @@
-import axios, { type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios';
+import axios, {
+  type AxiosError,
+  type AxiosRequestConfig,
+  type AxiosResponse,
+} from 'axios';
 import { getCookie } from '../utils/apiHelpers';
 import { logError, logWarn } from '../utils/errorHandling';
 
-interface DedupConfig extends InternalAxiosRequestConfig {
-  skipDedup?: boolean;
-}
+/**
+ * Single shared axios instance for the whole app.
+ *
+ * This used to be two divergent clients — `apiClient` (here) and `api`
+ * (in authService.ts). They had *different* behavior: `api` did JWT
+ * refresh-on-401 but no request de-duplication, while `apiClient` had a
+ * de-dup wrapper that — because it overrode `.request` — never actually
+ * intercepted `.get()` calls in axios 1.x. Maintaining two HTTP layers was
+ * the real duplication smell, so they're now unified here. `authService`
+ * re-exports this same instance as `api`, so every existing call site keeps
+ * working unchanged while getting consistent auth + de-dup behavior.
+ */
 
-// In-flight GET de-duplication map
-const inflightMap = new Map<string, Promise<unknown>>();
+type DedupGetConfig = AxiosRequestConfig & { skipDedup?: boolean };
 
-const getSignature = (config: InternalAxiosRequestConfig) => {
-  const method = (config.method || 'get').toLowerCase();
-  const baseURL = config.baseURL || '';
-  const url = (config.url || '').replace(baseURL, '');
+const apiClient = axios.create({
+  baseURL: '/api',
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 15000,
+});
 
-  if (method !== 'get') return `${method}:${url}`;
+// ── In-flight GET de-duplication ───────────────────────────────────────────
+// Collapses identical concurrent GETs (same url + sorted params) into a single
+// network request. TanStack Query already de-dups same-key fetches; this is a
+// second line of defense for non-RQ callers and for overlapping keys/components
+// that request the same resource simultaneously.
+//
+// NOTE: we wrap `.get` specifically. In axios 1.x the prototype `get` calls the
+// bound context's `request`, so overriding `apiClient.request` does NOT
+// intercept `.get()` — which is why the previous wrapper was effectively dead
+// code. Wrapping the method that callers actually use is the reliable approach.
+const inflightGetMap = new Map<string, Promise<AxiosResponse>>();
 
-  const params = (config.params || {}) as Record<string, unknown>;
+const getSignature = (url: string, config?: AxiosRequestConfig): string => {
+  const params = (config?.params || {}) as Record<string, unknown>;
   const orderedParams = Object.keys(params)
     .sort()
     .reduce<Record<string, string>>((acc, key) => {
@@ -25,56 +49,52 @@ const getSignature = (config: InternalAxiosRequestConfig) => {
       return acc;
     }, {});
 
-  return `${method}:${url}?${JSON.stringify(orderedParams)}`;
+  return `get:${url}?${JSON.stringify(orderedParams)}`;
 };
 
-const apiClient = axios.create({
-  baseURL: '/api',
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 15000,
-});
+const originalGet = apiClient.get.bind(apiClient) as typeof apiClient.get;
 
-const originalRequest: typeof apiClient.request = apiClient.request.bind(apiClient);
-
-apiClient.request = (function <T = unknown>(config: DedupConfig) {
-  const method = (config.method || 'get').toLowerCase();
-  const isGet = method === 'get';
-  const skipDedup = config.skipDedup === true;
-
-  if (isGet && !skipDedup) {
-    const signature = getSignature(config);
-    const existing = inflightMap.get(signature);
-
-    if (existing) {
-      if (import.meta.env.DEV) {
-        logWarn('apiClient', `[DEDUP] Blocked duplicate GET: ${config.url}`);
-      }
-      return existing as ReturnType<typeof originalRequest<T>>;
-    }
-
-    const requestPromise = originalRequest<T>(config)
-      .then((response) => {
-        inflightMap.delete(signature);
-        return response;
-      })
-      .catch((error: unknown) => {
-        inflightMap.delete(signature);
-        throw error;
-      });
-
-    inflightMap.set(signature, requestPromise as Promise<unknown>);
-    return requestPromise;
+apiClient.get = function dedupedGet<T = unknown>(
+  url: string,
+  config?: DedupGetConfig,
+): Promise<AxiosResponse<T>> {
+  if (config?.skipDedup) {
+    return originalGet<T>(url, config);
   }
 
-  return originalRequest<T>(config);
-}) as typeof apiClient.request;
+  const signature = getSignature(url, config);
+  const existing = inflightGetMap.get(signature);
 
+  if (existing) {
+    if (import.meta.env.DEV) {
+      logWarn('apiClient', `[DEDUP] Reusing in-flight GET: ${url}`);
+    }
+    return existing as Promise<AxiosResponse<T>>;
+  }
+
+  const requestPromise = originalGet<T>(url, config).finally(() => {
+    inflightGetMap.delete(signature);
+  });
+
+  inflightGetMap.set(signature, requestPromise as Promise<AxiosResponse>);
+  return requestPromise;
+} as typeof apiClient.get;
+
+// ── Request interceptor: auth token, CSRF, FormData ─────────────────────────
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const url = config.url ?? '';
+    const isPublicAuthEndpoint =
+      url.includes('/auth/login') ||
+      url.includes('/csrf-token') ||
+      url.includes('/auth/forgot-password') ||
+      url.includes('/auth/reset-password');
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (!isPublicAuthEndpoint) {
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
 
     const csrfToken = getCookie('XSRF-TOKEN');
@@ -94,34 +114,71 @@ apiClient.interceptors.request.use(
 
     return config;
   },
-  (error: unknown) => Promise.reject(error)
+  (error: unknown) => Promise.reject(error),
 );
+
+// ── Response interceptor: JWT refresh-on-401, then redirect ─────────────────
+function clearSessionAndRedirect(): void {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('refreshToken');
+  window.location.href = '/login';
+}
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: unknown) => {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'response' in error &&
-      (error as { response?: { status?: number; data?: unknown; config?: { url?: string; method?: string } } }).response
-    ) {
-      const axiosError = error as {
-        response: { status: number; data: unknown };
-        config: { url: string; method: string };
-      };
+  async (error: AxiosError<{ code?: string }>) => {
+    const originalRequest = error.config as
+      | (typeof error.config & { _retry?: boolean })
+      | undefined;
 
-      if (axiosError.response.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
+    if (error.response?.status === 401) {
+      const isLoginAttempt = error.config?.url?.includes('/auth/login');
+
+      if (!isLoginAttempt) {
+        const errorCode = error.response.data?.code;
+
+        // A blacklisted token can never be refreshed — bail straight to login.
+        if (errorCode === 'TOKEN_BLACKLISTED') {
+          clearSessionAndRedirect();
+          return new Promise(() => {});
+        }
+
+        if (originalRequest && !originalRequest._retry) {
+          originalRequest._retry = true;
+          const refreshToken = localStorage.getItem('refreshToken');
+          if (refreshToken) {
+            try {
+              const refreshResponse = await apiClient.post<{
+                success: boolean;
+                token: string;
+                refreshToken?: string;
+              }>('/auth/refresh-token', { refreshToken });
+
+              if (refreshResponse.data.success) {
+                const newToken = refreshResponse.data.token;
+                localStorage.setItem('token', newToken);
+                if (refreshResponse.data.refreshToken) {
+                  localStorage.setItem('refreshToken', refreshResponse.data.refreshToken);
+                }
+                if (originalRequest.headers) {
+                  originalRequest.headers.Authorization = `Bearer ${newToken}`;
+                }
+                return apiClient(originalRequest);
+              }
+            } catch {
+              // refresh failed — fall through to redirect
+            }
+          }
+        }
+
+        clearSessionAndRedirect();
         return new Promise(() => {});
       }
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default apiClient;
@@ -137,8 +194,8 @@ export default apiClient;
 //   fetchCSRDashboardStats = () =>
 //     apiGet<CSRDashboardStats>('csrService', '/csr/dashboard-stats');
 //
-// 401s are still handled centrally by the response interceptor above — these
-// helpers re-throw so callers that need to render an error state still can.
+// 401s are handled centrally by the response interceptor above (refresh, then
+// redirect) — these helpers re-throw so callers that need an error state can.
 
 /** Issue a GET and return `response.data`. Errors are logged via `logError` and re-thrown. */
 export async function apiGet<T>(scope: string, url: string, config?: AxiosRequestConfig): Promise<T> {
