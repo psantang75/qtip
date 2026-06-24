@@ -6,6 +6,63 @@ turning the steps into a checklist an operator can follow top-to-bottom.
 
 ---
 
+## 0. TL;DR — `git push` does NOT deploy (read this first)
+
+Pushing to GitHub only updates the repo. **The stage and production VMs do not
+auto-deploy.** Until someone SSHes into each VM, pulls, and *rebuilds*, the
+servers keep serving the **old** bundle to every user — any browser, any login,
+incognito included — even though `origin/main` already shows the new commit.
+This is the #1 cause of "I fixed it but production still shows the bug": the fix
+was pushed but never built on the host.
+
+Hosts (key-based SSH as `qtip-admin`, repo at `/opt/qtip`, both track `main`,
+nginx serves `/opt/qtip/frontend/dist` directly):
+
+| Env   | Host          |
+| ----- | ------------- |
+| stage | `10.90.15.6`  |
+| prod  | `10.90.15.5`  |
+
+### Frontend-only change (most common — no API restart, no DB)
+
+Run on **stage first**, verify in the browser, then repeat for prod. nginx
+serves `frontend/dist` directly, so a rebuild in place is the whole deploy — no
+copy/swap step:
+
+```bash
+ssh qtip-admin@10.90.15.6            # stage  (10.90.15.5 = prod)
+cd /opt/qtip
+git fetch origin && git checkout main && git merge --ff-only origin/main
+npm run build --prefix frontend
+```
+
+### Verify the LIVE bundle actually contains your change
+
+Don't trust "it built" — confirm the served file changed. The commit must match
+origin, and the minified bundle must contain a fingerprint of your edit
+(property names survive minification):
+
+```bash
+git rev-parse HEAD                                   # must equal origin/main
+ls -la frontend/dist/assets/AuditFormPage-*.js       # timestamp = just now
+# example fingerprint for the call-selector dedupe fix (commit 4658981):
+grep -o 'call_id===[a-zA-Z]*\.call_id' frontend/dist/assets/AuditFormPage-*.js
+```
+
+### Backend / full change (deps changed, API logic, or DB migration)
+
+Use the full script — it does install → build → migrate → PM2 restart → health
+check (see §3 for the detailed order):
+
+```bash
+cd /opt/qtip && ./scripts/deploy_application.sh -e staging      # then -e production
+```
+
+> If a dependency (`package.json`/lock) changed, add `npm ci` before the build.
+> A frontend-only edit does **not** need `npm ci` or a PM2 restart.
+
+---
+
 ## 1. Platform choice — PM2 vs IIS
 
 QTIP ships with configuration for two host patterns. Pick **one** per
