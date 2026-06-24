@@ -46,7 +46,10 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
             recording_url: null,
             transcript:    null,
           }
-      if (results.length > 0 && selectedCalls.some(c => c.id === call.id)) {
+      // Dedupe by conversation ID (call_id), not the numeric id: virtual calls
+      // resolved from PhoneSystem all share id -1, so comparing ids would falsely
+      // reject every additional (genuinely different) call.
+      if (selectedCalls.some(c => c.call_id === call.call_id)) {
         setError('This call has already been added.')
         return
       }
@@ -68,6 +71,10 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
         duration:      0,
         recording_url: null,
         transcript:    null,
+      }
+      if (selectedCalls.some(c => c.call_id === call.call_id)) {
+        setError('This call has already been added.')
+        return
       }
       const updated = [...selectedCalls, call]
       onCallsChange(updated)
