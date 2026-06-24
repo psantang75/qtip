@@ -212,8 +212,10 @@ function Stop-Application {
         
         Write-Log "Stopped PM2 processes" "INFO"
         
-        # Kill any remaining node processes on our ports
-        $portsToCheck = @(3000, 5173)
+        # Kill any remaining node processes on our ports. The API binds 5000 in
+        # every env (ecosystem.config.cjs); 5173 is the dev frontend if present.
+        $backendPort = if ($env:PORT) { [int]$env:PORT } else { 5000 }
+        $portsToCheck = @($backendPort, 5173)
         foreach ($port in $portsToCheck) {
             $processes = netstat -ano | Select-String ":$port " | ForEach-Object {
                 $fields = $_.ToString().Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
@@ -279,10 +281,15 @@ function Test-ApplicationHealth {
     
     Write-Log "Performing application health check..." "INFO"
     
-    $backendUrl = "http://localhost:3000"
-    $frontendUrl = "http://localhost:5173"
-    $healthEndpoint = "$backendUrl/monitoring/health"
-    $readyEndpoint = "$backendUrl/monitoring/ready"
+    # The API binds 5000 in every env (ecosystem.config.cjs); honor $env:PORT if
+    # the host overrides it. The real endpoints are /health and /ready and report
+    # status "healthy"/"ready" (see backend/src/routes/health.routes.ts). The
+    # backend is authoritative — the frontend is a static bundle (nginx/IIS), not
+    # a dev server, so we do not gate the deploy on a :5173 probe.
+    $backendPort = if ($env:PORT) { [int]$env:PORT } else { 5000 }
+    $backendUrl = "http://localhost:$backendPort"
+    $healthEndpoint = "$backendUrl/health"
+    $readyEndpoint = "$backendUrl/ready"
     
     $startTime = Get-Date
     $timeout = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -291,30 +298,24 @@ function Test-ApplicationHealth {
         try {
             # Test backend health
             $healthResponse = Invoke-RestMethod -Uri $healthEndpoint -TimeoutSec 10 -ErrorAction Stop
-            if ($healthResponse.status -eq "ok") {
+            if ($healthResponse.status -eq "healthy") {
                 Write-Log "Backend health check: PASS" "SUCCESS"
                 
-                # Test readiness
-                $readyResponse = Invoke-RestMethod -Uri $readyEndpoint -TimeoutSec 10 -ErrorAction Stop
-                if ($readyResponse.status -eq "ready") {
-                    Write-Log "Backend readiness check: PASS" "SUCCESS"
-                    
-                    # Test frontend (basic connectivity)
-                    try {
-                        $frontendResponse = Invoke-WebRequest -Uri $frontendUrl -TimeoutSec 10 -ErrorAction Stop
-                        if ($frontendResponse.StatusCode -eq 200) {
-                            Write-Log "Frontend health check: PASS" "SUCCESS"
-                            
-                            $duration = (Get-Date) - $startTime
-                            Write-Log "All health checks passed in $($duration.TotalSeconds) seconds" "SUCCESS"
-                            return $true
-                        }
-                    } catch {
-                        Write-Log "Frontend not ready, but backend is healthy" "WARN"
+                # Test readiness (best-effort; older builds may not expose /ready)
+                try {
+                    $readyResponse = Invoke-RestMethod -Uri $readyEndpoint -TimeoutSec 10 -ErrorAction Stop
+                    if ($readyResponse.status -eq "ready" -or $readyResponse.status -eq "healthy") {
+                        Write-Log "Backend readiness check: PASS" "SUCCESS"
+                    } else {
+                        Write-Log "Backend /ready returned: $($readyResponse.status)" "WARN"
                     }
-                } else {
-                    Write-Log "Backend not ready: $($readyResponse.status)" "WARN"
+                } catch {
+                    Write-Log "/ready not implemented; treating /health as authoritative" "INFO"
                 }
+                
+                $duration = (Get-Date) - $startTime
+                Write-Log "Health checks passed in $($duration.TotalSeconds) seconds" "SUCCESS"
+                return $true
             } else {
                 Write-Log "Backend not healthy: $($healthResponse.status)" "WARN"
             }

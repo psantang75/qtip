@@ -27,7 +27,11 @@ SKIP_DATABASE=0
 HEALTH_CHECK_ONLY=0
 RESTART=0
 HEALTH_TIMEOUT=300
-BACKEND_PORT="${PORT:-3000}"
+# The API listens on 5000 in every env (ecosystem.config.cjs sets PORT:5000 for
+# qtip-backend). A PORT in the shell or the host .env overrides this; load_env
+# refreshes BACKEND_PORT from the loaded .env so the health probe and the
+# port-kill in stop_app always target the port the app actually binds.
+BACKEND_PORT="${PORT:-5000}"
 
 print_usage() {
   cat <<EOF
@@ -110,7 +114,10 @@ load_env() {
   # omit devDependencies (prisma CLI, tsc) regardless of NODE_ENV, which breaks
   # the build and `prisma migrate deploy`. Force it off for the build phase.
   export npm_config_production=false
-  ok "${src} loaded (NODE_ENV + npm production flag stripped for build phase)"
+  # Honor a PORT from the host .env (falls back to the 5000 default above) so
+  # the health check and port-kill target the port the API actually binds.
+  BACKEND_PORT="${PORT:-$BACKEND_PORT}"
+  ok "${src} loaded (NODE_ENV + npm production flag stripped for build phase; api port ${BACKEND_PORT})"
 }
 
 # ---- prereqs --------------------------------------------------------------
