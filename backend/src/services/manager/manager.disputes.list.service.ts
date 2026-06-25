@@ -96,7 +96,7 @@ export async function listManagerTeamDisputes(
 ): Promise<DisputeListResult> {
   const offset = (params.page - 1) * params.limit
   const where = await buildDisputeWhere(
-    { userId: params.userId, userRole: params.userRole },
+    { userId: params.userId, userRole: params.userRole, scopedDepartmentIds: params.scopedDepartmentIds },
     params.filters,
   )
 

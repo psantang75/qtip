@@ -11,11 +11,10 @@ export interface NavItem {
   badge?: string
   group?: string
   /**
-   * If set, this item is gated by the Insights page-access table
-   * (`ie_page_role_access` / `ie_page_user_override`). The static `roles`
-   * array is ignored for these items — visibility is driven entirely by
-   * `/api/insights/navigation` so admin grants in the Pages screen are
-   * reflected immediately.
+   * Insights-only gate. When set, the item resolves through
+   * `ie_page_role_access` via `/api/insights/navigation` and `roles` is
+   * ignored. (Quality / Training / Performance Warnings are no longer listed
+   * here — they are fully server-driven via `/api/app-access/navigation`.)
    */
   pageKey?: string
 }
@@ -30,24 +29,19 @@ export interface SectionConfig {
 }
 
 export const NAV_CONFIG: SectionConfig[] = [
+  // Quality / Training / Performance Warnings are FULLY server-driven: their
+  // sidebar items (label, route, icon, visibility) come from
+  // `/api/app-access/navigation`, computed from `app_page_role_access` for the
+  // user's access level. The empty `items` arrays below are intentional — only
+  // the section metadata (label/icon/defaultPath) is used here. To add or
+  // rename a page in these sections, edit the `app_page` table, not this file.
   {
     id: 'quality',
     label: 'Quality',
     icon: 'Shield',
     color: '#00aeef',
     defaultPath: '/app/quality/submissions',
-    items: [
-      { label: 'Form Builder',      path: '/app/quality/forms',           icon: 'ClipboardList',   roles: [1] },
-      { label: 'Review Forms',      path: '/app/quality/review-forms',    icon: 'ClipboardCheck',  roles: [1,2] },
-      { label: 'AI Reviewer',       path: '/app/quality/ai-reviewer',     icon: 'Sliders',         roles: [1,2] },
-      { label: 'AI Inbox',          path: '/app/quality/ai-inbox',        icon: 'Bot',             roles: [1,2] },
-      { label: 'Completed Forms',    path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [1,2,4] },
-      { label: 'Completed Reviews',  path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [5] },
-      { label: 'My Reviews',        path: '/app/quality/submissions',     icon: 'FileCheck',       roles: [3] },
-      { label: 'Disputes',          path: '/app/quality/disputes',        icon: 'AlertTriangle',   roles: [1,2] },
-      { label: 'Disputes',          path: '/app/quality/disputes',        icon: 'AlertTriangle',   roles: [5] },
-      { label: 'Dispute History',   path: '/app/quality/disputes',        icon: 'History',         roles: [3] },
-    ],
+    items: [],
   },
   {
     id: 'training',
@@ -55,13 +49,7 @@ export const NAV_CONFIG: SectionConfig[] = [
     icon: 'GraduationCap',
     color: '#00aeef',
     defaultPath: '/app/training',
-    items: [
-      { label: 'Training Sessions', path: '/app/training/coaching',          icon: 'MessageSquare',   roles: [1,2,4,5]   },
-      { label: 'My Training',       path: '/app/training/my-coaching',       icon: 'BookOpen',        roles: [3]         },
-      { label: 'Training Topics',   path: '/app/training/library/topics',    icon: 'Tag',             roles: [1,4]       },
-      { label: 'Quizzes',           path: '/app/training/library/quizzes',   icon: 'HelpCircle',      roles: [1,4]       },
-      { label: 'Resources',         path: '/app/training/library/resources', icon: 'BookMarked',      roles: [1,4]       },
-    ],
+    items: [],
   },
   {
     id: 'performancewarnings',
@@ -69,10 +57,7 @@ export const NAV_CONFIG: SectionConfig[] = [
     icon: 'AlertTriangle',
     color: '#00aeef',
     defaultPath: PERFORMANCE_WARNINGS_APP_BASE,
-    items: [
-      { label: 'Performance Warnings', path: PERFORMANCE_WARNINGS_APP_BASE, icon: 'AlertTriangle', roles: [1, 2, 5] },
-      { label: 'My Performance Warnings', path: `${PERFORMANCE_WARNINGS_APP_BASE}/my`, icon: 'FileText', roles: [3] },
-    ],
+    items: [],
   },
   {
     id: 'insights',
@@ -117,10 +102,17 @@ export function getSectionConfig(id: NavSection): SectionConfig {
 
 export function getNavItemsForRole(section: NavSection, roleId: number): NavItem[] {
   const config = getSectionConfig(section)
-  // Items with a `pageKey` are gated by the backend Insights access table
-  // and are filtered separately by the Sidebar via /api/insights/navigation.
-  // Always include them here so the Sidebar can apply that filter.
-  return config.items.filter(item => item.pageKey != null || item.roles.includes(roleId))
+  return config.items.filter(item => {
+    // Both set: role must match (selects the right per-role label for items
+    // that share a route) AND the DB grant must allow it (applied later by
+    // the Sidebar/TopBar dynamic filter using the page-key set).
+    if (item.pageKey && item.roles.length > 0) return item.roles.includes(roleId)
+    // pageKey-only: visibility is purely DB-driven; include here so the
+    // dynamic filter gets to evaluate it.
+    if (item.pageKey) return true
+    // Legacy static items: role array is the gate.
+    return item.roles.includes(roleId)
+  })
 }
 
 export function getSectionFromPath(pathname: string): NavSection | null {

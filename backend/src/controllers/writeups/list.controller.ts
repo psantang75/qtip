@@ -14,14 +14,29 @@ import {
   getWriteUpDetail,
   getPriorDiscipline as fetchPriorDiscipline,
 } from '../../services/writeups'
+import { getManagedDepartmentIds } from '../../services/manager/manager.access'
 import { respondWithError } from './respond'
+
+/**
+ * Departments a view-all viewer may see. `null` (Admin) means no restriction;
+ * every other role is limited to the departments assigned to them via
+ * `department_managers`. Returns `null` for OWN-level viewers since the service
+ * self-scopes them anyway.
+ */
+async function resolveScopedDepartmentIds(req: AuthReq): Promise<number[] | null> {
+  if (!(req.pageAccess?.canViewAll ?? false)) return null
+  if (req.user!.role === 'Admin') return null
+  return getManagedDepartmentIds(req.user!.user_id)
+}
 
 /** GET /api/writeups */
 export const getWriteUps = async (req: AuthReq, res: Response) => {
   try {
     const result = await listWriteUps({
-      viewerId:     req.user!.user_id,
-      viewerRole:   req.user!.role,
+      viewerId:            req.user!.user_id,
+      viewerRole:          req.user!.role,
+      canViewAll:          req.pageAccess?.canViewAll ?? false,
+      scopedDepartmentIds: await resolveScopedDepartmentIds(req),
       page:         Math.max(1, parseInt(req.query.page as string) || 1),
       limit:        Math.min(5000, parseInt(req.query.limit as string) || 20),
       csrId:        req.query.csr_id        ? parseInt(req.query.csr_id as string) : undefined,
@@ -44,7 +59,7 @@ export const getWriteUpById = async (req: AuthReq, res: Response) => {
     if (isNaN(writeUpId)) {
       return res.status(400).json({ success: false, message: 'Invalid write-up ID' })
     }
-    const data = await getWriteUpDetail(writeUpId, req.user!.user_id, req.user!.role)
+    const data = await getWriteUpDetail(writeUpId, req.user!.user_id, req.user!.role, req.pageAccess?.canViewAll ?? false, await resolveScopedDepartmentIds(req))
     res.json({ success: true, data })
   } catch (error) {
     respondWithError(res, 'getWriteUpById', error)

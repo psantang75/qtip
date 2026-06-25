@@ -34,16 +34,24 @@ export interface SubmissionExportResult {
  * Throws `QAServiceError` 404 when the submission is missing or in an
  * unexportable status, or when no answers exist for the submission.
  */
-export async function buildSubmissionExportCsv(submissionId: number): Promise<SubmissionExportResult> {
-  const submissions = await prisma.$queryRaw<{ id: number }[]>(
+export async function buildSubmissionExportCsv(
+  submissionId: number,
+  restrictToSubmittedBy?: number,
+): Promise<SubmissionExportResult> {
+  const submissions = await prisma.$queryRaw<{ id: number; submitted_by: number }[]>(
     Prisma.sql`
-      SELECT id FROM submissions
+      SELECT id, submitted_by FROM submissions
       WHERE id = ${submissionId}
         AND (status = 'FINALIZED' OR status = 'DISPUTED' OR status = 'SUBMITTED')
     `,
   )
 
-  if (submissions.length === 0) {
+  // QA author self-scope: a submission authored by another reviewer returns
+  // the same 404 a missing row would (no info leak).
+  if (
+    submissions.length === 0 ||
+    (restrictToSubmittedBy != null && Number(submissions[0].submitted_by) !== restrictToSubmittedBy)
+  ) {
     throw new QAServiceError(
       'Submission not found or not a finalized/disputed/submitted submission',
       404,

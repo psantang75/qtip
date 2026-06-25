@@ -27,6 +27,14 @@ export function resolvePeriod(
   const m = today.getMonth()
 
   switch (norm) {
+    case 'today': {
+      const start  = new Date(y, m, today.getDate())   // local midnight today
+      const pStart = addDays(start, -1)                 // yesterday
+      return {
+        current: { start,  end: endOfDay(today) },
+        prior:   { start: pStart, end: endOfDay(pStart) },
+      }
+    }
     case 'current_week': {
       const mon  = mondayOf(today)
       const pMon = addDays(mon, -7)

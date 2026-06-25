@@ -12,6 +12,7 @@ import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { StickyFilterBar, StickyFilterField } from '@/components/common/StickyFilterBar'
 
 export const PERIOD_OPTIONS = [
+  'Today',
   'Current Week',
   'Prior Week',
   'Current Month',

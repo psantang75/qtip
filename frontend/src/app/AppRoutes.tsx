@@ -1,8 +1,10 @@
 import React from 'react'
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 
 import { ROLE_IDS } from '../hooks/useQualityRole'
 import { useAuth } from '../contexts/AuthContext'
+import { getAppAccess } from '../services/appAccessService'
 
 // Shell components — NOT lazy (load immediately)
 import AppShell from '../components/shell/AppShell'
@@ -17,7 +19,7 @@ import ResetPasswordPage  from '../pages/auth/ResetPasswordPage'
 // Admin pages — NOT lazy (small, load immediately)
 import AdminUsersPage       from '../pages/admin/AdminUsersPage'
 import AdminDepartmentsPage from '../pages/admin/AdminDepartmentsPage'
-import AdminRolesPage       from '../pages/admin/AdminRolesPage'
+import AppPageAccessPage    from '../pages/admin/AppPageAccessPage'
 import ProfilePage          from '../pages/admin/ProfilePage'
 import ListManagementPage   from '../pages/admin/ListManagementPage'
 import InsightsKpiManagementPage  from '../pages/admin/InsightsKpiManagementPage'
@@ -33,6 +35,7 @@ import {
   PageLoader,
   RedirectWriteupsToPerformanceWarnings,
   RequireInsightsAccess,
+  RequirePageAccess,
   RequireRole,
   RoleRedirect,
   TrainingIndexRedirect,
@@ -100,50 +103,50 @@ const AAEmailActivityPage    = React.lazy(() => import('../pages/insights/AAEmai
 
 const NotFoundPage           = React.lazy(() => import('../pages/NotFoundPage'))
 
-// Convenience — every role that can operate on coaching sessions as a
-// reviewer (not an agent). Inlined previously in 4 spots.
-const COACHING_REVIEWER_ROLES: number[] = [
-  ROLE_IDS.ADMIN,
-  ROLE_IDS.QA,
-  ROLE_IDS.TRAINER,
-  ROLE_IDS.MANAGER,
-]
-
-const PERFORMANCE_WARNING_EDITOR_ROLES: number[] = [
-  ROLE_IDS.ADMIN,
-  ROLE_IDS.QA,
-  ROLE_IDS.MANAGER,
-]
-
 const ON_DEMAND_REPORT_ROLES = [ROLE_IDS.ADMIN, ROLE_IDS.MANAGER]
 
 /**
- * Performance-warning detail entry point. Editors (admin/QA/manager) get the
- * full editor view; everyone else — notably the employee the warning is about,
- * who receives the same notification email — is sent to their read-only
- * `/my/:id` view instead of being bounced to the app root.
+ * Performance-warning detail entry point. Viewers who can see everyone's data
+ * (ALL/EDIT) get the full editor detail; everyone else — notably the employee
+ * the warning is about (OWN), who receives the same notification email — is
+ * sent to their read-only `/my/:id` view instead of getting a 403.
+ *
+ * We can't do this with the guard alone because the redirect target depends
+ * on the route param, so we resolve access here and branch on `canViewAll`.
  */
 function PerformanceWarningDetailRoute(): React.ReactElement | null {
   const { user } = useAuth()
   const { id } = useParams()
-  if (!user) return null
-  if (!PERFORMANCE_WARNING_EDITOR_ROLES.includes(user.role_id)) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['app-access', 'pw_list', user?.id],
+    queryFn:  () => getAppAccess('pw_list'),
+    enabled:  !!user,
+    staleTime: 5 * 60 * 1000,
+  })
+  if (!user || isLoading) return null
+  if (!data?.canViewAll) {
     return <Navigate to={`/app/performancewarnings/my/${id}`} replace />
   }
   return <PageLoader><WriteUpDetailPage /></PageLoader>
 }
 
 /**
- * Coaching session detail entry point. Reviewers (admin/QA/trainer/manager)
- * get the full session page; the CSR the session is about — who receives the
- * coaching emails — is sent to their read-only `/my-coaching/:id` view instead
- * of being bounced to the my-coaching list.
+ * Coaching session detail entry point. Reviewers who can see everyone's
+ * sessions (ALL/EDIT) get the full session page; the CSR the session is about
+ * (OWN) — who receives the coaching emails — is sent to their read-only
+ * `/my-coaching/:id` view instead.
  */
 function CoachingDetailRoute(): React.ReactElement | null {
   const { user } = useAuth()
   const { id } = useParams()
-  if (!user) return null
-  if (!COACHING_REVIEWER_ROLES.includes(user.role_id)) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['app-access', 'training_coaching', user?.id],
+    queryFn:  () => getAppAccess('training_coaching'),
+    enabled:  !!user,
+    staleTime: 5 * 60 * 1000,
+  })
+  if (!user || isLoading) return null
+  if (!data?.canViewAll) {
     return <Navigate to={`/app/training/my-coaching/${id}`} replace />
   }
   return <PageLoader><CoachingSessionDetailPage /></PageLoader>
@@ -169,7 +172,9 @@ export default function AppRoutes(): React.ReactElement {
         }>
           <Route path="users"            element={<AdminUsersPage />} />
           <Route path="departments"      element={<AdminDepartmentsPage />} />
-          <Route path="roles"            element={<AdminRolesPage />} />
+          {/* /roles was removed — its content moved to /pages-access. */}
+          <Route path="roles"            element={<Navigate to="/app/admin/pages-access" replace />} />
+          <Route path="pages-access"     element={<AppPageAccessPage />} />
           <Route path="list-management"  element={<ListManagementPage />} />
           <Route path="email-templates"  element={<AdminEmailTemplatesPage />} />
           <Route path="system-settings"  element={<SystemSettingsPage />} />
@@ -186,25 +191,38 @@ export default function AppRoutes(): React.ReactElement {
           <Route path="/" element={<RoleRedirect />} />
           <Route path="/app" element={<Navigate to="/" replace />} />
 
-          {/* Quality */}
+          {/* Quality — every page is gated by app_page_role_access. Forms
+              is Admin-only; Review Forms / AI Reviewer / AI Inbox are
+              Admin+QA writeable; Submissions and Disputes are reachable by
+              every role (the page itself self-scopes via the backend).
+              Audit (`/app/quality/audit`) is the per-call audit form a CSR
+              fills out — left ungated; the backend service enforces who
+              can submit. */}
           <Route path="/app/quality">
             <Route index element={<Navigate to="submissions" replace />} />
             <Route path="overview"        element={<Navigate to="/app/quality/submissions" replace />} />
-            <Route path="forms"           element={<PageLoader><FormsPage /></PageLoader>} />
-            <Route path="forms/new"       element={<PageLoader><FormsPage /></PageLoader>} />
-            <Route path="forms/:id/edit"  element={<PageLoader><FormsPage /></PageLoader>} />
-            <Route path="forms/:id/preview" element={<PageLoader><FormsPage /></PageLoader>} />
-            <Route path="forms/:id/duplicate" element={<PageLoader><FormsPage /></PageLoader>} />
-            <Route path="submissions"     element={<PageLoader><SubmissionsPage /></PageLoader>} />
-            <Route path="submissions/:id"   element={<PageLoader><SubmissionDetailPage /></PageLoader>} />
-            <Route path="disputes"          element={<PageLoader><DisputesPage /></PageLoader>} />
+
+            <Route path="forms"               element={<RequirePageAccess pageKey="quality_forms" minLevel="edit"><PageLoader><FormsPage /></PageLoader></RequirePageAccess>} />
+            <Route path="forms/new"           element={<RequirePageAccess pageKey="quality_forms" minLevel="edit"><PageLoader><FormsPage /></PageLoader></RequirePageAccess>} />
+            <Route path="forms/:id/edit"      element={<RequirePageAccess pageKey="quality_forms" minLevel="edit"><PageLoader><FormsPage /></PageLoader></RequirePageAccess>} />
+            <Route path="forms/:id/preview"   element={<RequirePageAccess pageKey="quality_forms" minLevel="view"><PageLoader><FormsPage /></PageLoader></RequirePageAccess>} />
+            <Route path="forms/:id/duplicate" element={<RequirePageAccess pageKey="quality_forms" minLevel="edit"><PageLoader><FormsPage /></PageLoader></RequirePageAccess>} />
+
+            <Route path="submissions"       element={<RequirePageAccess pageKey="quality_submissions"><PageLoader><SubmissionsPage /></PageLoader></RequirePageAccess>} />
+            <Route path="submissions/:id"   element={<RequirePageAccess pageKey="quality_submissions"><PageLoader><SubmissionDetailPage /></PageLoader></RequirePageAccess>} />
+
+            <Route path="disputes"          element={<RequirePageAccess pageKey="quality_disputes"><PageLoader><DisputesPage /></PageLoader></RequirePageAccess>} />
             <Route path="dispute-history"   element={<Navigate to="/app/quality/disputes" replace />} />
+
             <Route path="analytics"       element={<Navigate to="/app/insights/qc-quality" replace />} />
-            <Route path="review-forms"    element={<PageLoader><ReviewFormsPage /></PageLoader>} />
+
+            <Route path="review-forms"    element={<RequirePageAccess pageKey="quality_review_forms"><PageLoader><ReviewFormsPage /></PageLoader></RequirePageAccess>} />
             <Route path="audit"           element={<PageLoader><AuditFormPage /></PageLoader>} />
-            <Route path="ai-inbox"        element={<PageLoader><AIReviewInbox /></PageLoader>} />
-            <Route path="ai-reviewer"            element={<PageLoader><AIReviewerFormsList /></PageLoader>} />
-            <Route path="ai-reviewer/rule-packs" element={<PageLoader><RulePackLibrary /></PageLoader>} />
+
+            <Route path="ai-inbox"        element={<RequirePageAccess pageKey="quality_ai_inbox"><PageLoader><AIReviewInbox /></PageLoader></RequirePageAccess>} />
+
+            <Route path="ai-reviewer"            element={<RequirePageAccess pageKey="quality_ai_reviewer"><PageLoader><AIReviewerFormsList /></PageLoader></RequirePageAccess>} />
+            <Route path="ai-reviewer/rule-packs" element={<RequirePageAccess pageKey="quality_ai_reviewer"><PageLoader><RulePackLibrary /></PageLoader></RequirePageAccess>} />
             <Route
               path="ai-reviewer/base-prompts"
               element={
@@ -213,62 +231,83 @@ export default function AppRoutes(): React.ReactElement {
                 </RequireRole>
               }
             />
-            <Route path="ai-reviewer/:formId"    element={<PageLoader><AIReviewerFormDetail /></PageLoader>} />
+            <Route path="ai-reviewer/:formId"    element={<RequirePageAccess pageKey="quality_ai_reviewer"><PageLoader><AIReviewerFormDetail /></PageLoader></RequirePageAccess>} />
           </Route>
 
-          {/* Training */}
+          {/* Training. Coaching is one logical page (`training_coaching`):
+              ALL/EDIT land on the editor list, OWN (CSR) on the self view.
+              The guards keep each role on exactly one surface. */}
           <Route path="/app/training">
             <Route index element={<TrainingIndexRedirect />} />
-            {/* Trainer/manager/admin routes — CSRs are redirected to my-coaching */}
-            <Route path="coaching"         element={<RequireRole allowed={COACHING_REVIEWER_ROLES} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionsPage /></PageLoader></RequireRole>} />
-            <Route path="coaching/new"     element={<RequireRole allowed={COACHING_REVIEWER_ROLES} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequireRole>} />
-            <Route path="coaching/:id"     element={<CoachingDetailRoute />} />
-            <Route path="coaching/:id/edit" element={<RequireRole allowed={COACHING_REVIEWER_ROLES} fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequireRole>} />
-            <Route path="my-coaching"       element={<PageLoader><MyCoachingPage /></PageLoader>} />
-            <Route path="my-coaching/:id"   element={<PageLoader><MyCoachingDetailPage /></PageLoader>} />
-            <Route path="reports"           element={<PageLoader><TrainingReportsPage /></PageLoader>} />
+            {/* Editor surfaces — need ALL+ to read everyone's sessions, EDIT to
+                mutate. OWN users are bounced to my-coaching via fallback. */}
+            <Route path="coaching"          element={<RequirePageAccess pageKey="training_coaching" minLevel="viewAll" fallback="/app/training/my-coaching"><PageLoader><CoachingSessionsPage /></PageLoader></RequirePageAccess>} />
+            <Route path="coaching/new"      element={<RequirePageAccess pageKey="training_coaching" minLevel="edit" fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequirePageAccess>} />
+            <Route path="coaching/:id"      element={<CoachingDetailRoute />} />
+            <Route path="coaching/:id/edit" element={<RequirePageAccess pageKey="training_coaching" minLevel="edit" fallback="/app/training/my-coaching"><PageLoader><CoachingSessionFormPage /></PageLoader></RequirePageAccess>} />
+            {/* Self surface — OWN only. Editors (ALL/EDIT) are sent to the list. */}
+            <Route path="my-coaching"       element={<RequirePageAccess pageKey="training_coaching" minLevel="view" redirectViewAllTo="/app/training/coaching"><PageLoader><MyCoachingPage /></PageLoader></RequirePageAccess>} />
+            <Route path="my-coaching/:id"   element={<RequirePageAccess pageKey="training_coaching" minLevel="view" redirectViewAllTo="/app/training/coaching"><PageLoader><MyCoachingDetailPage /></PageLoader></RequirePageAccess>} />
+            <Route path="reports"           element={<RequirePageAccess pageKey="training_reports" minLevel="viewAll"><PageLoader><TrainingReportsPage /></PageLoader></RequirePageAccess>} />
             <Route path="library">
               <Route index element={<Navigate to="topics" replace />} />
-              <Route path="topics"           element={<PageLoader><LibraryTopicsPage /></PageLoader>} />
-              <Route path="quizzes"          element={<PageLoader><LibraryQuizzesPage /></PageLoader>} />
-              <Route path="quizzes/new"      element={<PageLoader><LibraryQuizFormPage /></PageLoader>} />
-              <Route path="quizzes/:id/edit" element={<PageLoader><LibraryQuizFormPage /></PageLoader>} />
-              <Route path="resources"        element={<PageLoader><LibraryResourcesPage /></PageLoader>} />
+              <Route path="topics"           element={<RequirePageAccess pageKey="training_library_topics" minLevel="view"><PageLoader><LibraryTopicsPage /></PageLoader></RequirePageAccess>} />
+              <Route path="quizzes"          element={<RequirePageAccess pageKey="training_library_quizzes" minLevel="view"><PageLoader><LibraryQuizzesPage /></PageLoader></RequirePageAccess>} />
+              <Route path="quizzes/new"      element={<RequirePageAccess pageKey="training_library_quizzes" minLevel="edit"><PageLoader><LibraryQuizFormPage /></PageLoader></RequirePageAccess>} />
+              <Route path="quizzes/:id/edit" element={<RequirePageAccess pageKey="training_library_quizzes" minLevel="edit"><PageLoader><LibraryQuizFormPage /></PageLoader></RequirePageAccess>} />
+              <Route path="resources"        element={<RequirePageAccess pageKey="training_library_resources" minLevel="view"><PageLoader><LibraryResourcesPage /></PageLoader></RequirePageAccess>} />
             </Route>
           </Route>
 
           <Route path="/app/writeups/*" element={<RedirectWriteupsToPerformanceWarnings />} />
 
-          {/* Performance Warnings (write-up documents) */}
+          {/* Performance Warnings — one logical page (`pw_list`). ALL/EDIT
+              land on the editor list/detail; OWN (the employee the warning is
+              about) lands on the self `/my*` view. The backend list/detail
+              services self-scope OWN viewers as a second line of defense. */}
           <Route path="/app/performancewarnings">
             <Route index element={<Navigate to="list" replace />} />
             <Route
               path="list"
               element={
-                <RequireRole allowed={PERFORMANCE_WARNING_EDITOR_ROLES} fallback="/app/performancewarnings/my">
+                <RequirePageAccess pageKey="pw_list" minLevel="viewAll" fallback="/app/performancewarnings/my">
                   <PageLoader><WriteUpsPage /></PageLoader>
-                </RequireRole>
+                </RequirePageAccess>
               }
             />
             <Route
               path="new"
               element={
-                <RequireRole allowed={PERFORMANCE_WARNING_EDITOR_ROLES} fallback="/app">
+                <RequirePageAccess pageKey="pw_list" minLevel="edit" fallback="/app/performancewarnings/my">
                   <PageLoader><WriteUpFormPage /></PageLoader>
-                </RequireRole>
+                </RequirePageAccess>
               }
             />
             <Route path=":id" element={<PerformanceWarningDetailRoute />} />
             <Route
               path=":id/edit"
               element={
-                <RequireRole allowed={PERFORMANCE_WARNING_EDITOR_ROLES} fallback="/app">
+                <RequirePageAccess pageKey="pw_list" minLevel="edit" fallback="/app/performancewarnings/my">
                   <PageLoader><WriteUpFormPage /></PageLoader>
-                </RequireRole>
+                </RequirePageAccess>
               }
             />
-            <Route path="my"     element={<PageLoader><MyWriteUpsPage /></PageLoader>} />
-            <Route path="my/:id" element={<PageLoader><MyWriteUpDetailPage /></PageLoader>} />
+            <Route
+              path="my"
+              element={
+                <RequirePageAccess pageKey="pw_list" minLevel="view" redirectViewAllTo="/app/performancewarnings/list">
+                  <PageLoader><MyWriteUpsPage /></PageLoader>
+                </RequirePageAccess>
+              }
+            />
+            <Route
+              path="my/:id"
+              element={
+                <RequirePageAccess pageKey="pw_list" minLevel="view" redirectViewAllTo="/app/performancewarnings/list">
+                  <PageLoader><MyWriteUpDetailPage /></PageLoader>
+                </RequirePageAccess>
+              }
+            />
           </Route>
 
           {/* Insights */}

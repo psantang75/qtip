@@ -11,7 +11,7 @@ import { useQCFilters } from '@/hooks/useQCFilters'
 import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
 import {
   getQCKpis, getQCTrends, getScoreDistribution, getCategoryScores,
-  getMissedQuestions, getQualityDeptComparison, getFormScores, getFilterOptions,
+  getMissedQuestions, getQualityDeptComparison, getQAFormsCompleted, getFormScores, getFilterOptions,
   getFormAgentBreakdown, getCategoryAgentBreakdown,
 } from '@/services/insightsQCService'
 import type { CategoryScore, FormScore, QCParams } from '@/services/insightsQCService'
@@ -292,6 +292,7 @@ export default function QCQualityPage() {
   const { data: catData  = [] } = useQuery({ queryKey: ['qc-cats', params], queryFn: () => getCategoryScores(params) })
   const { data: missData = [] } = useQuery({ queryKey: ['qc-miss', params], queryFn: () => getMissedQuestions(params) })
   const { data: deptComp = [] } = useQuery({ queryKey: ['qc-dept-cmp', params], queryFn: () => getQualityDeptComparison(params) })
+  const { data: qaForms = [] } = useQuery({ queryKey: ['qc-qa-forms', params], queryFn: () => getQAFormsCompleted(params) })
   const { data: formScores = [] } = useQuery({ queryKey: ['qc-forms', params], queryFn: () => getFormScores(params) })
   const { data: kpiConfig } = useKpiConfig()
 
@@ -410,6 +411,43 @@ export default function QCQualityPage() {
 
         {/* Top Missed Questions */}
         <QCMissedQuestions questions={missData} />
+
+        {/* QA Forms Completed — auditor x CSR x form, driven by the filters */}
+        <InsightsSection title="QA Forms Completed">
+          {qaForms.length === 0
+            ? <p className="text-sm text-slate-400 text-center py-4">No data available.</p>
+            : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-slate-400 border-b border-slate-200">
+                    {['QA Person','CSR','Form','Completed','Avg Score'].map(h => (
+                      <th key={h} className="text-left pb-2 font-medium pr-4 last:pr-0">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {qaForms.map(row => (
+                    <tr
+                      key={`${row.qaUserId}-${row.csrUserId}-${row.formId}`}
+                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                    >
+                      <td className="py-2.5 pr-4 font-medium text-slate-800">{row.qaName}</td>
+                      <td className="py-2.5 pr-4 text-slate-600">{row.csrName}</td>
+                      <td className="py-2.5 pr-4 text-slate-600">{row.form}</td>
+                      <td className="py-2.5 pr-4 text-slate-500">{row.completed}</td>
+                      <td className="py-2.5">
+                        <span className="flex items-center gap-1.5">
+                          <StatusDot value={row.avgScore ?? 0} thresholds={qaThresh} />
+                          <span className="font-semibold">{fmt(row.avgScore, '%')}</span>
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          }
+        </InsightsSection>
 
         {/* Department Comparison */}
         <InsightsSection

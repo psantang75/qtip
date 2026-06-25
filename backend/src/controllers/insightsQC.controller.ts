@@ -116,6 +116,15 @@ function qcHandler(
   }
 }
 
+// Page keys for every QC dashboard. Used both for the filter-options
+// endpoint and as the access set for shared payloads (KPI tiles, trend
+// sparklines) that EVERY QC page consumes. A user with even one QC page
+// grant must be able to load these — that's why the gate is "any of".
+//
+// Declared here (not in the "Filter options" section below) because
+// `getQCKpis` and `getQCTrends` reference it before that section is reached.
+const QC_PAGE_KEYS = ['qc_overview', 'qc_quality', 'qc_coaching', 'qc_warnings', 'qc_agents']
+
 // ── Shared KPIs & Trends ──────────────────────────────────────────────────────
 
 // `forms` filter is applied by qcKpiService to Quality queries only. Coaching,
@@ -123,19 +132,22 @@ function qcHandler(
 // matching the fact that only the Quality + Agent Profile pages expose a Form
 // filter in the UI.
 //
-// Also serves the Agent Profile drill-down (with ?userId=X) — users with
-// qc_agents access can request KPIs for a single agent. SELF scope is forced
-// to the requesting user's own id.
-export const getQCKpis = qcHandler(['qc_overview', 'qc_agents'], (deptFilter, ranges, req, access) => {
+// KPI tiles and trend sparklines are surfaced on every QC dashboard
+// (Overview, Quality, Coaching, Warnings, Agents). Gating only on
+// `qc_overview` + `qc_agents` (the original pair) produced false-403s for
+// users whose admin had narrowed them to e.g. `qc_coaching` + `qc_warnings`.
+// Allow access if the user has access to ANY QC page; per-KPI restriction
+// lives in `qcKpiService.getKpiValues` (which already filters by KPI code).
+//
+// Also serves the Agent Profile drill-down (with ?userId=X). SELF scope is
+// forced to the requesting user's own id regardless of the requested id.
+export const getQCKpis = qcHandler(QC_PAGE_KEYS, (deptFilter, ranges, req, access) => {
   const requestedUserId = req.query.userId ? parseInt(req.query.userId as string, 10) : undefined
   const userId = access.dataScope === 'SELF' ? req.user?.user_id : requestedUserId
   return qcKpiService.getKpiValues(deptFilter, ranges, parseFormNames(req), userId)
 })
 
-// Trends are also used by the Agent Profile drill-down (with ?userId=X), so
-// users with qc_agents access can request them too. SELF scope is forced to
-// the requesting user's own id.
-export const getQCTrends = qcHandler(['qc_overview', 'qc_agents'], (deptFilter, ranges, req, access) => {
+export const getQCTrends = qcHandler(QC_PAGE_KEYS, (deptFilter, ranges, req, access) => {
   const codes = req.query.kpis
     ? (req.query.kpis as string).split(',')
     : ['avg_qa_score', 'coaching_completion_rate', 'quiz_pass_rate']
@@ -188,11 +200,6 @@ export const getQCAgentFull = qcHandler('qc_agents', async (deptFilter, ranges, 
 })
 
 // ── Filter options ────────────────────────────────────────────────────────────
-
-// Filter options (dept list + form list) are shared infrastructure used by
-// every QC page. Allow access if the user has access to ANY QC page so the
-// filter bar still works for users with narrow grants (e.g. SELF on qc_agents).
-const QC_PAGE_KEYS = ['qc_overview', 'qc_quality', 'qc_coaching', 'qc_warnings', 'qc_agents']
 
 export const getFilterOptions = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -252,6 +259,13 @@ export const getMissedQuestions = qcHandler(['qc_quality', 'qc_agents'], (deptFi
 
 export const getQualityDeptComparison = qcHandler('qc_quality', (deptFilter, ranges, req) =>
   qcQuality.getQualityDeptComparison(deptFilter, ranges, parseFormNames(req)),
+)
+
+// QA Forms Completed — auditor x CSR x form rollup for the Quality page table
+// above Department Comparison. Same qc_quality gate + dept scope as the rest
+// of the page; honors the dept/form/period filters.
+export const getQAFormsCompleted = qcHandler('qc_quality', (deptFilter, ranges, req) =>
+  qcQuality.getQAFormsCompleted(deptFilter, parseFormNames(req), ranges),
 )
 
 // Form scores are also surfaced inside the Agent Profile drill-down on the

@@ -30,6 +30,7 @@ model Role {
 
   users              User[]
   insightsPageAccess IePageRoleAccess[]
+  appPageAccess      AppPageRoleAccess[]
 
   @@map("roles")
 }
@@ -1384,6 +1385,61 @@ model IePageDepartmentAccess {
   @@unique([page_id, department_key], name: "uq_page_department")
   @@index([department_key], name: "idx_page_dept_dept")
   @@map("ie_page_department_access")
+}
+
+// ── App Page Access — DB-driven role access for non-Insights pages ───────────
+//
+// Companion to ie_page / ie_page_role_access (which gates Insights). These
+// gate the app shell: Training and Performance Warnings in Phase 1.
+//
+// Invariant: this table only controls REACHABILITY, never data shape. CSR
+// (role_id=3) data isolation is enforced at the service layer regardless of
+// what these rows say (see assertCsrSelfScope).
+enum AppAccessLevel {
+  NONE
+  OWN
+  ALL
+  EDIT
+}
+
+model AppPage {
+  id              Int      @id @default(autoincrement())
+  page_key        String   @unique(map: "uq_app_page_key") @db.VarChar(50)
+  page_name       String   @db.VarChar(100)
+  section         String   @db.VarChar(50)
+  route_path      String   @db.VarChar(200)
+  icon            String?  @db.VarChar(50)
+  sort_order      Int      @default(0)
+  is_active       Boolean  @default(true)
+  // Self ("Own") experience metadata — drives the nav link for OWN-level
+  // roles (e.g. CSR sees "My Training" → /app/training/my-coaching).
+  supports_self   Boolean  @default(false)
+  self_route_path String?  @db.VarChar(200)
+  self_label      String?  @db.VarChar(100)
+  self_icon       String?  @db.VarChar(50)
+  created_at      DateTime @default(now())
+
+  role_access AppPageRoleAccess[]
+
+  @@index([section, sort_order], map: "idx_app_page_section")
+  @@map("app_page")
+}
+
+model AppPageRoleAccess {
+  id           Int            @id @default(autoincrement())
+  page_id      Int
+  role_id      Int
+  // Single source of truth for what the role can do on this page.
+  access_level AppAccessLevel @default(NONE)
+  // Deprecated — retained for one release; superseded by access_level.
+  can_access   Boolean        @default(false)
+  can_write    Boolean        @default(false)
+
+  page AppPage @relation(fields: [page_id], references: [id], onDelete: Cascade)
+  role Role    @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@unique([page_id, role_id], name: "uq_app_page_role")
+  @@map("app_page_role_access")
 }
 
 // ── Insights Engine — Ingestion & Configuration ──────────────────────────────

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import pool from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import logger from '../config/logger';
+import { qcCacheClear } from '../middleware/qcCache';
 
 const VALID_DATA_SCOPES = ['ALL', 'DIVISION', 'DEPARTMENT', 'SELF'] as const;
 
@@ -115,6 +116,12 @@ export const updatePageAccess = async (req: Request, res: Response): Promise<voi
     } finally {
       conn.release();
     }
+
+    // Invalidate the QC HTTP response cache so the new grants take effect
+    // immediately — without this, a freshly added user with `qc_coaching`
+    // would keep getting 403s from `/api/insights/qc/kpis` until the cache
+    // entry expired. See `middleware/qcCache.ts`.
+    qcCacheClear();
 
     res.json({ success: true });
   } catch (error) {

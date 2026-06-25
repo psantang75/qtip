@@ -1,12 +1,15 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Users, Building2, ShieldCheck, List, BarChart3, FileText, Activity, CalendarDays, Clock, Mail, Settings } from 'lucide-react'
+import { Users, Building2, List, BarChart3, FileText, Activity, CalendarDays, Clock, Mail, Settings } from 'lucide-react'
 import TopBar from './TopBar'
 import { cn } from '@/lib/utils'
 
+// "Roles" was removed — role descriptions were duplicating the live access
+// matrix shown on `Admin → Page Access`. That screen is now the single
+// source of truth for who can access what.
 const ADMIN_NAV = [
   { label: 'Users',           path: '/app/admin/users',           icon: Users },
   { label: 'Departments',     path: '/app/admin/departments',      icon: Building2 },
-  { label: 'Roles',           path: '/app/admin/roles',            icon: ShieldCheck },
+  { label: 'Page Access',     path: '/app/admin/pages-access',     icon: FileText },
   { label: 'List Management', path: '/app/admin/list-management',  icon: List },
   { label: 'Email Templates', path: '/app/admin/email-templates',  icon: Mail },
   { label: 'System Settings', path: '/app/admin/system-settings',  icon: Settings },

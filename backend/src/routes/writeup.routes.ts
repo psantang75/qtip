@@ -2,7 +2,7 @@ import { Router, RequestHandler } from 'express'
 import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
-import { authenticate, authorizeManager } from '../middleware/auth'
+import { authenticate, authorizePage } from '../middleware/auth'
 import { validateSchema } from '../validation/csr.validation'
 import { CreateWriteUpSchema, UpdateWriteUpSchema } from '../validation/writeup.validation'
 import {
@@ -52,28 +52,43 @@ const upload = multer({
 const router = Router()
 router.use(authenticate as unknown as RequestHandler)
 
-// Read-only routes — all authenticated users (CSRs see only their own via controller)
-router.get('/',                        getWriteUps                                                                                                              as unknown as RequestHandler)
-router.get('/qa-search',               searchQaRecords                                                                                                          as unknown as RequestHandler)
-router.get('/coaching-search',         searchCoachingSessions                                                                                                   as unknown as RequestHandler)
-router.get('/prior-discipline/:csrId', getPriorDiscipline                                                                                                       as unknown as RequestHandler)
-router.get('/:id',                     getWriteUpById                                                                                                           as unknown as RequestHandler)
-router.get('/:id/attachments/:attachmentId',                                                                                             downloadAttachment      as unknown as RequestHandler)
+// Page-access gates (scope model, key `pw_list`):
+//   view    → OWN+  (the employee the warning is about, plus editors)
+//   viewAll → ALL+  (editor surfaces that expose other users' data)
+//   edit    → EDIT  (create / edit / transition / attach)
+const pwView    = authorizePage('pw_list', 'view')    as unknown as RequestHandler
+const pwViewAll = authorizePage('pw_list', 'viewAll') as unknown as RequestHandler
+const pwEdit    = authorizePage('pw_list', 'edit')    as unknown as RequestHandler
 
-// Write routes — Manager, Admin, QA only (Trainer intentionally excluded;
-// see file header on `services/writeups/writeup.lifecycle.service.ts` for
-// the rationale — pre-production review item #90).
-router.post('/',                       authorizeManager as unknown as RequestHandler, validateSchema(CreateWriteUpSchema), createWriteUp                         as unknown as RequestHandler)
-router.post('/coaching-session',       authorizeManager as unknown as RequestHandler, createLinkedCoachingSession                                                as unknown as RequestHandler)
-router.put('/:id',                     authorizeManager as unknown as RequestHandler, validateSchema(UpdateWriteUpSchema), updateWriteUp                         as unknown as RequestHandler)
-router.patch('/:id/internal-notes',    authorizeManager as unknown as RequestHandler, updateInternalNotes                                                        as unknown as RequestHandler)
-router.patch('/:id/follow-up-notes',   authorizeManager as unknown as RequestHandler, updateFollowUpNotes                                                        as unknown as RequestHandler)
-router.patch('/:id/status',            authorizeManager as unknown as RequestHandler, transitionStatus                                                           as unknown as RequestHandler)
-router.patch('/:id/follow-up',         authorizeManager as unknown as RequestHandler, setFollowUp                                                                as unknown as RequestHandler)
-router.post('/:id/attachments',        authorizeManager as unknown as RequestHandler, upload.single('file') as unknown as RequestHandler, uploadAttachment       as unknown as RequestHandler)
-router.delete('/:id/attachments/:attachmentId', authorizeManager as unknown as RequestHandler,                                           deleteAttachment        as unknown as RequestHandler)
+// Editor-only search/lookup routes — expose other users' data, so they
+// require ALL+. Declared BEFORE `/:id` so the param route doesn't swallow them.
+router.get('/qa-search',               pwViewAll, searchQaRecords                                                                                              as unknown as RequestHandler)
+router.get('/coaching-search',         pwViewAll, searchCoachingSessions                                                                                       as unknown as RequestHandler)
+router.get('/prior-discipline/:csrId', pwViewAll, getPriorDiscipline                                                                                           as unknown as RequestHandler)
 
-// CSR-only — controller enforces ownership
-router.post('/:id/sign',               signWriteUp                                                                                                              as unknown as RequestHandler)
+// Self-scoped read routes — any role with OWN+ on pw_list. The service scopes
+// list/detail to the viewer's own non-DRAFT records unless they can see all
+// (`canSeeAll`). Attachment download is needed by the CSR the warning is about.
+router.get('/',                        pwView, getWriteUps                                                                                                      as unknown as RequestHandler)
+router.get('/:id',                     pwView, getWriteUpById                                                                                                   as unknown as RequestHandler)
+router.get('/:id/attachments/:attachmentId',           pwView,                                                           downloadAttachment                    as unknown as RequestHandler)
+
+// Write routes — EDIT level (Admin + Manager per the matrix). QA is excluded
+// by default (performance warnings are an HR/management responsibility), but
+// this is now admin-configurable via the Page Access screen rather than
+// hardcoded here.
+router.post('/',                       pwEdit, validateSchema(CreateWriteUpSchema), createWriteUp                                                               as unknown as RequestHandler)
+router.post('/coaching-session',       pwEdit, createLinkedCoachingSession                                                                                      as unknown as RequestHandler)
+router.put('/:id',                     pwEdit, validateSchema(UpdateWriteUpSchema), updateWriteUp                                                               as unknown as RequestHandler)
+router.patch('/:id/internal-notes',    pwEdit, updateInternalNotes                                                                                              as unknown as RequestHandler)
+router.patch('/:id/follow-up-notes',   pwEdit, updateFollowUpNotes                                                                                              as unknown as RequestHandler)
+router.patch('/:id/status',            pwEdit, transitionStatus                                                                                                 as unknown as RequestHandler)
+router.patch('/:id/follow-up',         pwEdit, setFollowUp                                                                                                      as unknown as RequestHandler)
+router.post('/:id/attachments',        pwEdit, upload.single('file') as unknown as RequestHandler, uploadAttachment                                             as unknown as RequestHandler)
+router.delete('/:id/attachments/:attachmentId', pwEdit,                                                    deleteAttachment                                     as unknown as RequestHandler)
+
+// Sign — the CSR the warning is about acknowledges it. Requires OWN+ (the
+// controller additionally enforces that it's their own record).
+router.post('/:id/sign',               pwView, signWriteUp                                                                                                      as unknown as RequestHandler)
 
 export default router

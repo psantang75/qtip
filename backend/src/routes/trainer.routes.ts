@@ -45,7 +45,7 @@ import {
   getReportsSummary,
   getCSRCoachingList
 } from '../controllers/coachingReport.controller';
-import { authenticate, authorizeCoachingUser, authorizeTrainer } from '../middleware/auth';
+import { authenticate, authorizeCoachingUser, authorizeTrainer, authorizePage } from '../middleware/auth';
 import multer from 'multer';
 
 const router = express.Router();
@@ -67,6 +67,12 @@ const auth = authenticate as unknown as RequestHandler;
 const coaching = authorizeCoachingUser as unknown as RequestHandler;
 const trainer = authorizeTrainer as unknown as RequestHandler;
 
+// DB-driven page-access gates for the Training section. QA is intentionally
+// blocked here even though `authorizeCoachingUser` would let them through —
+// QA owns Quality, not Training. Drives the "Training Sessions" surface.
+const coachingRead  = authorizePage('training_coaching', 'viewAll') as unknown as RequestHandler;
+const coachingWrite = authorizePage('training_coaching', 'edit')    as unknown as RequestHandler;
+
 // Health check (no auth)
 router.get('/health', getTrainerHealthCheck as unknown as RequestHandler);
 
@@ -83,20 +89,23 @@ router.get('/completed', auth, coaching, getTrainerCompletedSubmissions as unkno
 router.get('/completed/:id', auth, coaching, getTrainerSubmissionDetails as unknown as RequestHandler);
 
 // ─── Coaching Sessions ───────────────────────────────────────────────────────
-router.get('/coaches', auth, coaching, getEligibleCoaches as unknown as RequestHandler);
-router.get('/coaching-sessions', auth, coaching, getCoachingSessions as unknown as RequestHandler);
-router.get('/coaching-sessions/:id/attachment', auth, coaching, downloadAttachment as unknown as RequestHandler);
-router.get('/coaching-sessions/:id', auth, coaching, getCoachingSessionDetail as unknown as RequestHandler);
-router.post('/coaching-sessions', auth, coaching, upload.single('attachment'), createCoachingSession as unknown as RequestHandler);
-router.put('/coaching-sessions/:id', auth, coaching, upload.single('attachment'), updateCoachingSession as unknown as RequestHandler);
-router.patch('/coaching-sessions/:id/status', auth, coaching, setSessionStatus as unknown as RequestHandler);
-router.patch('/coaching-sessions/:id/deliver', auth, coaching, deliverCoachingSession as unknown as RequestHandler);
-router.patch('/coaching-sessions/:id/complete', auth, coaching, completeCoachingSession as unknown as RequestHandler);
-router.patch('/coaching-sessions/:id/flag-followup', auth, coaching, flagFollowUp as unknown as RequestHandler);
-router.patch('/coaching-sessions/:id/close', auth, coaching, closeCoachingSession as unknown as RequestHandler);
+// Reads gated by `training_coaching` (read); mutations by the same key (write).
+// Pre-existing `coaching` middleware kept as a layered fallback during the
+// rollout — both gates must pass. (Removed in Phase 2 once we trust the table.)
+router.get('/coaches', auth, coaching, coachingRead, getEligibleCoaches as unknown as RequestHandler);
+router.get('/coaching-sessions', auth, coaching, coachingRead, getCoachingSessions as unknown as RequestHandler);
+router.get('/coaching-sessions/:id/attachment', auth, coaching, coachingRead, downloadAttachment as unknown as RequestHandler);
+router.get('/coaching-sessions/:id', auth, coaching, coachingRead, getCoachingSessionDetail as unknown as RequestHandler);
+router.post('/coaching-sessions', auth, coaching, coachingWrite, upload.single('attachment'), createCoachingSession as unknown as RequestHandler);
+router.put('/coaching-sessions/:id', auth, coaching, coachingWrite, upload.single('attachment'), updateCoachingSession as unknown as RequestHandler);
+router.patch('/coaching-sessions/:id/status', auth, coaching, coachingWrite, setSessionStatus as unknown as RequestHandler);
+router.patch('/coaching-sessions/:id/deliver', auth, coaching, coachingWrite, deliverCoachingSession as unknown as RequestHandler);
+router.patch('/coaching-sessions/:id/complete', auth, coaching, coachingWrite, completeCoachingSession as unknown as RequestHandler);
+router.patch('/coaching-sessions/:id/flag-followup', auth, coaching, coachingWrite, flagFollowUp as unknown as RequestHandler);
+router.patch('/coaching-sessions/:id/close', auth, coaching, coachingWrite, closeCoachingSession as unknown as RequestHandler);
 
 // ─── CSR Coaching History (sidebar) ─────────────────────────────────────────
-router.get('/csr-coaching-history/:csrId', auth, coaching, getCSRCoachingHistory as unknown as RequestHandler);
+router.get('/csr-coaching-history/:csrId', auth, coaching, coachingRead, getCSRCoachingHistory as unknown as RequestHandler);
 
 // ─── KB Resources ────────────────────────────────────────────────────────────
 const resourceUpload = multer({

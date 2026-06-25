@@ -53,6 +53,7 @@ import reportRoutes from './routes/report.routes';
 import rawDataRoutes from './routes/rawData.routes';
 import insightsRoutes from './routes/insights.routes';
 import insightsAdminRoutes from './routes/insightsAdmin.routes';
+import appAccessRoutes from './routes/appAccess.routes';
 import onDemandReportsRoutes from './routes/onDemandReports.routes';
 import logger from './config/logger';
 
@@ -198,6 +199,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/raw-data', rawDataRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/insights/admin', insightsAdminRoutes);
+app.use('/api/app-access', appAccessRoutes);
 app.use('/api/on-demand-reports', onDemandReportsRoutes);
 
 // Error handling middleware (must be last)

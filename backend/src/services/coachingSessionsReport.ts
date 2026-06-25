@@ -29,21 +29,33 @@ import logger from '../config/logger';
 /**
  * Visibility predicate applied to every coaching-session query.
  *
- *   Admin   → org-wide
- *   Manager → CSRs they manage (`u.manager_id = userId`)
- *   QA / Trainer / others past the route guard → sessions they personally
- *     created (`cs.created_by = userId`)
+ *   Admin            → org-wide
+ *   Trainer          → author-scoped: only sessions they created
+ *     (`coaching_sessions.created_by`). Trainers manage their own training
+ *     sessions, mirroring the QA author self-scope on audits.
+ *   Manager / others → CSRs in the departments this user has been assigned
+ *     (`department_managers` — the same table the admin "assign to department"
+ *     flow writes). No assignments ⇒ no rows.
  *
- * Callers MUST `JOIN users u ON cs.csr_id = u.id` so the manager predicate
- * can resolve. This is the single source of truth — `coaching.controller.ts`
- * and `coachingReport.controller.ts` both consume it. Any change here applies
- * to the live list, the live detail view, every coaching-report aggregate,
- * and the on-demand exports.
+ * CSR self-view never reaches this predicate — it uses the dedicated
+ * `/api/csr/*` endpoints.
+ *
+ * Callers MUST `JOIN users u ON cs.csr_id = u.id` so `u.department_id` (the
+ * CSR's department) resolves. This is the single source of truth —
+ * `coaching.controller.ts` and `coachingReport.controller.ts` both consume it.
+ * Any change here applies to the live list, the live detail view, every
+ * coaching-report aggregate, and the on-demand exports.
  */
 export const buildCoachingSessionScope = (role: string, userId: number): Prisma.Sql => {
   if (role === 'Admin') return Prisma.sql`1=1`;
-  if (role === 'Manager') return Prisma.sql`u.manager_id = ${userId}`;
-  return Prisma.sql`cs.created_by = ${userId}`;
+  // Trainers are author-scoped: they only see / manage the coaching sessions
+  // they created, mirroring the QA author self-scope on audits. (Managers fall
+  // through to the department scope below.)
+  if (role === 'Trainer') return Prisma.sql`cs.created_by = ${userId}`;
+  return Prisma.sql`u.department_id IN (
+    SELECT dm.department_id FROM department_managers dm
+    WHERE dm.manager_id = ${userId} AND dm.is_active = 1
+  )`;
 };
 
 export interface CoachingSessionsFilters {

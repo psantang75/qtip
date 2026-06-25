@@ -1,5 +1,6 @@
 import express from 'express';
-import { authenticate, authorizeQA, authorizeQAOrTrainer } from '../middleware/auth';
+import { authenticate, authorizePage } from '../middleware/auth';
+import type { RequestHandler } from 'express';
 import {
   getCompletedSubmissions,
   getSubmissionDetails,
@@ -71,16 +72,23 @@ router.get('/health', async (req, res) => {
 // All other QA routes require authentication
 router.use(authenticate);
 
-// QA Dashboard routes — QA and Admin only
-router.get('/stats', authorizeQA, getQAStats);
-router.get('/csr-activity', authorizeQA, getQACSRActivity);
+// Page-access gates sourced from `app_page_role_access` (see migration
+// 20260625070000_add_quality_app_pages). All endpoints below back the
+// Quality > Submissions surface, so they share the `quality_submissions`
+// key. Read vs write follows the semantic of the action.
+const submissionsRead  = authorizePage('quality_submissions', 'viewAll') as unknown as RequestHandler;
+const submissionsWrite = authorizePage('quality_submissions', 'edit')    as unknown as RequestHandler;
 
-// Completed submissions routes — QA, Admin, and Trainer
-router.get('/completed', authorizeQAOrTrainer, getCompletedSubmissions);
-router.get('/completed/:id', authorizeQAOrTrainer, getSubmissionDetails);
-router.get('/completed/:id/export', authorizeQAOrTrainer, exportSubmission);
+// QA dashboard widgets — same surface as the submissions list.
+router.get('/stats',                       submissionsRead,  getQAStats);
+router.get('/csr-activity',                submissionsRead,  getQACSRActivity);
 
-// Submission management routes — QA and Admin only
-router.put('/submissions/:id/finalize', authorizeQA, finalizeSubmission);
+// Editor submission listings (used by the Submissions page).
+router.get('/completed',                   submissionsRead,  getCompletedSubmissions);
+router.get('/completed/:id',               submissionsRead,  getSubmissionDetails);
+router.get('/completed/:id/export',        submissionsRead,  exportSubmission);
+
+// Submission state transitions — full write required.
+router.put('/submissions/:id/finalize',    submissionsWrite, finalizeSubmission);
 
 export default router;

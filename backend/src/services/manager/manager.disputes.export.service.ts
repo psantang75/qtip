@@ -80,7 +80,7 @@ export async function exportManagerTeamDisputes(
   params: ExportDisputesParams,
 ): Promise<DisputeExportResult> {
   const where = await buildDisputeWhere(
-    { userId: params.userId, userRole: params.userRole },
+    { userId: params.userId, userRole: params.userRole, scopedDepartmentIds: params.scopedDepartmentIds },
     params.filters,
   )
 

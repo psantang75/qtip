@@ -40,6 +40,14 @@ export interface CompletedSubmissionsParams {
   dateEnd?: string
   status?: 'FINALIZED' | 'DISPUTED' | 'SUBMITTED'
   search?: string
+  /**
+   * When set, restrict the list to audits authored by this user
+   * (`submissions.submitted_by`). The QA role is author-scoped to their own
+   * audits — they can create/manage them but only see their own — mirroring
+   * the QA dashboard (`getQAStats`) and the QA dispute self-scope. Admin /
+   * Manager / Trainer pass `undefined` and see everyone's.
+   */
+  submittedBy?: number
 }
 
 export interface CompletedSubmissionsResult {

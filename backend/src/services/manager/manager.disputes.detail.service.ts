@@ -6,13 +6,19 @@
 import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
 import { getDisputeScoreHistory } from '../../utils/disputeScoreHistory'
-import { getCsrRoleId, getManagedDepartmentIds } from './manager.access'
+import { getCsrRoleId } from './manager.access'
 import { ManagerServiceError } from './manager.types'
 
 export interface DisputeDetailParams {
   userId: number
   userRole: string | undefined
   disputeId: string
+  /**
+   * Departments this viewer may see, resolved from page access by the
+   * controller. `null` = no restriction (Admin / QA); `[]` = manages no
+   * departments; ids = limit to CSRs in these departments.
+   */
+  scopedDepartmentIds: number[] | null
 }
 
 export interface DisputeDetail {
@@ -47,17 +53,16 @@ export async function getManagerDisputeDetails(
   let whereClause = 'WHERE d.id = ?'
   const queryParams: unknown[] = [params.disputeId]
 
-  if (params.userRole === 'Manager') {
-    const departmentIds = await getManagedDepartmentIds(params.userId)
-    if (departmentIds.length === 0) {
+  if (params.scopedDepartmentIds !== null) {
+    if (params.scopedDepartmentIds.length === 0) {
       throw new ManagerServiceError(
         'No departments found for this manager',
         403,
         'NO_DEPARTMENTS',
       )
     }
-    whereClause += ` AND u.department_id IN (${departmentIds.map(() => '?').join(',')})`
-    queryParams.push(...departmentIds)
+    whereClause += ` AND u.department_id IN (${params.scopedDepartmentIds.map(() => '?').join(',')})`
+    queryParams.push(...params.scopedDepartmentIds)
   }
 
   whereClause += ' AND u.role_id = ?'

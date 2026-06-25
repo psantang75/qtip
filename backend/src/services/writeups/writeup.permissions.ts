@@ -10,11 +10,12 @@
 import { WriteUpServiceError } from './writeup.types'
 
 /**
- * Roles that can see every CSR's write-ups. Anyone outside this set sees
- * only their own non-DRAFT records (CSR self-view).
+ * NOTE: "Can this viewer see every CSR's write-ups?" is no longer a hardcoded
+ * role check. It is the viewer's resolved `pw_list` access level (ALL/EDIT =>
+ * see all, OWN => self-scoped), threaded in as `canViewAll` from
+ * `req.pageAccess`. CSR isolation is still enforced unconditionally below via
+ * `assertCsrSelfScope`.
  */
-export const canSeeAll = (role: string): boolean =>
-  ['Admin', 'QA', 'Manager'].includes(role)
 
 /**
  * Status-transition matrix for write-ups. Keys are the current status,
@@ -69,4 +70,30 @@ export const isVisibleToCsr = (csrIdOnRow: number, status: string, viewerId: num
   if (csrIdOnRow !== viewerId) return false
   if (status === 'DRAFT') return false
   return true
+}
+
+/**
+ * Explicit CSR data-isolation invariant — defense-in-depth.
+ *
+ * Use in every detail / single-row path that reads a user-scoped write-up
+ * row. If a CSR viewer ever ends up looking at someone else's row (e.g.
+ * because someone misconfigured `app_page_role_access` to grant CSR
+ * `can_access=true` on `pw_list`), this throws a 404 — same envelope as a
+ * missing record so there's no information leak.
+ *
+ * INVARIANT: CSR data isolation must hold regardless of what the access
+ * table says. This helper is the single greppable expression of that rule
+ * for the write-up surface. Call it explicitly even when `canSeeAll`
+ * already implies the right behaviour — the redundancy is intentional.
+ */
+export const assertCsrSelfScope = (
+  viewerRole: string,
+  viewerId: number,
+  csrIdOnRow: number,
+  status: string,
+): void => {
+  if (viewerRole !== 'CSR') return
+  if (!isVisibleToCsr(csrIdOnRow, status, viewerId)) {
+    throw new WriteUpServiceError('Write-up not found', 404, 'WRITEUP_NOT_FOUND')
+  }
 }

@@ -6,22 +6,36 @@
  * `controllers/writeup.controller.ts` during the pre-production review
  * (item #29).
  *
- * Visibility rules:
- *   - Admin / QA / Manager: see everyone, can filter by `csr_id`.
- *   - Everyone else (CSR): scoped to their own non-DRAFT records.
- *     Detail returns 404 when the row exists but belongs to another CSR
- *     or is still in DRAFT — same envelope as a missing row, no info leak.
+ * Visibility rules (driven by the caller's resolved `pw_list` access level,
+ * NOT a hardcoded role list — so the admin "Page Access" screen controls it):
+ *   - `canViewAll` (level ALL or EDIT):
+ *       - Admin (`scopedDepartmentIds === null`): every CSR.
+ *       - other roles: only CSRs in the departments the viewer has been
+ *         assigned (`scopedDepartmentIds`). No departments ⇒ no rows.
+ *     Can additionally filter by `csr_id`.
+ *   - otherwise (level OWN): self-scoped to their own non-DRAFT records.
+ *     Detail returns 404 when the row exists but belongs to another user or is
+ *     still in DRAFT — same envelope as a missing row, no info leak. CSR
+ *     isolation is additionally enforced by `assertCsrSelfScope` for
+ *     defense-in-depth, regardless of what the access table says.
  */
 
 import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
-import { canSeeAll, isVisibleToCsr } from './writeup.permissions'
+import { isVisibleToCsr, assertCsrSelfScope } from './writeup.permissions'
 import { shapePriorDiscipline, splitSep } from './writeup.helpers'
 import { WriteUpServiceError } from './writeup.types'
 
 export interface ListWriteUpsParams {
   viewerId: number
   viewerRole: string
+  /** Resolved from the viewer's `pw_list` level: true for ALL/EDIT. */
+  canViewAll: boolean
+  /**
+   * Departments this viewer may see (from `department_managers`). `null` means
+   * no restriction (Admin / org-wide). Only consulted when `canViewAll`.
+   */
+  scopedDepartmentIds: number[] | null
   page: number
   limit: number
   csrId?: number
@@ -46,16 +60,24 @@ export interface ListWriteUpsResult {
  * role-based visibility plus the optional filters surfaced by the UI.
  */
 export async function listWriteUps(params: ListWriteUpsParams): Promise<ListWriteUpsResult> {
-  const { viewerId, viewerRole, page, limit, csrId, status, documentType, dateFrom, dateTo, search } = params
+  const { viewerId, canViewAll, scopedDepartmentIds, page, limit, csrId, status, documentType, dateFrom, dateTo, search } = params
   const offset = (page - 1) * limit
 
   const conditions: Prisma.Sql[] = []
 
-  if (!canSeeAll(viewerRole)) {
+  if (!canViewAll) {
     conditions.push(Prisma.sql`wu.csr_id = ${viewerId}`)
     conditions.push(Prisma.sql`wu.status != 'DRAFT'`)
-  } else if (csrId) {
-    conditions.push(Prisma.sql`wu.csr_id = ${csrId}`)
+  } else {
+    // Non-admin view-all viewers are limited to their assigned departments.
+    if (scopedDepartmentIds !== null) {
+      conditions.push(
+        scopedDepartmentIds.length
+          ? Prisma.sql`csr.department_id IN (${Prisma.join(scopedDepartmentIds)})`
+          : Prisma.sql`1=0`,
+      )
+    }
+    if (csrId) conditions.push(Prisma.sql`wu.csr_id = ${csrId}`)
   }
 
   if (status)       conditions.push(Prisma.sql`wu.status = ${status}`)
@@ -108,10 +130,11 @@ export async function listWriteUps(params: ListWriteUpsParams): Promise<ListWrit
  * theirs or is still DRAFT.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getWriteUpDetail(writeUpId: number, viewerId: number, viewerRole: string): Promise<any> {
+export async function getWriteUpDetail(writeUpId: number, viewerId: number, viewerRole: string, canViewAll: boolean, scopedDepartmentIds: number[] | null): Promise<any> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
     SELECT wu.*,
+      csr.department_id  as csr_department_id,
       csr.username       as csr_name,
       creator.username   as created_by_name,
       mgr.username       as manager_name,
@@ -131,7 +154,18 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
   }
 
   const writeUp = rows[0]
-  if (viewerRole === 'CSR' && !isVisibleToCsr(writeUp.csr_id, writeUp.status, viewerId)) {
+  // Explicit CSR data-isolation guard. Belt and suspenders alongside the
+  // broader non-editor check below — see `assertCsrSelfScope` JSDoc.
+  assertCsrSelfScope(viewerRole, viewerId, writeUp.csr_id, writeUp.status)
+  // OWN-level viewers (level !== ALL/EDIT) may only see their own non-DRAFT
+  // record; anything else returns the same 404 a missing row would.
+  if (!canViewAll && !isVisibleToCsr(writeUp.csr_id, writeUp.status, viewerId)) {
+    throw new WriteUpServiceError('Write-up not found', 404, 'WRITEUP_NOT_FOUND')
+  }
+  // Non-admin view-all viewers can only reach rows for CSRs in their assigned
+  // departments — same 404 envelope otherwise (no info leak).
+  if (canViewAll && scopedDepartmentIds !== null &&
+      !scopedDepartmentIds.includes(Number(writeUp.csr_department_id))) {
     throw new WriteUpServiceError('Write-up not found', 404, 'WRITEUP_NOT_FOUND')
   }
 
@@ -226,7 +260,10 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
   ])
 
   const priorDiscipline = shapePriorDiscipline(priorDisciplineRaw)
-  const isAgent = viewerRole === 'CSR'
+  // OWN-level viewers can only reach a row because it is their own — the
+  // subject of the warning — so they get the redacted agent view: no internal
+  // notes, no management-only list-item categories. ALL/EDIT see everything.
+  const isAgent = !canViewAll
 
   return {
     ...writeUp,

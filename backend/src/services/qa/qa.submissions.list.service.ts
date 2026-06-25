@@ -18,13 +18,15 @@ import type { CompletedSubmissionsParams, CompletedSubmissionsResult } from './q
 const ALLOWED_STATUSES = new Set(['FINALIZED', 'DISPUTED', 'SUBMITTED', 'DRAFT'])
 
 export async function listCompletedSubmissions(params: CompletedSubmissionsParams): Promise<CompletedSubmissionsResult> {
-  const { page, limit, formId, dateStart, dateEnd, status, search } = params
+  const { page, limit, formId, dateStart, dateEnd, status, search, submittedBy } = params
   const offset = (page - 1) * limit
 
   const conditions: Prisma.Sql[] = [
     Prisma.sql`s.status IN ('FINALIZED', 'DISPUTED', 'SUBMITTED', 'DRAFT')`,
   ]
 
+  // Author self-scope: QA viewers see only audits they submitted.
+  if (submittedBy) conditions.push(Prisma.sql`s.submitted_by = ${submittedBy}`)
   if (formId)    conditions.push(Prisma.sql`s.form_id = ${formId}`)
   if (dateStart) conditions.push(Prisma.sql`s.submitted_at >= ${dateStart + ' 00:00:00'}`)
   if (dateEnd)   conditions.push(Prisma.sql`s.submitted_at <= ${dateEnd + ' 23:59:59'}`)

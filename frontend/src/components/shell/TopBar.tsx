@@ -1,4 +1,6 @@
+import { useMemo } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, LogOut, User, Settings, ArrowLeft, Shield, GraduationCap, AlertTriangle, BarChart2 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -9,9 +11,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
-import { NAV_CONFIG, getSectionFromPath } from '@/config/navConfig'
+import { NAV_CONFIG, getSectionFromPath, getNavItemsForRole } from '@/config/navConfig'
 import { ROLE_DISPLAY } from '@/config/navConfig'
 import { ROLE_IDS } from '@/hooks/useQualityRole'
+import { getInsightsNavigation } from '@/services/insightsService'
+import { getAppNavigation } from '@/services/appAccessService'
 import { cn } from '@/lib/utils'
 
 const SECTION_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -41,6 +45,53 @@ export default function TopBar() {
   const initials = user ? getInitials(user.username) : 'U'
   const roleName = user ? (ROLE_DISPLAY[user.role_id] ?? 'USER') : ''
 
+  // Backend-driven nav payloads for the two DB-gated access systems.
+  // Used to decide which top-level section tabs to render: a section is
+  // hidden when the user has zero items in it (no point bouncing them to a
+  // blank section). Items that gate purely on static `roles` (no pageKey)
+  // are evaluated synchronously via `getNavItemsForRole`.
+  const { data: insightsNav } = useQuery({
+    queryKey: ['insights-navigation'],
+    queryFn: getInsightsNavigation,
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  })
+  const { data: appNav } = useQuery({
+    queryKey: ['app-navigation'],
+    queryFn: getAppNavigation,
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const insightsKeys = useMemo(() => {
+    const set = new Set<string>()
+    for (const cat of insightsNav ?? []) for (const p of cat.pages) set.add(p.page_key)
+    return set
+  }, [insightsNav])
+
+  // Sections with at least one server-granted app page (Quality / Training /
+  // Performance Warnings). Insights is handled separately below.
+  const appSectionsWithPages = useMemo(() => {
+    const set = new Set<string>()
+    for (const sec of appNav ?? []) if (sec.pages.length > 0) set.add(sec.section)
+    return set
+  }, [appNav])
+
+  // A top-level tab renders only when the user can reach something inside it,
+  // so we never bounce them into a blank section.
+  const visibleSections = useMemo(() => {
+    if (!user) return []
+    return NAV_CONFIG.filter(section => {
+      if (section.id === 'insights') {
+        // Insights keeps its navConfig grouping; gate on ie_page access plus
+        // any static-roles items (e.g. On Demand Reports).
+        return getNavItemsForRole('insights', user.role_id)
+          .some(item => !item.pageKey || insightsKeys.has(item.pageKey))
+      }
+      return appSectionsWithPages.has(section.id)
+    })
+  }, [user, insightsKeys, appSectionsWithPages])
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-[72px] flex items-center px-6 bg-neutral-900 border-b border-white/5">
 
@@ -58,7 +109,7 @@ export default function TopBar() {
 
       {/* ── Section navigation (center) ─────────────────────────────────── */}
       <nav className="flex-1 flex items-center justify-center gap-1">
-        {NAV_CONFIG.map(section => {
+        {visibleSections.map(section => {
           const Icon = SECTION_ICONS[section.id]
           const isActive = getSectionFromPath(location.pathname) === section.id
           return (

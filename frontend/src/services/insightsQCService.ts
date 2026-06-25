@@ -48,6 +48,12 @@ export interface FormScore { id: number; form: string; submissions: number; avgS
 export interface FormAgentRow { userId: number; name: string; dept: string; audits: number; avgScore: number | null }
 export interface CategoryAgentRow { userId: number; name: string; dept: string; audits: number; avgScore: number | null }
 export interface DeptQualityRow { dept: string; audits: number; avgScore: number | null; disputes: number }
+export interface QAFormCompletedRow {
+  qaUserId: number; qaName: string
+  csrUserId: number; csrName: string
+  formId: number; form: string
+  completed: number; avgScore: number | null
+}
 
 export interface CoachingTopic        { topic: string; sessions: number; agents: number }
 export interface CoachingTopicAgent   { userId: number; name: string; dept: string; sessions: number; lastCoached: string | null; repeat: boolean }
@@ -150,6 +156,9 @@ export const getMissedQuestions = async (p: QCParams): Promise<MissedQuestion[]>
 
 export const getQualityDeptComparison = async (p: QCParams): Promise<DeptQualityRow[]> =>
   (await api.get('/insights/qc/quality/dept-comparison', { params: p })).data
+
+export const getQAFormsCompleted = async (p: QCParams): Promise<QAFormCompletedRow[]> =>
+  (await api.get('/insights/qc/quality/qa-forms-completed', { params: p })).data
 
 export const getFormScores = async (p: QCParams & { userId?: string }): Promise<FormScore[]> =>
   (await api.get('/insights/qc/quality/forms', { params: p })).data

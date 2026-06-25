@@ -10,7 +10,7 @@
  */
 
 import express, { Request, Response } from 'express';
-import { authenticate, authorizeAdmin } from '../middleware/auth';
+import { authenticate, authorizeAdmin, authorizePage } from '../middleware/auth';
 import aiReviewerService, {
   AIReviewerServiceError,
   loadCase,
@@ -45,6 +45,12 @@ import logger from '../config/logger';
 
 const router = express.Router();
 router.use(authenticate);
+// Every AI Reviewer endpoint requires the `quality_ai_reviewer` page grant.
+// Per-endpoint `authorizeAdmin` calls below stay as a stricter overlay for
+// admin-only operations (rubric edits, prompt management, etc.).
+// `quality_ai_inbox` is a separate page key — the /inbox endpoint below also
+// requires it; the AI Inbox page in the UI is gated to that key.
+router.use(authorizePage('quality_ai_reviewer', 'viewAll'));
 
 /**
  * Hard cap on the per-form `ai_review_guidance` free-text addendum, in chars.

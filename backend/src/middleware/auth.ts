@@ -4,6 +4,8 @@ import { authLogger, securityLogger } from '../config/logger';
 import { tokenBlacklistService } from '../services/TokenBlacklistService';
 import { ApiErrors, sendError } from '../utils/apiError';
 import { getJwtSecret } from '../config/environment';
+import { getInsightsRoleId } from '../utils/insightsRoleMap';
+import appPermissionService, { levelSatisfies, type RequiredLevel } from '../services/AppPermissionService';
 
 // Extend Express Request type to include user property
 declare global {
@@ -12,6 +14,17 @@ declare global {
       user?: {
         user_id: number;
         role: string;
+      };
+      // Resolved app-page access for the gated route, stashed by
+      // `authorizePage` so controllers can drive DATA scoping from the same
+      // level the middleware enforced (e.g. ALL/EDIT => see everyone's rows,
+      // OWN => self-scope) without re-querying. See AppPermissionService.
+      pageAccess?: {
+        pageKey: string;
+        level: 'NONE' | 'OWN' | 'ALL' | 'EDIT';
+        canView: boolean;
+        canViewAll: boolean;
+        canEdit: boolean;
       };
     }
   }
@@ -216,4 +229,63 @@ export const authorizeManager = (req: Request, res: Response, next: NextFunction
   next();
 };
 
-export default { authenticate, authorizeAdmin, authorizeTrainer, authorizeQA, authorizeQAOrTrainer, authorizeManager, authorizeCoachingUser, authorizeRecordingAccess };
+/**
+ * Page-access middleware backed by `app_page_role_access` (scope model).
+ *
+ * Returns 401/403 when the current user's role does not meet the required
+ * level on the page identified by `pageKey`:
+ *
+ *   'view'    — OWN, ALL or EDIT (can reach the page; self endpoints)
+ *   'viewAll' — ALL or EDIT      (sees everyone's data; editor reads)
+ *   'edit'    — EDIT only        (create / edit / delete)
+ *
+ * This is the canonical gate for non-Insights endpoints. Use it instead of
+ * inventing a new `authorize<Section>` helper.
+ *
+ * Defense-in-depth reminder: this middleware controls REACHABILITY only.
+ * Data scoping (CSR self-scope, manager team-scope) still happens in the
+ * entity services and must not be removed even when a page gate is in place.
+ * In particular a 'view' gate lets OWN-level roles through — the service
+ * must still self-scope their query to their own rows.
+ */
+export const authorizePage = (
+  pageKey: string,
+  required: RequiredLevel = 'view',
+) => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+
+  if (!req.user) {
+    securityLogger.accessDenied(ip, req.originalUrl, 'Not authenticated');
+    ApiErrors.unauthorized(res);
+    return;
+  }
+
+  const roleId = getInsightsRoleId(req.user.role);
+  if (roleId === null) {
+    securityLogger.accessDenied(ip, req.originalUrl, `Unknown role: ${req.user.role}`, req.user.user_id);
+    ApiErrors.forbidden(res, 'Access denied. Unknown role');
+    return;
+  }
+
+  try {
+    const access = await appPermissionService.resolveAccess(roleId, pageKey);
+    if (!levelSatisfies(access.level, required)) {
+      securityLogger.accessDenied(ip, req.originalUrl, `Page access denied: ${pageKey} (need ${required}, has ${access.level})`, req.user.user_id);
+      ApiErrors.forbidden(res, 'Access denied');
+      return;
+    }
+    // Stash for downstream controllers/services to scope data by level.
+    req.pageAccess = {
+      pageKey,
+      level:      access.level,
+      canView:    access.canView,
+      canViewAll: access.canViewAll,
+      canEdit:    access.canEdit,
+    };
+    next();
+  } catch {
+    ApiErrors.internal(res, 'Authorization check failed');
+  }
+};
+
+export default { authenticate, authorizeAdmin, authorizeTrainer, authorizeQA, authorizeQAOrTrainer, authorizeManager, authorizeCoachingUser, authorizeRecordingAccess, authorizePage };

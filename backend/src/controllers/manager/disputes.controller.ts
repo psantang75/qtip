@@ -14,6 +14,7 @@ import {
   getManagerDisputeDetails,
   resolveManagerDispute,
 } from '../../services/manager'
+import { getManagedDepartmentIds } from '../../services/manager/manager.access'
 import { escapeFilename } from '../../utils/contentDisposition'
 import { respondSuccessError, type AuthenticatedRequest } from './respond'
 
@@ -26,6 +27,23 @@ const filtersFromQuery = (req: AuthenticatedRequest) => ({
   startDate: req.query.startDate as string | undefined,
   endDate: req.query.endDate as string | undefined,
 })
+
+/**
+ * Departments a dispute viewer may see. Replaces the old hard-coded
+ * `userRole === 'Manager'` department lookup that lived in the dispute
+ * services; mirrors writeups' `resolveScopedDepartmentIds`.
+ *   - Admin: `null` (org-wide, no restriction).
+ *   - QA: `null` — QA is author-scoped (own audits) in `buildDisputeWhere`,
+ *         so it is not department-bound.
+ *   - everyone else (Manager): the departments assigned via `department_managers`.
+ */
+const resolveScopedDepartmentIds = async (
+  req: AuthenticatedRequest,
+): Promise<number[] | null> => {
+  const role = req.user?.role
+  if (role === 'Admin' || role === 'QA') return null
+  return getManagedDepartmentIds(req.user!.user_id)
+}
 
 export const listDisputesHandler = async (
   req: AuthenticatedRequest,
@@ -41,6 +59,7 @@ export const listDisputesHandler = async (
     const result = await listManagerTeamDisputes({
       userId,
       userRole: req.user?.role,
+      scopedDepartmentIds: await resolveScopedDepartmentIds(req),
       page: parseInt(req.query.page as string) || 1,
       limit: Math.min(5000, parseInt(req.query.limit as string) || 10),
       filters: filtersFromQuery(req),
@@ -68,6 +87,7 @@ export const exportDisputesHandler = async (
     const result = await exportManagerTeamDisputes({
       userId,
       userRole: req.user?.role,
+      scopedDepartmentIds: await resolveScopedDepartmentIds(req),
       filters: filtersFromQuery(req),
     })
 
@@ -94,6 +114,7 @@ export const disputeDetailHandler = async (
     const detail = await getManagerDisputeDetails({
       userId,
       userRole: req.user?.role,
+      scopedDepartmentIds: await resolveScopedDepartmentIds(req),
       disputeId: req.params.disputeId,
     })
     res.status(200).json(detail)

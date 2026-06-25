@@ -35,6 +35,11 @@ export const getCompletedSubmissions = async (req: Request, res: Response): Prom
       ? rawStatus
       : undefined
 
+    // QA is author-scoped: they only see audits they submitted. Admin /
+    // Manager / Trainer (the other roles with viewAll on quality_submissions)
+    // see everyone's. Mirrors the QA dashboard + QA dispute self-scope.
+    const submittedBy = req.user?.role === 'QA' ? userId : undefined
+
     const result = await listCompletedSubmissions({
       page,
       limit,
@@ -43,6 +48,7 @@ export const getCompletedSubmissions = async (req: Request, res: Response): Prom
       dateEnd:   (req.query.date_end   as string) || undefined,
       status,
       search:    (req.query.search as string) || undefined,
+      submittedBy,
     })
 
     res.status(200).json(result)
@@ -67,7 +73,9 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
       return
     }
 
-    const detail = await getSubmissionDetail(submissionId, includeFullForm)
+    // QA is author-scoped: they can only open audits they submitted.
+    const restrictToSubmittedBy = req.user?.role === 'QA' ? userId : undefined
+    const detail = await getSubmissionDetail(submissionId, includeFullForm, restrictToSubmittedBy)
     res.status(200).json(detail)
   } catch (error) {
     respondWithError(res, 'getSubmissionDetails', error, {
@@ -89,7 +97,9 @@ export const exportSubmission = async (req: Request, res: Response): Promise<voi
       return
     }
 
-    const { csv, filename, rowCount } = await buildSubmissionExportCsv(submissionId)
+    // QA is author-scoped: they can only export audits they submitted.
+    const restrictToSubmittedBy = req.user?.role === 'QA' ? userId : undefined
+    const { csv, filename, rowCount } = await buildSubmissionExportCsv(submissionId, restrictToSubmittedBy)
     res.setHeader('Content-Type', 'text/csv')
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
     res.status(200).send(csv)

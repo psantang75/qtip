@@ -431,3 +431,42 @@ export async function getQualityDeptComparison(
     disputes: parseInt(r.disputes, 10),
   }))
 }
+
+// QA Forms Completed — one row per (QA auditor, CSR, form) with the count of
+// finalized audits and the average QA score, honoring the page's dept/form/
+// period filters. Drives the flat table above Department Comparison on the
+// Quality page. Lists every QA auditor in the current scope (management view).
+export async function getQAFormsCompleted(
+  deptFilter: number[], formNames: string[], ranges: PeriodRanges,
+) {
+  const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
+  const dc = deptClause(deptFilter)
+  const fc = formClause(formNames)
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT auditor.id AS qa_user_id, auditor.username AS qa_name,
+       csr.id AS csr_user_id, csr.username AS csr_name,
+       MIN(f.id) AS form_id, f.form_name,
+       COUNT(DISTINCT s.id) AS completed,
+       AVG(COALESCE(s.total_score, ss.score)) AS avg_score
+     FROM submissions s
+     LEFT JOIN score_snapshots ss ON ss.submission_id = s.id
+     JOIN forms f ON s.form_id = f.id
+     JOIN users auditor ON auditor.id = s.submitted_by
+     ${CSR_JOIN}
+     WHERE s.status = 'FINALIZED'
+       AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${fc.sql}
+     GROUP BY auditor.id, auditor.username, csr.id, csr.username, f.form_name
+     ORDER BY qa_name, csr_name, f.form_name`,
+    [s, e, ...dc.params, ...fc.params],
+  )
+  return rows.map(r => ({
+    qaUserId:  r.qa_user_id as number,
+    qaName:    r.qa_name as string,
+    csrUserId: r.csr_user_id as number,
+    csrName:   r.csr_name as string,
+    formId:    r.form_id as number,
+    form:      r.form_name as string,
+    completed: parseInt(r.completed, 10),
+    avgScore:  r.avg_score != null ? Math.round(parseFloat(r.avg_score) * 10) / 10 : null,
+  }))
+}

@@ -1,5 +1,5 @@
 import express, { RequestHandler } from 'express';
-import { authenticate, authorizeQA } from '../middleware/auth';
+import { authenticate, authorizePage } from '../middleware/auth';
 import { 
   getForms, 
   getFormById, 
@@ -11,10 +11,14 @@ import {
 const router = express.Router();
 
 const auth = authenticate as unknown as RequestHandler;
-// Form mutations are restricted to QA + Admin (matches the Form Builder UI).
-// GETs stay open to any authenticated user because CSRs, Trainers, and Managers
-// all need to read form definitions to render audits, dashboards, and history.
-const qaOrAdmin = authorizeQA as unknown as RequestHandler;
+// Form mutations are gated by the `quality_forms` grant in
+// `app_page_role_access` — change who can build forms via the admin
+// Page Access screen, not by editing this file.
+//
+// GETs stay open to any authenticated user because CSRs, Trainers, and
+// Managers all need to read form definitions to render audits, dashboards,
+// and history.
+const formsWrite = authorizePage('quality_forms', 'edit') as unknown as RequestHandler;
 
 /**
  * @route GET /api/forms
@@ -35,20 +39,20 @@ router.get('/:id', auth, getFormById as unknown as RequestHandler);
  * @desc Create a new form with categories and questions
  * @access Private (QA, Admin)
  */
-router.post('/', auth, qaOrAdmin, createForm as unknown as RequestHandler);
+router.post('/', auth, formsWrite, createForm as unknown as RequestHandler);
 
 /**
  * @route PUT /api/forms/:id
  * @desc Update an existing form (creates a new version)
  * @access Private (QA, Admin)
  */
-router.put('/:id', auth, qaOrAdmin, updateForm as unknown as RequestHandler);
+router.put('/:id', auth, formsWrite, updateForm as unknown as RequestHandler);
 
 /**
  * @route DELETE /api/forms/:id
  * @desc Deactivate a form
  * @access Private (QA, Admin)
  */
-router.delete('/:id', auth, qaOrAdmin, deactivateForm as unknown as RequestHandler);
+router.delete('/:id', auth, formsWrite, deactivateForm as unknown as RequestHandler);
 
 export default router; 

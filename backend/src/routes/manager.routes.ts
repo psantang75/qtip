@@ -19,7 +19,7 @@
  * `/api/trainer/coaching-sessions` and `/api/admin/coaching-sessions`.
  */
 import express, { RequestHandler } from 'express'
-import { authenticate, authorizeManager } from '../middleware/auth'
+import { authenticate, authorizeManager, authorizePage } from '../middleware/auth'
 import {
   dashboardStatsHandler,
   csrActivityHandler,
@@ -49,10 +49,18 @@ router.get('/team-csrs', teamCsrsHandler as unknown as RequestHandler)
 router.get('/team-audits', teamAuditsListHandler as unknown as RequestHandler)
 router.get('/team-audits/:id', teamAuditDetailHandler as unknown as RequestHandler)
 
-// Disputes
-router.get('/disputes', listDisputesHandler as unknown as RequestHandler)
-router.get('/disputes/export', exportDisputesHandler as unknown as RequestHandler)
-router.get('/disputes/:disputeId', disputeDetailHandler as unknown as RequestHandler)
-router.post('/disputes/:disputeId/resolve', resolveDisputeHandler as unknown as RequestHandler)
+// Disputes — page-access gates layered on top of `authorizeManager` so that
+// flipping `quality_disputes` for a role in the admin Page Access screen
+// also blocks the API, not just the UI route. The outer `authorizeManager`
+// stays as a coarse role gate (intentionally — keeps CSRs out of /disputes
+// here even if `quality_disputes` is mistakenly granted to them; CSR
+// dispute history lives at /api/csr/disputes which is the self-scoped
+// counterpart).
+const disputesRead  = authorizePage('quality_disputes', 'viewAll') as unknown as RequestHandler
+const disputesWrite = authorizePage('quality_disputes', 'edit')    as unknown as RequestHandler
+router.get('/disputes',                       disputesRead,  listDisputesHandler  as unknown as RequestHandler)
+router.get('/disputes/export',                disputesRead,  exportDisputesHandler as unknown as RequestHandler)
+router.get('/disputes/:disputeId',            disputesRead,  disputeDetailHandler  as unknown as RequestHandler)
+router.post('/disputes/:disputeId/resolve',   disputesWrite, resolveDisputeHandler as unknown as RequestHandler)
 
 export default router

@@ -120,7 +120,16 @@ export default function AdminDepartmentsPage() {
     queryFn:  () => departmentService.getAssignableUsers(),
   })
 
-  const managers = assignable.filter(u => u.role_id === ROLE_IDS.MANAGER)
+  // Users assignable to a department for data-access scoping. Managers, QA, and
+  // Trainers can all be granted department access — whoever is assigned here
+  // sees that department's coaching and performance-warning data (the
+  // assignment is stored in department_managers). CSRs always see only their
+  // own data and are never assigned here.
+  const managers = assignable.filter(u =>
+    u.role_id === ROLE_IDS.MANAGER ||
+    u.role_id === ROLE_IDS.QA ||
+    u.role_id === ROLE_IDS.TRAINER,
+  )
 
   // ── Form ─────────────────────────────────────────────────────────────────
   const form = useForm<FormValues>({
@@ -237,10 +246,10 @@ export default function AdminDepartmentsPage() {
 
   // Label for the dropdown trigger
   const managerTriggerLabel = selectedIds.length === 0
-    ? 'Select managers…'
+    ? 'Select staff…'
     : selectedIds.length === 1
       ? managers.find(m => Number(m.id) === selectedIds[0])?.username ?? '1 selected'
-      : `${selectedIds.length} managers selected`
+      : `${selectedIds.length} selected`
 
   return (
     <div className="space-y-5">
@@ -249,7 +258,7 @@ export default function AdminDepartmentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Departments</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Manage departments and manager assignments</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage departments and who can access each one</p>
         </div>
         <Button onClick={openCreate} className="gap-1.5">
           <Plus size={15} /> Add Department
@@ -298,7 +307,7 @@ export default function AdminDepartmentsPage() {
               <DeptSortHead field="department_name" sortField={sortField} sortDir={sortDir} onSort={deptSort}>Department</DeptSortHead>
               <TableHead className="py-4">Parent</TableHead>
               <TableHead className="py-4">Users</TableHead>
-              <TableHead className="py-4">Managers</TableHead>
+              <TableHead className="py-4">Access</TableHead>
               <DeptSortHead field="is_active" sortField={sortField} sortDir={sortDir} onSort={deptSort}>Status</DeptSortHead>
               <TableHead className="py-4 w-[80px]" />
             </StandardTableHeaderRow>
@@ -401,9 +410,13 @@ export default function AdminDepartmentsPage() {
                 </FormItem>
               )} />
 
-              {/* Manager assignment */}
+              {/* Department access assignment */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Assigned Managers</Label>
+                <Label className="text-sm font-medium">Department Access</Label>
+                <p className="text-[12px] text-muted-foreground -mt-1">
+                  Managers, QA, and Trainers assigned here can see this department's
+                  coaching and performance-warning data.
+                </p>
 
                 {/* Selected chips — shown above the dropdown */}
                 {selectedIds.length > 0 && (
@@ -417,6 +430,9 @@ export default function AdminDepartmentsPage() {
                           className="flex items-center gap-1 bg-primary/10 text-primary text-[12px] font-medium px-2.5 py-1 rounded-full"
                         >
                           {m.username ?? '—'}
+                          {m.role_name && (
+                            <span className="text-[10px] uppercase opacity-70">{m.role_name}</span>
+                          )}
                           <button
                             type="button"
                             onClick={() => removeManager(id)}
@@ -458,7 +474,7 @@ export default function AdminDepartmentsPage() {
                       <div className="relative">
                         <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                         <Input
-                          placeholder="Search managers…"
+                          placeholder="Search staff…"
                           value={managerQuery}
                           onChange={e => setManagerQuery(e.target.value)}
                           className="pl-8 h-8 text-[13px]"
@@ -470,7 +486,7 @@ export default function AdminDepartmentsPage() {
                     {/* Manager list with checkboxes */}
                     <div className="max-h-[200px] overflow-y-auto">
                       {visibleManagers.length === 0 ? (
-                        <p className="text-[12px] text-muted-foreground px-3 py-2">No managers found</p>
+                        <p className="text-[12px] text-muted-foreground px-3 py-2">No staff found</p>
                       ) : visibleManagers.map(m => (
                         <DropdownMenuCheckboxItem
                           key={m.id}
@@ -478,7 +494,12 @@ export default function AdminDepartmentsPage() {
                           onCheckedChange={() => toggleManager(m.id)}
                           onSelect={e => e.preventDefault()}
                         >
-                          {m.username ?? '—'}
+                          <span className="flex w-full items-center justify-between gap-2">
+                            <span>{m.username ?? '—'}</span>
+                            {m.role_name && (
+                              <span className="text-[10px] uppercase text-muted-foreground">{m.role_name}</span>
+                            )}
+                          </span>
                         </DropdownMenuCheckboxItem>
                       ))}
                     </div>

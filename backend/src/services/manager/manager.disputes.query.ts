@@ -6,7 +6,7 @@
  * Both code paths now call `buildDisputeWhere` and consume the same
  * `whereSql` + `params` pair.
  */
-import { getCsrRoleId, getManagedDepartmentIds } from './manager.access'
+import { getCsrRoleId } from './manager.access'
 
 export interface DisputeFilters {
   csrFilter?: string
@@ -21,6 +21,15 @@ export interface DisputeFilters {
 export interface DisputeScope {
   userId: number
   userRole: string | undefined
+  /**
+   * Departments this viewer may see, resolved from page access by the
+   * controller (NOT from a hard-coded role string):
+   *   - `null`  => no department restriction (Admin org-wide; QA, which is
+   *                author-scoped below, is also passed null).
+   *   - `[]`    => the viewer manages no departments => no rows.
+   *   - ids     => limit to CSRs in these departments.
+   */
+  scopedDepartmentIds: number[] | null
 }
 
 export interface DisputeWhereResult {
@@ -38,27 +47,33 @@ export async function buildDisputeWhere(
   const conditions: string[] = []
   const params: unknown[] = []
 
-  if (scope.userRole === 'Manager') {
-    const departmentIds = await getManagedDepartmentIds(scope.userId)
-    if (departmentIds.length === 0) {
+  // QA reviewers only see disputes against their own audits, and only after the
+  // dispute has been adjusted (i.e. the QA needs to revisit it). This is an
+  // intentional author self-scope that the Page Access level cannot override —
+  // it is surfaced to admins via PAGE_ROLE_NOTES['quality_disputes'][2] in
+  // frontend/src/pages/admin/AppPageAccessPage.tsx. Keep the two in sync.
+  // QA is author-bound, not department-bound, so the department scope below
+  // does not apply to it (the controller passes `scopedDepartmentIds = null`).
+  if (scope.userRole === 'QA') {
+    conditions.push('d.status = ?')
+    params.push('ADJUSTED')
+    conditions.push('s.submitted_by = ?')
+    params.push(scope.userId)
+  } else if (scope.scopedDepartmentIds !== null) {
+    // Department-bound viewers (e.g. Managers) are limited to their assigned
+    // departments. No departments => no rows.
+    if (scope.scopedDepartmentIds.length === 0) {
       return { hasScope: false, whereSql: '', params: [] }
     }
-    conditions.push(`csr.department_id IN (${departmentIds.map(() => '?').join(',')})`)
-    params.push(...departmentIds)
+    conditions.push(`csr.department_id IN (${scope.scopedDepartmentIds.map(() => '?').join(',')})`)
+    params.push(...scope.scopedDepartmentIds)
   }
 
   conditions.push('csr.role_id = ?')
   conditions.push('csr.is_active = 1')
   params.push(csrRoleId)
 
-  // QA reviewers only see disputes against their own audits, and only after the
-  // dispute has been adjusted (i.e. the QA needs to revisit it).
-  if (scope.userRole === 'QA') {
-    conditions.push('d.status = ?')
-    params.push('ADJUSTED')
-    conditions.push('s.submitted_by = ?')
-    params.push(scope.userId)
-  } else if (filters.statusFilter) {
+  if (scope.userRole !== 'QA' && filters.statusFilter) {
     conditions.push('d.status = ?')
     params.push(filters.statusFilter)
   }

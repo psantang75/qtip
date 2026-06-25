@@ -7,6 +7,7 @@ import { ROLE_IDS } from '../hooks/useQualityRole'
 import { PageSpinner } from '../components/common/PageSpinner'
 import { ErrorBoundary } from '../components/common/ErrorBoundary'
 import { getInsightsAccess, getInsightsNavigation } from '../services/insightsService'
+import { getAppAccess, type AppAccessLevel } from '../services/appAccessService'
 
 /**
  * Route guards, redirects, and the lazy-page loader.
@@ -71,11 +72,24 @@ export function CacheResetGuard(): null {
   return null
 }
 
-// ── Role-aware training index redirect ────────────────────────────────────────
+// ── Access-aware training index redirect ──────────────────────────────────────
+// Routes /app/training to the right coaching surface for the user's resolved
+// level on `training_coaching`: editors (ALL/EDIT) → /coaching, self-viewers
+// (OWN) → /my-coaching. Driven by access, not a hardcoded role check.
 
-export function TrainingIndexRedirect(): React.ReactElement {
+export function TrainingIndexRedirect(): React.ReactElement | null {
   const { user } = useAuth()
-  return <Navigate to={user?.role_id === ROLE_IDS.AGENT ? 'my-coaching' : 'coaching'} replace />
+  const { data, isLoading } = useQuery({
+    queryKey:  ['app-access', 'training_coaching', user?.id],
+    queryFn:   () => getAppAccess('training_coaching'),
+    enabled:   !!user,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  if (!user || isLoading) return <PageSpinner />
+  if (data?.canViewAll) return <Navigate to="coaching" replace />
+  if (data?.canView)    return <Navigate to="my-coaching" replace />
+  return <Navigate to="/app" replace />
 }
 
 // ── Role guard — redirects to a fallback if the user's role isn't allowed ─────
@@ -126,6 +140,63 @@ export function RequireInsightsAccess({
     )
   }
   if (!data?.canAccess) return <Navigate to={fallback} replace />
+  return <>{children}</>
+}
+
+// ── App page-access guard (scope model) ──────────────────────────────────────
+// Drives access from the same `app_page_role_access` ladder the backend
+// `authorizePage` middleware enforces. Mirrors `RequireInsightsAccess` but
+// is level-aware:
+//
+//   minLevel='view'    → OWN+ may enter (self pages, shared list pages)
+//   minLevel='viewAll' → ALL+ may enter (editor pages); OWN users hit fallback
+//   minLevel='edit'    → EDIT only
+//
+// `redirectViewAllTo` keeps editors off the self ("My X") routes: a user who
+// can see all data is bounced to the editor route instead of the self view
+// (whose API would otherwise 403 them). Pair it with `fallback` pointing the
+// other way on the editor route so each role lands on exactly one surface.
+
+const SATISFIES: Record<'view' | 'viewAll' | 'edit', (l: AppAccessLevel) => boolean> = {
+  view:    (l) => l === 'OWN' || l === 'ALL' || l === 'EDIT',
+  viewAll: (l) => l === 'ALL' || l === 'EDIT',
+  edit:    (l) => l === 'EDIT',
+}
+
+export function RequirePageAccess({
+  pageKey,
+  minLevel = 'view',
+  fallback = '/app',
+  redirectViewAllTo,
+  children,
+}: {
+  pageKey: string
+  minLevel?: 'view' | 'viewAll' | 'edit'
+  fallback?: string
+  redirectViewAllTo?: string
+  children: React.ReactNode
+}): React.ReactElement | null {
+  const { user } = useAuth()
+  const { data, isLoading } = useQuery({
+    queryKey: ['app-access', pageKey, user?.id],
+    queryFn:  () => getAppAccess(pageKey),
+    enabled:  !!user,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  if (!user) return null
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    )
+  }
+
+  if (!data) return <Navigate to={fallback} replace />
+  // Editors don't belong on the self view — send them to the editor route.
+  if (redirectViewAllTo && data.canViewAll) return <Navigate to={redirectViewAllTo} replace />
+  if (!SATISFIES[minLevel](data.level)) return <Navigate to={fallback} replace />
   return <>{children}</>
 }
 

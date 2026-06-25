@@ -50,7 +50,11 @@ export interface SubmissionDetail {
  * non-readable status, and 500 (DATABASE_ERROR) for raw db failures so the
  * controller can preserve the existing two-tier error envelope.
  */
-export async function getSubmissionDetail(submissionId: number, includeFullForm: boolean): Promise<SubmissionDetail> {
+export async function getSubmissionDetail(
+  submissionId: number,
+  includeFullForm: boolean,
+  restrictToSubmittedBy?: number,
+): Promise<SubmissionDetail> {
   let submission: any
   try {
     submission = await loadSubmission(submissionId)
@@ -64,7 +68,13 @@ export async function getSubmissionDetail(submissionId: number, includeFullForm:
     )
   }
 
-  if (!submission) {
+  // QA author self-scope: when restricted, a submission authored by another
+  // reviewer returns the same 404 a missing row would — no info leak about
+  // whether a submission exists for someone else.
+  if (
+    !submission ||
+    (restrictToSubmittedBy != null && Number(submission.submitted_by) !== restrictToSubmittedBy)
+  ) {
     throw new QAServiceError(
       'Submission not found or not a finalized/disputed submission',
       404,
