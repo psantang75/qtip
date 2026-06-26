@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { InsightsSection, TrendChart, StatRow, ExpandableRow } from '@/components/insights'
-import type { CategoryScore, FormScore, KpiValues, AgentProfile } from '@/services/insightsQCService'
+import type { CategoryScore, FormScore, KpiValues, AgentProfile, MissedQuestion } from '@/services/insightsQCService'
 import { scoreColor, fmtN, type TrendPoint } from './agentProfileHelpers'
 import { resolveThresholds, type KpiConfig } from '@/hooks/useKpiConfig'
 
@@ -16,6 +16,7 @@ interface Props {
   showAllCats: boolean
   setShowAllCats: (v: boolean) => void
   recentAudits: AgentProfile['recentAudits']
+  missedQuestions: MissedQuestion[]
 }
 
 function fmt(v: number | null | undefined, suffix = ''): string {
@@ -28,6 +29,7 @@ export default function AgentQualitySection({
   formScores,
   catScores, showAllCats, setShowAllCats,
   recentAudits,
+  missedQuestions,
 }: Props) {
   // Group this agent's recent reviews by form so each expandable form row
   // can show its own per-review history (matches the past Forms Performance
@@ -212,6 +214,41 @@ export default function AgentQualitySection({
             {showAllCats ? 'Show bottom 5 only' : `Show all ${formsWithCats.length} forms`}
           </button>
         )}
+      </InsightsSection>
+
+      {/* Top Missed Questions — this agent's most-missed scored questions,
+          mirroring the Quality page's visual language (red miss-rate bar +
+          missed/total). Scoped to the agent on the backend, so there is no
+          per-question agent drill-down here. */}
+      <InsightsSection title="Top Missed Questions" infoKpiCodes={['top_missed_questions']}>
+        {missedQuestions.length === 0
+          ? <p className="text-sm text-slate-400 text-center py-4">No missed-question data for this period.</p>
+          : (
+            <>
+              <div className="flex items-center gap-3 text-[11px] text-slate-400 font-medium border-b border-slate-200 pb-1.5 mb-0.5">
+                <span className="flex-1 min-w-0">Question</span>
+                <span className="w-44 shrink-0">Form</span>
+                <span className="w-44 shrink-0 text-right">Miss Rate</span>
+              </div>
+              {missedQuestions.map(q => {
+                const barPct = Math.min(q.missRate, 100)
+                return (
+                  <div key={q.questionId} className="flex items-center gap-3 py-2 border-b border-slate-100 last:border-0">
+                    <span className="text-[13px] font-medium text-slate-800 truncate flex-1">{q.question}</span>
+                    <span className="w-44 shrink-0 text-xs text-slate-500 truncate">{q.form}</span>
+                    <div className="flex items-center gap-1.5 shrink-0 w-44 justify-end">
+                      <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-red-400" style={{ width: `${barPct}%` }} />
+                      </div>
+                      <span className="text-xs font-semibold text-red-600 w-10 text-right">{q.missRate}%</span>
+                      <span className="text-[11px] text-slate-400 w-14 text-right">{q.missed}/{q.total}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )
+        }
       </InsightsSection>
     </>
   )

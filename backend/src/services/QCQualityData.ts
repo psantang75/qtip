@@ -191,11 +191,19 @@ const POSSIBLE_EXPR = `
   END`
 
 export async function getMissedQuestions(
-  deptFilter: number[], formNames: string[], ranges: PeriodRanges,
+  deptFilter: number[], formNames: string[], ranges: PeriodRanges, userId?: number | null,
 ) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
   const fc = formClause(formNames)
+  // Agent Profile drill-down scopes the whole report to a single auditee. In
+  // that mode we drop the minimum-sample floor so any missed question can
+  // surface, but still cap at the top 10 by miss rate; the org-wide Quality
+  // view keeps the >=5 floor + top 10 to stay signal-dense across all agents.
+  const userSql    = userId != null ? 'AND csr.id = ?' : ''
+  const userParams: (string | number)[] = userId != null ? [userId] : []
+  const havingSql  = userId != null ? 'HAVING missed > 0' : 'HAVING total >= 5 AND missed > 0'
+  const limitSql   = 'LIMIT 10'
 
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT fq.id AS qId, fq.question_text AS question, f.form_name AS form,
@@ -209,13 +217,27 @@ export async function getMissedQuestions(
      ${CSR_JOIN}
      WHERE s.status = 'FINALIZED'
        AND s.submitted_at BETWEEN ? AND ?
-       AND fq.question_type IN ('YES_NO','SCALE','RADIO') ${dc.sql} ${fc.sql}
+       AND fq.question_type IN ('YES_NO','SCALE','RADIO') ${dc.sql} ${fc.sql} ${userSql}
      GROUP BY fq.id, fq.question_text, f.id, f.form_name
-     HAVING total >= 5 AND missed > 0
-     ORDER BY (missed / total) DESC LIMIT 10`,
-    [s, e, ...dc.params, ...fc.params],
+     ${havingSql}
+     ORDER BY (missed / total) DESC ${limitSql}`,
+    [s, e, ...dc.params, ...fc.params, ...userParams],
   )
   if (rows.length === 0) return []
+
+  // Single-agent scope (Agent Profile): the rows already belong to one auditee,
+  // so the per-question "which agents missed this" breakdown is redundant.
+  if (userId != null) {
+    return rows.map(r => ({
+      questionId: r.qId as number,
+      question:   r.question as string,
+      form:       r.form as string,
+      missed:     parseInt(r.missed, 10),
+      total:      parseInt(r.total, 10),
+      missRate:   r.total > 0 ? Math.round((r.missed / r.total) * 1000) / 10 : 0,
+      agents:     [] as Array<{ userId: number; name: string; dept: string; missed: number; total: number }>,
+    }))
+  }
 
   const qIds = rows.map(r => r.qId as number)
   const ph   = qIds.map(() => '?').join(',')
@@ -456,7 +478,7 @@ export async function getQAFormsCompleted(
      WHERE s.status = 'FINALIZED'
        AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${fc.sql}
      GROUP BY auditor.id, auditor.username, csr.id, csr.username, f.form_name
-     ORDER BY qa_name, csr_name, f.form_name`,
+     ORDER BY qa_name, f.form_name, csr_name`,
     [s, e, ...dc.params, ...fc.params],
   )
   return rows.map(r => ({

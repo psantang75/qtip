@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Users } from 'lucide-react'
@@ -14,7 +14,7 @@ import {
   getMissedQuestions, getQualityDeptComparison, getQAFormsCompleted, getFormScores, getFilterOptions,
   getFormAgentBreakdown, getCategoryAgentBreakdown,
 } from '@/services/insightsQCService'
-import type { CategoryScore, FormScore, QCParams } from '@/services/insightsQCService'
+import type { CategoryScore, FormScore, QCParams, QAFormCompletedRow } from '@/services/insightsQCService'
 import { scoreColor, fmtN } from '@/components/insights/agentProfileHelpers'
 import QCMissedQuestions from './QCMissedQuestions'
 
@@ -293,6 +293,30 @@ export default function QCQualityPage() {
   const { data: missData = [] } = useQuery({ queryKey: ['qc-miss', params], queryFn: () => getMissedQuestions(params) })
   const { data: deptComp = [] } = useQuery({ queryKey: ['qc-dept-cmp', params], queryFn: () => getQualityDeptComparison(params) })
   const { data: qaForms = [] } = useQuery({ queryKey: ['qc-qa-forms', params], queryFn: () => getQAFormsCompleted(params) })
+  // Group the flat QA-forms rows into (QA person → form) blocks so we can render
+  // a subtotal row per QA-person/form, mirroring the Tickets & Tasks report.
+  // Rows arrive pre-sorted by qa → form → agent, so contiguous grouping is safe.
+  // Subtotal Avg Score is completed-weighted (each agent's avg is over their
+  // own completed count), which equals the group's overall average.
+  const qaFormGroups = useMemo(() => {
+    const groups: Array<{
+      key: string; qaName: string; form: string
+      rows: QAFormCompletedRow[]; completed: number; avgScore: number | null
+    }> = []
+    for (const row of qaForms) {
+      const key = `${row.qaUserId}-${row.formId}`
+      let g = groups.length > 0 && groups[groups.length - 1].key === key ? groups[groups.length - 1] : null
+      if (!g) { g = { key, qaName: row.qaName, form: row.form, rows: [], completed: 0, avgScore: null }; groups.push(g) }
+      g.rows.push(row)
+    }
+    for (const g of groups) {
+      g.completed = g.rows.reduce((s, r) => s + r.completed, 0)
+      let num = 0, den = 0
+      for (const r of g.rows) if (r.avgScore != null) { num += r.avgScore * r.completed; den += r.completed }
+      g.avgScore = den > 0 ? Math.round((num / den) * 10) / 10 : null
+    }
+    return groups
+  }, [qaForms])
   const { data: formScores = [] } = useQuery({ queryKey: ['qc-forms', params], queryFn: () => getFormScores(params) })
   const { data: kpiConfig } = useKpiConfig()
 
@@ -420,28 +444,42 @@ export default function QCQualityPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs text-slate-400 border-b border-slate-200">
-                    {['QA Person','CSR','Form','Completed','Avg Score'].map(h => (
+                    {['QA Person','Form','Agent','Completed','Avg Score'].map(h => (
                       <th key={h} className="text-left pb-2 font-medium pr-4 last:pr-0">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {qaForms.map(row => (
-                    <tr
-                      key={`${row.qaUserId}-${row.csrUserId}-${row.formId}`}
-                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
-                    >
-                      <td className="py-2.5 pr-4 font-medium text-slate-800">{row.qaName}</td>
-                      <td className="py-2.5 pr-4 text-slate-600">{row.csrName}</td>
-                      <td className="py-2.5 pr-4 text-slate-600">{row.form}</td>
-                      <td className="py-2.5 pr-4 text-slate-500">{row.completed}</td>
-                      <td className="py-2.5">
-                        <span className="flex items-center gap-1.5">
-                          <StatusDot value={row.avgScore ?? 0} thresholds={qaThresh} />
-                          <span className="font-semibold">{fmt(row.avgScore, '%')}</span>
-                        </span>
-                      </td>
-                    </tr>
+                  {qaFormGroups.map(group => (
+                    <Fragment key={group.key}>
+                      {group.rows.map(row => (
+                        <tr
+                          key={`${row.qaUserId}-${row.csrUserId}-${row.formId}`}
+                          className="border-b border-slate-100 hover:bg-slate-50"
+                        >
+                          <td className="py-2.5 pr-4 font-medium text-slate-800">{row.qaName}</td>
+                          <td className="py-2.5 pr-4 text-slate-600">{row.form}</td>
+                          <td className="py-2.5 pr-4 text-slate-600">{row.csrName}</td>
+                          <td className="py-2.5 pr-4 text-slate-500">{row.completed}</td>
+                          <td className="py-2.5">
+                            <span className="flex items-center gap-1.5">
+                              <StatusDot value={row.avgScore ?? 0} thresholds={qaThresh} />
+                              <span className="font-semibold">{fmt(row.avgScore, '%')}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-100 border-b-2 border-slate-200 font-semibold text-slate-900">
+                        <td className="py-2.5 pr-4" colSpan={3}>Total — {group.qaName} · {group.form}</td>
+                        <td className="py-2.5 pr-4 text-slate-700">{group.completed}</td>
+                        <td className="py-2.5">
+                          <span className="flex items-center gap-1.5">
+                            <StatusDot value={group.avgScore ?? 0} thresholds={qaThresh} />
+                            <span>{fmt(group.avgScore, '%')}</span>
+                          </span>
+                        </td>
+                      </tr>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

@@ -133,11 +133,12 @@ export const getQCAgentProfile = async (userId: number, p: QCParams): Promise<Ag
 // round trip; subsequent filter changes still hit the per-section endpoints
 // directly so only the affected data refetches.
 export interface QCAgentFullResponse {
-  profile:        AgentProfile
-  kpis:           QCKpiResponse
-  trends:         TrendRow[]
-  formScores:     FormScore[]
-  categoryScores: CategoryScore[]
+  profile:         AgentProfile
+  kpis:            QCKpiResponse
+  trends:          TrendRow[]
+  formScores:      FormScore[]
+  categoryScores:  CategoryScore[]
+  missedQuestions: MissedQuestion[]
 }
 export const getQCAgentFull = async (
   userId: number,

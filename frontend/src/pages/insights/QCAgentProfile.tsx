@@ -49,6 +49,7 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
   const trendData       = bundle?.trends
   const formScoresData  = bundle?.formScores ?? []
   const catScores       = bundle?.categoryScores ?? []
+  const missedQuestions = bundle?.missedQuestions ?? []
 
   // Note: the form-id-driven category drill-down (changing the Form filter
   // narrows the Category Performance table) is intentionally not wired into
@@ -109,6 +110,7 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
           formScores={formScoresData}
           catScores={catScores} showAllCats={showAllCats} setShowAllCats={setShowAllCats}
           recentAudits={profile?.recentAudits ?? []}
+          missedQuestions={missedQuestions}
         />
 
         <AgentCoachingSection

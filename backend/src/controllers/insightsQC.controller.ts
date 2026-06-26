@@ -189,14 +189,15 @@ export const getQCAgentFull = qcHandler('qc_agents', async (deptFilter, ranges, 
   const trendCodes = req.query.kpis
     ? (req.query.kpis as string).split(',')
     : ['avg_qa_score']
-  const [profile, kpis, trends, formScores, categoryScores] = await Promise.all([
+  const [profile, kpis, trends, formScores, categoryScores, missedQuestions] = await Promise.all([
     qcAnalyticsService.getAgentProfile(userId, ranges),
     qcKpiService.getKpiValues(deptFilter, ranges, formNames, userId),
     qcKpiService.getTrends(deptFilter, trendCodes, ranges.current.end, userId, formNames),
     qcQuality.getFormScores(deptFilter, ranges, userId),
     qcQuality.getCategoryScores(deptFilter, formNames, ranges, userId),
+    qcQuality.getMissedQuestions(deptFilter, formNames, ranges, userId),
   ])
-  return { profile, kpis, trends, formScores, categoryScores }
+  return { profile, kpis, trends, formScores, categoryScores, missedQuestions }
 })
 
 // ── Filter options ────────────────────────────────────────────────────────────
@@ -253,9 +254,13 @@ export const getCategoryScores = qcHandler(['qc_quality', 'qc_agents'], (deptFil
   return qcQuality.getCategoryScores(deptFilter, parseFormNames(req), ranges, userId)
 })
 
-export const getMissedQuestions = qcHandler(['qc_quality', 'qc_agents'], (deptFilter, ranges, req) =>
-  qcQuality.getMissedQuestions(deptFilter, parseFormNames(req), ranges),
-)
+export const getMissedQuestions = qcHandler(['qc_quality', 'qc_agents'], (deptFilter, ranges, req, access) => {
+  const requestedUserId = req.query.userId ? parseInt(req.query.userId as string, 10) : null
+  const userId = access.dataScope === 'SELF'
+    ? req.user?.user_id ?? null
+    : (Number.isFinite(requestedUserId) ? requestedUserId : null)
+  return qcQuality.getMissedQuestions(deptFilter, parseFormNames(req), ranges, userId)
+})
 
 export const getQualityDeptComparison = qcHandler('qc_quality', (deptFilter, ranges, req) =>
   qcQuality.getQualityDeptComparison(deptFilter, ranges, parseFormNames(req)),
