@@ -1,12 +1,11 @@
-import type { CoachingPurpose, CoachingFormat, CoachingSourceType } from '@/services/trainingService'
-
 export interface CoachingFormState {
   csr_ids: number[]   // multi-select for create; [csr_id] for edit (API field name)
   coach_id: number
   session_date: string
-  coaching_purpose: CoachingPurpose | ''
-  coaching_format: CoachingFormat | ''
-  source_type: CoachingSourceType | ''
+  // List Management list_items.id references ('' = unselected).
+  coaching_purpose: number | ''
+  coaching_format: number | ''
+  source_type: number | ''
   notes: string
   topic_ids: number[]
   required_action: string

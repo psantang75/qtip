@@ -128,9 +128,10 @@ export async function searchCoachingSessions(params: SearchCoachingSessionsParam
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
-    SELECT cs.id as session_id, cs.session_date, cs.coaching_purpose, cs.status, cs.notes,
+    SELECT cs.id as session_id, cs.session_date, lp.label as coaching_purpose, cs.status, cs.notes,
       GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ', ') as topic_names
     FROM coaching_sessions cs
+    LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
     LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
     LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
     ${whereClause}

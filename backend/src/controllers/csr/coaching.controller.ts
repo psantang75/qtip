@@ -137,14 +137,8 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
       });
     }
 
-    const validPurposes = ['WEEKLY', 'PERFORMANCE', 'ONBOARDING'];
-    if (coaching_purpose && typeof coaching_purpose === 'string' && !validPurposes.includes(coaching_purpose)) {
-      return res.status(400).json({ error: 'INVALID_COACHING_PURPOSE', message: 'Invalid coaching purpose provided' });
-    }
-    const validFormats = ['ONE_ON_ONE', 'SIDE_BY_SIDE', 'TEAM_SESSION'];
-    if (coaching_format && typeof coaching_format === 'string' && !validFormats.includes(coaching_format)) {
-      return res.status(400).json({ error: 'INVALID_COACHING_FORMAT', message: 'Invalid coaching format provided' });
-    }
+    // coaching_purpose / coaching_format filters are now list_items.id references
+    // (List Management); the 'all' sentinel disables the filter.
 
     const offset = (pageNum - 1) * pageSizeNum;
     const limit = pageSizeNum;
@@ -160,10 +154,10 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
     }
 
     if (coaching_purpose && coaching_purpose !== 'all') {
-      conditions.push(Prisma.sql`cs.coaching_purpose = ${coaching_purpose}`);
+      conditions.push(Prisma.sql`cs.coaching_purpose = ${parseInt(coaching_purpose as string)}`);
     }
     if (coaching_format && coaching_format !== 'all') {
-      conditions.push(Prisma.sql`cs.coaching_format = ${coaching_format}`);
+      conditions.push(Prisma.sql`cs.coaching_format = ${parseInt(coaching_format as string)}`);
     }
 
     if (startDate) {
@@ -211,8 +205,8 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
         SELECT
           cs.id,
           cs.session_date,
-          cs.coaching_purpose,
-          cs.coaching_format,
+          lp.label as coaching_purpose,
+          lf.label as coaching_format,
           cs.notes,
           cs.status,
           cs.attachment_filename,
@@ -233,11 +227,13 @@ export const getCSRCoachingSessions = async (req: Request, res: Response) => {
            )) as quiz_passed_count
         FROM coaching_sessions cs
         LEFT JOIN users creator ON cs.created_by = creator.id
+        LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
+        LEFT JOIN list_items lf ON lf.id = cs.coaching_format
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
         LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         ${whereClause}
         GROUP BY
-          cs.id, cs.session_date, cs.coaching_purpose, cs.coaching_format,
+          cs.id, cs.session_date, lp.label, lf.label,
           cs.notes, cs.status, cs.attachment_filename, cs.attachment_path,
           cs.due_date, cs.follow_up_date, creator.username, cs.created_at
         ORDER BY cs.session_date DESC
@@ -307,7 +303,8 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
 
     const sessionRows = await prisma.$queryRaw<any[]>(
       Prisma.sql`
-        SELECT cs.id, cs.session_date, cs.coaching_purpose, cs.coaching_format, cs.source_type, cs.status,
+        SELECT cs.id, cs.session_date,
+          lp.label as coaching_purpose, lf.label as coaching_format, ls.label as source_type, cs.status,
           cs.notes, cs.required_action,
           cs.require_action_plan, cs.require_acknowledgment,
           cs.quiz_required, cs.quiz_id,
@@ -322,6 +319,9 @@ export const getCSRCoachingSessionDetails = async (req: Request, res: Response) 
           GROUP_CONCAT(DISTINCT li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         LEFT JOIN users creator ON cs.created_by = creator.id
+        LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
+        LEFT JOIN list_items lf ON lf.id = cs.coaching_format
+        LEFT JOIN list_items ls ON ls.id = cs.source_type
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
         LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         WHERE cs.id = ${sessionId} AND cs.csr_id = ${userId}

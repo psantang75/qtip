@@ -20,6 +20,7 @@ export const DATA_LAST_UPDATED = '06-17-2026 11:12 AM'
 // prior month. Sourced from the Business Calendar once the data layer lands.
 export const SAMPLE_BUSINESS_DAYS = 13
 export const SAMPLE_PRIOR_BUSINESS_DAYS = 21
+export const SAMPLE_CURRENT_DATE_RANGE = { start: '06-01-2026', end: '06-13-2026' }
 export const SAMPLE_PRIOR_DATE_RANGE = { start: '05-01-2026', end: '05-31-2026' }
 
 /** Sales agents used across the section's sample data (also feeds the Agent filter). */

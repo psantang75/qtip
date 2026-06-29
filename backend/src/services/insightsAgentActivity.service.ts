@@ -1066,6 +1066,8 @@ export interface MarginResult {
   dataThroughDate: string | null;
   /** Business days in the full natural prior period (e.g. entire previous month). */
   priorBusinessDays: number;
+  /** Selected current period range, formatted MM-DD-YYYY for display. */
+  currentDateRange: { start: string; end: string } | null;
   /** Full natural prior period range, formatted MM-DD-YYYY for display. */
   priorDateRange: { start: string; end: string } | null;
   availableUsers: string[];
@@ -1095,7 +1097,7 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
   const empty: MarginResult = {
     leads: [], deals: [], margin: [], customers: [],
     businessDaysElapsed: 0, businessDaysTotal: 0, dataThroughDate: null,
-    priorBusinessDays: 0, priorDateRange: null,
+    priorBusinessDays: 0, currentDateRange: null, priorDateRange: null,
     availableUsers: [], availableDepartments: [], dataLastUpdated: null,
     dataNextUpdate: null, updateEveryMinutes: null,
   };
@@ -1291,6 +1293,7 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
     businessDaysTotal: bizTotal,
     dataThroughDate: dateKeyToIso(dataThroughKey),
     priorBusinessDays,
+    currentDateRange: { start: fmtMDY(current.start), end: fmtMDY(current.end) },
     priorDateRange: { start: fmtMDY(priorRange.start), end: fmtMDY(priorRange.end) },
     availableUsers: userRows.map((r) => r.salesperson_name as string).filter(Boolean),
     availableDepartments: deptRows.map((r) => r.department_name as string),

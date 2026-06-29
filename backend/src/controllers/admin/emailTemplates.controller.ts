@@ -336,7 +336,7 @@ function sampleData(templateKey: string): Record<string, unknown> {
   };
   const baseSession = {
     id: 7, session_date: new Date(),
-    coaching_format: 'ONE_ON_ONE', coaching_purpose: 'WEEKLY',
+    coaching_format: '1-on-1', coaching_purpose: 'Weekly',
     duration_minutes: 30, location: 'Zoom',
     preparation_notes: 'Review last week\'s call recordings.',
     action_due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),

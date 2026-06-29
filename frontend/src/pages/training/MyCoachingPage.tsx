@@ -20,18 +20,16 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
+import { useCoachingLabels } from '@/hooks/useCoachingLabels'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
-import {
-  COACHING_PURPOSE_LABELS as PURPOSE_MAP,
-  COACHING_FORMAT_LABELS as FORMAT_MAP,
-  STATUS_LABELS,
-} from '@/constants/labels'
+import { STATUS_LABELS } from '@/constants/labels'
 import { QuizStatusBadge } from './CoachingSessionsPage'
 
 const SORT_PRIORITY: Record<string, number> = { SCHEDULED: 0, AWAITING_CSR_ACTION: 0 }
 
 export default function MyCoachingPage() {
   const navigate = useNavigate()
+  const { purposeMap: PURPOSE_MAP, formatMap: FORMAT_MAP, formatOptions } = useCoachingLabels()
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
@@ -112,7 +110,7 @@ export default function MyCoachingPage() {
       const bd = b.due_date ? new Date(b.due_date).getTime() : Infinity
       return ad - bd
     })
-  }, [allSessions, sessionId, effectiveSelectedStatuses, selectedFormats, selectedTopics, dateFrom, dateTo, dueToday, overdue])
+  }, [allSessions, sessionId, effectiveSelectedStatuses, selectedFormats, selectedTopics, dateFrom, dateTo, dueToday, overdue, FORMAT_MAP])
 
   const { sort, dir, toggle, sorted } = useListSort(filtered)
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
@@ -131,6 +129,7 @@ export default function MyCoachingPage() {
         resultTotal={filtered.length}
         itemCount={allSessions.length}
         topicOptions={topicOptions}
+        formatOptions={formatOptions}
       />
 
       <ListCard>

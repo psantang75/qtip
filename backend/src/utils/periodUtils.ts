@@ -35,6 +35,14 @@ export function resolvePeriod(
         prior:   { start: pStart, end: endOfDay(pStart) },
       }
     }
+    case 'yesterday': {
+      const start  = addDays(new Date(y, m, today.getDate()), -1)  // local midnight yesterday
+      const pStart = addDays(start, -1)                            // day before yesterday
+      return {
+        current: { start,  end: endOfDay(start) },
+        prior:   { start: pStart, end: endOfDay(pStart) },
+      }
+    }
     case 'current_week': {
       const mon  = mondayOf(today)
       const pMon = addDays(mon, -7)

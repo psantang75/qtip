@@ -62,6 +62,7 @@ export default function QCWarningsPage() {
         customStart={customStart} customEnd={customEnd}
         onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
         businessDays={meta?.businessDays} priorBusinessDays={priorMeta?.businessDays}
+        currentDateRange={meta?.startDate ? { start: meta.startDate, end: meta.endDate } : undefined}
         priorDateRange={priorMeta?.startDate ? { start: priorMeta.startDate, end: priorMeta.endDate } : undefined}
         onReset={resetFilters}
       />

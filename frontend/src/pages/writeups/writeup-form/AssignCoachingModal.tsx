@@ -17,10 +17,10 @@ import { useToast } from '@/hooks/use-toast'
 import trainingService from '@/services/trainingService'
 import writeupService from '@/services/writeupService'
 
+import listService from '@/services/listService'
 import {
   COACHING_PURPOSE_LABELS as PURPOSE_LABELS,
   COACHING_FORMAT_LABELS as FORMAT_LABELS,
-  COACHING_SOURCE_LABELS as SOURCE_LABELS,
 } from '@/constants/labels'
 
 const OPEN_STATUSES = ['SCHEDULED', 'IN_PROGRESS', 'IN_PROCESS', 'PENDING_CSR', 'AWAITING_CSR_ACTION', 'FOLLOW_UP_REQUIRED']
@@ -129,9 +129,10 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
 }) {
   const { toast } = useToast()
   const [date,           setDate]          = useState('')
-  const [purpose,        setPurpose]       = useState('PERFORMANCE')
-  const [source,         setSource]        = useState('OTHER')
-  const [format,         setFormat]        = useState('ONE_ON_ONE')
+  // Coaching purpose/source/format are List-Management list_items.id values.
+  const [purpose,        setPurpose]       = useState<number | ''>('')
+  const [source,         setSource]        = useState<number | ''>('')
+  const [format,         setFormat]        = useState<number | ''>('')
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set())
   const [draftTopics,    setDraftTopics]   = useState<Set<string>>(new Set())
   const [topicOpen,      setTopicOpen]     = useState(false)
@@ -142,6 +143,9 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
     queryFn:  () => import('@/services/listService').then(m => m.default.getItems('training_topic')),
     staleTime: 5 * 60_000,
   })
+  const { data: purposeItems = [] } = useQuery({ queryKey: ['list-items', 'coaching_purpose'], queryFn: () => listService.getItems('coaching_purpose'), staleTime: 5 * 60_000 })
+  const { data: sourceItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_source'],  queryFn: () => listService.getItems('coaching_source'),  staleTime: 5 * 60_000 })
+  const { data: formatItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_format'],  queryFn: () => listService.getItems('coaching_format'),  staleTime: 5 * 60_000 })
   const activeTopics        = (topicItems as any[]).filter(t => t.is_active)
   const topicCategories     = useMemo(() => [...new Set(activeTopics.map((t: any) => t.category).filter(Boolean))] as string[], [activeTopics])
   const topicsByCat         = (cat: string) => activeTopics.filter((t: any) => t.category === cat)
@@ -156,8 +160,8 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
 
   const createMut = useMutation({
     mutationFn: () => writeupService.createLinkedCoachingSession({
-      csr_id: csrId, session_date: date, coaching_purpose: purpose,
-      coaching_format: format, source_type: source,
+      csr_id: csrId, session_date: date, coaching_purpose: purpose ? String(purpose) : undefined,
+      coaching_format: format ? String(format) : undefined, source_type: source ? String(source) : undefined,
       topic_names: selectedTopics.size > 0 ? Array.from(selectedTopics) : undefined,
       notes: notes || undefined,
     }),
@@ -187,12 +191,10 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
               <Input type="date" className="h-9 text-[13px]" value={date} onChange={e => setDate(e.target.value)} />
             </Field>
             <Field label="Purpose" required>
-              <Select value={purpose} onValueChange={setPurpose}>
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+              <Select value={purpose ? String(purpose) : ''} onValueChange={v => setPurpose(Number(v))}>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="Select purpose…" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="PERFORMANCE">Performance</SelectItem>
-                  <SelectItem value="WEEKLY">Weekly</SelectItem>
-                  <SelectItem value="ONBOARDING">Onboarding</SelectItem>
+                  {purposeItems.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Field>
@@ -200,25 +202,18 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Source">
-              <Select value={source} onValueChange={setSource}>
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+              <Select value={source ? String(source) : ''} onValueChange={v => setSource(Number(v))}>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="Select source…" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="QA_AUDIT">QA Audit</SelectItem>
-                  <SelectItem value="MANAGER_OBSERVATION">Manager Observation</SelectItem>
-                  <SelectItem value="TREND">Trend</SelectItem>
-                  <SelectItem value="DISPUTE">Dispute</SelectItem>
-                  <SelectItem value="SCHEDULED">Scheduled</SelectItem>
-                  <SelectItem value="OTHER">Other</SelectItem>
+                  {sourceItems.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Field>
             <Field label="Format" required>
-              <Select value={format} onValueChange={setFormat}>
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+              <Select value={format ? String(format) : ''} onValueChange={v => setFormat(Number(v))}>
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="Select format…" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ONE_ON_ONE">One-on-One</SelectItem>
-                  <SelectItem value="SIDE_BY_SIDE">Side-by-Side</SelectItem>
-                  <SelectItem value="TEAM_SESSION">Team Session</SelectItem>
+                  {formatItems.map(f => <SelectItem key={f.id} value={String(f.id)}>{f.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Field>
@@ -281,7 +276,7 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
             <Button type="button" size="sm" className="bg-primary hover:bg-primary/90 text-white"
-              disabled={!date || createMut.isPending} onClick={() => createMut.mutate()}>
+              disabled={!date || !purpose || !format || createMut.isPending} onClick={() => createMut.mutate()}>
               {createMut.isPending ? 'Creating…' : 'Create & Link'}
             </Button>
           </div>

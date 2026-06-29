@@ -78,6 +78,7 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
         showFormFilter selectedForms={selectedForms} onFormsChange={onFormsChange}
         availableForms={availableForms}
         businessDays={meta?.businessDays} priorBusinessDays={priorMeta?.businessDays}
+        currentDateRange={meta?.startDate ? { start: meta.startDate, end: meta.endDate } : undefined}
         priorDateRange={priorMeta?.startDate ? { start: priorMeta.startDate, end: priorMeta.endDate } : undefined}
         showBackButton={showBackButton} onBack={onBack}
       />

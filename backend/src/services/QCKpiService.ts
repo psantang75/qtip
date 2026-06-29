@@ -101,9 +101,9 @@ export class QCKpiService {
     const qpDate:      unknown[] = [s, e, ...dp, ...userParams]
 
     const [qualityA, qualityB, qualityC, qualityD,
-      coachingE, timeToCoachF,
+      coachingE,
       quizG, quizH,
-      wuI, activeUsersJ, wuStepUpsK, wuRepeatAgentsL] = await Promise.all([
+      wuI, activeUsersJ, wuStepUpsK, wuRepeatAgentsL, agentsInDeptM] = await Promise.all([
       // Block A: avgQa (LEFT JOIN score_snapshots for fallback score)
       aggregateRow(
         `SELECT AVG(COALESCE(s.total_score, ss.score)) AS avgQa
@@ -179,15 +179,6 @@ export class QCKpiService {
          WHERE cs.session_date BETWEEN ? AND ? ${dc.sql} ${userSql}`,
         qpDate,
       ),
-      // Block F: timeToCoach — different join shape (needs submissions for QA-sourced sessions).
-      aggregateRow(
-        `SELECT AVG(DATEDIFF(cs.created_at, sub.submitted_at)) AS timeToCoach
-         FROM coaching_sessions cs
-         JOIN submissions sub ON cs.qa_audit_id = sub.id
-         JOIN users csr ON cs.csr_id = csr.id
-         WHERE cs.source_type = 'QA_AUDIT' AND cs.session_date BETWEEN ? AND ? ${dc.sql} ${userSql}`,
-        qpDate,
-      ),
       // Block G: quizTotal, quizPassed, avgQuizScore.
       aggregateRow(
         `SELECT
@@ -258,6 +249,14 @@ export class QCKpiService {
          ) repeat_agents`,
         qpDate,
       ),
+      // Block M: active agents in the selected departments. Drives the coaching
+      // Session Goal (1 session per agent per week). Honors the Department
+      // filter (dc.sql) and the optional user filter; not date-bounded.
+      scalar(
+        `SELECT COUNT(*) AS value FROM users csr
+         WHERE csr.role_id = 3 AND csr.is_active = 1 ${dc.sql} ${userSql}`,
+        [...dp, ...userParams],
+      ),
     ])
 
     const avgQa                 = qualityA.avgQa
@@ -279,7 +278,6 @@ export class QCKpiService {
     const avgDaysClose          = coachingE.avgDaysClose
     const followupDue           = coachingE.followupDue
     const followupOnTime        = coachingE.followupOnTime
-    const timeToCoach           = timeToCoachF.timeToCoach
     const quizTotal             = quizG.quizTotal
     const quizPassed            = quizG.quizPassed
     const avgQuizScore          = quizG.avgQuizScore
@@ -291,11 +289,19 @@ export class QCKpiService {
     const activeUsers           = activeUsersJ
     const wuStepUps             = wuStepUpsK
     const wuRepeatAgents        = wuRepeatAgentsL
+    const agentsInDept          = agentsInDeptM
 
     const auditsAssigned = paceTarget !== null ? Math.round(paceTarget * businessDays) : null
     const auditCompletionRate = safePct(auditsCompleted, auditsAssigned)
 
     const coachingCompletionRate = safePct(sessCompleted, sessTotal)
+
+    // Coaching Session Goal — one session per active agent per week. A business
+    // week is 5 business days, so weeks = businessDays / 5. Honors the active
+    // Department filter via the agent count (Block M).
+    const coachingSessionGoal = agentsInDept !== null
+      ? Math.round(agentsInDept * (businessDays / 5))
+      : null
 
     return {
       kpis: {
@@ -312,6 +318,7 @@ export class QCKpiService {
       avg_criticals_per_audit:        avgCriticalsPerAudit,
       time_to_audit:                  timeToAudit,
       qa_score_trend:                 null,
+      coaching_session_goal:          coachingSessionGoal,
       coaching_sessions_assigned:     sessTotal,
       coaching_sessions_scheduled:    sessScheduled,
       coaching_sessions_completed:    sessCompleted,
@@ -320,7 +327,6 @@ export class QCKpiService {
       coaching_delivery_rate:         safePct(sessDelivered, sessTotal),
       avg_days_to_close_coaching:     avgDaysClose,
       followup_compliance_rate:       safePct(followupOnTime, followupDue),
-      time_to_coaching:               timeToCoach,
       quizzes_assigned:               quizTotal,
       quizzes_passed:                 quizPassed,
       quiz_pass_rate:                 safePct(quizPassed, quizTotal),

@@ -21,16 +21,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUrlFilters } from '@/hooks/useUrlFilters'
 import { useListSort } from '@/hooks/useListSort'
+import { useCoachingLabels } from '@/hooks/useCoachingLabels'
 import { formatQualityDate, defaultDateRange90 } from '@/utils/dateFormat'
 
-import {
-  COACHING_PURPOSE_LABELS,
-  COACHING_FORMAT_LABELS,
-  STATUS_LABELS,
-} from '@/constants/labels'
-
-const PURPOSE_MAP = COACHING_PURPOSE_LABELS
-const FORMAT_MAP  = COACHING_FORMAT_LABELS
+import { STATUS_LABELS } from '@/constants/labels'
 
 
 export { TopicChips } from '@/components/training/TopicChips'
@@ -79,6 +73,7 @@ function nextDue(s: CoachingSession): { date: string | null; type: 'D' | 'F' | n
 
 export default function CoachingSessionsPage() {
   const navigate = useNavigate()
+  const { purposeMap: PURPOSE_MAP, formatMap: FORMAT_MAP, formatOptions } = useCoachingLabels()
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
@@ -156,7 +151,7 @@ export default function CoachingSessionsPage() {
     if (selectedFormats.length)           items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
     if (selectedTopics.length)            items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
     return items
-  }, [allItems, sessionId, selectedAgents, effectiveSelectedStatuses, selectedFormats, selectedTopics])
+  }, [allItems, sessionId, selectedAgents, effectiveSelectedStatuses, selectedFormats, selectedTopics, FORMAT_MAP])
 
   const { sort, dir, toggle, sorted: sortedItems } = useListSort(filtered)
 
@@ -210,6 +205,7 @@ export default function CoachingSessionsPage() {
         agentOptions={agentOptions}
         selectedAgents={selectedAgents}
         topicOptions={topicOptions}
+        formatOptions={formatOptions}
       />
 
       <ListCard>

@@ -1,7 +1,7 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Users } from 'lucide-react'
+import { Users, ExternalLink } from 'lucide-react'
 import {
   InsightsFilterBar, InsightsSection, KpiTile, StatRow,
   TrendChart, ScoreHistogram, StatusBadge, StatusDot, ExpandableRow,
@@ -12,10 +12,12 @@ import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
 import {
   getQCKpis, getQCTrends, getScoreDistribution, getCategoryScores,
   getMissedQuestions, getQualityDeptComparison, getQAFormsCompleted, getFormScores, getFilterOptions,
-  getFormAgentBreakdown, getCategoryAgentBreakdown,
+  getFormAgentBreakdown, getCategoryAgentBreakdown, getLowScoringAudits,
 } from '@/services/insightsQCService'
-import type { CategoryScore, FormScore, QCParams, QAFormCompletedRow } from '@/services/insightsQCService'
+import type { CategoryScore, FormScore, QCParams, QAFormCompletedRow, LowScoringAudit } from '@/services/insightsQCService'
 import { scoreColor, fmtN } from '@/components/insights/agentProfileHelpers'
+import { formatQualityDate } from '@/utils/dateFormat'
+import { ListPagination } from '@/components/common/ListPagination'
 import QCMissedQuestions from './QCMissedQuestions'
 
 function fmt(v: number | null | undefined, suffix = ''): string {
@@ -128,6 +130,92 @@ function FormScoresSection({ formScores, params, qaGoal, qaWarn }: {
           />
         )
       })}
+    </InsightsSection>
+  )
+}
+
+// Quality page "QA Forms Below 90%" — a flat list of individual finalized
+// audits scoring under 90, surfacing the audited agent, the form, the
+// interaction date, and the score. Sits directly beneath Average Score by
+// Form so reviewers can drill from the form average straight to the specific
+// low-scoring interactions. Agent name links to the QC agent profile.
+function LowScoresSection({ audits, qaThresh }: {
+  audits:   LowScoringAudit[]
+  qaThresh: ReturnType<typeof resolveThresholds>
+}) {
+  const navigate = useNavigate()
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+
+  // Reset to the first page whenever the data or page size changes so we never
+  // land on a now-empty page after a filter/period change.
+  useEffect(() => { setPage(1) }, [audits, pageSize])
+
+  const totalPages = Math.max(1, Math.ceil(audits.length / pageSize))
+  const visible = audits.slice((page - 1) * pageSize, page * pageSize)
+
+  return (
+    <InsightsSection
+      title="QA Forms Below 90%"
+      description={audits.length > 0 ? `${audits.length} ${audits.length === 1 ? 'audit' : 'audits'} below 90% in the selected period` : undefined}
+    >
+      {audits.length === 0
+        ? <p className="text-sm text-slate-400 text-center py-4">No audits below 90% for the selected period.</p>
+        : (
+          <>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-slate-400 border-b border-slate-200">
+                  {['Review ID','Agent','Form','Interaction Date','Score'].map(h => (
+                    <th key={h} className="text-left pb-2 font-medium pr-4 last:pr-0">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map(row => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer"
+                    onClick={() => navigate(`/app/insights/qc-agents?agent=${row.csrUserId}`)}
+                  >
+                    <td className="py-2.5 pr-4">
+                      <a
+                        href={`/app/quality/submissions/${row.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                      >
+                        #{row.id}
+                        <ExternalLink size={12} />
+                      </a>
+                    </td>
+                    <td className="py-2.5 pr-4 font-medium text-primary hover:underline">{row.agent}</td>
+                    <td className="py-2.5 pr-4 text-slate-600">{row.form}</td>
+                    <td className="py-2.5 pr-4 text-slate-500">{formatQualityDate(row.interactionDate)}</td>
+                    <td className="py-2.5">
+                      <span className="flex items-center gap-1.5">
+                        <StatusDot value={row.score ?? 0} thresholds={qaThresh} />
+                        <span className="font-semibold">{fmtN(row.score, '%')}</span>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="mt-3">
+              <ListPagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={audits.length}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            </div>
+          </>
+        )
+      }
     </InsightsSection>
   )
 }
@@ -318,6 +406,7 @@ export default function QCQualityPage() {
     return groups
   }, [qaForms])
   const { data: formScores = [] } = useQuery({ queryKey: ['qc-forms', params], queryFn: () => getFormScores(params) })
+  const { data: lowScores = [] } = useQuery({ queryKey: ['qc-low-scores', params], queryFn: () => getLowScoringAudits(params) })
   const { data: kpiConfig } = useKpiConfig()
 
   const cur       = kpiData?.current   ?? {}
@@ -342,6 +431,7 @@ export default function QCQualityPage() {
         showFormFilter selectedForms={forms} onFormsChange={setForms}
         availableForms={formOptions}
         businessDays={meta?.businessDays} priorBusinessDays={priorMeta?.businessDays}
+        currentDateRange={meta?.startDate ? { start: meta.startDate, end: meta.endDate } : undefined}
         priorDateRange={priorMeta?.startDate ? { start: priorMeta.startDate, end: priorMeta.endDate } : undefined}
         onReset={resetFilters}
       />
@@ -427,6 +517,9 @@ export default function QCQualityPage() {
           qaGoal={auditGoal} qaWarn={auditWarn ?? auditGoal - 10}
         />
 
+        {/* QA Forms Below 90% — individual low-scoring audits */}
+        <LowScoresSection audits={lowScores} qaThresh={qaThresh} />
+
         {/* Category Performance — expandable per-form, then per-category, then per-agent */}
         <CategoryPerformanceSection
           catData={catData} params={params}
@@ -450,8 +543,8 @@ export default function QCQualityPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {qaFormGroups.map(group => (
-                    <Fragment key={group.key}>
+                  {qaFormGroups.map((group, gi) => (
+                    <Fragment key={`${group.key}-${gi}`}>
                       {group.rows.map(row => (
                         <tr
                           key={`${row.qaUserId}-${row.csrUserId}-${row.formId}`}

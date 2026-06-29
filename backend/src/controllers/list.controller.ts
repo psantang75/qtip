@@ -28,15 +28,6 @@ export const getListItems = async (req: Request, res: Response) => {
 };
 
 // ── CREATE a new list item ────────────────────────────────────────────────────
-/** Generate a stable key from a label: "Group Session" → "GROUP_SESSION" */
-function slugify(label: string): string {
-  return label.toUpperCase().trim()
-    .replace(/[^A-Z0-9\s]/g, '')
-    .replace(/\s+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_|_$/g, '') || 'ITEM';
-}
-
 export const createListItem = async (req: AuthReq, res: Response) => {
   try {
     const { list_type, category, label, sort_order } = req.body;
@@ -44,7 +35,8 @@ export const createListItem = async (req: AuthReq, res: Response) => {
       return res.status(400).json({ success: false, message: 'list_type and label are required' });
     }
 
-    const item_key = req.body.item_key ?? (category === null || category === undefined ? slugify(label.trim()) : null);
+    // Lists are identified by label/id only — no auto-generated slug (item_key).
+    const item_key = req.body.item_key ?? null;
 
     const maxRows = await prisma.$queryRaw<{ max_order: number }[]>(
       Prisma.sql`SELECT COALESCE(MAX(sort_order), 0) as max_order FROM list_items WHERE list_type = ${list_type}`

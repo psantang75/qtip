@@ -94,6 +94,7 @@ export default function QCCoachingPage() {
         customStart={customStart} customEnd={customEnd}
         onCustomStartChange={setCustomStart} onCustomEndChange={setCustomEnd}
         businessDays={meta?.businessDays} priorBusinessDays={priorMeta?.businessDays}
+        currentDateRange={meta?.startDate ? { start: meta.startDate, end: meta.endDate } : undefined}
         priorDateRange={priorMeta?.startDate ? { start: priorMeta.startDate, end: priorMeta.endDate } : undefined}
         onReset={resetFilters}
       />
@@ -106,8 +107,8 @@ export default function QCCoachingPage() {
         </div>
 
         {/* 1. KPI tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {['coaching_sessions_assigned','coaching_sessions_scheduled','coaching_sessions_completed','coaching_sessions_closed'].map(code => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+          {['coaching_session_goal','coaching_sessions_assigned','coaching_sessions_scheduled','coaching_sessions_completed','coaching_sessions_closed'].map(code => (
             <KpiTile key={code} kpiCode={code} value={cur[code] ?? null} priorValue={prv[code] ?? undefined}
               thresholds={resolveThresholds(code, kpiConfig)} />
           ))}

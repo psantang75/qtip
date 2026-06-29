@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { ROLE_IDS } from '@/hooks/useQualityRole'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil } from 'lucide-react'
-import trainingService, { type CoachingSession, type CoachingSourceType, type CoachingFormat, type CoachingPurpose } from '@/services/trainingService'
+import trainingService, { type CoachingSession } from '@/services/trainingService'
 import listService from '@/services/listService'
 import { ListPageHeader } from '@/components/common/ListPageHeader'
 import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
@@ -17,10 +17,7 @@ import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 import {
-  COACHING_PURPOSE_LABELS as PURPOSE_MAP,
-  COACHING_FORMAT_LABELS as FORMAT_MAP,
   COACHING_STATUS_LABELS as STATUS_LABELS,
-  COACHING_SOURCE_LABELS as SOURCE_LABELS,
 } from '@/constants/labels'
 import {
   SessionSection, RequiredActionsSection, AccountabilitySection, InternalNotesSection,
@@ -159,9 +156,9 @@ export default function CoachingSessionDetailPage() {
       csr_ids:                [session.csr_id],
       coach_id:               session.created_by ?? user?.id ?? 0,
       session_date:           session.session_date?.slice(0, 16) ?? '',
-      coaching_purpose:       session.coaching_purpose,
-      coaching_format:        session.coaching_format,
-      source_type:            session.source_type,
+      coaching_purpose:       session.coaching_purpose_id ?? '',
+      coaching_format:        session.coaching_format_id ?? '',
+      source_type:            session.source_type_id ?? '',
       notes:                  session.notes ?? '',
       topic_ids:              session.topic_ids ?? [],
       required_action:        session.required_action ?? '',
@@ -189,9 +186,9 @@ export default function CoachingSessionDetailPage() {
     fd.append('csr_id',               String(formDraft.csr_ids[0] || ''))
     fd.append('coach_id',             String(formDraft.coach_id))
     fd.append('session_date',         formDraft.session_date)
-    fd.append('coaching_purpose',     formDraft.coaching_purpose)
-    fd.append('coaching_format',      formDraft.coaching_format)
-    fd.append('source_type',          formDraft.source_type)
+    fd.append('coaching_purpose',     String(formDraft.coaching_purpose))
+    fd.append('coaching_format',      String(formDraft.coaching_format))
+    fd.append('source_type',          String(formDraft.source_type))
     fd.append('notes',                formDraft.notes)
     fd.append('topic_ids',            formDraft.topic_ids.join(','))
     fd.append('required_action',      formDraft.required_action)
@@ -441,9 +438,9 @@ export default function CoachingSessionDetailPage() {
               <InfoRow label="Agent"            value={session.csr_name} />
               <InfoRow label="Coach"            value={session.created_by_name} />
               <InfoRow label="Session Date"     value={formatQualityDate(session.session_date)} />
-              <InfoRow label="Coaching Format"  value={formatItems.find(i => i.item_key === session.coaching_format)?.label ?? FORMAT_MAP[session.coaching_format as CoachingFormat] ?? session.coaching_format} />
-              <InfoRow label="Coaching Purpose" value={purposeItems.find(i => i.item_key === session.coaching_purpose)?.label ?? PURPOSE_MAP[session.coaching_purpose as CoachingPurpose] ?? session.coaching_purpose} />
-              <InfoRow label="Coaching Source"  value={sourceItems.find(i => i.item_key === session.source_type)?.label ?? SOURCE_LABELS[session.source_type as CoachingSourceType] ?? session.source_type} />
+              <InfoRow label="Coaching Format"  value={session.coaching_format} />
+              <InfoRow label="Coaching Purpose" value={session.coaching_purpose} />
+              <InfoRow label="Coaching Source"  value={session.source_type} />
               <InfoRow label="Created"          value={formatQualityDate(session.created_at)} />
               {!!session.is_overdue && (
                 <InfoRow label="Overdue" value={<span className="text-[14px] font-semibold text-red-600">⚠ Overdue</span>} />

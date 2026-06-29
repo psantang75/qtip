@@ -82,13 +82,14 @@ function isWarningType(coachingType: string): boolean {
   return Object.prototype.hasOwnProperty.call(WARNING_DOCUMENT_TYPES, coachingType.trim());
 }
 
+// Coaching purpose/format are List-Management lists keyed by label (no slugs).
 function mapCoachingType(coachingType: string): { coaching_purpose: string; coaching_format: string } {
   switch (coachingType.trim()) {
-    case 'Classroom':    return { coaching_purpose: 'ONBOARDING', coaching_format: 'TEAM_SESSION' };
-    case 'Side-by-Side': return { coaching_purpose: 'WEEKLY',     coaching_format: 'SIDE_BY_SIDE' };
-    case 'Team Session': return { coaching_purpose: 'WEEKLY',     coaching_format: 'TEAM_SESSION' };
+    case 'Classroom':    return { coaching_purpose: 'Onboarding', coaching_format: 'Team Session' };
+    case 'Side-by-Side': return { coaching_purpose: 'Weekly',     coaching_format: 'Side-by-Side' };
+    case 'Team Session': return { coaching_purpose: 'Weekly',     coaching_format: 'Team Session' };
     case '1-on-1':
-    default:             return { coaching_purpose: 'WEEKLY',     coaching_format: 'ONE_ON_ONE'   };
+    default:             return { coaching_purpose: 'Weekly',     coaching_format: '1-on-1'       };
   }
 }
 
@@ -252,6 +253,16 @@ async function seedCoachingAndWarnings(conn: mysql.Connection, fallbackUserId: n
     'attachment_filename', 'attachment_path', 'attachment_size', 'attachment_mime_type',
     'status', 'created_at', 'created_by', 'is_legacy', 'legacy_coaching_type',
   ];
+
+  // coaching_purpose / coaching_format are now list_items.id FKs (List Management).
+  // Resolve the built-in ids by label so legacy rows map correctly.
+  const [coachingListRows] = await conn.execute<mysql.RowDataPacket[]>(
+    `SELECT id, list_type, label FROM list_items WHERE list_type IN ('coaching_purpose','coaching_format')`
+  );
+  const coachingListIdMap = new Map<string, number>();
+  for (const lr of coachingListRows as mysql.RowDataPacket[]) {
+    coachingListIdMap.set(`${lr.list_type}:${lr.label}`, lr.id as number);
+  }
   const coachingRows: (string | number | null)[][] = [];
   const coachingTopicLinks: { sessionId: number; topicIds: string[] }[] = [];
 
@@ -306,12 +317,14 @@ async function seedCoachingAndWarnings(conn: mysql.Connection, fallbackUserId: n
       }
     } else {
       const { coaching_purpose, coaching_format } = mapCoachingType(coachingType);
+      const purposeId = coachingListIdMap.get(`coaching_purpose:${coaching_purpose}`) ?? null;
+      const formatId  = coachingListIdMap.get(`coaching_format:${coaching_format}`) ?? null;
       coachingRows.push([
         transformValue(r['id']),
         transformValue(r['csr_id']),
         transformValue(r['session_date'] ?? ''),
-        coaching_purpose,
-        coaching_format,
+        purposeId,
+        formatId,
         transformValue(r['notes'] ?? ''),
         transformValue(r['attachment_filename'] ?? ''),
         transformValue(r['attachment_path'] ?? ''),

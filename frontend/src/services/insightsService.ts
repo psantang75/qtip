@@ -440,6 +440,8 @@ export interface MarginResponse {
   dataThroughDate:      string | null
   /** Business days in the full natural prior period (e.g. entire previous month). */
   priorBusinessDays:    number
+  /** Selected current period range, formatted MM-DD-YYYY for display. */
+  currentDateRange:     { start: string; end: string } | null
   /** Full natural prior period range, formatted MM-DD-YYYY for display. */
   priorDateRange:       { start: string; end: string } | null
   availableUsers:       string[]

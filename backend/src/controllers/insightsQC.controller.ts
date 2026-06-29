@@ -273,6 +273,13 @@ export const getQAFormsCompleted = qcHandler('qc_quality', (deptFilter, ranges, 
   qcQuality.getQAFormsCompleted(deptFilter, parseFormNames(req), ranges),
 )
 
+// QA Forms Below 90% — individual finalized audits scoring under 90, driving
+// the Quality page table directly beneath "Average Score by Form". Same
+// qc_quality gate + dept scope; honors the dept/form/period filters.
+export const getLowScoringAudits = qcHandler('qc_quality', (deptFilter, ranges, req) =>
+  qcQuality.getLowScoringAudits(deptFilter, parseFormNames(req), ranges),
+)
+
 // Form scores are also surfaced inside the Agent Profile drill-down on the
 // qc_agents page. When ?userId=X is supplied the data is scoped to that
 // user's audits; SELF scope forces userId to the requesting user.

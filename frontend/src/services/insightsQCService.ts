@@ -45,6 +45,7 @@ export interface CategoryScore  { categoryId: number; category: string; formId: 
 export interface MissedQuestionAgent { userId: number; name: string; dept: string; missed: number; total: number }
 export interface MissedQuestion { questionId: number; question: string; form: string; missRate: number; missed: number; total: number; agents: MissedQuestionAgent[] }
 export interface FormScore { id: number; form: string; submissions: number; avgScore: number | null }
+export interface LowScoringAudit { id: number; csrUserId: number; agent: string; form: string; interactionDate: string | null; score: number | null }
 export interface FormAgentRow { userId: number; name: string; dept: string; audits: number; avgScore: number | null }
 export interface CategoryAgentRow { userId: number; name: string; dept: string; audits: number; avgScore: number | null }
 export interface DeptQualityRow { dept: string; audits: number; avgScore: number | null; disputes: number }
@@ -163,6 +164,11 @@ export const getQAFormsCompleted = async (p: QCParams): Promise<QAFormCompletedR
 
 export const getFormScores = async (p: QCParams & { userId?: string }): Promise<FormScore[]> =>
   (await api.get('/insights/qc/quality/forms', { params: p })).data
+
+// Individual finalized audits scoring under 90%, for the Quality page's
+// "QA Forms Below 90%" table. Honors the dept/form/period filters.
+export const getLowScoringAudits = async (p: QCParams): Promise<LowScoringAudit[]> =>
+  (await api.get('/insights/qc/quality/low-scores', { params: p })).data
 
 // Per-agent breakdown for a single form. Used by the Quality page's expandable
 // Average Score by Form rows; lazy-fetched only when a row is opened.

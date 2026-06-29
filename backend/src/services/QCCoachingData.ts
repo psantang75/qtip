@@ -128,14 +128,16 @@ export async function getSessionsByStatus(deptFilter: number[], ranges: PeriodRa
     `SELECT cs.status,
        u.id AS userId, u.username AS name,
        COALESCE(d.department_name,'Unknown') AS dept,
-       cs.coaching_purpose AS purpose,
-       cs.coaching_format AS format,
+       lp.label AS purpose,
+       lf.label AS format,
        COUNT(*) AS sessions
      FROM coaching_sessions cs
      JOIN users u ON cs.csr_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
+     LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
+     LEFT JOIN list_items lf ON lf.id = cs.coaching_format
      WHERE cs.session_date BETWEEN ? AND ? ${dc.sql}
-     GROUP BY cs.status, u.id, cs.coaching_purpose, cs.coaching_format
+     GROUP BY cs.status, u.id, cs.coaching_purpose, cs.coaching_format, lp.label, lf.label
      ORDER BY cs.status, sessions DESC
      LIMIT 1000`,
     [s, e, ...dc.params],

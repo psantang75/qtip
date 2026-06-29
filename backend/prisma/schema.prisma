@@ -514,8 +514,8 @@ model CoachingSession {
   batch_id             String?               @db.VarChar(36)
   csr_id               Int
   session_date         DateTime              @db.DateTime(0)
-  coaching_purpose     CoachingPurpose       @default(WEEKLY)
-  coaching_format      CoachingFormat        @default(ONE_ON_ONE)
+  coaching_purpose     Int?                  // FK -> list_items.id (list_type='coaching_purpose')
+  coaching_format      Int?                  // FK -> list_items.id (list_type='coaching_format')
   notes                String?               @db.Text
   attachment_filename  String?               @db.VarChar(255)
   attachment_path      String?               @db.VarChar(500)
@@ -525,7 +525,7 @@ model CoachingSession {
   created_at           DateTime              @default(now()) @db.DateTime(0)
   created_by           Int?
 
-  source_type            CoachingSourceType   @default(OTHER)
+  source_type            Int?                 // FK -> list_items.id (list_type='coaching_source')
   qa_audit_id            Int?
   required_action        String?              @db.Text
   kb_resource_id         Int?
@@ -1568,17 +1568,9 @@ enum AuditAssignmentTargetType {
 }
 
 
-enum CoachingPurpose {
-  WEEKLY
-  PERFORMANCE
-  ONBOARDING
-}
-
-enum CoachingFormat {
-  ONE_ON_ONE
-  SIDE_BY_SIDE
-  TEAM_SESSION
-}
+// CoachingPurpose / CoachingFormat enums removed in migration
+// 20260629150000_coaching_lists_to_listitem_fk — these fields are now INT
+// foreign keys into list_items (managed via List Management).
 
 enum CoachingSessionStatus {
   DRAFT
@@ -1590,15 +1582,6 @@ enum CoachingSessionStatus {
   FOLLOW_UP_REQUIRED
   CLOSED
   CANCELED
-}
-
-enum CoachingSourceType {
-  QA_AUDIT
-  MANAGER_OBSERVATION
-  TREND
-  DISPUTE
-  SCHEDULED
-  OTHER
 }
 
 enum SubmissionStatus {

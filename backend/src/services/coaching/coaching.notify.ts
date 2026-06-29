@@ -30,9 +30,23 @@ export async function notifyCoachingStatus(sessionId: number, status: string): P
 
   try {
     const [session] = await prisma.$queryRaw<any[]>(
-      Prisma.sql`SELECT * FROM coaching_sessions WHERE id = ${sessionId}`,
+      Prisma.sql`SELECT cs.*,
+                   lp.label AS coaching_purpose_label,
+                   lf.label AS coaching_format_label,
+                   ls.label AS source_type_label
+                 FROM coaching_sessions cs
+                 LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
+                 LEFT JOIN list_items lf ON lf.id = cs.coaching_format
+                 LEFT JOIN list_items ls ON ls.id = cs.source_type
+                 WHERE cs.id = ${sessionId}`,
     )
     if (!session) return
+
+    // coaching_purpose/format/source are list_items.id FKs — expose the resolved
+    // labels under the names the email templates render.
+    session.coaching_purpose = session.coaching_purpose_label ?? session.coaching_purpose
+    session.coaching_format  = session.coaching_format_label  ?? session.coaching_format
+    session.source_type      = session.source_type_label      ?? session.source_type
 
     const [csr, coach] = await Promise.all([
       prisma.user.findUnique({ where: { id: session.csr_id }, select: { id: true, username: true } }),

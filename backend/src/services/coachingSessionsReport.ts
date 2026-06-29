@@ -145,7 +145,8 @@ export function buildCoachingSessionsWhere(filters: CoachingSessionsFilters): Pr
     conditions.push(Prisma.sql`cs.csr_id = ${typeof filters.csr_id === 'string' ? parseInt(filters.csr_id) : filters.csr_id}`);
   }
   if (filters.status) conditions.push(Prisma.sql`cs.status = ${filters.status}`);
-  if (filters.coaching_purpose) conditions.push(Prisma.sql`cs.coaching_purpose = ${filters.coaching_purpose}`);
+  // coaching_purpose is now a list_items.id reference (List Management).
+  if (filters.coaching_purpose) conditions.push(Prisma.sql`cs.coaching_purpose = ${Number(filters.coaching_purpose)}`);
   if (filters.start_date) conditions.push(Prisma.sql`DATE(cs.session_date) >= ${filters.start_date}`);
   if (filters.end_date) conditions.push(Prisma.sql`DATE(cs.session_date) <= ${filters.end_date}`);
 
@@ -196,7 +197,7 @@ export async function fetchCoachingSessionsPage(
     `,
     prisma.$queryRaw<any[]>`
       SELECT
-        cs.id, cs.csr_id, u.username as csr_name, cs.session_date, cs.coaching_purpose, cs.notes, cs.status,
+        cs.id, cs.csr_id, u.username as csr_name, cs.session_date, lp.label as coaching_purpose, cs.notes, cs.status,
         cs.attachment_filename, cs.attachment_path, cs.attachment_size, cs.attachment_mime_type,
         cs.created_at, creator.username as created_by_name,
         GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ', ') as topics,
@@ -205,6 +206,7 @@ export async function fetchCoachingSessionsPage(
       JOIN users u ON cs.csr_id = u.id
       JOIN departments d ON u.department_id = d.id
       LEFT JOIN users creator ON cs.created_by = creator.id
+      LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
       LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
       LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
       ${whereClause}
@@ -243,7 +245,7 @@ export async function fetchAllCoachingSessions(
 
   return prisma.$queryRaw<any[]>`
     SELECT
-      cs.id, cs.session_date, cs.coaching_purpose, cs.notes, cs.status, cs.attachment_filename,
+      cs.id, cs.session_date, lp.label as coaching_purpose, cs.notes, cs.status, cs.attachment_filename,
       cs.created_at, cs.completed_at, cs.require_action_plan, cs.require_acknowledgment,
       cs.csr_acknowledged_at,
       u.username as csr_name, creator.username as created_by_name,
@@ -255,6 +257,7 @@ export async function fetchAllCoachingSessions(
     JOIN users u ON cs.csr_id = u.id
     JOIN departments d ON u.department_id = d.id
     LEFT JOIN users creator ON cs.created_by = creator.id
+    LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
     LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
     LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
     LEFT JOIN coaching_session_behavior_flags csbf ON csbf.coaching_session_id = cs.id
@@ -309,7 +312,7 @@ export function formatCoachingSessionRow(session: any): Record<string, string> {
     status: session.status
       ? session.status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c: string) => c.toUpperCase())
       : '',
-    coaching_purpose: (session.coaching_purpose || '').toUpperCase(),
+    coaching_purpose: session.coaching_purpose || '',
     csr_name: session.csr_name || '',
     topics: topicsValue,
     created_by_name: session.created_by_name || 'Unknown',

@@ -165,9 +165,11 @@ export class QCAnalyticsService {
       ),
       pool.execute<RowDataPacket[]>(
         `SELECT cs.id, DATE_FORMAT(cs.session_date,'%Y-%m-%d') AS date,
-           cs.coaching_purpose AS purpose, cs.coaching_format AS format, cs.status,
+           lp.label AS purpose, lf.label AS format, cs.status,
            GROUP_CONCAT(li_t.label ORDER BY li_t.label SEPARATOR '||') AS topics
          FROM coaching_sessions cs
+         LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
+         LEFT JOIN list_items lf ON lf.id = cs.coaching_format
          LEFT JOIN coaching_session_topics cst ON cst.coaching_session_id = cs.id
          LEFT JOIN list_items li_t ON li_t.id = cst.topic_id
          WHERE cs.csr_id = ? AND cs.created_at BETWEEN ? AND ?

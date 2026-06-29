@@ -105,9 +105,9 @@ export default function CoachingSessionFormPage() {
       csr_ids:               [s.csr_id],
       coach_id:              s.created_by   ?? user?.id ?? 0,
       session_date:          s.session_date?.slice(0, 16) ?? new Date().toISOString().slice(0, 16),
-      coaching_purpose:      s.coaching_purpose,
-      coaching_format:       s.coaching_format,
-      source_type:           s.source_type,
+      coaching_purpose:      s.coaching_purpose_id ?? '',
+      coaching_format:       s.coaching_format_id ?? '',
+      source_type:           s.source_type_id ?? '',
       notes:                 s.notes ?? '',
       topic_ids:             s.topic_ids ?? [],
       required_action:       s.required_action ?? '',
@@ -158,9 +158,9 @@ export default function CoachingSessionFormPage() {
     }
     fd.append('coach_id',               String(f.coach_id || user?.id || ''))
     fd.append('session_date',           f.session_date)
-    fd.append('coaching_purpose',       f.coaching_purpose)
-    fd.append('coaching_format',        f.coaching_format)
-    fd.append('source_type',            f.source_type)
+    fd.append('coaching_purpose',       String(f.coaching_purpose))
+    fd.append('coaching_format',        String(f.coaching_format))
+    fd.append('source_type',            String(f.source_type))
     fd.append('notes',                  f.notes)
     fd.append('topic_ids',              f.topic_ids.join(','))
     fd.append('required_action',        f.required_action)

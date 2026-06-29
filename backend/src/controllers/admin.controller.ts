@@ -557,6 +557,18 @@ export const exportCompletedForm = async (req: Request, res: Response): Promise<
 };
 
 /**
+ * Default coaching list_items.id for a list_type — the first active option by
+ * display order. Coaching purpose/format/source are List-Management-managed FKs
+ * with no stable keys, so the default is simply the top of the admin list.
+ */
+async function defaultCoachingListId(listType: string): Promise<number | null> {
+  const rows = await prisma.$queryRaw<{ id: number }[]>(
+    Prisma.sql`SELECT id FROM list_items WHERE list_type = ${listType} AND is_active = 1 ORDER BY sort_order ASC, id ASC LIMIT 1`
+  );
+  return rows[0]?.id ?? null;
+}
+
+/**
  * Create new coaching session
  * @route POST /api/admin/coaching-sessions
  */
@@ -564,8 +576,6 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
   try {
     const adminId = req.user?.user_id;
     let { csr_id, session_date, topic_ids, coaching_purpose, coaching_format, notes, status } = req.body;
-    coaching_purpose = coaching_purpose || 'WEEKLY';
-    coaching_format  = coaching_format  || 'ONE_ON_ONE';
     const attachment = req.file as Express.Multer.File | undefined;
 
     if (topic_ids !== undefined) {
@@ -670,13 +680,20 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
       }
     }
 
+    // coaching_purpose / coaching_format / source_type are list_items.id FKs.
+    // Use the provided ids, falling back to the first active option per list.
+    const purposeId = coaching_purpose ? parseInt(coaching_purpose) : await defaultCoachingListId('coaching_purpose');
+    const formatId  = coaching_format  ? parseInt(coaching_format)  : await defaultCoachingListId('coaching_format');
+    const sourceId  = await defaultCoachingListId('coaching_source');
+
     const newSession = await prisma.$transaction(async (tx) => {
       const session = await tx.coachingSession.create({
         data: {
           csr_id: parseInt(csr_id),
           session_date: new Date(session_date),
-          coaching_purpose: coaching_purpose || 'WEEKLY',
-          coaching_format:  coaching_format  || 'ONE_ON_ONE',
+          coaching_purpose: purposeId,
+          coaching_format:  formatId,
+          source_type:      sourceId,
           notes: notes || null,
           status,
           attachment_filename: attachmentData.filename,
@@ -1026,12 +1043,9 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
       return;
     }
 
-    if (coaching_purpose) {
-      const validCoachingPurposes = ['WEEKLY', 'PERFORMANCE', 'ONBOARDING'];
-      if (!validCoachingPurposes.includes(coaching_purpose)) {
-        res.status(400).json({ success: false, message: 'Invalid coaching purpose' });
-        return;
-      }
+    if (coaching_purpose && !(Number.isInteger(parseInt(coaching_purpose)) && parseInt(coaching_purpose) > 0)) {
+      res.status(400).json({ success: false, message: 'Invalid coaching purpose' });
+      return;
     }
 
     if (csr_id) {
@@ -1080,7 +1094,10 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
 
     if (csr_id !== undefined) data.csr_id = parseInt(csr_id);
     if (session_date !== undefined) data.session_date = new Date(session_date);
-    if (coaching_purpose !== undefined) { data.coaching_purpose = coaching_purpose; data.coaching_format = coaching_format || 'ONE_ON_ONE'; }
+    if (coaching_purpose !== undefined) {
+      data.coaching_purpose = parseInt(coaching_purpose);
+      data.coaching_format = coaching_format ? parseInt(coaching_format) : await defaultCoachingListId('coaching_format');
+    }
     if (notes !== undefined) data.notes = notes || null;
     if (status !== undefined) data.status = status;
 

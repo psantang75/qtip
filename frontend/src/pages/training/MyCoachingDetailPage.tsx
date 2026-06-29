@@ -15,12 +15,8 @@ import { LegacyImportBanner } from '@/components/common/LegacyImportBanner'
 import { useToast } from '@/hooks/use-toast'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
-import {
-  COACHING_PURPOSE_LABELS as PURPOSE_MAP,
-  COACHING_FORMAT_LABELS as FORMAT_MAP,
-  COACHING_STATUS_LABELS as STATUS_LABELS,
-  COACHING_SOURCE_LABELS as SOURCE_LABELS,
-} from '@/constants/labels'
+import { useCoachingLabels } from '@/hooks/useCoachingLabels'
+import { COACHING_STATUS_LABELS as STATUS_LABELS } from '@/constants/labels'
 
 import { Section, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow, TopicList } from './training-detail/layout'
 import { AttachmentCard } from '@/components/training/AttachmentCard'
@@ -35,6 +31,7 @@ export default function MyCoachingDetailPage() {
   const qc        = useQueryClient()
   const { toast } = useToast()
   const { user }  = useAuth()
+  const { purposeMap: PURPOSE_MAP, formatMap: FORMAT_MAP, sourceMap: SOURCE_LABELS } = useCoachingLabels()
 
   const [actionPlan,    setActionPlan]    = useState('')
   const [acknowledged,  setAcknowledged]  = useState(false)

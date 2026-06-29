@@ -37,6 +37,8 @@ interface CoachingFilterBarProps {
   agentOptions?: string[]
   selectedAgents?: string[]
   topicOptions: string[]
+  /** Format options resolved from List Management; defaults to hardcoded labels. */
+  formatOptions?: string[]
 }
 
 export function CoachingFilterBar({
@@ -49,6 +51,7 @@ export function CoachingFilterBar({
   agentOptions,
   selectedAgents,
   topicOptions,
+  formatOptions = FORMAT_OPTIONS,
 }: CoachingFilterBarProps) {
   const allExceptClosed = useMemo(() => STATUS_OPTIONS.filter(s => s !== 'Closed' && s !== 'Canceled'), [])
   const effectiveStatuses = useMemo(
@@ -80,7 +83,7 @@ export function CoachingFilterBar({
         width="w-[280px]"
       />
       <StagedMultiSelect
-        options={FORMAT_OPTIONS}
+        options={formatOptions}
         selected={values.formats}
         onApply={v => setMany({ formats: v.join(','), page: '1' })}
         placeholder="All Formats"

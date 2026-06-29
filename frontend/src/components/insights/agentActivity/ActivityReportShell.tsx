@@ -1,6 +1,6 @@
 import { InsightsFilterBar } from '@/components/insights'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
-import { SAMPLE_AGENTS, SAMPLE_BUSINESS_DAYS, SAMPLE_PRIOR_BUSINESS_DAYS, SAMPLE_PRIOR_DATE_RANGE } from './placeholderData'
+import { SAMPLE_AGENTS, SAMPLE_BUSINESS_DAYS, SAMPLE_PRIOR_BUSINESS_DAYS, SAMPLE_CURRENT_DATE_RANGE, SAMPLE_PRIOR_DATE_RANGE } from './placeholderData'
 
 type ActivityFilters = ReturnType<typeof useActivityFilters>
 
@@ -34,6 +34,8 @@ interface ActivityReportShellProps {
   dataThroughDate?: string | null
   /** Business days in the prior comparison range (defaults to the sample value). */
   priorBusinessDays?: number
+  /** Selected current period date range (defaults to the sample range). */
+  currentDateRange?: { start: string; end: string }
   /** Prior comparison date range (defaults to the sample range). */
   priorDateRange?: { start: string; end: string }
   /**
@@ -60,6 +62,7 @@ export default function ActivityReportShell({
   businessDaysTotal,
   dataThroughDate,
   priorBusinessDays = SAMPLE_PRIOR_BUSINESS_DAYS,
+  currentDateRange = SAMPLE_CURRENT_DATE_RANGE,
   priorDateRange = SAMPLE_PRIOR_DATE_RANGE,
   filters,
   availableUsers = SAMPLE_AGENTS,
@@ -96,6 +99,7 @@ export default function ActivityReportShell({
         businessDaysTotal={hideBusinessDays ? undefined : businessDaysTotal}
         dataThroughDate={hideBusinessDays ? undefined : dataThroughDate}
         priorBusinessDays={hideBusinessDays ? undefined : priorBusinessDays}
+        currentDateRange={hideBusinessDays ? undefined : currentDateRange}
         priorDateRange={hideBusinessDays ? undefined : priorDateRange}
         onReset={resetFilters}
       />

@@ -8,7 +8,7 @@ import { GenericListEditor } from './list-management/GenericListEditor'
 
 // ── List catalogue ────────────────────────────────────────────────────────────
 
-type ListTier = 'label-override' | 'dynamic'
+type ListTier = 'dynamic'
 
 interface ManagedList {
   key: string
@@ -38,9 +38,9 @@ const SECTIONS: ListSection[] = [
     label: 'Training',
     lists: [
       { key: 'topics',           label: 'Training Topics',  description: '', tier: 'dynamic',        implemented: true,  listType: 'training_topic'   },
-      { key: 'coaching_purpose', label: 'Coaching Purpose', description: '', tier: 'label-override', implemented: true,  listType: 'coaching_purpose' },
-      { key: 'coaching_format',  label: 'Coaching Format',  description: '', tier: 'label-override', implemented: true,  listType: 'coaching_format'  },
-      { key: 'coaching_source',  label: 'Coaching Source',  description: '', tier: 'label-override', implemented: true,  listType: 'coaching_source'  },
+      { key: 'coaching_purpose', label: 'Coaching Purpose', description: 'Purpose options selectable when creating a coaching session.', tier: 'dynamic', implemented: true,  listType: 'coaching_purpose' },
+      { key: 'coaching_format',  label: 'Coaching Format',  description: 'Format options selectable when creating a coaching session.',  tier: 'dynamic', implemented: true,  listType: 'coaching_format'  },
+      { key: 'coaching_source',  label: 'Coaching Source',  description: 'Source options selectable when creating a coaching session.',  tier: 'dynamic', implemented: true,  listType: 'coaching_source'  },
       { key: 'behavior_flags',   label: 'Behavior Flags',   description: '', tier: 'dynamic',        implemented: true,  listType: 'behavior_flag'    },
       { key: 'root_causes',      label: 'Root Causes',      description: 'Predefined root cause options selectable by trainers during coaching sessions.', tier: 'dynamic', implemented: true, listType: 'root_cause' },
       { key: 'support_needed',   label: 'Support Needed',   description: 'Predefined support options selectable by trainers during coaching sessions.',    tier: 'dynamic', implemented: true, listType: 'support_needed' },

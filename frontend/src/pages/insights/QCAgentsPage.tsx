@@ -227,6 +227,7 @@ function AdminAgentsList({
         showFormFilter selectedForms={forms} onFormsChange={setForms}
         availableForms={formOptions}
         businessDays={meta?.businessDays} priorBusinessDays={priorMeta?.businessDays}
+        currentDateRange={meta?.startDate ? { start: meta.startDate, end: meta.endDate } : undefined}
         priorDateRange={priorMeta?.startDate ? { start: priorMeta.startDate, end: priorMeta.endDate } : undefined}
         onReset={resetFilters}
       />

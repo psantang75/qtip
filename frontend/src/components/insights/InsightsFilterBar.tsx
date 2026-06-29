@@ -13,6 +13,7 @@ import { StickyFilterBar, StickyFilterField } from '@/components/common/StickyFi
 
 export const PERIOD_OPTIONS = [
   'Today',
+  'Yesterday',
   'Current Week',
   'Prior Week',
   'Current Month',
@@ -57,6 +58,8 @@ interface InsightsFilterBarProps {
   /** Latest date with data (ISO YYYY-MM-DD); shown as "(through MM-DD-YYYY)" when set. */
   dataThroughDate?: string | null
   priorBusinessDays?: number
+  /** Current period date range; rendered as "Current X to Y" in the Date Range row. */
+  currentDateRange?: { start: string; end: string }
   priorDateRange?: { start: string; end: string }
   onReset?: () => void
 }
@@ -87,11 +90,12 @@ export default function InsightsFilterBar({
   businessDaysTotal,
   dataThroughDate,
   priorBusinessDays,
+  currentDateRange,
   priorDateRange,
   onReset,
 }: InsightsFilterBarProps) {
   const isCustom = period === 'Custom'
-  const hasInfoRow = businessDays != null || priorDateRange
+  const hasInfoRow = businessDays != null || priorDateRange || currentDateRange
 
   // ISO (YYYY-MM-DD) -> MM-DD-YYYY, matching the Prior Date Range display.
   const fmtThrough = (iso: string) => {
@@ -104,25 +108,38 @@ export default function InsightsFilterBar({
       {businessDays != null && (
         <span className="flex items-center gap-1.5">
           <CalendarDays size={13} className="text-primary" />
-          Business Days:{' '}
+          <span>Business Days:</span>
+          <span className="font-medium text-slate-600">Current</span>
           <strong className="text-slate-700">
             {businessDays}{businessDaysTotal != null ? ` of ${businessDaysTotal}` : ''}
-          </strong>{' '}
-          current
-          {dataThroughDate ? <span className="text-slate-400">{` (through ${fmtThrough(dataThroughDate)})`}</span> : null}
-          {', '}
-          <strong className="text-slate-700">{priorBusinessDays ?? '…'}</strong> prior
+          </strong>
+          {dataThroughDate ? <span className="text-slate-400">{`(through ${fmtThrough(dataThroughDate)})`}</span> : null}
+          <span className="font-medium text-slate-600">Prior</span>
+          <strong className="text-slate-700">{priorBusinessDays ?? '…'}</strong>
         </span>
       )}
-      {priorDateRange && (
+      {(currentDateRange || priorDateRange) && (
         <span className="flex items-center gap-1.5 ml-2">
           <CalendarDays size={13} className="text-primary" />
           <span className="w-2.5 h-px bg-primary inline-block" />
           <CalendarDays size={13} className="text-primary" />
-          <span className="ml-1">Prior Date Range:</span>
-          <strong className="text-slate-700">{priorDateRange.start}</strong>
-          <span className="text-slate-400">to</span>
-          <strong className="text-slate-700">{priorDateRange.end}</strong>
+          <span className="ml-1">Date Range:</span>
+          {currentDateRange && (
+            <>
+              <span className="font-medium text-slate-600">Current</span>
+              <strong className="text-slate-700">{currentDateRange.start}</strong>
+              <span className="text-slate-400">to</span>
+              <strong className="text-slate-700">{currentDateRange.end}</strong>
+            </>
+          )}
+          {priorDateRange && (
+            <>
+              <span className="font-medium text-slate-600">Prior</span>
+              <strong className="text-slate-700">{priorDateRange.start}</strong>
+              <span className="text-slate-400">to</span>
+              <strong className="text-slate-700">{priorDateRange.end}</strong>
+            </>
+          )}
         </span>
       )}
     </>

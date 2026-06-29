@@ -454,6 +454,66 @@ export async function getQualityDeptComparison(
   }))
 }
 
+// QA Forms Below 90% — one row per finalized audit whose overall score is
+// under 90, listing the audited agent, the form, the interaction date, and the
+// score. Honors the page's dept/form/period filters. Interaction date prefers
+// the audited call's date, then the 'Interaction Date'/'Call Date' metadata
+// field (date_value, then raw text value), and finally falls back to the
+// submission (review) date so the column always shows a meaningful date.
+export async function getLowScoringAudits(
+  deptFilter: number[], formNames: string[], ranges: PeriodRanges,
+) {
+  const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
+  const dc = deptClause(deptFilter)
+  const fc = formClause(formNames)
+  // Resolve the effective score via a scalar subquery rather than a JOIN to
+  // score_snapshots: a submission can have more than one snapshot row, and a
+  // JOIN would emit a duplicate audit row per snapshot (inflating the list and
+  // colliding React keys). The subquery guarantees one row per submission.
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT s.id,
+       csr.id AS csr_user_id, csr.username AS agent,
+       f.form_name AS form,
+       COALESCE(s.total_score, (
+         SELECT ss.score FROM score_snapshots ss
+         WHERE ss.submission_id = s.id ORDER BY ss.id DESC LIMIT 1
+       )) AS score,
+       COALESCE(
+         DATE_FORMAT(c.call_date, '%Y-%m-%d'),
+         (
+           SELECT COALESCE(DATE_FORMAT(sm2.date_value, '%Y-%m-%d'), sm2.value)
+           FROM submission_metadata sm2
+           JOIN form_metadata_fields fmf2 ON sm2.field_id = fmf2.id
+           WHERE sm2.submission_id = s.id
+             AND fmf2.field_name IN ('Interaction Date', 'Call Date')
+           LIMIT 1
+         ),
+         DATE_FORMAT(s.submitted_at, '%Y-%m-%d')
+       ) AS interaction_date
+     FROM submissions s
+     LEFT JOIN calls c ON c.id = s.call_id
+     JOIN forms f ON s.form_id = f.id
+     ${CSR_JOIN}
+     WHERE s.status = 'FINALIZED'
+       AND s.submitted_at BETWEEN ? AND ?
+       AND COALESCE(s.total_score, (
+         SELECT ss.score FROM score_snapshots ss
+         WHERE ss.submission_id = s.id ORDER BY ss.id DESC LIMIT 1
+       )) < 90
+       ${dc.sql} ${fc.sql}
+     ORDER BY score ASC, s.submitted_at DESC`,
+    [s, e, ...dc.params, ...fc.params],
+  )
+  return rows.map(r => ({
+    id:              r.id as number,
+    csrUserId:       r.csr_user_id as number,
+    agent:           r.agent as string,
+    form:            r.form as string,
+    interactionDate: (r.interaction_date as string | null) ?? null,
+    score:           r.score != null ? Math.round(parseFloat(r.score) * 10) / 10 : null,
+  }))
+}
+
 // QA Forms Completed — one row per (QA auditor, CSR, form) with the count of
 // finalized audits and the average QA score, honoring the page's dept/form/
 // period filters. Drives the flat table above Department Comparison on the

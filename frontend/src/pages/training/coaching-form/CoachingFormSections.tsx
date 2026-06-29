@@ -16,15 +16,10 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu'
 import type {
-  CoachingPurpose, CoachingFormat, CoachingSourceType, TrainingResource, LibraryQuiz,
+  TrainingResource, LibraryQuiz,
 } from '@/services/trainingService'
 import type { ListItem } from '@/services/listService'
 import type { CoachingFormState, CoachingFormErrors } from './types'
-import {
-  COACHING_PURPOSE_LABELS,
-  COACHING_FORMAT_LABELS,
-  COACHING_SOURCE_LABELS,
-} from '@/constants/labels'
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -166,41 +161,31 @@ function TopicMultiSelect({ topicItems, selectedIds, onToggle, error }: {
 
 // ── Section 1: Session (Info + Notes combined) ───────────────────────────────
 
-const NOTES_PLACEHOLDER: Record<CoachingPurpose, string> = {
-  WEEKLY:      'Summarize performance trends, strengths, and focus areas...',
-  PERFORMANCE: 'Describe the specific gap or pattern being addressed...',
-  ONBOARDING:  'Describe the onboarding topic and key points covered...',
-}
+const NOTES_PLACEHOLDER = 'Summarize topics covered, strengths, focus areas, and next steps…'
+
+// Coaching purpose/format/source are List-Management-managed list items
+// (list_items.id is the stored value).
+type CoachingListItem = { id: number; label: string }
 
 interface S1Props {
   form: CoachingFormState; errors: CoachingFormErrors
   csrs: { id: number; name: string; department: string }[]  // prop name kept for API compat
   coaches: { id: number; name: string }[]
   topicItems?: ListItem[]
-  purposeItems?: { item_key?: string; label: string }[]
-  formatItems?:  { item_key?: string; label: string }[]
-  sourceItems?:  { item_key?: string; label: string }[]
+  purposeItems?: CoachingListItem[]
+  formatItems?:  CoachingListItem[]
+  sourceItems?:  CoachingListItem[]
   isEdit?: boolean
   update: <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
   toggleTopic: (id: number) => void
 }
 
-const DEFAULT_PURPOSES = Object.entries(COACHING_PURPOSE_LABELS).map(
-  ([item_key, label]) => ({ item_key, label }),
-)
-const DEFAULT_FORMATS = Object.entries(COACHING_FORMAT_LABELS).map(
-  ([item_key, label]) => ({ item_key, label }),
-)
-const DEFAULT_SOURCES = Object.entries(COACHING_SOURCE_LABELS).map(
-  ([item_key, label]) => ({ item_key, label }),
-)
-
 export function SessionSection({ form, errors, csrs, coaches, topicItems = [],
   purposeItems, formatItems, sourceItems,
   isEdit, update, toggleTopic }: S1Props) {
-  const purposes = (purposeItems?.length ? purposeItems : DEFAULT_PURPOSES)
-  const formats  = (formatItems?.length  ? formatItems  : DEFAULT_FORMATS)
-  const sources  = (sourceItems?.length  ? sourceItems  : DEFAULT_SOURCES)
+  const purposes = purposeItems ?? []
+  const formats  = formatItems ?? []
+  const sources  = sourceItems ?? []
   const toggleAgent = (agentId: number) => {
     const next = form.csr_ids.includes(agentId)
       ? form.csr_ids.filter(x => x !== agentId)
@@ -261,37 +246,37 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems = [],
             onChange={e => update('session_date', e.target.value)} />
         </Field>
         <Field label="Coaching Purpose" required error={errors.coaching_purpose}>
-          <Select value={form.coaching_purpose} onValueChange={v => update('coaching_purpose', v as CoachingPurpose)}>
+          <Select value={form.coaching_purpose ? String(form.coaching_purpose) : ''} onValueChange={v => update('coaching_purpose', Number(v))}>
             <SelectTrigger className="h-9 text-[13px]">
               <SelectValue placeholder="Select purpose…" />
             </SelectTrigger>
             <SelectContent>
-              {purposes.filter(p => p.item_key).map(p => (
-                <SelectItem key={p.item_key} value={p.item_key!}>{p.label}</SelectItem>
+              {purposes.map(p => (
+                <SelectItem key={p.id} value={String(p.id)}>{p.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </Field>
         <Field label="Source" required error={errors.source_type}>
-          <Select value={form.source_type} onValueChange={v => update('source_type', v as CoachingSourceType)}>
+          <Select value={form.source_type ? String(form.source_type) : ''} onValueChange={v => update('source_type', Number(v))}>
             <SelectTrigger className="h-9 text-[13px]">
               <SelectValue placeholder="Select source…" />
             </SelectTrigger>
             <SelectContent>
-              {sources.filter(s => s.item_key).map(s => (
-                <SelectItem key={s.item_key} value={s.item_key!}>{s.label}</SelectItem>
+              {sources.map(s => (
+                <SelectItem key={s.id} value={String(s.id)}>{s.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </Field>
         <Field label="Coaching Format" required error={errors.coaching_format}>
-          <Select value={form.coaching_format} onValueChange={v => update('coaching_format', v as CoachingFormat)}>
+          <Select value={form.coaching_format ? String(form.coaching_format) : ''} onValueChange={v => update('coaching_format', Number(v))}>
             <SelectTrigger className="h-9 text-[13px]">
               <SelectValue placeholder="Select format…" />
             </SelectTrigger>
             <SelectContent>
-              {formats.filter(f => f.item_key).map(f => (
-                <SelectItem key={f.item_key} value={f.item_key!}>{f.label}</SelectItem>
+              {formats.map(f => (
+                <SelectItem key={f.id} value={String(f.id)}>{f.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -319,7 +304,7 @@ export function SessionSection({ form, errors, csrs, coaches, topicItems = [],
         </Field>
         <Field label="Notes" required error={errors.notes}>
           <RichTextEditor value={form.notes}
-            placeholder={form.coaching_purpose ? NOTES_PLACEHOLDER[form.coaching_purpose as CoachingPurpose] : 'Enter session notes…'}
+            placeholder={NOTES_PLACEHOLDER}
             onChange={html => update('notes', html)}
           />
         </Field>

@@ -180,6 +180,7 @@ export default function AAMarginPage() {
       businessDaysTotal={data?.businessDaysTotal}
       dataThroughDate={data?.dataThroughDate}
       priorBusinessDays={data?.priorBusinessDays}
+      currentDateRange={data?.currentDateRange ?? undefined}
       priorDateRange={data?.priorDateRange ?? undefined}
       live
     >

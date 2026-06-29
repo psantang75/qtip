@@ -73,6 +73,19 @@ interface RecentSessionRow {
  */
 const roleCondition = buildCoachingSessionScope;
 
+/**
+ * Validate that `id` is an active list_items row of the given coaching list_type
+ * ('coaching_purpose' | 'coaching_format' | 'coaching_source'). These three
+ * fields are List-Management-managed FKs into list_items.id.
+ */
+async function isValidCoachingListId(id: number, listType: string): Promise<boolean> {
+  if (!Number.isInteger(id) || id <= 0) return false;
+  const rows = await prisma.$queryRaw<{ id: number }[]>(
+    Prisma.sql`SELECT id FROM list_items WHERE id = ${id} AND list_type = ${listType} AND is_active = 1 LIMIT 1`
+  );
+  return rows.length > 0;
+}
+
 export const getCoachingSessions = async (req: AuthReq, res: Response) => {
   try {
     const userId = req.user!.user_id;
@@ -86,8 +99,8 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
 
     if (csr_id)          conditions.push(Prisma.sql`cs.csr_id = ${parseInt(csr_id as string)}`);
     if (status)          conditions.push(Prisma.sql`cs.status = ${status}`);
-    if (coaching_purpose) conditions.push(Prisma.sql`cs.coaching_purpose = ${coaching_purpose}`);
-    if (coaching_format)  conditions.push(Prisma.sql`cs.coaching_format = ${coaching_format}`);
+    if (coaching_purpose) conditions.push(Prisma.sql`cs.coaching_purpose = ${parseInt(coaching_purpose as string)}`);
+    if (coaching_format)  conditions.push(Prisma.sql`cs.coaching_format = ${parseInt(coaching_format as string)}`);
     if (date_from) conditions.push(Prisma.sql`DATE(cs.session_date) >= ${date_from}`);
     if (date_to) conditions.push(Prisma.sql`DATE(cs.session_date) <= ${date_to}`);
     if (overdue_only === 'true') {
@@ -116,7 +129,9 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
       ),
       prisma.$queryRaw<any[]>(
         Prisma.sql`
-          SELECT cs.id, cs.batch_id, cs.csr_id, u.username as csr_name, cs.coaching_purpose, cs.coaching_format, cs.source_type,
+          SELECT cs.id, cs.batch_id, cs.csr_id, u.username as csr_name,
+            lp.label as coaching_purpose, lf.label as coaching_format, ls.label as source_type,
+            cs.coaching_purpose as coaching_purpose_id, cs.coaching_format as coaching_format_id, cs.source_type as source_type_id,
             cs.status, cs.session_date, cs.due_date, cs.follow_up_date, cs.follow_up_required,
             cs.notes, cs.created_at, cb.username as created_by_name, cs.attachment_filename,
             GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ',') as topics,
@@ -133,6 +148,9 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
           FROM coaching_sessions cs
           JOIN users u ON cs.csr_id = u.id
           LEFT JOIN users cb ON cs.created_by = cb.id
+          LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
+          LEFT JOIN list_items lf ON lf.id = cs.coaching_format
+          LEFT JOIN list_items ls ON ls.id = cs.source_type
           LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
           LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
           ${whereClause}
@@ -172,12 +190,16 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
       Prisma.sql`
         SELECT cs.*, u.username as csr_name, u.email as csr_email,
           d.department_name as csr_department, cb.username as created_by_name,
+          lp.label as coaching_purpose_label, lf.label as coaching_format_label, ls.label as source_type_label,
           GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ',') as topics,
           GROUP_CONCAT(DISTINCT li_t.id ORDER BY li_t.id SEPARATOR ',') as topic_ids
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
         LEFT JOIN departments d ON u.department_id = d.id
         LEFT JOIN users cb ON cs.created_by = cb.id
+        LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
+        LEFT JOIN list_items lf ON lf.id = cs.coaching_format
+        LEFT JOIN list_items ls ON ls.id = cs.source_type
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
         LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         ${whereClause}
@@ -192,6 +214,14 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
       require_acknowledgment: Boolean(Number(rows[0].require_acknowledgment)),
       require_action_plan:    Boolean(Number(rows[0].require_action_plan)),
       follow_up_required:     Boolean(Number(rows[0].follow_up_required)),
+      // Coaching purpose/format/source are list_items.id FKs. Expose the numeric
+      // id (for the edit form) plus the resolved label (for display).
+      coaching_purpose_id: rows[0].coaching_purpose,
+      coaching_format_id:  rows[0].coaching_format,
+      source_type_id:      rows[0].source_type,
+      coaching_purpose: rows[0].coaching_purpose_label ?? rows[0].coaching_purpose,
+      coaching_format:  rows[0].coaching_format_label  ?? rows[0].coaching_format,
+      source_type:      rows[0].source_type_label      ?? rows[0].source_type,
       topics:    rows[0].topics    ? rows[0].topics.split(',')            : [],
       topic_ids: rows[0].topic_ids ? rows[0].topic_ids.split(',').map(Number) : [],
     };
@@ -234,9 +264,11 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
       ),
       prisma.$queryRaw<any[]>(
         Prisma.sql`
-          SELECT cs2.id, cs2.session_date, cs2.coaching_purpose, cs2.coaching_format, cs2.status,
+          SELECT cs2.id, cs2.session_date, lp2.label as coaching_purpose, lf2.label as coaching_format, cs2.status,
             GROUP_CONCAT(DISTINCT li_t2.label ORDER BY li_t2.label SEPARATOR ',') as topics
           FROM coaching_sessions cs2
+          LEFT JOIN list_items lp2 ON lp2.id = cs2.coaching_purpose
+          LEFT JOIN list_items lf2 ON lf2.id = cs2.coaching_format
           LEFT JOIN coaching_session_topics cst2 ON cs2.id = cst2.coaching_session_id
           LEFT JOIN list_items li_t2 ON cst2.topic_id = li_t2.id
           WHERE cs2.csr_id = ${session.csr_id} AND cs2.id != ${sessionId}
@@ -331,6 +363,15 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
     }
     if (!topic_ids.length) return res.status(400).json({ success: false, message: 'At least one topic is required' });
 
+    // coaching_purpose / coaching_format / source_type are list_items.id references
+    // (List Management). Validate each id belongs to the right active list.
+    const purposeId = parseInt(coaching_purpose);
+    const formatId  = parseInt(coaching_format);
+    const sourceId  = parseInt(source_type);
+    if (!(await isValidCoachingListId(purposeId, 'coaching_purpose'))) return res.status(400).json({ success: false, message: 'Invalid coaching purpose' });
+    if (!(await isValidCoachingListId(formatId,  'coaching_format')))  return res.status(400).json({ success: false, message: 'Invalid coaching format' });
+    if (!(await isValidCoachingListId(sourceId,  'coaching_source')))  return res.status(400).json({ success: false, message: 'Invalid coaching source' });
+
     const resolvedCoachId = coach_id ? parseInt(coach_id) : userId;
     if (coach_id && parseInt(coach_id) !== userId) {
       const coachCheck = await prisma.$queryRaw<any[]>(
@@ -370,7 +411,7 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
              internal_notes, behavior_flags,
              attachment_filename, attachment_path, attachment_size, attachment_mime_type, created_by)
             VALUES
-            (${batchId}, ${csrId}, ${session_date}, ${coaching_purpose}, ${coaching_format}, ${source_type}, ${notes || null}, 'DRAFT',
+            (${batchId}, ${csrId}, ${session_date}, ${purposeId}, ${formatId}, ${sourceId}, ${notes || null}, 'DRAFT',
              ${required_action || null}, ${kb_url || null},
              ${require_acknowledgment === 'false' || require_acknowledgment === false ? 0 : 1},
              ${require_action_plan === 'false' || require_action_plan === false ? 0 : 1},
@@ -462,9 +503,21 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
 
     const parts: Prisma.Sql[] = [];
     if (session_date     !== undefined) parts.push(Prisma.sql`session_date = ${session_date}`);
-    if (coaching_purpose !== undefined) parts.push(Prisma.sql`coaching_purpose = ${coaching_purpose}`);
-    if (coaching_format  !== undefined) parts.push(Prisma.sql`coaching_format = ${coaching_format}`);
-    if (source_type      !== undefined) parts.push(Prisma.sql`source_type = ${source_type}`);
+    if (coaching_purpose !== undefined) {
+      const purposeId = parseInt(coaching_purpose);
+      if (!(await isValidCoachingListId(purposeId, 'coaching_purpose'))) return res.status(400).json({ success: false, message: 'Invalid coaching purpose' });
+      parts.push(Prisma.sql`coaching_purpose = ${purposeId}`);
+    }
+    if (coaching_format !== undefined) {
+      const formatId = parseInt(coaching_format);
+      if (!(await isValidCoachingListId(formatId, 'coaching_format'))) return res.status(400).json({ success: false, message: 'Invalid coaching format' });
+      parts.push(Prisma.sql`coaching_format = ${formatId}`);
+    }
+    if (source_type !== undefined) {
+      const sourceId = parseInt(source_type);
+      if (!(await isValidCoachingListId(sourceId, 'coaching_source'))) return res.status(400).json({ success: false, message: 'Invalid coaching source' });
+      parts.push(Prisma.sql`source_type = ${sourceId}`);
+    }
     if (notes !== undefined) parts.push(Prisma.sql`notes = ${notes || null}`);
     if (required_action !== undefined) parts.push(Prisma.sql`required_action = ${required_action || null}`);
     if (kb_url !== undefined) parts.push(Prisma.sql`kb_url = ${kb_url || null}`);
@@ -810,10 +863,12 @@ export const getCSRCoachingHistory = async (req: AuthReq, res: Response) => {
 
     const sessions = await prisma.$queryRaw<any[]>(
       Prisma.sql`
-        SELECT cs.id, cs.session_date, cs.coaching_purpose, cs.coaching_format, cs.status,
+        SELECT cs.id, cs.session_date, lp.label as coaching_purpose, lf.label as coaching_format, cs.status,
           GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ',') as topics
         FROM coaching_sessions cs
         JOIN users u ON cs.csr_id = u.id
+        LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
+        LEFT JOIN list_items lf ON lf.id = cs.coaching_format
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
         LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         ${whereClause}

@@ -53,8 +53,9 @@ export const getReportsSummary = async (req: AuthReq, res: Response) => {
       if (ids.length) conditions.push(Prisma.sql`cs.csr_id IN (${Prisma.join(ids)})`);
     }
     if (coaching_types) {
-      const types = (coaching_types as string).split(',').filter(Boolean);
-      if (types.length) conditions.push(Prisma.sql`cs.coaching_purpose IN (${Prisma.join(types)})`);
+      // coaching_purpose is now a list_items.id reference (List Management).
+      const typeIds = (coaching_types as string).split(',').map(Number).filter(Boolean);
+      if (typeIds.length) conditions.push(Prisma.sql`cs.coaching_purpose IN (${Prisma.join(typeIds)})`);
     }
     if (topic_ids) {
       const ids = (topic_ids as string).split(',').map(Number).filter(Boolean);
@@ -79,7 +80,7 @@ export const getReportsSummary = async (req: AuthReq, res: Response) => {
         Prisma.sql`SELECT cs.status, COUNT(*) as count ${csJoin} ${whereClause} GROUP BY cs.status`
       ),
       prisma.$queryRaw<any[]>(
-        Prisma.sql`SELECT cs.coaching_purpose, COUNT(*) as count ${csJoin} ${whereClause} GROUP BY cs.coaching_purpose ORDER BY count DESC`
+        Prisma.sql`SELECT lp.label as coaching_purpose, COUNT(*) as count ${csJoin} LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose ${whereClause} GROUP BY cs.coaching_purpose, lp.label ORDER BY count DESC`
       ),
       prisma.$queryRaw<any[]>(
         Prisma.sql`

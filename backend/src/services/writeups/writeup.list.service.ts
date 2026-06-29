@@ -190,10 +190,11 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
   const linkedCoachingRaw = writeUp.linked_coaching_id
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? await prisma.$queryRaw<any[]>(Prisma.sql`
-        SELECT cs.id, cs.coaching_purpose, cs.status, cs.session_date,
+        SELECT cs.id, lp.label as coaching_purpose, cs.status, cs.session_date,
           SUBSTRING(cs.notes, 1, 500) as notes,
           GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR '~|~') as topic_names
         FROM coaching_sessions cs
+        LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
         LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
         LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
         WHERE cs.id = ${writeUp.linked_coaching_id}
@@ -215,7 +216,7 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
     prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT pd.reference_type, pd.reference_id,
         wu.document_type, wu.status as wu_status, wu.meeting_date,
-        cs.coaching_purpose, cs.status as cs_status, cs.session_date,
+        lp.label as coaching_purpose, cs.status as cs_status, cs.session_date,
         SUBSTRING(cs.notes, 1, 500) as cs_notes,
         GROUP_CONCAT(DISTINCT wuv.policy_violated ORDER BY wuv.policy_violated SEPARATOR '~|~') as policies_violated,
         GROUP_CONCAT(DISTINCT SUBSTRING(wui.description, 1, 200) SEPARATOR '~|~') as incident_descriptions,
@@ -225,6 +226,7 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
       LEFT JOIN write_up_incidents wui  ON wu.id = wui.write_up_id
       LEFT JOIN write_up_violations wuv ON wui.id = wuv.incident_id
       LEFT JOIN coaching_sessions cs    ON pd.reference_type = 'coaching_session' AND pd.reference_id = cs.id
+      LEFT JOIN list_items lp           ON lp.id = cs.coaching_purpose
       LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
       LEFT JOIN list_items li_t         ON cst.topic_id = li_t.id
       WHERE pd.write_up_id = ${writeUpId}
@@ -308,10 +310,11 @@ export async function getPriorDiscipline(csrId: number): Promise<{
     `),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     prisma.$queryRaw<any[]>(Prisma.sql`
-      SELECT cs.id, cs.session_date, cs.coaching_purpose, cs.status,
+      SELECT cs.id, cs.session_date, lp.label as coaching_purpose, cs.status,
         SUBSTRING(cs.notes, 1, 500) as notes,
         GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR '~|~') as topic_names
       FROM coaching_sessions cs
+      LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
       LEFT JOIN coaching_session_topics cst ON cs.id = cst.coaching_session_id
       LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
       WHERE cs.csr_id = ${csrId}

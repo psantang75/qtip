@@ -41,7 +41,7 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     source:       'submissions, score_snapshots, submission_metadata (CSR field)',
   },
   audits_assigned: {
-    code: 'audits_assigned', name: 'Audits Assigned',
+    code: 'audits_assigned', name: 'Audit Goal',
     format: 'NUMBER', direction: 'NEUTRAL',
     scope: 'non_filtered',
     description:  'Expected number of audits in the selected period. Calculated as the global pace target (audits per business day, set in Thresholds) multiplied by the number of business days in the period.',
@@ -177,6 +177,14 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     source:       'submissions, departments, disputes, submission_metadata',
   },
   // ── Coaching (10) ─────────────────────────────────────────────────────────
+  coaching_session_goal: {
+    code: 'coaching_session_goal', name: 'Sessions Goal',
+    format: 'NUMBER', direction: 'NEUTRAL',
+    scope: 'department',
+    description:  'Target number of coaching sessions for the period — one session per active agent per week. The agent count honors the active Department filter; the number of weeks is derived from the business calendar (business days ÷ 5).',
+    formulaPlain: 'active_agents (in selected departments) × (business_days_in_period ÷ 5), rounded',
+    source:       'users (active agents), business_calendar_days',
+  },
   coaching_sessions_assigned: {
     code: 'coaching_sessions_assigned', name: 'Sessions Assigned',
     format: 'NUMBER', direction: 'NEUTRAL',
@@ -240,14 +248,6 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     description:  'Of coaching sessions that required a follow-up, the share completed on or before the follow-up date.',
     formulaPlain: 'COUNT(sessions follow_up_required AND completed_at ≤ follow_up_date) / COUNT(sessions follow_up_required) × 100',
     source:       'coaching_sessions',
-  },
-  time_to_coaching: {
-    code: 'time_to_coaching', name: 'Time to Coaching',
-    format: 'NUMBER', direction: 'DOWN_IS_GOOD', goal: 5, warn: 10, crit: 21,
-    scope: 'department',
-    description:  'Average days from when an audit was submitted to when its coaching session was created (audit-sourced sessions only).',
-    formulaPlain: "AVG(DATEDIFF(coaching.created_at, submission.submitted_at)) WHERE source_type = 'QA_AUDIT' AND session_date IN range",
-    source:       'coaching_sessions, submissions',
   },
   coaching_status_distribution: {
     code: 'coaching_status_distribution', name: 'Coaching Sessions by Status',

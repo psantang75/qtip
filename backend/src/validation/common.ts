@@ -92,12 +92,7 @@ export const COACHING_SESSION_STATUSES = [
 export type CoachingSessionStatus = typeof COACHING_SESSION_STATUSES[number]
 export const CoachingSessionStatusSchema = z.enum(COACHING_SESSION_STATUSES)
 
-/** Mirrors Prisma enum `CoachingPurpose`. */
-export const COACHING_PURPOSES = ['WEEKLY', 'PERFORMANCE', 'ONBOARDING'] as const
-export type CoachingPurpose = typeof COACHING_PURPOSES[number]
-export const CoachingPurposeSchema = z.enum(COACHING_PURPOSES)
-
-/** Mirrors Prisma enum `CoachingFormat`. */
-export const COACHING_FORMATS = ['ONE_ON_ONE', 'SIDE_BY_SIDE', 'TEAM_SESSION'] as const
-export type CoachingFormat = typeof COACHING_FORMATS[number]
-export const CoachingFormatSchema = z.enum(COACHING_FORMATS)
+// Coaching purpose / format / source are now list_items.id references managed
+// via List Management (migration 20260629150000). Filters accept a numeric id.
+export const CoachingPurposeSchema = z.coerce.number().int().positive()
+export const CoachingFormatSchema = z.coerce.number().int().positive()

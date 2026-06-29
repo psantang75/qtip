@@ -29,11 +29,9 @@ import { COACHING_PURPOSE_LABELS, COACHING_STATUS_LABELS, CLIENT_FETCH_LIMIT } f
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TYPE_COLORS: Record<string, string> = {
-  WEEKLY:      'var(--color-chart-blue,   #60a5fa)',
-  PERFORMANCE: 'var(--color-chart-amber,  #fbbf24)',
-  ONBOARDING:  'var(--color-chart-teal,   #2dd4bf)',
-}
+// Coaching purpose is now an admin-managed list, so colors are assigned from a
+// palette by index rather than keyed to fixed enum values.
+const TYPE_PALETTE = ['#60a5fa', '#fbbf24', '#2dd4bf', '#6366f1', '#f472b6', '#34d399', '#f59e0b', '#a78bfa']
 const STATUS_COLORS: Record<string, string> = {
   DRAFT:               'var(--color-chart-slate,  #94a3b8)',
   SCHEDULED:           'var(--color-chart-indigo, #6366f1)',
@@ -240,7 +238,7 @@ export default function TrainingReportsPage() {
                   <Tooltip />
                   <Bar dataKey="count" radius={[3, 3, 0, 0]} name="Sessions">
                     {typeData.map((entry, idx) => (
-                      <Cell key={idx} fill={TYPE_COLORS[entry.type] ?? '#94a3b8'} />
+                      <Cell key={idx} fill={TYPE_PALETTE[idx % TYPE_PALETTE.length]} />
                     ))}
                   </Bar>
                 </BarChart>

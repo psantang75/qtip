@@ -23,12 +23,11 @@ const inp = 'h-8 px-2 border border-slate-200 rounded-md text-[13px] focus:outli
 
 // ── Sortable list item ────────────────────────────────────────────────────────
 
-function SortableListItem({ item, onSave, onToggle, onDelete, showItemKey, availableCategories = [] }: {
+function SortableListItem({ item, onSave, onToggle, onDelete, availableCategories = [] }: {
   item: ListItem
   onSave: (id: number, label: string, category: string) => void
   onToggle: (id: number) => void
   onDelete: (id: number) => void
-  showItemKey?: boolean
   availableCategories?: string[]
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
@@ -73,7 +72,6 @@ function SortableListItem({ item, onSave, onToggle, onDelete, showItemKey, avail
         <GripVertical className="h-4 w-4" />
       </Button>
       <span className="text-[13px] text-slate-700 flex-1">{item.label}</span>
-      {showItemKey && item.item_key && <span className="text-[11px] text-slate-400 font-mono">{item.item_key}</span>}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)} className="h-8 w-8 p-0 text-slate-400 hover:text-primary"><Pencil className="h-3.5 w-3.5" /></Button>
         <Button type="button" variant="ghost" size="sm" onClick={() => onToggle(item.id)} className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600">
@@ -96,8 +94,8 @@ function SortableListItem({ item, onSave, onToggle, onDelete, showItemKey, avail
 // ── Category block ────────────────────────────────────────────────────────────
 
 function CategoryBlock({ cat, items, addingIn, onStartAdd, onAdd, onCloseAdd,
-  onSaveItem, onToggleItem, onDeleteItem, onReorderItems, onRemoveCategory, dragHandleProps, showItemKey, availableCategories = [] }: {
-  cat: string; items: ListItem[]; showItemKey?: boolean; availableCategories?: string[]
+  onSaveItem, onToggleItem, onDeleteItem, onReorderItems, onRemoveCategory, dragHandleProps, availableCategories = [] }: {
+  cat: string; items: ListItem[]; availableCategories?: string[]
   addingIn: string | null
   onStartAdd: (cat: string) => void; onAdd: (label: string) => void; onCloseAdd: () => void
   onSaveItem: (id: number, label: string, category: string) => void
@@ -150,7 +148,7 @@ function CategoryBlock({ cat, items, addingIn, onStartAdd, onAdd, onCloseAdd,
           modifiers={[restrictToVerticalAxis, restrictToParentElement]} onDragEnd={handleItemDragEnd}>
           <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
             {items.map(item => (
-              <SortableListItem key={item.id} item={item} showItemKey={showItemKey}
+              <SortableListItem key={item.id} item={item}
                 availableCategories={availableCategories}
                 onSave={onSaveItem} onToggle={onToggleItem} onDelete={onDeleteItem} />
             ))}
@@ -186,11 +184,10 @@ function SortableCategoryWrapper(props: Omit<Parameters<typeof CategoryBlock>[0]
 
 // ── Uncategorized sortable block ──────────────────────────────────────────────
 
-export function UncategorizedBlock({ uncategorized, categories, items, showItemKey, commit, onSave, onToggle, onDelete }: {
+export function UncategorizedBlock({ uncategorized, categories, items, commit, onSave, onToggle, onDelete }: {
   uncategorized: ListItem[]
   categories: string[]
   items: ListItem[]
-  showItemKey?: boolean
   commit: (newItems: ListItem[]) => void
   onSave: (id: number, label: string, category: string) => void
   onToggle: (id: number) => void
@@ -223,7 +220,7 @@ export function UncategorizedBlock({ uncategorized, categories, items, showItemK
         <SortableContext items={uncategorized.map(i => i.id)} strategy={verticalListSortingStrategy}>
           <div className="px-2 py-1 space-y-0.5">
             {uncategorized.map(item => (
-              <SortableListItem key={item.id} item={item} showItemKey={showItemKey}
+              <SortableListItem key={item.id} item={item}
                 availableCategories={categories}
                 onSave={onSave} onToggle={onToggle} onDelete={onDelete} />
             ))}
@@ -252,7 +249,6 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
     queryFn:  () => listService.getItems(listType, true),
   })
   const items = localItems ?? serverItems
-  const showItemKey = items.some(i => i.item_key)
 
   const persistedCats = useMemo(() =>
     [...new Set(items.filter(i => i.category).map(i => i.category!))], [items])
@@ -384,7 +380,7 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
             <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
               <div className="px-2 py-1 space-y-0.5">
                 {items.map(item => (
-                  <SortableListItem key={item.id} item={item} showItemKey={showItemKey}
+                  <SortableListItem key={item.id} item={item}
                     availableCategories={categories}
                     onSave={(id, label, category) => saveMut.mutate({ id, label, category })}
                     onToggle={id => toggleMut.mutate(id)}
@@ -403,7 +399,7 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
             modifiers={[restrictToVerticalAxis]} onDragEnd={handleCatDragEnd}>
             <SortableContext items={categories.map(c => `cat:${c}`)} strategy={verticalListSortingStrategy}>
               {categories.map(cat => (
-                <SortableCategoryWrapper key={cat} cat={cat} showItemKey={showItemKey}
+                <SortableCategoryWrapper key={cat} cat={cat}
                   items={items.filter(i => i.category === cat)} addingIn={addingIn}
                   onStartAdd={setAddingIn}
                   onAdd={label => { addMut.mutate({ label, category: cat }); setPendingCategories(prev => prev.filter(c => c !== cat)); setAddingIn(null) }}
@@ -418,7 +414,7 @@ export function GenericListEditor({ listType, listLabel }: { listType: string; l
             </SortableContext>
             {uncategorized.length > 0 && (
               <UncategorizedBlock uncategorized={uncategorized} categories={categories} items={items}
-                showItemKey={showItemKey} commit={commit}
+                commit={commit}
                 onSave={(id, label, category) => saveMut.mutate({ id, label, category })}
                 onToggle={id => toggleMut.mutate(id)}
                 onDelete={id => deleteMut.mutate(id)}

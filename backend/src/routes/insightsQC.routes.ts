@@ -4,7 +4,7 @@ import {
   getQCAgents, getQCAgentProfile, getQCAgentFull,
   getFilterOptions,
   getScoreDistribution, getCategoryScores, getMissedQuestions, getQualityDeptComparison, getQAFormsCompleted, getFormScores,
-  getFormAgentBreakdown, getCategoryAgentBreakdown,
+  getLowScoringAudits, getFormAgentBreakdown, getCategoryAgentBreakdown,
   getCoachingTopics, getRepeatOffenders, getCoachingTopicAgents, getSessionsByStatus, getAgentsFailedQuizzes, getQuizBreakdown, getCoachingDeptComparison,
   getWriteUpPipeline, getActiveWriteUps, getEscalationData, getRepeatWarningAgents, getPolicyViolations, getWarningsDeptComparison,
 } from '../controllers/insightsQC.controller'
@@ -28,6 +28,7 @@ router.get('/quality/missed-questions',   h(getMissedQuestions))
 router.get('/quality/dept-comparison',    h(getQualityDeptComparison))
 router.get('/quality/qa-forms-completed', h(getQAFormsCompleted))
 router.get('/quality/forms',              h(getFormScores))
+router.get('/quality/low-scores',         h(getLowScoringAudits))
 router.get('/quality/forms/:formId/agents', h(getFormAgentBreakdown))
 router.get('/quality/category-agents',    h(getCategoryAgentBreakdown))
 router.get('/coaching/topics',            h(getCoachingTopics))

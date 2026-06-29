@@ -3,23 +3,13 @@ import { normalizePaginated, PaginatedResult } from './qaService'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type CoachingPurpose =
-  | 'WEEKLY'
-  | 'PERFORMANCE'
-  | 'ONBOARDING'
-
-export type CoachingFormat =
-  | 'ONE_ON_ONE'
-  | 'SIDE_BY_SIDE'
-  | 'TEAM_SESSION'
-
-export type CoachingSourceType =
-  | 'QA_AUDIT'
-  | 'MANAGER_OBSERVATION'
-  | 'TREND'
-  | 'DISPUTE'
-  | 'SCHEDULED'
-  | 'OTHER'
+// Coaching purpose / format / source are now List-Management-managed list items.
+// The API returns the resolved display label (string); the numeric list_items.id
+// is exposed separately as `*_id` for editing. These aliases are kept as `string`
+// so existing label-typed call sites keep compiling.
+export type CoachingPurpose = string
+export type CoachingFormat = string
+export type CoachingSourceType = string
 
 // Mirrors backend Prisma enum CoachingSessionStatus (backend/prisma/schema.prisma).
 // Keep these in lock-step with `COACHING_STATUS_LABELS` in `@/constants/labels`
@@ -75,9 +65,12 @@ export interface CoachingSession {
   csr_name: string
   created_by: number
   created_by_name: string
-  coaching_purpose: CoachingPurpose
-  coaching_format: CoachingFormat
-  source_type: CoachingSourceType
+  coaching_purpose: CoachingPurpose          // resolved label (display)
+  coaching_format: CoachingFormat            // resolved label (display)
+  source_type: CoachingSourceType            // resolved label (display)
+  coaching_purpose_id?: number               // list_items.id (for editing)
+  coaching_format_id?: number                // list_items.id (for editing)
+  source_type_id?: number                    // list_items.id (for editing)
   qa_audit_id?: number
   notes?: string
   required_action?: string
