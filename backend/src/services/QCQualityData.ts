@@ -7,21 +7,21 @@ import { deptClause, formClause, formFilter, CSR_JOIN } from './qcQueryHelpers'
 // ── Filter options (cross-filtered) ──────────────────────────────────────────
 
 export async function getFilterOptions(
-  deptFilter: number[], formNames: string[], ranges: PeriodRanges,
+  deptFilter: number[], _formNames: string[], ranges: PeriodRanges,
 ) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
 
-  // Departments available: filtered by period + selected forms (NOT by dept)
-  const fc = formClause(formNames)
+  // Departments available: the CSR roster (every department that has an active
+  // CSR), independent of period/forms/audit existence. This mirrors the
+  // roster-driven Agent Performance list (users role_id = 3) so the dropdown
+  // is stable and lists all real departments — not just those that happen to
+  // have a finalized audit in the selected period.
   const [deptRows] = await pool.execute<RowDataPacket[]>(
     `SELECT DISTINCT d.department_name
-     FROM submissions s
-     JOIN forms f ON s.form_id = f.id
-     ${CSR_JOIN}
-     JOIN departments d ON csr.department_id = d.id
-     WHERE s.status = 'FINALIZED' AND s.submitted_at BETWEEN ? AND ? ${fc.sql}
+     FROM users u
+     JOIN departments d ON u.department_id = d.id
+     WHERE u.role_id = 3 AND u.is_active = 1
      ORDER BY d.department_name`,
-    [s, e, ...fc.params],
   )
 
   // Forms available: filtered by period + selected depts (NOT by form)
