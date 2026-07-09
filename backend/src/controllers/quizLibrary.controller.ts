@@ -139,8 +139,10 @@ export const createLibraryQuiz = async (req: AuthReq, res: Response) => {
       if (q.correct_option === undefined || q.correct_option < 0 || q.correct_option >= q.options.length) return res.status(400).json({ success: false, message: 'correct_option must be a valid 0-based index' });
     }
 
-    const resolvedCourseId = course_id ? parseInt(course_id) : await getDefaultCourseId();
-    if (!resolvedCourseId) return res.status(400).json({ success: false, message: 'No published course found for quiz assignment' });
+    // Courses were eliminated from the product; quizzes are now categorized by
+    // training topics (quiz_topics) instead. course_id is a nullable legacy
+    // column, so only set it if an explicit one was passed.
+    const resolvedCourseId = course_id ? parseInt(course_id) : null;
 
     const parsedTopicIds: number[] = Array.isArray(topic_ids) ? topic_ids.map(Number).filter(Boolean) : [];
 
@@ -245,9 +247,4 @@ export const deleteLibraryQuiz = async (req: AuthReq, res: Response) => {
     logger.error('[QUIZ_LIB] deleteLibraryQuiz error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
-};
-
-const getDefaultCourseId = async (): Promise<number | null> => {
-  const rows = await prisma.$queryRaw<{ id: number }[]>(Prisma.sql`SELECT id FROM courses WHERE is_draft = 0 ORDER BY id ASC LIMIT 1`);
-  return rows[0]?.id ?? null;
 };

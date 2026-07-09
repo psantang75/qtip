@@ -436,12 +436,12 @@ model Course {
 
 model Quiz {
   id         Int     @id @default(autoincrement())
-  course_id  Int
+  course_id  Int?
   quiz_title String  @db.VarChar(100)
   pass_score Decimal @db.Decimal(5, 2)
   is_active  Boolean @default(true) @db.TinyInt
 
-  course            Course            @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  course            Course?           @relation(fields: [course_id], references: [id], onDelete: Cascade)
   quiz_questions    QuizQuestion[]
   coaching_sessions CoachingSession[] @relation("CoachingSessionQuiz")
   quiz_attempts     QuizAttempt[]
