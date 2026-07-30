@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 // Load .env BEFORE any module that reads process.env at import time
 // (notably ./config/environment which fail-fasts on missing DB_PASSWORD when
@@ -87,6 +88,33 @@ if (nodeEnv === 'production' || nodeEnv === 'staging') {
   app.set('trust proxy', 1);
 }
 
+/**
+ * Resolve the Vite SPA build directory for express.static / sendFile.
+ * Docker layout: /app/backend/dist/index.js → /app/frontend/dist
+ * Host layout:   <repo>/backend/dist/index.js → <repo>/frontend/dist
+ */
+function resolveFrontendDistPath(): string {
+  const candidates = [
+    path.resolve(__dirname, '../../frontend/dist'),
+    path.resolve(__dirname, '../../../frontend/dist'),
+    path.resolve(process.cwd(), 'frontend/dist'),
+    path.resolve(process.cwd(), '../frontend/dist'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'index.html'))) {
+      return candidate;
+    }
+  }
+
+  logger.warn(
+    `[static] frontend dist not found; falling back to ${candidates[0]} (tried: ${candidates.join(', ')})`,
+  );
+  return candidates[0];
+}
+
+const frontendDistPath = resolveFrontendDistPath();
+
 // Security middleware
 app.use(securityHeaders);
 app.use(validateRequest);
@@ -96,6 +124,22 @@ app.use(requestLogger);
 
 // Metrics collection middleware
 app.use(metricsMiddleware);
+
+// Serve hashed Vite assets BEFORE CORS/CSRF. Module/script fetches send an
+// Origin header; a CORS rejection used to throw and become a 500 on /assets/*.
+app.use(
+  express.static(frontendDistPath, {
+    index: false,
+    fallthrough: true,
+    // Hashed filenames under /assets/ are safe to cache aggressively.
+    setHeaders(res, filePath) {
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  }),
+);
+logger.info(`[static] serving SPA from ${frontendDistPath}`);
 
 // CORS middleware with production configuration
 app.use(cors(corsConfig));
@@ -201,6 +245,30 @@ app.use('/api/insights', insightsRoutes);
 app.use('/api/insights/admin', insightsAdminRoutes);
 app.use('/api/app-access', appAccessRoutes);
 app.use('/api/on-demand-reports', onDemandReportsRoutes);
+
+// SPA fallback for client-side routing (static assets already handled above).
+app.use((req, res, next) => {
+  if (
+    req.path.startsWith('/api') ||
+    req.path.startsWith('/api-docs') ||
+    req.path.startsWith('/assets') ||
+    req.path === '/health' ||
+    req.path === '/metrics'
+  ) {
+    return next();
+  }
+
+  const indexHtml = path.join(frontendDistPath, 'index.html');
+  res.sendFile(indexHtml, (err) => {
+    if (err) {
+      logger.error('[static] failed to send index.html', {
+        path: indexHtml,
+        error: err.message,
+      });
+      next(err);
+    }
+  });
+});
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);

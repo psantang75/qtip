@@ -230,8 +230,11 @@ export const corsConfig = {
     if (config.ALLOWED_ORIGINS.includes(origin)) {
       callback(null, true);
     } else {
+      // Deny without throwing — passing an Error makes the cors package
+      // surface a 500 to the client (breaking SPA asset loads when the
+      // browser sends Origin on module/script fetches).
       logger.warn(`[SECURITY] CORS blocked request from origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'), false);
+      callback(null, false);
     }
   },
   credentials: true,

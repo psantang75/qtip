@@ -258,15 +258,16 @@ export default function ProfilePage() {
               <FormField control={passwordForm.control} name="currentPassword" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Current Password</FormLabel>
-                  <FormControl>
-                    <div className="relative">
+                  {/* Wrapper outside FormControl so id lands on <Input>, not a div */}
+                  <div className="relative">
+                    <FormControl>
                       <Input type={showCurrentPw ? 'text' : 'password'} className="pr-9" {...field} />
-                      <button type="button" tabIndex={-1} onClick={() => setShowCurrentPw(v => !v)}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                        {showCurrentPw ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                  </FormControl>
+                    </FormControl>
+                    <button type="button" tabIndex={-1} onClick={() => setShowCurrentPw(v => !v)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showCurrentPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -274,15 +275,16 @@ export default function ProfilePage() {
                 <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
                   <FormItem>
                     <FormLabel>New Password</FormLabel>
-                    <FormControl>
-                      <div className="relative">
+                    {/* Wrapper outside FormControl so id lands on <Input>, not a div */}
+                    <div className="relative">
+                      <FormControl>
                         <Input type={showNewPw ? 'text' : 'password'} className="pr-9" {...field} />
-                        <button type="button" tabIndex={-1} onClick={() => setShowNewPw(v => !v)}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                          {showNewPw ? <EyeOff size={14} /> : <Eye size={14} />}
-                        </button>
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                      <button type="button" tabIndex={-1} onClick={() => setShowNewPw(v => !v)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        {showNewPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )} />

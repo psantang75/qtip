@@ -156,17 +156,18 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
 
             <FormField control={form.control} name="password" render={({ field }) => (
               <FormItem><FormLabel>Password</FormLabel>
-                <FormControl>
-                  <div className="relative">
+                {/* Wrapper outside FormControl so id lands on <Input>, not a div */}
+                <div className="relative">
+                  <FormControl>
                     <Input type={showPass ? 'text' : 'password'}
                       placeholder={isCreate ? '8+ chars, mixed case, number, symbol' : 'Leave blank to keep current'}
                       className="pr-9" {...field} />
-                    <button type="button" tabIndex={-1} onClick={() => setShowPass(v => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                      {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </FormControl>
+                  </FormControl>
+                  <button type="button" tabIndex={-1} onClick={() => setShowPass(v => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
                 <FormMessage />
               </FormItem>
             )} />

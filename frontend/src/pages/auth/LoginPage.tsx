@@ -125,8 +125,9 @@ export default function LoginPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-[13px]">Password</FormLabel>
-                    <FormControl>
-                      <div className="relative">
+                    {/* Wrapper outside FormControl so id lands on <Input>, not a div */}
+                    <div className="relative">
+                      <FormControl>
                         <Input
                           type={showPassword ? 'text' : 'password'}
                           placeholder="••••••••"
@@ -134,21 +135,21 @@ export default function LoginPage() {
                           className="pr-10"
                           {...field}
                         />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          tabIndex={-1}
-                          className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
-                          onClick={() => setShowPassword(v => !v)}
-                        >
-                          {showPassword
-                            ? <EyeOff size={15} />
-                            : <Eye size={15} />
-                          }
-                        </Button>
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        tabIndex={-1}
+                        className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowPassword(v => !v)}
+                      >
+                        {showPassword
+                          ? <EyeOff size={15} />
+                          : <Eye size={15} />
+                        }
+                      </Button>
+                    </div>
                     <FormMessage className="text-[12px]" />
                   </FormItem>
                 )}
