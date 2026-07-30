@@ -23,14 +23,74 @@ nginx serves `/opt/qtip/frontend/dist` directly):
 | stage | `10.90.15.6`  |
 | prod  | `10.90.15.5`  |
 
-### Frontend-only change (most common — no API restart, no DB)
+> **Stage is now containerized** (see §0a). The git-as-source-of-truth model
+> is unchanged — only the path, SSH user, and rebuild command differ on stage.
+> Prod (`10.90.15.5`) stays on the PM2 flow below until it is migrated too.
 
-Run on **stage first**, verify in the browser, then repeat for prod. nginx
-serves `frontend/dist` directly, so a rebuild in place is the whole deploy — no
-copy/swap step:
+## 0a. Containerized stage (10.90.15.6) — the current stage loop
+
+Stage moved to Docker Compose. **The repo is still the source of truth** — do
+NOT hand-edit files on the box as the primary workflow. The staging `/code`
+directory is a checkout of `origin/main`; you deploy by pulling and rebuilding
+the image, exactly like the PM2 flow just with different mechanics.
+
+| What                | Old (PM2)                     | New (container stage)                                  |
+| ------------------- | ----------------------------- | ------------------------------------------------------ |
+| SSH user            | `qtip-admin`                  | `dmadmin`                                              |
+| Code path           | `/opt/qtip`                   | `/home/dmadmin/docker-staging/qtip-app/code`           |
+| Rebuild command     | `deploy_application.sh`/PM2   | `docker compose up -d --build`                         |
+| URL                 | host:port                     | `https://qtip-stage.dm.local` (shared Nginx proxy)     |
+| DB                  | host MySQL                    | container MySQL 8.4, published `10.90.15.6:3306`       |
+
+Deploy loop (run on stage; prod first-verify-then-promote discipline is
+unchanged):
 
 ```bash
-ssh qtip-admin@10.90.15.6            # stage  (10.90.15.5 = prod)
+ssh dmadmin@10.90.15.6
+# pull the release into the checkout that IS /code
+git -C /home/dmadmin/docker-staging/qtip-app/code pull --ff-only
+# rebuild + recreate the container from that code
+cd /home/dmadmin/docker-staging/qtip-app
+docker compose up -d --build
+```
+
+- **`.env`-only change** (no code): `docker compose up -d` (recreates the
+  container without rebuilding the image).
+- **Proxy change**: `cd /home/dmadmin/docker-staging/proxy && docker compose exec proxy nginx -t && docker compose exec proxy nginx -s reload`
+- Direct Remote-SSH editing on the box is for **live debugging only** — commit
+  anything that works back to `main` so it survives the next rebuild and reaches
+  prod. Never let the box diverge from `origin/main`.
+- **Workstation prerequisite**: your machine must resolve `*.dm.local` to
+  `10.90.15.6`. If DNS doesn't, add to the hosts file
+  (`C:\Windows\System32\drivers\etc\hosts` on Windows, needs admin):
+
+  ```text
+  10.90.15.6  qtip-stage.dm.local
+  10.90.15.6  dmassist-stage.dm.local
+  ```
+
+  Certs are self-signed until prod certs are issued — expect a browser trust
+  prompt. Bookmark the FQDN (short names 301-redirect to it).
+
+### Known container-stage caveats (from IT)
+
+- **Equipment uploads are non-persistent** on stage — they are written inside
+  the container filesystem and lost on `docker compose up` recreate. A bind
+  mount is a pending IT change.
+- **CIFS mounts**: the app depends on host mounts `/mnt/qtip-audio` and
+  `/mnt/dmcms`. If the host loses those network mounts, audio features fail
+  gracefully while the rest of the app stays up.
+
+### Frontend-only change (most common — no API restart, no DB)
+
+Run on **stage first**, verify in the browser, then repeat for prod. On the
+containerized stage box use the §0a loop (`git pull` + `docker compose up -d
+--build`). The PM2 in-place rebuild below now applies to **prod**
+(`10.90.15.5`) — nginx serves `frontend/dist` directly there, so a rebuild in
+place is the whole deploy, no copy/swap step:
+
+```bash
+ssh qtip-admin@10.90.15.5            # prod  (stage 10.90.15.6 → see §0a)
 cd /opt/qtip
 git fetch origin && git checkout main && git merge --ff-only origin/main
 npm run build --prefix frontend
@@ -51,11 +111,14 @@ grep -o 'call_id===[a-zA-Z]*\.call_id' frontend/dist/assets/AuditFormPage-*.js
 
 ### Backend / full change (deps changed, API logic, or DB migration)
 
-Use the full script — it does install → build → migrate → PM2 restart → health
-check (see §3 for the detailed order):
+On **stage** the container rebuild (§0a) already does install → build → restart
+in one step (the image build runs `npm ci` + `npm run build`); apply DB
+migrations with the §3.3 step before the rebuild if the release includes one.
+On **prod** use the full PM2 script — install → build → migrate → PM2 restart →
+health check (see §3 for the detailed order):
 
 ```bash
-cd /opt/qtip && ./scripts/deploy_application.sh -e staging      # then -e production
+cd /opt/qtip && ./scripts/deploy_application.sh -e production
 ```
 
 > If a dependency (`package.json`/lock) changed, add `npm ci` before the build.

@@ -1,0 +1,52 @@
+﻿# Cursor indexing ignore.
+#
+# Version-controlled so it applies everywhere the repo is checked out,
+# including the containerized staging /code workspace opened over
+# Remote-SSH (see docs/deployment_runbook.md). Keeps indexing off
+# dependencies, build artifacts, logs, and anything secret.
+
+# Dependencies
+node_modules/
+.npm
+
+# Build output
+dist/
+build/
+backend/dist/
+frontend/dist/
+*.tsbuildinfo
+
+# Prisma generated client
+backend/src/generated/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+e2e/.env
+
+# Logs / scratch
+logs/
+*.log
+backend/tmp/
+.deploy_tmp/
+.cache/
+
+# Uploads / local data stores
+backend/uploads/
+uploads/
+backend/data/
+data/
+QTIP_data/
+
+# Database dumps
+scripts/backups/
+*.dump
+*.sql.gz
+
+# Testing artifacts
+coverage/
+playwright-report/
+test-results/
