@@ -15,24 +15,60 @@ incognito included — even though `origin/main` already shows the new commit.
 This is the #1 cause of "I fixed it but production still shows the bug": the fix
 was pushed but never built on the host.
 
-Hosts (key-based SSH as `qtip-admin`, repo at `/opt/qtip`, both track `main`,
-nginx serves `/opt/qtip/frontend/dist` directly):
+Hosts (each environment has a checkout that tracks its **own branch** — see
+§0b for the promotion model):
 
-| Env   | Host          |
-| ----- | ------------- |
-| stage | `10.90.15.6`  |
-| prod  | `10.90.15.5`  |
+| Env   | Host          | SSH user     | Checkout path                                | Tracks branch |
+| ----- | ------------- | ------------ | -------------------------------------------- | ------------- |
+| stage | `10.90.15.6`  | `dmadmin`    | `/home/dmadmin/docker-staging/qtip-app/code` | `stage`       |
+| prod  | `10.90.15.5`  | `qtip-admin` | `/opt/qtip`                                  | `production`  |
 
-> **Stage is now containerized** (see §0a). The git-as-source-of-truth model
-> is unchanged — only the path, SSH user, and rebuild command differ on stage.
-> Prod (`10.90.15.5`) stays on the PM2 flow below until it is migrated too.
+> **Stage is containerized** (see §0a); prod stays on the PM2 flow below until
+> it is migrated too. The git-as-source-of-truth model is unchanged — only the
+> path, SSH user, and rebuild command differ on stage.
+
+## 0b. Branch & promotion model
+
+`main` is the integration branch and the single source of truth. Each
+environment has its **own branch** whose tip records exactly what is deployed
+there. **Never edit files directly on a host** except for live debugging —
+commit the fix to `main` and promote it forward, or it silently drifts and is
+lost on the next rebuild.
+
+| Branch       | Meaning                          | Deployed on             |
+| ------------ | -------------------------------- | ----------------------- |
+| `main`       | Integration / source of truth    | (not deployed directly) |
+| `stage`      | Exactly what is live on staging  | `10.90.15.6`            |
+| `production` | Exactly what is live on prod     | `10.90.15.5`            |
+
+Promotion is **fast-forward-only** — history stays linear and each environment
+branch is a strict subset of the one before it:
+
+```bash
+# 1. Develop: commit to main (directly, or merge a feature branch into main).
+
+# 2. Promote main -> stage, then deploy on the stage box:
+git checkout stage; git merge --ff-only main; git push origin stage
+ssh dmadmin@10.90.15.6 'git -C /home/dmadmin/docker-staging/qtip-app/code pull --ff-only; cd /home/dmadmin/docker-staging/qtip-app; docker compose up -d --build'
+
+# 3. Verify on https://qtip-stage.dm.local
+
+# 4. Promote stage -> production, then deploy on the prod host:
+git checkout production; git merge --ff-only stage; git push origin production
+ssh qtip-admin@10.90.15.5 'cd /opt/qtip; git pull --ff-only; ./scripts/deploy_application.sh -e production'
+```
+
+If a `git merge --ff-only` is rejected, the target has commits the source
+doesn't — reconcile on `main` first. **Never force-push an environment
+branch**, and never commit straight onto `stage`/`production`.
 
 ## 0a. Containerized stage (10.90.15.6) — the current stage loop
 
 Stage moved to Docker Compose. **The repo is still the source of truth** — do
 NOT hand-edit files on the box as the primary workflow. The staging `/code`
-directory is a checkout of `origin/main`; you deploy by pulling and rebuilding
-the image, exactly like the PM2 flow just with different mechanics.
+directory is a checkout of the **`stage`** branch (see §0b); you deploy by
+pulling and rebuilding the image, exactly like the PM2 flow just with different
+mechanics.
 
 | What                | Old (PM2)                     | New (container stage)                                  |
 | ------------------- | ----------------------------- | ------------------------------------------------------ |
@@ -58,8 +94,8 @@ docker compose up -d --build
   container without rebuilding the image).
 - **Proxy change**: `cd /home/dmadmin/docker-staging/proxy && docker compose exec proxy nginx -t && docker compose exec proxy nginx -s reload`
 - Direct Remote-SSH editing on the box is for **live debugging only** — commit
-  anything that works back to `main` so it survives the next rebuild and reaches
-  prod. Never let the box diverge from `origin/main`.
+  anything that works back to `main` and promote it (§0b) so it survives the
+  next rebuild and reaches prod. Never let the box diverge from its branch.
 - **Workstation prerequisite**: your machine must resolve `*.dm.local` to
   `10.90.15.6`. If DNS doesn't, add to the hosts file
   (`C:\Windows\System32\drivers\etc\hosts` on Windows, needs admin):
