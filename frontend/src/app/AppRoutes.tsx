@@ -26,6 +26,7 @@ import InsightsKpiManagementPage  from '../pages/admin/InsightsKpiManagementPage
 import InsightsPageManagementPage from '../pages/admin/InsightsPageManagementPage'
 import InsightsIngestionLogPage   from '../pages/admin/InsightsIngestionLogPage'
 import InsightsSourceReportsPage   from '../pages/admin/InsightsSourceReportsPage'
+import ManualUploadPage            from '../pages/admin/ManualUploadPage'
 import SystemSettingsPage         from '../pages/admin/SystemSettingsPage'
 import InsightsCalendarPage       from '../pages/admin/InsightsCalendarPage'
 import AdminEmailTemplatesPage    from '../pages/admin/AdminEmailTemplatesPage'
@@ -79,6 +80,11 @@ const WriteUpFormPage      = React.lazy(() => import('../pages/writeups/WriteUpF
 const WriteUpDetailPage    = React.lazy(() => import('../pages/writeups/WriteUpDetailPage'))
 const MyWriteUpsPage       = React.lazy(() => import('../pages/writeups/MyWriteUpsPage'))
 const MyWriteUpDetailPage  = React.lazy(() => import('../pages/writeups/MyWriteUpDetailPage'))
+
+// Scheduling — gated on the `sched_calendar` / `sched_exceptions` app_page rows.
+const SchedulingPage           = React.lazy(() => import('../pages/scheduling/SchedulingPage'))
+const MySchedulePage           = React.lazy(() => import('../pages/scheduling/MySchedulePage'))
+const SchedulingExceptionsPage = React.lazy(() => import('../pages/scheduling/SchedulingExceptionsPage'))
 
 const DashboardPage          = React.lazy(() => import('../pages/insights/DashboardPage'))
 const TeamDashboardPage      = React.lazy(() => import('../pages/insights/TeamDashboardPage'))
@@ -183,6 +189,7 @@ export default function AppRoutes(): React.ReactElement {
           <Route path="insights/calendar"   element={<InsightsCalendarPage />} />
           <Route path="insights/ingestion"  element={<InsightsIngestionLogPage />} />
           <Route path="insights/source-reports" element={<InsightsSourceReportsPage />} />
+          <Route path="insights/import"     element={<ManualUploadPage />} />
         </Route>
 
         <Route element={<AppShell />}>
@@ -305,6 +312,37 @@ export default function AppRoutes(): React.ReactElement {
               element={
                 <RequirePageAccess pageKey="pw_list" minLevel="view" redirectViewAllTo="/app/performancewarnings/list">
                   <PageLoader><MyWriteUpDetailPage /></PageLoader>
+                </RequirePageAccess>
+              }
+            />
+          </Route>
+
+          {/* Scheduling — one logical calendar page (`sched_calendar`). ALL/EDIT
+              land on the editor grid; OWN (agents) land on the self schedule.
+              Backend readGrid/readMySchedule self-scope OWN viewers as defence. */}
+          <Route path="/app/scheduling">
+            <Route index element={<Navigate to="calendar" replace />} />
+            <Route
+              path="calendar"
+              element={
+                <RequirePageAccess pageKey="sched_calendar" minLevel="viewAll" fallback="/app/scheduling/my-schedule">
+                  <PageLoader><SchedulingPage /></PageLoader>
+                </RequirePageAccess>
+              }
+            />
+            <Route
+              path="my-schedule"
+              element={
+                <RequirePageAccess pageKey="sched_calendar" minLevel="view" redirectViewAllTo="/app/scheduling/calendar">
+                  <PageLoader><MySchedulePage /></PageLoader>
+                </RequirePageAccess>
+              }
+            />
+            <Route
+              path="exceptions"
+              element={
+                <RequirePageAccess pageKey="sched_exceptions" minLevel="viewAll" fallback="/app/scheduling/calendar">
+                  <PageLoader><SchedulingExceptionsPage /></PageLoader>
                 </RequirePageAccess>
               }
             />

@@ -6,6 +6,7 @@ import {
   importLeadSource,
   importTicketTask,
   importEmailStats,
+  importPunchData,
   previewImport,
 } from '../services/importService';
 import prisma from '../config/prisma';
@@ -18,6 +19,7 @@ const VALID_DATA_TYPES = [
   'lead_source',
   'ticket_task',
   'email_stats',
+  'punch_data',
 ] as const;
 
 type DataType = typeof VALID_DATA_TYPES[number];
@@ -30,6 +32,7 @@ function getImportHandler(dataType: DataType) {
     lead_source:       importLeadSource,
     ticket_task:       importTicketTask,
     email_stats:       importEmailStats,
+    punch_data:        importPunchData,
   };
   return handlers[dataType];
 }

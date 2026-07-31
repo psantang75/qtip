@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, LogOut, User, Settings, ArrowLeft, Shield, GraduationCap, AlertTriangle, BarChart2 } from 'lucide-react'
+import { ChevronDown, LogOut, User, Settings, ArrowLeft, Shield, GraduationCap, AlertTriangle, CalendarDays, BarChart2 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +22,7 @@ const SECTION_ICONS: Record<string, React.ComponentType<{ size?: number; classNa
   quality:              Shield,
   training:             GraduationCap,
   performancewarnings:  AlertTriangle,
+  scheduling:           CalendarDays,
   insights:             BarChart2,
 }
 

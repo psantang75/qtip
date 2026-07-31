@@ -73,7 +73,12 @@ export default function FormsPage() {
         ...normalized, id: undefined, form_name: `${normalized.form_name} (Copy)`, version: 1,
         categories: normalized.categories.map(c => ({
           ...c, id: undefined, form_id: undefined,
-          questions: c.questions.map(q => ({ ...q, id: undefined, category_id: undefined })),
+          // Keep each question's original `id` so the backend can re-map
+          // condition `target_question_id` and `rollup_member_question_ids`
+          // onto the newly-created questions (see MySQLFormRepository
+          // resolveTargetQuestionId / resolveRollupMemberIds). createForm
+          // never inserts this id — it only uses it as a lookup key.
+          questions: c.questions.map(q => ({ ...q, category_id: undefined })),
         })),
         metadata_fields: normalized.metadata_fields?.map(f => ({ ...f, id: undefined, form_id: undefined })) || [],
       })

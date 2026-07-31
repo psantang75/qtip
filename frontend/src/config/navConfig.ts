@@ -1,4 +1,4 @@
-export type NavSection = 'quality' | 'training' | 'performancewarnings' | 'insights'
+export type NavSection = 'quality' | 'training' | 'performancewarnings' | 'scheduling' | 'insights'
 
 /** Client route base for performance warning (write-up) documents — API remains `/api/writeups`. */
 export const PERFORMANCE_WARNINGS_APP_BASE = '/app/performancewarnings'
@@ -57,6 +57,14 @@ export const NAV_CONFIG: SectionConfig[] = [
     icon: 'AlertTriangle',
     color: '#00aeef',
     defaultPath: PERFORMANCE_WARNINGS_APP_BASE,
+    items: [],
+  },
+  {
+    id: 'scheduling',
+    label: 'Scheduling',
+    icon: 'CalendarDays',
+    color: '#00aeef',
+    defaultPath: '/app/scheduling/calendar',
     items: [],
   },
   {
@@ -119,6 +127,7 @@ export function getSectionFromPath(pathname: string): NavSection | null {
   if (pathname.startsWith('/app/quality'))  return 'quality'
   if (pathname.startsWith('/app/training')) return 'training'
   if (pathname.startsWith('/app/performancewarnings') || pathname.startsWith('/app/writeups')) return 'performancewarnings'
+  if (pathname.startsWith('/app/scheduling')) return 'scheduling'
   if (pathname.startsWith('/app/insights')) return 'insights'
   if (pathname.startsWith('/app/analytics')) return 'insights' // legacy — shows insights sidebar
   return null

@@ -1,11 +1,12 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Shield, GraduationCap, AlertTriangle, BarChart2, BarChart3 } from 'lucide-react'
+import { Shield, GraduationCap, AlertTriangle, CalendarDays, BarChart2, BarChart3 } from 'lucide-react'
 import { NAV_CONFIG, getSectionFromPath } from '@/config/navConfig'
 
 const SECTION_ICONS = {
   quality:              Shield,
   training:             GraduationCap,
   performancewarnings:  AlertTriangle,
+  scheduling:           CalendarDays,
   insights:             BarChart2,
   analytics:            BarChart3,
 }

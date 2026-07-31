@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Users, Building2, List, BarChart3, FileText, Activity, CalendarDays, Clock, Mail, Settings } from 'lucide-react'
+import { Users, Building2, List, BarChart3, FileText, Activity, CalendarDays, Clock, Mail, Settings, Upload } from 'lucide-react'
 import TopBar from './TopBar'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +21,7 @@ const INSIGHTS_NAV = [
   { label: 'Business Calendar', path: '/app/admin/insights/calendar',   icon: CalendarDays },
   { label: 'Report Schedules', path: '/app/admin/insights/source-reports', icon: Clock },
   { label: 'Ingestion Log',     path: '/app/admin/insights/ingestion',  icon: Activity },
+  { label: 'Manual Upload',     path: '/app/admin/insights/import',     icon: Upload },
 ]
 
 const ACTIVE   = 'border-l-[3px] border-l-primary bg-primary/[0.08] text-primary font-semibold'

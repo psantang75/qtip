@@ -63,6 +63,60 @@ export async function countBusinessDays(start: Date, end: Date): Promise<number>
   return count;
 }
 
+/**
+ * Day-of-week for a 'YYYY-MM-DD' string without timezone drift. Parsed at UTC
+ * noon so a DST shift can never bump it to the previous day. 0 = Sunday.
+ */
+function dowOf(dateStr: string): number {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay();
+}
+
+/**
+ * Fetch the stored day_type for a set of 'YYYY-MM-DD' strings in one query,
+ * returned as a Map. Dates with no row are simply absent from the map, and the
+ * caller applies the Mon–Fri default. Used by scheduling apply/copy so a
+ * fortnight is one lookup rather than fourteen.
+ */
+export async function getCalendarDayTypes(dateStrs: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (dateStrs.length === 0) return out;
+  const placeholders = dateStrs.map(() => '?').join(',');
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT calendar_date, day_type FROM business_calendar_days
+     WHERE calendar_date IN (${placeholders})`,
+    dateStrs,
+  );
+  for (const row of rows) {
+    const d = row.calendar_date instanceof Date ? row.calendar_date : new Date(row.calendar_date);
+    out.set(toDateString(d), row.day_type as string);
+  }
+  return out;
+}
+
+/**
+ * True when a single 'YYYY-MM-DD' date is a working business day (day_type
+ * 'WORKDAY', or Mon–Fri when no row exists). WEEKEND/HOLIDAY/CLOSURE are false.
+ */
+export async function isWorkday(dateStr: string): Promise<boolean> {
+  const types = await getCalendarDayTypes([dateStr]);
+  const t = types.get(dateStr);
+  if (t) return t === 'WORKDAY' || t === 'ADJUSTMENT';
+  const dow = dowOf(dateStr);
+  return dow >= 1 && dow <= 5;
+}
+
+/**
+ * True when scheduling must skip a date: a stored HOLIDAY or CLOSURE. Weekends
+ * are NOT blocked here — people work Saturdays, so apply/copy only skip the
+ * two closure types, never the default weekend. Uses a prefetched type map so
+ * a bulk write does not query per day.
+ */
+export function isBlockedForScheduling(dateStr: string, types: Map<string, string>): boolean {
+  const t = types.get(dateStr);
+  return t === 'HOLIDAY' || t === 'CLOSURE';
+}
+
 export interface BusinessDaySummary {
   totalDays:       number;
   businessDays:    number;

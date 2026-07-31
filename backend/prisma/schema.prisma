@@ -53,6 +53,7 @@ model Department {
   metric_departments            MetricDepartment[]
   metric_thresholds             MetricThreshold[]
   report_definition_departments ReportDefinitionDepartment[]
+  schedule_coverage_thresholds  ScheduleCoverageThreshold[]
 
   @@map("departments")
 }
@@ -105,6 +106,9 @@ model User {
   lead_source_raw                       LeadSourceRaw[]
   ticket_task_raw                       TicketTaskRaw[]
   email_stats_raw                       EmailStatsRaw[]
+  punch_raw                             PunchRaw[]
+  schedule_shifts                       ScheduleShift[]
+  schedule_exceptions                   ScheduleException[]
   quiz_attempts                         QuizAttempt[]
   training_resources                    TrainingResource[]
   write_ups_as_csr                      WriteUp[]          @relation("WriteUpCsr")
@@ -1128,6 +1132,30 @@ model EmailStatsRaw {
   @@map("email_stats_raw")
 }
 
+// Paychex punch/time-clock segments. One row per punch pair (in/out). Loaded
+// via manual admin upload (and later an automated inbox poller). Dedup key is
+// `post_id` (Paychex "Post ID"), which is unique per punch — the importer
+// upserts on it so overlapping/re-sent exports never duplicate and edits heal.
+model PunchRaw {
+  id               Int       @id @default(autoincrement())
+  post_id          String    @unique @db.VarChar(50)
+  user_id          Int
+  punch_in_at      DateTime? @db.DateTime(0)
+  punch_out_at     DateTime? @db.DateTime(0)
+  punch_type_in    String?   @db.VarChar(50)
+  punch_type_out   String?   @db.VarChar(50)
+  regular_duration Decimal   @default(0) @db.Decimal(10, 2)
+  import_id        Int?
+  created_at       DateTime  @default(now()) @db.DateTime(0)
+  updated_at       DateTime  @default(now()) @updatedAt @db.DateTime(0)
+
+  user   User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  import ImportLog? @relation(fields: [import_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, punch_in_at])
+  @@map("punch_raw")
+}
+
 // ── Import Tracking ──────────────────────────────────────────────────────────
 
 model ImportLog {
@@ -1149,6 +1177,7 @@ model ImportLog {
   lead_source_raw   LeadSourceRaw[]
   ticket_task_raw   TicketTaskRaw[]
   email_stats_raw   EmailStatsRaw[]
+  punch_raw         PunchRaw[]
 
   @@map("import_logs")
 }
@@ -2114,4 +2143,191 @@ model NotificationQueueEntry {
   @@index([scheduled_for, processed_at])
   @@index([user_id, template_key])
   @@map("notification_queue")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scheduling — see migration 20260731170000_add_scheduling. The business week
+// runs Sunday (day_of_week = 0) to Saturday. Author columns carry no FK.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ScheduleShiftSource {
+  TEMPLATE
+  COPIED
+  MANUAL
+  ROLLED
+}
+
+enum ScheduleShiftStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ScheduleDurationMode {
+  FULL_DAY
+  WINDOW
+  EITHER
+}
+
+model ScheduleActivityType {
+  id                 Int      @id @default(autoincrement())
+  label              String   @unique(map: "uq_schedule_activity_type_label") @db.VarChar(50)
+  is_paid            Boolean  @default(true)
+  counts_as_coverage Boolean  @default(false)
+  color              String?  @db.VarChar(20)
+  sort_order         Int      @default(0)
+  is_active          Boolean  @default(true)
+  is_system          Boolean  @default(false)
+  created_at         DateTime @default(now()) @db.DateTime(0)
+  updated_at         DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  template_segments ScheduleTemplateDaySegment[]
+  shift_segments    ScheduleShiftSegment[]
+
+  @@map("schedule_activity_type")
+}
+
+model ScheduleExceptionType {
+  id                Int                  @id @default(autoincrement())
+  type_key          String               @unique(map: "uq_schedule_exception_type_key") @db.VarChar(50)
+  label             String               @db.VarChar(100)
+  description       String?              @db.VarChar(255)
+  is_excused        Boolean              @default(false)
+  duration_mode     ScheduleDurationMode @default(WINDOW)
+  affects_arrival   Boolean              @default(false)
+  affects_departure Boolean              @default(false)
+  is_system         Boolean              @default(false)
+  sort_order        Int                  @default(0)
+  is_active         Boolean              @default(true)
+  created_at        DateTime             @default(now()) @db.DateTime(0)
+  updated_at        DateTime             @default(now()) @updatedAt @db.DateTime(0)
+
+  exceptions ScheduleException[]
+
+  @@map("schedule_exception_type")
+}
+
+model ScheduleCoverageThreshold {
+  id            Int      @id @default(autoincrement())
+  department_id Int      @unique(map: "uq_schedule_coverage_threshold_department")
+  green_min     Int      @default(1)
+  yellow_min    Int      @default(1)
+  created_at    DateTime @default(now()) @db.DateTime(0)
+  updated_at    DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
+
+  @@map("schedule_coverage_threshold")
+}
+
+model ScheduleTemplate {
+  id            Int      @id @default(autoincrement())
+  template_name String   @unique(map: "uq_schedule_template_name") @db.VarChar(100)
+  description   String?  @db.VarChar(255)
+  is_active     Boolean  @default(true)
+  created_by    Int?
+  created_at    DateTime @default(now()) @db.DateTime(0)
+  updated_at    DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  days   ScheduleTemplateDay[]
+  shifts ScheduleShift[]
+
+  @@map("schedule_template")
+}
+
+model ScheduleTemplateDay {
+  id          Int      @id @default(autoincrement())
+  template_id Int
+  day_of_week Int      @db.TinyInt
+  is_day_off  Boolean  @default(false)
+  start_time  DateTime? @db.Time(0)
+  end_time    DateTime? @db.Time(0)
+
+  template ScheduleTemplate             @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  segments ScheduleTemplateDaySegment[]
+
+  @@unique([template_id, day_of_week], map: "uq_schedule_template_day")
+  @@map("schedule_template_day")
+}
+
+model ScheduleTemplateDaySegment {
+  id               Int      @id @default(autoincrement())
+  template_day_id  Int
+  activity_type_id Int
+  start_time       DateTime @db.Time(0)
+  end_time         DateTime @db.Time(0)
+  sort_order       Int      @default(0)
+
+  template_day  ScheduleTemplateDay  @relation(fields: [template_day_id], references: [id], onDelete: Cascade)
+  activity_type ScheduleActivityType @relation(fields: [activity_type_id], references: [id], onDelete: Restrict)
+
+  @@index([template_day_id], map: "idx_schedule_template_day_segment_day")
+  @@map("schedule_template_day_segment")
+}
+
+model ScheduleShift {
+  id          Int                 @id @default(autoincrement())
+  user_id     Int
+  shift_date  DateTime            @db.Date
+  start_at    DateTime?           @db.DateTime(0)
+  end_at      DateTime?           @db.DateTime(0)
+  is_day_off  Boolean             @default(false)
+  source      ScheduleShiftSource @default(MANUAL)
+  template_id Int?
+  notes       String?             @db.VarChar(500)
+  status      ScheduleShiftStatus @default(DRAFT)
+  locked_at   DateTime?           @db.DateTime(0)
+  created_by  Int?
+  updated_by  Int?
+  created_at  DateTime            @default(now()) @db.DateTime(0)
+  updated_at  DateTime            @default(now()) @updatedAt @db.DateTime(0)
+
+  user     User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  template ScheduleTemplate?  @relation(fields: [template_id], references: [id], onDelete: SetNull)
+  segments ScheduleShiftSegment[]
+  exceptions ScheduleException[]
+
+  @@unique([user_id, shift_date], map: "uq_schedule_shift_user_date")
+  @@index([shift_date], map: "idx_schedule_shift_date")
+  @@index([user_id, shift_date], map: "idx_schedule_shift_user_date")
+  @@index([status, shift_date], map: "idx_schedule_shift_status_date")
+  @@map("schedule_shift")
+}
+
+model ScheduleShiftSegment {
+  id               Int      @id @default(autoincrement())
+  shift_id         Int
+  activity_type_id Int
+  start_at         DateTime @db.DateTime(0)
+  end_at           DateTime @db.DateTime(0)
+  sort_order       Int      @default(0)
+
+  shift         ScheduleShift        @relation(fields: [shift_id], references: [id], onDelete: Cascade)
+  activity_type ScheduleActivityType @relation(fields: [activity_type_id], references: [id], onDelete: Restrict)
+
+  @@index([shift_id], map: "idx_schedule_shift_segment_shift")
+  @@map("schedule_shift_segment")
+}
+
+model ScheduleException {
+  id                Int      @id @default(autoincrement())
+  user_id           Int
+  exception_date    DateTime @db.Date
+  exception_type_id Int
+  shift_id          Int?
+  is_full_day       Boolean  @default(false)
+  starts_at         DateTime? @db.DateTime(0)
+  ends_at           DateTime? @db.DateTime(0)
+  notes             String?  @db.VarChar(500)
+  paychex_reference String?  @db.VarChar(100)
+  entered_by        Int?
+  created_at        DateTime @default(now()) @db.DateTime(0)
+  updated_at        DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  user           User                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  exception_type ScheduleExceptionType @relation(fields: [exception_type_id], references: [id], onDelete: Restrict)
+  shift          ScheduleShift?        @relation(fields: [shift_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, exception_date], map: "idx_schedule_exception_user_date")
+  @@index([exception_date], map: "idx_schedule_exception_date")
+  @@map("schedule_exception")
 }

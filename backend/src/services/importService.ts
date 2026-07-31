@@ -135,6 +135,60 @@ function str(val: any): string | null {
   return s || null;
 }
 
+/**
+ * Parse a full date-time cell like "07/28/2026 08:00 AM" (Paychex punch export)
+ * into a LOCAL Date (see date-handling rule). Also accepts already-parsed Date
+ * objects and ISO strings. Returns null when unparseable.
+ */
+function parseDateTime(value: any): Date | null {
+  if (value == null) return null;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+
+  const s = String(value).trim();
+  if (!s) return null;
+
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*([AP]M)?$/i);
+  if (m) {
+    let hh = +m[4];
+    const ap = m[6]?.toUpperCase();
+    if (ap === 'PM' && hh < 12) hh += 12;
+    if (ap === 'AM' && hh === 12) hh = 0;
+    return new Date(+m[3], +m[1] - 1, +m[2], hh, +m[5]);
+  }
+
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** Parse a time-only cell like "04:00 PM" into {h, m} (24h). Null if unparseable. */
+function parseClockTime(value: any): { h: number; m: number } | null {
+  if (value == null) return null;
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return { h: value.getHours(), m: value.getMinutes() };
+  }
+  const s = String(value).trim();
+  const m = s.match(/^(\d{1,2}):(\d{2})\s*([AP]M)?$/i);
+  if (!m) return null;
+  let hh = +m[1];
+  const ap = m[3]?.toUpperCase();
+  if (ap === 'PM' && hh < 12) hh += 12;
+  if (ap === 'AM' && hh === 12) hh = 0;
+  return { h: hh, m: +m[2] };
+}
+
+/**
+ * The Paychex "Actual Time Out" cell is time-only (no date). Combine it with the
+ * punch-in date; if the resulting time is before punch-in, the shift crossed
+ * midnight, so roll the date forward one day.
+ */
+function derivePunchOut(inAt: Date | null, timeOut: any): Date | null {
+  const t = parseClockTime(timeOut);
+  if (!t || !inAt) return null;
+  let out = new Date(inAt.getFullYear(), inAt.getMonth(), inAt.getDate(), t.h, t.m);
+  if (out.getTime() < inAt.getTime()) out = new Date(out.getTime() + 86400000);
+  return out;
+}
+
 // ── Create / finalise ImportLog helpers ──────────────────────────────────────
 
 async function createImportLog(
@@ -648,6 +702,122 @@ export async function importEmailStats(
   }
 }
 
+// ── importPunchData ───────────────────────────────────────────────────────────
+
+/**
+ * Paychex "employee-time-cards" punch export. One row per punch segment.
+ * Expected Excel columns:
+ *   Post ID, Alert Email, Actual Date/Time In, Regular Duration
+ * Optional: Punch Type In, Punch Type Out, Actual Time Out
+ *
+ * Identity is matched by `Alert Email` (blank/unmatched emails are skipped and
+ * surfaced as warnings, never errors). Dedup key is `Post ID`: the importer
+ * UPSERTS on it, so overlapping or re-sent 14-day exports never duplicate and
+ * later Paychex edits to an existing punch heal in place.
+ */
+export async function importPunchData(
+  buffer: Buffer,
+  fileName: string,
+  importedBy: number,
+): Promise<ImportResult> {
+  const REQUIRED = ['Post ID', 'Alert Email', 'Actual Date/Time In', 'Regular Duration'];
+  const logId = await createImportLog('punch_data', fileName, importedBy);
+
+  try {
+    const rows = parseExcel(buffer);
+    validateColumns(rows, REQUIRED);
+    const emailMap = await buildEmailMap();
+
+    const warnings: string[] = [];
+    const unmatchedEmails = new Set<string>();
+    const seenPostIds = new Set<string>();
+    let blankEmailRows = 0;
+    let unmatchedRows = 0;
+    let errored = 0;
+    const prepared: any[] = [];
+
+    for (const row of rows) {
+      try {
+        const postId = str(row['Post ID']);
+        if (!postId) throw new Error('Missing Post ID');
+        // Guard against duplicate Post IDs within a single file (last wins).
+        if (seenPostIds.has(postId)) {
+          const dupIdx = prepared.findIndex(r => r.post_id === postId);
+          if (dupIdx >= 0) prepared.splice(dupIdx, 1);
+        }
+
+        const email = str(row['Alert Email'])?.toLowerCase() ?? '';
+        if (!email) { blankEmailRows++; continue; }
+
+        const userId = emailMap.get(email) ?? null;
+        if (!userId) { unmatchedEmails.add(email); unmatchedRows++; continue; }
+
+        const punchInAt = parseDateTime(row['Actual Date/Time In']);
+        const punchOutAt = derivePunchOut(punchInAt, row['Actual Time Out']);
+
+        seenPostIds.add(postId);
+        prepared.push({
+          post_id: postId,
+          user_id: userId,
+          punch_in_at: punchInAt,
+          punch_out_at: punchOutAt,
+          punch_type_in: str(row['Punch Type In']),
+          punch_type_out: str(row['Punch Type Out']),
+          regular_duration: num(row['Regular Duration'], true),
+          import_id: logId,
+        });
+      } catch {
+        errored++;
+      }
+    }
+
+    // Upsert by post_id in chunked transactions — heals edits, never duplicates.
+    let imported = 0;
+    for (let i = 0; i < prepared.length; i += BATCH_SIZE) {
+      const chunk = prepared.slice(i, i + BATCH_SIZE);
+      await prisma.$transaction(
+        chunk.map(rec =>
+          prisma.punchRaw.upsert({
+            where: { post_id: rec.post_id },
+            create: rec,
+            update: {
+              user_id: rec.user_id,
+              punch_in_at: rec.punch_in_at,
+              punch_out_at: rec.punch_out_at,
+              punch_type_in: rec.punch_type_in,
+              punch_type_out: rec.punch_type_out,
+              regular_duration: rec.regular_duration,
+              import_id: rec.import_id,
+            },
+          }),
+        ),
+      );
+      imported += chunk.length;
+    }
+
+    if (blankEmailRows > 0) {
+      warnings.push(`${blankEmailRows} row(s) had no Alert Email and were skipped.`);
+    }
+    if (unmatchedEmails.size > 0) {
+      warnings.push(`${unmatchedEmails.size} email(s) not matched to any user: ${[...unmatchedEmails].slice(0, 10).join(', ')}${unmatchedEmails.size > 10 ? '...' : ''}`);
+    }
+
+    const result: ImportResult = {
+      import_log_id: logId,
+      rows_total: rows.length,
+      rows_imported: imported,
+      rows_skipped: blankEmailRows + unmatchedRows,
+      rows_errored: errored,
+      warnings,
+    };
+    await finaliseImportLog(logId, result, warnings.length ? { warnings } : null);
+    return result;
+  } catch (err) {
+    await failImportLog(logId, err);
+    throw err;
+  }
+}
+
 // ── Preview helper (used by controller) ──────────────────────────────────────
 
 export interface PreviewResult {
@@ -675,6 +845,13 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   lead_source:        ['Email', 'ReportDate', 'SourceName', 'LeadsReceived', 'Converted'],
   ticket_task:        ['Email', 'ReportDate', 'Status'],
   email_stats:        ['Email', 'ReportDate', 'EmailsSent', 'EmailsReceived'],
+  punch_data:         ['Post ID', 'Alert Email', 'Actual Date/Time In', 'Regular Duration'],
+};
+
+// Most imports carry the user identity in an `Email` column; the Paychex punch
+// export uses `Alert Email`. Preview reads the right key per data type.
+const EMAIL_COLUMN: Record<string, string> = {
+  punch_data: 'Alert Email',
 };
 
 export async function previewImport(
@@ -690,9 +867,10 @@ export async function previewImport(
   const preview_rows = rows.slice(0, 10);
 
   // Email matching check on first 100 rows
+  const emailKey = EMAIL_COLUMN[dataType] ?? 'Email';
   const emailMap = await buildEmailMap();
   const emailRows = rows.slice(0, 100);
-  const checkedEmails = emailRows.map(r => str(r['Email'])?.toLowerCase() ?? '').filter(Boolean);
+  const checkedEmails = emailRows.map(r => str(r[emailKey])?.toLowerCase() ?? '').filter(Boolean);
   const matchedCount = checkedEmails.filter(e => emailMap.has(e)).length;
   const unmatched = [...new Set(checkedEmails.filter(e => !emailMap.has(e)))];
 

@@ -5,10 +5,26 @@ import { ListPageHeader } from '@/components/common/ListPageHeader'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { GenericListEditor } from './list-management/GenericListEditor'
+import {
+  ExceptionTypesEditor,
+  ActivityTypesEditor,
+  CoverageThresholdsEditor,
+} from './list-management/SchedulingListEditors'
 
 // ── List catalogue ────────────────────────────────────────────────────────────
 
 type ListTier = 'dynamic'
+
+/**
+ * Custom editors for lists that live in their own tables (richer than the
+ * generic list-items system). When set, the right panel renders this instead of
+ * GenericListEditor.
+ */
+const CUSTOM_EDITORS = {
+  sched_exception_type: ExceptionTypesEditor,
+  sched_activity_type: ActivityTypesEditor,
+  sched_coverage: CoverageThresholdsEditor,
+} as const
 
 interface ManagedList {
   key: string
@@ -17,6 +33,7 @@ interface ManagedList {
   tier: ListTier
   implemented: boolean
   listType?: string
+  editor?: keyof typeof CUSTOM_EDITORS
 }
 
 interface ListSection {
@@ -54,6 +71,15 @@ const SECTIONS: ListSection[] = [
       { key: 'writeup_reference',   label: 'Reference Material',     description: 'Reference materials (e.g. handbook sections) that can be cited in a write-up violation.',      tier: 'dynamic', implemented: true, listType: 'writeup_reference'   },
       { key: 'writeup_timeline',    label: 'Timeline for Correction', description: 'Correction timeline options available when setting expectations in a write-up.',              tier: 'dynamic', implemented: true, listType: 'writeup_timeline'    },
       { key: 'writeup_consequence', label: 'Consequence if Not Met', description: 'Consequence options displayed when the corrective action is not met in a write-up.',            tier: 'dynamic', implemented: true, listType: 'writeup_consequence' },
+    ],
+  },
+  {
+    id: 'scheduling',
+    label: 'Scheduling',
+    lists: [
+      { key: 'sched_exception_types', label: 'Attendance Exception Types', description: 'Exception reasons (absence, late, early leave, PTO…) selectable when logging attendance exceptions.', tier: 'dynamic', implemented: true, editor: 'sched_exception_type' },
+      { key: 'sched_activity_types',  label: 'Shift Activity Types',       description: 'Break/lunch (and future) segment types available when building shifts and templates.',              tier: 'dynamic', implemented: true, editor: 'sched_activity_type' },
+      { key: 'sched_coverage',        label: 'Coverage Thresholds',        description: 'Per-department green/yellow staffing minimums that drive the schedule coverage heatmap.',              tier: 'dynamic', implemented: true, editor: 'sched_coverage' },
     ],
   },
 ]
@@ -148,7 +174,9 @@ export default function ListManagementPage() {
                 </div>
               </div>
 
-              {selectedList.implemented && selectedList.listType ? (
+              {selectedList.editor ? (
+                (() => { const Editor = CUSTOM_EDITORS[selectedList.editor]; return <Editor /> })()
+              ) : selectedList.implemented && selectedList.listType ? (
                 <GenericListEditor listType={selectedList.listType} listLabel={selectedList.label} />
               ) : (
                 <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center">

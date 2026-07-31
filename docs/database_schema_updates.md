@@ -58,4 +58,29 @@ The API implementation has been developed to support these new fields with appro
 
 4. **Better Filtering**: The API supports filtering by all new fields, allowing for more advanced querying capabilities.
 
-No migration of existing data is necessary as all new fields either allow NULL values or have default values. 
+No migration of existing data is necessary as all new fields either allow NULL values or have default values.
+
+## Scheduling Module Tables
+
+Added by migration `20260731170000_add_scheduling`. Nine additive tables plus
+`app_page` / `app_page_role_access` seeds (section `scheduling`). See
+[`scheduling.md`](scheduling.md) for the feature overview. All tables use
+`utf8mb4_unicode_ci`; author columns (`created_by` / `updated_by` / `entered_by`)
+are `INT NULL` with no FK, matching existing convention. Dates are `@db.Date`
+(UTC midnight), times `@db.Time`, and shift wall-clocks `@db.DateTime`.
+
+| Table | Grain | Purpose |
+|-------|-------|---------|
+| `schedule_activity_type` | one per segment kind | Break / Lunch / … . `is_paid`, `counts_as_coverage`, `is_system`, `sort_order`. Generalizes breaks so new kinds are data, not schema. |
+| `schedule_exception_type` | one per exception kind | Excused Absence / Scheduled PTO / Late / Early Leave / … . Carries `is_excused`, `duration_mode` (`FULL_DAY`/`WINDOW`/`EITHER`), `affects_arrival`, `affects_departure`. |
+| `schedule_coverage_threshold` | one per department | `green_min` / `yellow_min` staffing minimums for the day-view heatmap. FK → `departments`. |
+| `schedule_template` | one per reusable week | `template_name`, `description`, `is_active`. **No** department or color column. |
+| `schedule_template_day` | one per template × weekday (0=Sun) | `is_day_off`, `start_time`/`end_time`. FK → `schedule_template` (ON DELETE CASCADE). |
+| `schedule_template_day_segment` | one per template-day break/lunch | `activity_type_id`, `start_time`/`end_time`, `sort_order`. |
+| `schedule_shift` | one per user × day (unique `user_id`,`shift_date`) | The materialized plan. `is_day_off`, `start_at`/`end_at`, `notes`, `status` (`DRAFT`/`PUBLISHED`), `source`, `template_id`, `locked_at`. FK → `users`. |
+| `schedule_shift_segment` | one per shift break/lunch | `activity_type_id`, `start_at`/`end_at`, `sort_order`. FK → `schedule_shift` (ON DELETE CASCADE). |
+| `schedule_exception` | one per user × day × window | `exception_type_id`, `is_full_day`, `starts_at`/`ends_at`, `notes`, `paychex_reference`. Non-overlapping per day (enforced in service). FK → `users`. |
+
+All FKs use explicit `fk_*` names and appropriate `ON DELETE` clauses; unique
+keys are `uq_*` and secondary indexes `idx_*`. The migration is additive only —
+no existing table is altered and no data is migrated.

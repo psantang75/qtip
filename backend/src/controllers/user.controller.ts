@@ -3,6 +3,7 @@ import { UserService, UserServiceError } from '../services/UserService';
 import { MySQLUserRepository } from '../repositories/UserRepository';
 import prisma from '../config/prisma';
 import logger from '../config/logger';
+import { cancelFutureShiftsForUser } from '../services/scheduling';
 
 // Initialize user service with repository
 const userRepository = new MySQLUserRepository();
@@ -171,6 +172,16 @@ export const toggleUserStatus = async (req: Request, res: Response, next: NextFu
     const updatedBy = req.user?.user_id || 0;
     
     const updatedUser = await userService.toggleUserStatus(user_id, is_active, updatedBy);
+
+    // A deactivated user must stop generating attendance denominators — cancel
+    // their future shifts. Past shifts stay intact as history.
+    if (is_active === false) {
+      const cancelled = await cancelFutureShiftsForUser(user_id);
+      if (cancelled > 0) {
+        logger.info(`[USER CONTROLLER] Cancelled ${cancelled} future shifts for deactivated user ${user_id}`);
+      }
+    }
+
     return res.status(200).json(updatedUser);
   } catch (error) {
     logger.error('[USER CONTROLLER] Error in toggleUserStatus:', error);
