@@ -3,14 +3,14 @@ import { InsightsSection } from '@/components/insights'
 import ActivityReportShell from '@/components/insights/agentActivity/ActivityReportShell'
 import TicketsTasksTable from '@/components/insights/agentActivity/TicketsTasksTable'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
-import { getTicketsPastDue, getTicketsTasks } from '@/services/insightsService'
+import { getCsrTicketsPastDue, getCsrTicketsTasks } from '@/services/insightsCsrService'
 
-export default function AATicketsTasksPage() {
+export default function CSRTicketsTasksPage() {
   const filters = useActivityFilters()
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['aa-tickets-tasks', filters.params.users, filters.params.departments],
-    queryFn:  () => getTicketsTasks(filters.params),
+    queryKey: ['csr-tickets-tasks', filters.params.users, filters.params.departments],
+    queryFn:  () => getCsrTicketsTasks(filters.params),
     // Filter-driven snapshot; refreshes server-side every 2h. Don't lean on the
     // global 5-min staleTime, which can serve a pre-change cached list.
     staleTime: 0,
@@ -40,9 +40,9 @@ export default function AATicketsTasksPage() {
           <TicketsTasksTable
             groups={groups}
             grandTotal={data?.grandTotal}
-            agentLabel="Salesperson"
-            fetchPastDue={getTicketsPastDue}
-            pastDueQueryKey="aa-tickets-past-due"
+            agentLabel="Agent"
+            fetchPastDue={getCsrTicketsPastDue}
+            pastDueQueryKey="csr-tickets-past-due"
           />
         )}
       </InsightsSection>

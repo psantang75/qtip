@@ -25,7 +25,8 @@ const SAMPLE_DEPTS = ['Sales Inbound', 'Sales Outbound']
 
 interface ActivityReportShellProps {
   title: string
-  description: string
+  /** Omitted on reports whose title needs no gloss — no empty line is rendered. */
+  description?: string
   /** Business days in the selected range — shown as the calculation basis. */
   businessDays?: number
   /** Total business days in the period; when set, current renders "X of Y". */
@@ -108,7 +109,7 @@ export default function ActivityReportShell({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-            <p className="text-sm text-slate-500 mt-0.5">{description}</p>
+            {description && <p className="text-sm text-slate-500 mt-0.5">{description}</p>}
           </div>
           {!live && (
             <span className="shrink-0 mt-1 inline-flex items-center rounded-full bg-warning/10 text-warning px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide">

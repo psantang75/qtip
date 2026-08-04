@@ -386,6 +386,26 @@ export const getTicketsTasks = async (p: AAParams): Promise<TicketsTasksResponse
   return response.data
 }
 
+/** One overdue work item behind a Past Due cell. Tasks fill `taskType`, tickets fill `classification`/`subClassification`; `status` applies to both. */
+export interface PastDueItem {
+  processType:        string
+  referenceId:        number
+  customerName:       string | null
+  taskType:           string | null
+  classification:     string | null
+  subClassification:  string | null
+  status:             string | null
+  nextContact:        string | null
+  crmUrl:             string | null
+}
+
+export interface PastDueQuery { agent: string; classification: string }
+
+export const getTicketsPastDue = async (q: PastDueQuery): Promise<PastDueItem[]> => {
+  const response = await api.get('/insights/agent-activity/tickets/past-due', { params: q })
+  return response.data
+}
+
 // ── Agent Activity — Leads (Phase 4 live data) ────────────────────────────────
 
 export interface LeadCatSourceRow {

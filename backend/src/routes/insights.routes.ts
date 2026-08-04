@@ -6,8 +6,9 @@ import {
   getDataFreshness,
   getKpiConfig,
 } from '../controllers/insights.controller';
-import { getAgentActivityStatus, getEmailActivity, getCallActivity, getTicketsTasks, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
+import { getAgentActivityStatus, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
 import qcRouter from './insightsQC.routes';
+import csrRouter from './insightsCsr.routes';
 
 const router = express.Router();
 
@@ -53,6 +54,11 @@ router.get('/agent-activity/tickets',
   getTicketsTasks as unknown as RequestHandler
 );
 
+router.get('/agent-activity/tickets/past-due',
+  authenticate as unknown as RequestHandler,
+  getTicketsPastDue as unknown as RequestHandler
+);
+
 router.get('/agent-activity/leads',
   authenticate as unknown as RequestHandler,
   getLeads as unknown as RequestHandler
@@ -65,5 +71,8 @@ router.get('/agent-activity/margin',
 
 // QC analytics — authenticate applied per-handler (via qcHandler wrapper)
 router.use('/qc', authenticate as unknown as RequestHandler, qcRouter as unknown as RequestHandler);
+
+// Agent Activity - CSR (attendance points and schedule compliance)
+router.use('/csr', authenticate as unknown as RequestHandler, csrRouter as unknown as RequestHandler);
 
 export default router;

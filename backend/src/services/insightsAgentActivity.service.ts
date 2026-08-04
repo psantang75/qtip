@@ -719,6 +719,42 @@ export interface TicketTaskFilters {
    * numbers. Resolved from ie_page_role_access via InsightsPermissionService.
    */
   selfEmployeeKey?: number | null;
+  /**
+   * Which Agent Activity section is asking. 'sales' keeps the Sales Department -
+   * All subtree; 'csr' takes its complement (Customer Service / Tech Support /
+   * VIP Support / etc.) so the CSR section shows the agents it owns and nothing
+   * else. The CSR-role guard applies either way. Defaults to 'sales'.
+   */
+  area?: 'sales' | 'csr';
+}
+
+/** Overdue = a real due date that has already passed. Shared by the count and the detail list. */
+const PAST_DUE_PREDICATE = 'f.next_contact IS NOT NULL AND DATE(f.next_contact) < CURDATE()';
+
+/**
+ * Joins + base predicate every Tickets & Tasks query shares: conform to the
+ * current employee/department dimension rows, keep CSRs only, and keep the
+ * section's own department subtree. The CSR section reads the complement of the
+ * Sales subtree; COALESCE so a department whose hierarchy_path hasn't been
+ * backfilled yet still counts as non-Sales instead of dropping out on a NULL
+ * comparison. `selfEmployeeKey` is folded into the BASE predicate so a
+ * SELF-scoped viewer can never widen past themselves.
+ */
+function ticketTaskBase(area: 'sales' | 'csr' | undefined, selfEmployeeKey?: number | null) {
+  const deptGuard = area === 'csr'
+    ? "COALESCE(dpt.hierarchy_path, '') <> ? AND COALESCE(dpt.hierarchy_path, '') NOT LIKE CONCAT(?, '/%')"
+    : "(dpt.hierarchy_path = ? OR dpt.hierarchy_path LIKE CONCAT(?, '/%'))";
+
+  const baseWhere = ['e.role_name = ?', deptGuard];
+  const baseParams: (string | number)[] = [AGENT_ROLE, SALES_DEPT_ROOT_PATH, SALES_DEPT_ROOT_PATH];
+  applySelfScope(baseWhere, baseParams, selfEmployeeKey);
+
+  return {
+    EMP_JOIN: 'JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key',
+    DEPT_JOIN: 'JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key',
+    baseWhere,
+    baseParams,
+  };
 }
 
 export interface TicketRow {
@@ -745,9 +781,10 @@ export interface TicketsTasksResult {
  * (agent, classification) into Current / Due Today / Past Due buckets. This is a
  * SNAPSHOT report, so there is NO period filter — it always reflects the latest
  * ingested snapshot. Buckets are derived here from next_contact vs CURDATE() so
- * they stay accurate between snapshot runs. Same sales-only guards as the other
- * AA reports (CSR role + Sales Department - All subtree, by the conformed
- * assignee). Degrades to empty if the fact table isn't loaded yet.
+ * they stay accurate between snapshot runs. CSR-role guard as on every AA report;
+ * the department guard follows `filters.area` — the Sales Department - All subtree
+ * for the Sales section, its complement for the CSR section — matched by the
+ * conformed assignee. Degrades to empty if the fact table isn't loaded yet.
  */
 export async function getTicketsTasks(filters: TicketTaskFilters): Promise<TicketsTasksResult> {
   const empty: TicketsTasksResult = {
@@ -757,21 +794,12 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
   };
   if (!(await factTableExists('ie_fact_ticket_task'))) return empty;
 
-  const EMP_JOIN = `JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key`;
-  const DEPT_JOIN = `JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key`;
+  const { EMP_JOIN, DEPT_JOIN, baseWhere, baseParams } = ticketTaskBase(filters.area, filters.selfEmployeeKey);
   // Bucket = next_contact (the task/ticket DueOn) vs today. NULL due date -> no
   // bucket (matches the legacy proc's PastDueCurrent CASE with no ELSE).
   const CUR = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) > CURDATE())`;
   const DUE = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) = CURDATE())`;
-  const PAST = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) < CURDATE())`;
-
-  const baseWhere = [
-    'e.role_name = ?',
-    "(dpt.hierarchy_path = ? OR dpt.hierarchy_path LIKE CONCAT(?, '/%'))",
-  ];
-  const baseParams: (string | number)[] = [AGENT_ROLE, SALES_DEPT_ROOT_PATH, SALES_DEPT_ROOT_PATH];
-
-  applySelfScope(baseWhere, baseParams, filters.selfEmployeeKey);
+  const PAST = `SUM(${PAST_DUE_PREDICATE})`;
 
   const where = [...baseWhere];
   const params = [...baseParams];
@@ -851,6 +879,81 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
     dataNextUpdate: schedule.dataNextUpdate,
     updateEveryMinutes: schedule.updateEveryMinutes,
   };
+}
+
+export interface TicketPastDueFilters {
+  /** The agent whose Past Due cell was opened (ie_fact_ticket_task.agent_name). */
+  agent: string;
+  /** The classification row that was opened. */
+  classification: string;
+  selfEmployeeKey?: number | null;
+  area?: 'sales' | 'csr';
+}
+
+export interface PastDueItem {
+  /** 'Ticket' or 'Task'. */
+  processType: string;
+  /** Ticket number for tickets, task id for tasks — what the CRM screen is keyed on. */
+  referenceId: number;
+  customerName: string | null;
+  /** Tasks only: the task type. */
+  taskType: string | null;
+  /** Tickets only: parent classification. */
+  classification: string | null;
+  /** Tickets only: sub-classification. */
+  subClassification: string | null;
+  /** Where the item stands — a task status ('Promised To Pay') or a ticket status ('Assigned'). */
+  status: string | null;
+  /** Due date (YYYY-MM-DD, formatted in SQL so no timezone shifting can occur). */
+  nextContact: string | null;
+  crmUrl: string | null;
+}
+
+/**
+ * The individual past-due work items behind one Past Due cell, oldest due date
+ * first so the most overdue work is at the top. Same guards as the aggregate —
+ * including SELF scope — so opening a cell can never reveal a row the report
+ * itself would have excluded.
+ *
+ * The two process types carry different meaning in the same columns, so they are
+ * split out here rather than in the UI: a Task's `classification` is really its
+ * task type and its `sub_classification` is just the literal 'Task', while a
+ * Ticket's pair is the real parent/child classification. `status` is meaningful
+ * for both (a task status or a ticket status) and is passed through as-is.
+ */
+export async function getTicketsPastDue(filters: TicketPastDueFilters): Promise<PastDueItem[]> {
+  if (!(await factTableExists('ie_fact_ticket_task'))) return [];
+
+  const { EMP_JOIN, DEPT_JOIN, baseWhere, baseParams } = ticketTaskBase(filters.area, filters.selfEmployeeKey);
+  const where = [...baseWhere, 'f.agent_name = ?', 'f.classification = ?', PAST_DUE_PREDICATE];
+  const params = [...baseParams, filters.agent, filters.classification];
+
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT f.process_type, f.ticket_id, f.task_id, f.customer_name,
+            f.classification, f.sub_classification, f.status, f.crm_url,
+            DATE_FORMAT(f.next_contact, '%Y-%m-%d') AS next_contact
+     FROM ie_fact_ticket_task f
+     ${EMP_JOIN}
+     ${DEPT_JOIN}
+     WHERE ${where.join(' AND ')}
+     ORDER BY f.next_contact ASC`,
+    params,
+  );
+
+  return rows.map((r) => {
+    const isTask = r.process_type === 'Task';
+    return {
+      processType: r.process_type as string,
+      referenceId: Number(isTask ? r.task_id : r.ticket_id),
+      customerName: (r.customer_name as string | null) ?? null,
+      taskType: isTask ? ((r.classification as string | null) ?? null) : null,
+      classification: isTask ? null : ((r.classification as string | null) ?? null),
+      subClassification: isTask ? null : ((r.sub_classification as string | null) ?? null),
+      status: (r.status as string | null) ?? null,
+      nextContact: (r.next_contact as string | null) ?? null,
+      crmUrl: (r.crm_url as string | null) ?? null,
+    };
+  });
 }
 
 // ── Leads (Phase 4) ─────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import {
   getEmailActivity as svcGetEmailActivity,
   getCallActivity as svcGetCallActivity,
   getTicketsTasks as svcGetTicketsTasks,
+  getTicketsPastDue as svcGetTicketsPastDue,
   getLeads as svcGetLeads,
   getMargin as svcGetMargin,
 } from '../services/insightsAgentActivity.service';
@@ -120,6 +121,68 @@ export const getTicketsTasks = async (req: Request, res: Response): Promise<void
     res.status(500).json({ error: 'Failed to load tickets & tasks' });
   }
 };
+
+/**
+ * GET /api/insights/csr/tickets
+ * The same Tickets & Tasks snapshot for the Agent Activity - CSR section: same
+ * buckets and grouping, scoped to the CSR-area agents (everyone outside the
+ * Sales Department - All subtree) and its own page grant.
+ */
+export const getCsrTicketsTasks = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const scope = await resolveAaScope(req, res, 'csr_tickets');
+    if (!scope) return;
+    const { users, departments } = req.query as Record<string, string | undefined>;
+    const result = await svcGetTicketsTasks({
+      users: users ? users.split(',').filter(Boolean) : undefined,
+      departments: departments ? departments.split(',').filter(Boolean) : undefined,
+      selfEmployeeKey: scope.selfEmployeeKey,
+      area: 'csr',
+    });
+    res.json(result);
+  } catch (error) {
+    logger.error('getCsrTicketsTasks error:', error);
+    res.status(500).json({ error: 'Failed to load tickets & tasks' });
+  }
+};
+
+/**
+ * Shared handler for the Past Due drill-in behind a Tickets & Tasks cell. Both
+ * sections read the same fact through the same guards; only the page grant and
+ * the department subtree differ.
+ */
+function pastDueHandler(pageKey: string, area: 'sales' | 'csr') {
+  return async (req: Request, res: Response): Promise<void> => {
+    try {
+      const scope = await resolveAaScope(req, res, pageKey);
+      if (!scope) return;
+      const { agent, classification } = req.query as Record<string, string | undefined>;
+      if (!agent || !classification) {
+        res.status(400).json({ error: 'agent and classification are required' });
+        return;
+      }
+      const items = await svcGetTicketsPastDue({
+        agent,
+        classification,
+        selfEmployeeKey: scope.selfEmployeeKey,
+        area,
+      });
+      res.json(items);
+    } catch (error) {
+      logger.error('getTicketsPastDue error:', error);
+      res.status(500).json({ error: 'Failed to load past due tickets & tasks' });
+    }
+  };
+}
+
+/**
+ * GET /api/insights/agent-activity/tickets/past-due?agent=&classification=
+ * GET /api/insights/csr/tickets/past-due?agent=&classification=
+ * The individual overdue work items behind one Past Due count, each with its CRM
+ * deep link so the viewer can act on it.
+ */
+export const getTicketsPastDue = pastDueHandler('aa_sales_tickets', 'sales');
+export const getCsrTicketsPastDue = pastDueHandler('csr_tickets', 'csr');
 
 /**
  * GET /api/insights/agent-activity/leads

@@ -3,6 +3,7 @@ import pool from '../config/database'
 import { RowDataPacket } from 'mysql2'
 import { InsightsPermissionService } from '../services/InsightsPermissionService'
 import type { InsightsAccessResult } from '../services/InsightsPermissionService'
+import { resolveDeptFilter } from '../services/insightsScope'
 import { resolvePeriod } from '../utils/periodUtils'
 import type { PeriodRanges } from '../utils/periodUtils'
 import { getInsightsRoleId } from '../utils/insightsRoleMap'
@@ -22,37 +23,6 @@ class BadRequestError extends Error {
     super(message)
     this.name = 'BadRequestError'
   }
-}
-
-async function resolveDeptFilter(
-  userId: number,
-  access: InsightsAccessResult,
-  reqDepts?: string,
-): Promise<number[]> {
-  if (access.dataScope === 'ALL') {
-    if (reqDepts) {
-      const parts = reqDepts.split(',').map(s => s.trim()).filter(Boolean)
-      const numericIds = parts.map(Number).filter(n => !isNaN(n) && n > 0)
-      if (numericIds.length === parts.length) return numericIds
-      // Resolve department names to IDs
-      const ph = parts.map(() => '?').join(',')
-      const [rows] = await pool.execute<RowDataPacket[]>(
-        `SELECT id FROM departments WHERE department_name IN (${ph})`,
-        parts,
-      )
-      return rows.map(r => r.id as number)
-    }
-    return []
-  }
-  // SELF scope is filtered by user_id at the handler level — leave the
-  // dept filter empty so deptClause() produces no SQL.
-  if (access.dataScope === 'SELF') return []
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT department_id FROM users WHERE id = ?',
-    [userId],
-  )
-  const deptId = rows[0]?.department_id as number | null
-  return deptId ? [deptId] : []
 }
 
 function periodRanges(req: Request): PeriodRanges {
