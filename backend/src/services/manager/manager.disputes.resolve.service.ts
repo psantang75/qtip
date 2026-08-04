@@ -17,6 +17,7 @@ import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
 import { getDisputeScoreHistory, recordDisputeScore } from '../../utils/disputeScoreHistory'
 import { ManagerServiceError } from './manager.types'
+import { closeUnlock } from '../unlock/unlock.service'
 
 export type ResolutionAction =
   | 'UPHOLD'
@@ -196,6 +197,13 @@ export async function resolveManagerDispute(
       notes: 'Score adjusted during dispute resolution',
     })
   }
+
+  // If an admin had reopened this determination, the re-decision closes that
+  // unlock event. A no-op when nothing was reopened.
+  await closeUnlock('DISPUTE', Number(disputeId), userId, {
+    new_status: finalStatus,
+    new_score: new_score ?? null,
+  })
 
   // Notify the disputant. Wrapped — never blocks resolution if mail fails.
   try {

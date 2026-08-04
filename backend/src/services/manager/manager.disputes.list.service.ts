@@ -37,6 +37,8 @@ export interface DisputeListItem {
   form_name: string
   qa_analyst_name: string | null
   interaction_date: string | null
+  /** How many times an admin has reopened this dispute decision. */
+  reopen_count: number
 }
 
 export interface DisputeListResult {
@@ -56,6 +58,7 @@ const SELECT_LIST = `
     d.created_at,
     d.resolved_at,
     d.resolution_notes,
+    d.reopen_count,
     s.total_score,
     (
       SELECT dsh.score
@@ -131,6 +134,7 @@ export async function listManagerTeamDisputes(
     created_at: d.created_at as Date | string,
     resolved_at: (d.resolved_at as Date | string | null) ?? null,
     resolution_notes: (d.resolution_notes as string) ?? null,
+    reopen_count: Number(d.reopen_count ?? 0),
     total_score: d.total_score == null ? null : Number(d.total_score),
     previous_score: d.previous_score == null ? null : Number(d.previous_score),
     adjusted_score: d.adjusted_score == null ? null : Number(d.adjusted_score),

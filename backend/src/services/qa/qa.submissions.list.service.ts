@@ -70,6 +70,8 @@ export async function listCompletedSubmissions(params: CompletedSubmissionsParam
     critical_fail_count: number
     score_capped: number
     ai_overall_confidence: number | null
+    reopen_count: number
+    unlock_open: number
   }[]>(
     Prisma.sql`
       SELECT
@@ -84,6 +86,11 @@ export async function listCompletedSubmissions(params: CompletedSubmissionsParam
         s.critical_fail_count,
         s.score_capped,
         s.ai_overall_confidence,
+        s.reopen_count,
+        EXISTS (
+          SELECT 1 FROM record_unlock ru
+          WHERE ru.entity_type = 'SUBMISSION' AND ru.entity_id = s.id AND ru.state = 'OPEN'
+        ) AS unlock_open,
         (
           SELECT sm.value
           FROM submission_metadata sm

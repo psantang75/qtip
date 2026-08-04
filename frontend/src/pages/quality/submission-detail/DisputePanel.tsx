@@ -1,4 +1,4 @@
-import { Pencil, FileText, Edit3 } from 'lucide-react'
+import { Pencil, FileText, Edit3, Unlock, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { Section, SectionLabel, NoteBlock } from '@/components/common/DetailLayout'
@@ -17,6 +17,7 @@ interface Dispute {
   resolved_by?:      number | null
   created_at?:       string
   resolved_at?:      string
+  reopen_count?:     number
 }
 
 export interface ResolutionState {
@@ -39,14 +40,27 @@ interface Props {
   canResolveDispute: boolean
   resolution:       ResolutionState
   formData:         any
+  /** Admin-only: this determination is closed and can be reopened. */
+  canReopen?:       boolean
+  onReopen?:        () => void
 }
 
 export function DisputePanel({
   submissionId, dispute, isAgent, editingDispute, onEditDispute,
   canResolveDispute, resolution, formData,
+  canReopen = false, onReopen,
 }: Props) {
   const headerRight = (
     <div className="flex items-center gap-3">
+      {(dispute.reopen_count ?? 0) > 0 && (
+        <span
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full"
+          title="An administrator has reopened this dispute decision after it was closed."
+        >
+          <RotateCcw className="h-3 w-3" />
+          Reopened {dispute.reopen_count}&times;
+        </span>
+      )}
       <span className="text-[13px] text-slate-500 flex items-center gap-1.5">
         Status: <span className="text-[15px] font-semibold text-primary">{STATUS_LABELS[dispute.status] ?? dispute.status}</span>
       </span>
@@ -54,6 +68,13 @@ export function DisputePanel({
         <button className="text-[12px] text-primary hover:text-primary/80 transition-colors font-medium flex items-center gap-1"
           onClick={() => onEditDispute(true)}>
           <Pencil className="h-3 w-3" /> Edit
+        </button>
+      )}
+      {canReopen && (
+        <button className="text-[12px] text-amber-700 hover:text-amber-800 transition-colors font-medium flex items-center gap-1"
+          onClick={onReopen}
+          title="Reopen this decision so the dispute can be edited and re-decided. Recorded in the Unlock Register.">
+          <Unlock className="h-3 w-3" /> Reopen
         </button>
       )}
     </div>

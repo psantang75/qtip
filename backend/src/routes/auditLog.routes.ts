@@ -1,5 +1,5 @@
 ﻿import express, { Request, Response, RequestHandler } from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authorizeAdmin } from '../middleware/auth';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import logger from '../config/logger';
@@ -151,20 +151,23 @@ const getAuditLogByIdHandler = async (req: Request, res: Response): Promise<void
   }
 };
 
-// Apply authentication middleware
+// Admin only. These rows carry the justification text behind admin
+// overrides (unlock reasons, legacy overrides), which must not be readable
+// by the agents those overrides are about.
 router.use(authenticate as unknown as RequestHandler);
+router.use(authorizeAdmin as unknown as RequestHandler);
 
 /**
  * @route GET /api/audit-logs
  * @desc Get audit logs with pagination and filtering
- * @access Private
+ * @access Private (Admin)
  */
 router.get('/', getAuditLogsHandler as unknown as RequestHandler);
 
 /**
  * @route GET /api/audit-logs/:id
  * @desc Get audit log by ID
- * @access Private
+ * @access Private (Admin)
  */
 router.get('/:id', getAuditLogByIdHandler as unknown as RequestHandler);
 

@@ -124,6 +124,10 @@ export interface Submission {
   critical_cap_percent?: number
   /** AI Reviewer overall confidence (0..1, null for human authored). */
   ai_overall_confidence?: number | null
+  /** How many times an admin has reopened this review. */
+  reopen_count?: number
+  /** 1 while an admin reopen is still awaiting correction. */
+  unlock_open?: number
 }
 
 export interface AnswerRow {
@@ -155,6 +159,8 @@ export interface DisputeRecord {
   original_score?: number
   qa_analyst_name?: string
   interaction_date?: string | null
+  /** How many times an admin has reopened this dispute decision. */
+  reopen_count?: number
 }
 
 export interface MetadataEntry {
@@ -177,6 +183,21 @@ export interface SubmissionDetail extends Submission {
       category_weight: number
     }>
   }
+  /** How many times an admin has reopened this review. */
+  reopen_count?: number
+  /** Populated while the review or its dispute is currently reopened. */
+  active_unlock?: {
+    id: number
+    entity_type: 'SUBMISSION' | 'DISPUTE'
+    entity_id: number
+    reason_code: string
+    reason_note: string
+    unlocked_at: string
+    unlocked_by_name: string | null
+    relock_due_at: string
+    prior_status: string
+    prior_score: number | null
+  } | null
 }
 
 export interface FormQuestion {

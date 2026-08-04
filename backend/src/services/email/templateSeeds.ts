@@ -218,6 +218,33 @@ const SEEDS: SeedSpec[] = [
     digest_eligible: false,
     deep_link_target: 'Submission detail page with dispute outcome (/app/quality/submissions/{id}).' },
 
+  // ── Admin unlock / reopen ──────────────────────────────────────────
+  // Reopening withdraws a score the agent has already seen, so the agent is
+  // a fixed recipient — they must never learn about a score change after the
+  // fact. Digest is disabled for the same reason: a next-day summary is too
+  // late when the corrected review is due back within days.
+  { template_key: 'submission.unlocked', category: 'Quality', name: 'Review reopened by admin',
+    description: 'An admin reopened a submitted or finalized review so it can be corrected. The score is withdrawn until it is re-submitted.',
+    cadence: 'IMMEDIATE', is_locked: false,
+    recipient_summary: 'Agent + original QA + agent\'s manager',
+    allowed_variables: ['form', 'submission', 'csr', 'actor', 'originalQa', 'unlock', 'priorScore', 'recipient', 'deepLinkPath'],
+    available_roles: ['agent', 'original_qa', 'direct_manager'],
+    default_recipient_roles: ['agent', 'original_qa', 'direct_manager'],
+    fixed_roles: ['agent'],
+    digest_eligible: false,
+    deep_link_target: 'Submission detail page for the reopened review (/app/quality/submissions/{id}).' },
+
+  { template_key: 'dispute.unlocked', category: 'Disputes', name: 'Dispute decision reopened by admin',
+    description: 'An admin reopened a closed dispute determination so it can be edited and re-decided.',
+    cadence: 'IMMEDIATE', is_locked: false,
+    recipient_summary: 'Disputant + original QA + disputant\'s manager',
+    allowed_variables: ['form', 'submission', 'csr', 'actor', 'originalQa', 'unlock', 'priorScore', 'recipient', 'deepLinkPath'],
+    available_roles: ['self', 'original_qa', 'direct_manager'],
+    default_recipient_roles: ['self', 'original_qa', 'direct_manager'],
+    fixed_roles: ['self'],
+    digest_eligible: false,
+    deep_link_target: 'Submission detail page with the reopened dispute (/app/quality/submissions/{id}).' },
+
   // ── Coaching ───────────────────────────────────────────────────────
   { template_key: 'coaching.scheduled', category: 'Coaching', name: 'Coaching scheduled',
     description: 'A coaching session has been scheduled.',

@@ -42,6 +42,23 @@ export interface SubmissionDetail {
   answers: any[]
   dispute: any | null
   scoreBreakdown: any | null
+  /** How many times an admin has reopened this review. */
+  reopen_count: number
+  /** The still-open unlock, when this record is currently reopened. */
+  active_unlock: ActiveUnlock | null
+}
+
+export interface ActiveUnlock {
+  id: number
+  entity_type: 'SUBMISSION' | 'DISPUTE'
+  entity_id: number
+  reason_code: string
+  reason_note: string
+  unlocked_at: Date
+  unlocked_by_name: string | null
+  relock_due_at: Date
+  prior_status: string
+  prior_score: number | null
 }
 
 /**
@@ -83,13 +100,14 @@ export async function getSubmissionDetail(
     )
   }
 
-  const [metadata, calls, ticket_tasks, answers, disputes, scoreBreakdown] = await Promise.all([
+  const [metadata, calls, ticket_tasks, answers, disputes, scoreBreakdown, activeUnlock] = await Promise.all([
     loadMetadata(submissionId),
     loadCalls(submissionId),
     loadTicketTasks(submissionId),
     loadAnswers(submissionId),
     loadDispute(submissionId),
     loadScoreBreakdown(submissionId),
+    loadActiveUnlock(submissionId),
   ])
 
   const result: SubmissionDetail = {
@@ -121,6 +139,8 @@ export async function getSubmissionDetail(
     answers,
     dispute: disputes[0] ?? null,
     scoreBreakdown,
+    reopen_count: Number(submission.reopen_count ?? 0),
+    active_unlock: activeUnlock,
   }
 
   if (includeFullForm) {
@@ -143,7 +163,7 @@ async function loadSubmission(submissionId: number): Promise<any | null> {
     SELECT
       s.id, s.form_id, s.submitted_by, s.submitted_at, s.total_score, s.status,
       s.critical_fail_count, s.score_capped,
-      s.ai_overall_confidence, s.ai_extras,
+      s.ai_overall_confidence, s.ai_extras, s.reopen_count,
       f.form_name, f.version, f.user_version, f.user_version_date,
       f.interaction_type, f.critical_cap_percent,
       reviewer.username AS reviewer_name,
@@ -159,9 +179,40 @@ async function loadSubmission(submissionId: number): Promise<any | null> {
     JOIN forms f ON s.form_id = f.id
     LEFT JOIN users reviewer ON reviewer.id = s.submitted_by
     WHERE s.id = ${submissionId}
-      AND (s.status = 'FINALIZED' OR s.status = 'DISPUTED' OR s.status = 'SUBMITTED')
+      AND (
+        s.status IN ('FINALIZED', 'DISPUTED', 'SUBMITTED')
+        -- A review an admin reopened sits in DRAFT. It still has to render
+        -- here, or the detail page 404s the moment anyone clicks Reopen.
+        OR EXISTS (
+          SELECT 1 FROM record_unlock ru
+          WHERE ru.entity_type = 'SUBMISSION' AND ru.entity_id = s.id AND ru.state = 'OPEN'
+        )
+      )
   `)
   return rows[0] ?? null
+}
+
+/**
+ * The still-open unlock for this review, covering both a reopened review and
+ * a reopened dispute on it. Drives the banner and the resume-draft CTA.
+ */
+async function loadActiveUnlock(submissionId: number): Promise<ActiveUnlock | null> {
+  const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
+    SELECT ru.id, ru.entity_type, ru.entity_id, ru.reason_code, ru.reason_note,
+           ru.unlocked_at, ru.relock_due_at, ru.prior_status, ru.prior_score,
+           actor.username AS unlocked_by_name
+    FROM record_unlock ru
+    LEFT JOIN users actor ON ru.unlocked_by = actor.id
+    WHERE ru.submission_id = ${submissionId} AND ru.state = 'OPEN'
+    ORDER BY ru.unlocked_at DESC
+    LIMIT 1
+  `)
+  const row = rows[0]
+  if (!row) return null
+  return {
+    ...row,
+    prior_score: row.prior_score == null ? null : Number(row.prior_score),
+  }
 }
 
 async function loadMetadata(submissionId: number): Promise<any[]> {
@@ -222,7 +273,7 @@ async function loadDispute(submissionId: number): Promise<any[]> {
   return prisma.$queryRaw<any[]>(Prisma.sql`
     SELECT
       d.id, d.reason, d.status, d.resolution_notes, d.attachment_url,
-      d.resolved_by, d.created_at, d.resolved_at,
+      d.resolved_by, d.created_at, d.resolved_at, d.reopen_count,
       dsh_adj.score  AS new_score,
       dsh_prev.score AS previous_score
     FROM disputes d

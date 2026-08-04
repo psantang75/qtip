@@ -8,6 +8,9 @@ import { getFormById } from '@/services/formService'
 import { normalizeFormMetadata } from '@/pages/quality/form-builder/formBuilderUtils'
 import submissionService from '@/services/submissionService'
 import aiReviewerService from '@/services/aiReviewerService'
+import { unlockService, UNLOCK_REASON_LABELS } from '@/services/unlockService'
+import { useQualityRole } from '@/hooks/useQualityRole'
+import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
 import MultipleCallSelector from '@/components/common/MultipleCallSelector'
 import { CallDetailsPanel } from './submission-detail/CallDetailsPanel'
 import TicketTaskSelector, { type TicketTaskRef } from '@/components/common/TicketTaskSelector'
@@ -63,25 +66,36 @@ export default function AuditFormPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { isAdmin } = useQualityRole()
 
   const formIdParam = searchParams.get('formId')
   const callId = searchParams.get('callId')
   const agentId = searchParams.get('csrId')
-  // ── AI Reviewer modes ────────────────────────────────────────────────
+  // ── Prefill modes ────────────────────────────────────────────────────
   // ?promoteDraft=<aiSubmissionId>            — load AI's DRAFT, edit, promote to SUBMITTED
   // ?calibrationOverlayFor=<aiSubmissionId>   — load AI's SUBMITTED answers, write a NEW human submission
+  // ?resumeDraft=<submissionId>               — load a human DRAFT an admin reopened, edit, re-submit
   const promoteDraftId = searchParams.get('promoteDraft')
   const calibrationOverlayId = searchParams.get('calibrationOverlayFor')
+  const resumeDraftId = searchParams.get('resumeDraft')
   const aiSubmissionId = promoteDraftId
     ? Number(promoteDraftId)
     : calibrationOverlayId
       ? Number(calibrationOverlayId)
-      : null
-  const aiMode: 'promote' | 'overlay' | null = promoteDraftId
+      : resumeDraftId
+        ? Number(resumeDraftId)
+        : null
+  const prefillMode: 'promote' | 'overlay' | 'resume' | null = promoteDraftId
     ? 'promote'
     : calibrationOverlayId
       ? 'overlay'
-      : null
+      : resumeDraftId
+        ? 'resume'
+        : null
+  // The AI-specific chrome (calibration banner, confidence chip, AI side
+  // panels) keys off this narrower flag — a reopened human review has none
+  // of that, it just reuses the same prefill plumbing.
+  const aiMode: 'promote' | 'overlay' | null = prefillMode === 'resume' ? null : prefillMode
 
   const qc = useQueryClient()
 
@@ -93,15 +107,19 @@ export default function AuditFormPage() {
     isError: aiPrefillError,
     error: aiPrefillErrorObj,
   } = useQuery({
-    queryKey: ['ai-reviewer-prefill', aiMode, aiSubmissionId],
+    queryKey: ['ai-reviewer-prefill', prefillMode, aiSubmissionId],
     queryFn: async () => {
-      if (!aiSubmissionId || !aiMode) return null
+      if (!aiSubmissionId || !prefillMode) return null
       // Promote-draft uses the dedicated AI Reviewer draft endpoint
       // (it filters to AI-Reviewer-owned drafts only). Overlay reuses
       // the standard submission-detail endpoint since the source is
-      // SUBMITTED.
-      if (aiMode === 'promote') {
+      // SUBMITTED. Resume uses the submissions draft endpoint, which
+      // returns the same shape scoped to the draft's own author.
+      if (prefillMode === 'promote') {
         return aiReviewerService.getDraft(aiSubmissionId)
+      }
+      if (prefillMode === 'resume') {
+        return submissionService.getDraftForEdit(aiSubmissionId)
       }
       // Lazy import to avoid pulling qaService into pages that don't need it
       const qaServiceMod = await import('@/services/qaService')
@@ -121,7 +139,7 @@ export default function AuditFormPage() {
         calls: [] as NonNullable<import('@/services/aiReviewerService').AiDraftDetail['calls']>,
       }
     },
-    enabled: !!(aiSubmissionId && aiMode),
+    enabled: !!(aiSubmissionId && prefillMode),
     staleTime: 60 * 1000,
     retry: false, // 403/404/409 from the draft endpoint are deterministic — don't retry
   })
@@ -165,7 +183,7 @@ export default function AuditFormPage() {
     }
   }, [aiPrefillError, aiPrefillErrorObj, aiSubmissionId])
 
-  const formId = aiMode && aiPrefill?.form_id ? String(aiPrefill.form_id) : formIdParam
+  const formId = prefillMode && aiPrefill?.form_id ? String(aiPrefill.form_id) : formIdParam
 
   // includeInactive=true: a submission is always tied to a specific
   // form_id, and the form may have been deactivated AFTER the
@@ -186,6 +204,19 @@ export default function AuditFormPage() {
     () => (formRaw ? normalizeFormMetadata(formRaw) : null),
     [formRaw],
   )
+
+  // The unlock event behind a resume, so the banner can state the reason and
+  // the deadline. Admin-only endpoint — a QA correcting their own review gets
+  // the generic banner text instead, which is enough for them to act on.
+  const { data: resumeUnlock } = useQuery({
+    queryKey: ['submission-active-unlock', aiSubmissionId],
+    queryFn: async () => {
+      const history = await unlockService.getSubmissionHistory(aiSubmissionId!)
+      return history.find((u) => u.state === 'OPEN' && u.entity_type === 'SUBMISSION') ?? null
+    },
+    enabled: prefillMode === 'resume' && !!aiSubmissionId && isAdmin,
+    retry: false,
+  })
 
   const { data: agentUsers = [] } = useQuery({
     queryKey: ['agent-dropdown-users'],
@@ -235,12 +266,24 @@ export default function AuditFormPage() {
           correction_reason: correctionReason.trim() || null,
         })
       }
+      // A reopened review updates its existing row rather than creating a
+      // second one, and closes the unlock event on the way through.
+      if (prefillMode === 'resume' && aiSubmissionId) {
+        return submissionService.resubmitUnlocked(aiSubmissionId, {
+          answers: payload.answers,
+          metadata: payload.metadata,
+        })
+      }
       return submissionService.submitAudit(payload)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['submissions'] })
       qc.invalidateQueries({ queryKey: ['ai-reviewer-inbox'] })
-      if (aiMode) {
+      if (prefillMode === 'resume' && aiSubmissionId) {
+        navigate(`/app/quality/submissions/${aiSubmissionId}`, {
+          state: { message: 'Correction submitted and re-scored.' },
+        })
+      } else if (aiMode) {
         const msg =
           aiMode === 'promote'
             ? 'AI draft promoted and scored.'
@@ -276,9 +319,9 @@ export default function AuditFormPage() {
   // AI submission so we wait for that fetch to complete before judging.
   useEffect(() => {
     if (formId) return
-    if (aiMode && !aiPrefill) return
+    if (prefillMode && !aiPrefill) return
     navigate('/app/quality/review-forms')
-  }, [formId, aiMode, aiPrefill, navigate])
+  }, [formId, prefillMode, aiPrefill, navigate])
 
   // Initialize derived state once the form data arrives from useQuery.
   // In AI Reviewer modes (promote / overlay) we hydrate the form with
@@ -287,7 +330,7 @@ export default function AuditFormPage() {
   useEffect(() => {
     if (!form) return
     const seedAnswers: Record<number, AnswerType> = {}
-    if (aiMode && aiPrefill?.answers) {
+    if (prefillMode && aiPrefill?.answers) {
       for (const a of aiPrefill.answers) {
         const qid = Number(a.question_id)
         let foundQ: any
@@ -331,7 +374,7 @@ export default function AuditFormPage() {
     // Date, CSR, etc.) on top of the auto defaults so the human reviewer
     // sees what the AI captured. Auto fields stay live (current user /
     // today) — those are the human's stamp, not the AI's.
-    if (aiMode && aiPrefill?.metadata) {
+    if (prefillMode && aiPrefill?.metadata) {
       const autoFieldKeys = new Set(
         (form.metadata_fields ?? [])
           .filter((f: any) => f.field_type === 'AUTO')
@@ -347,7 +390,7 @@ export default function AuditFormPage() {
 
     // Hydrate the linked ticket(s) / task(s) from the AI submission so
     // the left-pane TicketTaskSelector shows what's already attached.
-    if (aiMode && aiPrefill?.ticket_tasks?.length) {
+    if (prefillMode && aiPrefill?.ticket_tasks?.length) {
       setLinkedTicketTasks(
         aiPrefill.ticket_tasks
           .filter((t: any) => t && (t.kind === 'TICKET' || t.kind === 'TASK') && Number.isFinite(Number(t.external_id)))
@@ -360,7 +403,7 @@ export default function AuditFormPage() {
     // CALL (or that has an attached CALL) re-opens in the audit page
     // showing only the ticket and silently drops the call — the user
     // sees no transcript / recording context to grade against.
-    if (aiMode && aiPrefill?.calls?.length) {
+    if (prefillMode && aiPrefill?.calls?.length) {
       setSelectedCalls(
         aiPrefill.calls
           .filter((c: any) => c && Number.isFinite(Number(c.id)) && typeof c.call_id === 'string')
@@ -376,7 +419,7 @@ export default function AuditFormPage() {
           }))
       )
     }
-  }, [form, user, aiMode, aiPrefill])
+  }, [form, user, prefillMode, aiPrefill])
 
   const updateRenderData = (formData: any, currentAnswers: Record<number, AnswerType>) => {
     if (!formData) return
@@ -490,7 +533,7 @@ export default function AuditFormPage() {
     })
   }
 
-  if (loading || (aiMode && aiPrefillLoading)) {
+  if (loading || (prefillMode && aiPrefillLoading)) {
     return (
       <div className="p-6 space-y-4">
         <div className="h-8 bg-slate-100 rounded animate-pulse w-1/3" />
@@ -499,7 +542,7 @@ export default function AuditFormPage() {
     )
   }
 
-  if (aiMode && aiPrefillErrorDetail) {
+  if (prefillMode && aiPrefillErrorDetail) {
     return (
       <div className="p-6">
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)}
@@ -554,14 +597,16 @@ export default function AuditFormPage() {
           </Button>
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold text-slate-900">
-              {aiMode === 'promote'
+              {prefillMode === 'promote'
                 ? 'Promote AI Draft'
-                : aiMode === 'overlay'
+                : prefillMode === 'overlay'
                   ? 'Calibration Re-audit'
-                  : 'Review Form'}
+                  : prefillMode === 'resume'
+                    ? 'Correct Review'
+                    : 'Review Form'}
             </h1>
             <div className="flex items-center gap-3 shrink-0 mt-0.5">
-              {!aiMode && (
+              {!prefillMode && (
                 <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
                   <Save className="h-4 w-4 mr-1.5" />
                   {isSavingDraft ? 'Saving…' : 'Save Draft'}
@@ -571,12 +616,43 @@ export default function AuditFormPage() {
                 className="bg-primary hover:bg-primary/90 text-white">
                 <Send className="h-4 w-4 mr-1.5" />
                 {isSubmitting
-                  ? (aiMode === 'promote' ? 'Promoting…' : aiMode === 'overlay' ? 'Recording…' : 'Submitting…')
-                  : (aiMode === 'promote' ? 'Promote to Submitted' : aiMode === 'overlay' ? 'Save Calibration' : 'Submit Review')}
+                  ? (prefillMode === 'promote' ? 'Promoting…' : prefillMode === 'overlay' ? 'Recording…' : prefillMode === 'resume' ? 'Re-submitting…' : 'Submitting…')
+                  : (prefillMode === 'promote' ? 'Promote to Submitted' : prefillMode === 'overlay' ? 'Save Calibration' : prefillMode === 'resume' ? 'Re-submit Review' : 'Submit Review')}
               </Button>
             </div>
           </div>
         </div>
+
+        {prefillMode === 'resume' && (
+          <div className="mt-2 mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12px] text-amber-800 flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div>
+                <span className="font-semibold">Reopened for correction</span>{' '}
+                {resumeUnlock
+                  ? `${UNLOCK_REASON_LABELS[resumeUnlock.reason_code] ?? resumeUnlock.reason_code}${resumeUnlock.unlocked_by_name ? ` — reopened by ${resumeUnlock.unlocked_by_name}` : ''}.`
+                  : 'An administrator returned this review to you so it can be corrected.'}{' '}
+                Your edits replace the existing review; the original review date is preserved.
+              </div>
+              {resumeUnlock && (
+                <>
+                  <div className="text-amber-700">{resumeUnlock.reason_note}</div>
+                  <div className="text-[11px] text-amber-600">
+                    Re-submit by {fmtDate(resumeUnlock.relock_due_at)} or the previous score is automatically restored.
+                  </div>
+                </>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowScoreBreakdown(true)}
+              className="shrink-0 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-mono tabular-nums text-amber-800 hover:bg-amber-100 hover:border-amber-400 transition-colors cursor-pointer"
+              title="Click to see how this score is calculated"
+            >
+              <Calculator className="h-3 w-3" />
+              Score {score.toFixed(1)}%
+            </button>
+          </div>
+        )}
 
         {aiMode && (
           <div className="mt-2 mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12px] text-amber-800 flex items-start justify-between gap-3">

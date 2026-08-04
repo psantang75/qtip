@@ -134,6 +134,38 @@ export interface AuditDetailsResponse {
   };
 }
 
+/**
+ * A DRAFT's saved state, shaped to match `AiDraftDetail` so AuditFormPage's
+ * prefill hydration works for both AI drafts and reopened human reviews.
+ */
+export interface DraftForEdit {
+  submission_id: number;
+  form_id: number;
+  form_name: string | null;
+  submitted_at: string;
+  submitted_by: number;
+  /**
+   * Never sent for a human draft — declared only so this stays assignable
+   * wherever `AiDraftDetail` is, letting AuditFormPage share one prefill
+   * code path across AI drafts and reopened human reviews.
+   */
+  ai_overall_confidence?: number | null;
+  ai_extras?: null;
+  answers: Array<{ question_id: number; answer: string; notes: string }>;
+  metadata: Array<{ field_id: number; value: string }>;
+  ticket_tasks: Array<{ kind: 'TICKET' | 'TASK'; external_id: number }>;
+  calls: Array<{
+    id: number;
+    call_id: string;
+    csr_id: number;
+    customer_id: string | null;
+    call_date: string;
+    duration: number;
+    recording_url: string | null;
+    transcript: string | null;
+  }>;
+}
+
 // Helper function to get the shared axios instance (already has auth headers via interceptor)
 const getAuthorizedAxios = () => {
   // Return the shared api instance that has the 401 interceptor
@@ -247,6 +279,40 @@ const submissionService = {
       return response.data;
     } catch (error) {
       logError('submissionService', 'Error finalizing submission:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Load a DRAFT's saved answers back into the audit form. Used by the
+   * `?resumeDraft=` mode after an admin reopens a review. Response shape
+   * matches AiDraftDetail so AuditFormPage hydrates it with one code path.
+   */
+  getDraftForEdit: async (submissionId: number): Promise<DraftForEdit> => {
+    try {
+      const api = getAuthorizedAxios();
+      const response = await api.get<DraftForEdit>(`/submissions/${submissionId}/draft`);
+      return response.data;
+    } catch (error) {
+      logError('submissionService', 'Error loading draft for edit:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Re-submit a reopened review in place. Updates the existing row (keeping
+   * its original review date) and closes the unlock event.
+   */
+  resubmitUnlocked: async (
+    submissionId: number,
+    payload: { answers: SubmissionAnswerPayload[]; metadata?: SubmissionMetadataPayload[] },
+  ): Promise<SubmissionResult & { total_score: number }> => {
+    try {
+      const api = getAuthorizedAxios();
+      const response = await api.post(`/submissions/${submissionId}/resubmit`, payload);
+      return response.data;
+    } catch (error) {
+      logError('submissionService', 'Error re-submitting reopened review:', error);
       throw error;
     }
   },

@@ -28,6 +28,7 @@ import InsightsIngestionLogPage   from '../pages/admin/InsightsIngestionLogPage'
 import InsightsSourceReportsPage   from '../pages/admin/InsightsSourceReportsPage'
 import ManualUploadPage            from '../pages/admin/ManualUploadPage'
 import SystemSettingsPage         from '../pages/admin/SystemSettingsPage'
+import UnlockRegisterPage         from '../pages/admin/UnlockRegisterPage'
 import InsightsCalendarPage       from '../pages/admin/InsightsCalendarPage'
 import AdminEmailTemplatesPage    from '../pages/admin/AdminEmailTemplatesPage'
 
@@ -188,6 +189,7 @@ export default function AppRoutes(): React.ReactElement {
           <Route path="list-management"  element={<ListManagementPage />} />
           <Route path="email-templates"  element={<AdminEmailTemplatesPage />} />
           <Route path="system-settings"  element={<SystemSettingsPage />} />
+          <Route path="quality/unlocks"  element={<UnlockRegisterPage />} />
           <Route path="insights/kpis"       element={<InsightsKpiManagementPage />} />
           <Route path="insights/pages"      element={<InsightsPageManagementPage />} />
           <Route path="insights/calendar"   element={<InsightsCalendarPage />} />

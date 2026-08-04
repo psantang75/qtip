@@ -744,6 +744,9 @@ model Submission {
   ai_overall_confidence    Decimal? @db.Decimal(3, 2)
   ai_calibrated_confidence Decimal? @db.Decimal(3, 2)
   ai_extras    Json?
+  /// How many times an admin has reopened this review. Denormalized from
+  /// record_unlock so the reopen cap check and the list badge are one read.
+  reopen_count Int              @default(0)
 
   form      Form  @relation(fields: [form_id], references: [id], onDelete: Cascade)
   call      Call? @relation(fields: [call_id], references: [id], onDelete: Cascade)
@@ -756,6 +759,7 @@ model Submission {
   score_snapshots         ScoreSnapshot[]
   disputes                Dispute[]
   dispute_score_history   DisputeScoreHistory[]
+  record_unlocks          RecordUnlock[]
 
   @@index([status, submitted_at], map: "idx_submissions_status_date")
   @@index([form_id, status, submitted_at], map: "idx_submissions_form_status_date")
@@ -875,6 +879,8 @@ model Dispute {
   reason           String        @db.Text
   resolution_notes String?       @db.Text
   attachment_url   String?       @db.VarChar(500)
+  /// How many times an admin has reopened this dispute determination.
+  reopen_count     Int           @default(0)
 
   submission Submission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
   disputant  User       @relation("DisputeBy", fields: [disputed_by], references: [id], onDelete: Cascade)
@@ -918,6 +924,54 @@ model AuditLog {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("audit_logs")
+}
+
+/// An admin reopening a review or a closed dispute determination. Reopening
+/// withdraws a score the agent has already seen, so the event is immutable
+/// (written once, updated only to close) and carries everything needed to
+/// both restore the prior state and audit the pattern of use.
+model RecordUnlock {
+  id            Int              @id @default(autoincrement())
+  entity_type   UnlockEntityType
+  entity_id     Int
+  /// For a DISPUTE this is the dispute's parent submission, so every report
+  /// joins one way regardless of entity_type.
+  submission_id Int
+  unlocked_by   Int
+  unlocked_at   DateTime         @default(now()) @db.DateTime(0)
+  reason_code   UnlockReasonCode
+  reason_note   String           @db.Text
+
+  prior_status   String   @db.VarChar(20)
+  prior_score    Decimal? @db.Decimal(5, 2)
+  /// submitted_at for a submission; resolved_by / resolved_at /
+  /// resolution_notes / status for a dispute. Exactly what the auto re-lock
+  /// sweep restores.
+  prior_snapshot Json?
+
+  /// Original QA for a submission, resolving manager for a dispute.
+  assigned_to   Int?
+  /// True when the unlocking admin is also the person expected to fix it.
+  /// Flagged rather than blocked — on a small team the admin is often the QA.
+  self_service  Boolean  @default(false) @db.TinyInt
+  relock_due_at DateTime @db.DateTime(0)
+  /// Unlocked past the configured window after an explicit break-glass confirm.
+  beyond_window Boolean  @default(false) @db.TinyInt
+
+  state      UnlockState @default(OPEN)
+  closed_at  DateTime?   @db.DateTime(0)
+  closed_by  Int?
+  new_status String?     @db.VarChar(20)
+  new_score  Decimal?    @db.Decimal(5, 2)
+
+  submission Submission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+
+  @@index([entity_type, entity_id], map: "idx_record_unlock_entity")
+  @@index([unlocked_by, unlocked_at], map: "idx_record_unlock_actor")
+  @@index([assigned_to], map: "idx_record_unlock_assignee")
+  @@index([state, relock_due_at], map: "idx_record_unlock_sweep")
+  @@index([submission_id], map: "idx_record_unlock_submission")
+  @@map("record_unlock")
 }
 
 model AgentActivity {
@@ -1640,6 +1694,27 @@ enum DisputeStatus {
 enum DisputeScoreHistoryType {
   PREVIOUS
   ADJUSTED
+}
+
+enum UnlockEntityType {
+  SUBMISSION
+  DISPUTE
+}
+
+enum UnlockReasonCode {
+  SCORING_ERROR
+  WRONG_INTERACTION
+  CALIBRATION_CORRECTION
+  POLICY_CHANGE
+  TECHNICAL_ISSUE
+  AGENT_APPEAL
+  OTHER
+}
+
+enum UnlockState {
+  OPEN
+  CLOSED
+  AUTO_RELOCKED
 }
 
 enum AggregationType {

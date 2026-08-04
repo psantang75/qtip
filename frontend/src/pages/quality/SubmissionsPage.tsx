@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { FileText, Eye, Search } from 'lucide-react'
+import { FileText, Eye, Search, RotateCcw } from 'lucide-react'
 import qaService, { type Submission } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -231,7 +231,32 @@ export default function SubmissionsPage() {
                       state: { from: pageTitle, fromPath: '/app/quality/submissions' },
                     })}>
                     <TableCell className="text-[13px] text-slate-500">{row.id}</TableCell>
-                    <TableCell><StatusBadge status={row.status} /></TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1.5">
+                        <StatusBadge status={row.status} />
+                        {(row.reopen_count ?? 0) > 0 && (
+                          <TooltipProvider delayDuration={200}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  onClick={e => e.stopPropagation()}
+                                  aria-label="Reopened by an administrator"
+                                  className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-700"
+                                >
+                                  <RotateCcw className="h-2.5 w-2.5" />
+                                  {row.reopen_count}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[240px] text-xs leading-snug">
+                                {row.unlock_open
+                                  ? 'Currently reopened by an administrator and awaiting correction.'
+                                  : `Reopened by an administrator ${row.reopen_count} time${row.reopen_count === 1 ? '' : 's'} after being scored.`}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-[13px] text-slate-600">{row.form_name}</TableCell>
                     {!isAgent    && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-600 pl-6">{fmtDate(row.created_at)}</TableCell>

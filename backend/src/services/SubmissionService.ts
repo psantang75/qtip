@@ -400,6 +400,82 @@ export class SubmissionService implements ISubmissionService {
   }
 
   /**
+   * Load a DRAFT's saved answers back out so the audit form can rehydrate
+   * it. Needed by the admin-unlock flow: reopening a review parks it in
+   * DRAFT, and until this existed there was no way for a human QA to get
+   * their own draft back on screen (the AI Reviewer draft endpoint rejects
+   * anything not owned by the AI user).
+   *
+   * The response shape deliberately matches that endpoint's payload so
+   * AuditFormPage's existing prefill effect works without a second branch.
+   * Callers other than the owner must be admins — enforced here rather than
+   * only at the route.
+   */
+  async getDraftForEdit(submission_id: number, requester_id: number, isAdmin: boolean) {
+    if (!Number.isInteger(submission_id) || submission_id <= 0) {
+      throw new SubmissionServiceError('Invalid submission ID', 'INVALID_SUBMISSION_ID', 400);
+    }
+
+    const submission = await prisma.submission.findUnique({
+      where: { id: submission_id },
+      include: {
+        form: { select: { id: true, form_name: true } },
+        submission_answers: true,
+        submission_metadata: true,
+        submission_ticket_tasks: true,
+        submission_calls: { include: { call: true } },
+      },
+    });
+    if (!submission) {
+      throw new SubmissionServiceError('Submission not found', 'SUBMISSION_NOT_FOUND', 404);
+    }
+    if (submission.status !== 'DRAFT') {
+      throw new SubmissionServiceError(
+        `Submission ${submission_id} is ${submission.status}, not DRAFT.`,
+        'NOT_A_DRAFT',
+        409
+      );
+    }
+    if (submission.submitted_by !== requester_id && !isAdmin) {
+      throw new SubmissionServiceError('This draft belongs to another reviewer', 'FORBIDDEN', 403);
+    }
+
+    return {
+      submission_id: submission.id,
+      form_id: submission.form_id,
+      form_name: submission.form?.form_name ?? null,
+      submitted_at: submission.submitted_at,
+      submitted_by: submission.submitted_by,
+      answers: submission.submission_answers.map((a) => ({
+        question_id: a.question_id,
+        answer: a.answer ?? '',
+        notes: a.notes ?? '',
+      })),
+      metadata: submission.submission_metadata.map((m) => ({
+        field_id: m.field_id,
+        value: m.value ?? '',
+      })),
+      ticket_tasks: submission.submission_ticket_tasks.map((t) => ({
+        kind: t.kind,
+        external_id: Number(t.external_id),
+      })),
+      calls: submission.submission_calls
+        .map((sc) => sc.call)
+        .filter((c): c is NonNullable<typeof c> => c != null)
+        .map((c) => ({
+          id: c.id,
+          call_id: c.call_id,
+          csr_id: c.csr_id,
+          customer_id: c.customer_id ?? null,
+          call_date: c.call_date instanceof Date ? c.call_date.toISOString() : String(c.call_date),
+          duration: c.duration,
+          recording_url: c.recording_url ?? null,
+          transcript: c.transcript ?? null,
+        })),
+    };
+  }
+
+  /**
    * Promotes an existing DRAFT submission (typically created by the AI
    * Reviewer) to SUBMITTED. Replaces the draft's answers and metadata
    * with the human's edits, re-attributes ownership to the human user,
@@ -408,11 +484,19 @@ export class SubmissionService implements ISubmissionService {
    *
    * Mirrors the submitAudit scoring path so AI-promoted submissions
    * behave identically to a human-completed audit going forward.
+   *
+   * `opts.preserveSubmittedAt` is for the admin-unlock re-submit path: a
+   * corrected review must keep its original review date, otherwise the fix
+   * silently moves the audit into the current reporting period and distorts
+   * every trend that buckets on submitted_at. The AI promote path leaves it
+   * off and keeps stamping "now", which is correct there — that draft has
+   * never been submitted before.
    */
   async promoteDraftToSubmitted(
     submission_id: number,
     edits: { answers: CreateSubmissionAnswerDTO[]; metadata?: import('../models').SubmissionMetadataDTO[] },
-    human_user_id: number
+    human_user_id: number,
+    opts: { preserveSubmittedAt?: boolean } = {}
   ): Promise<{
     submission_id: number;
     total_score: number;
@@ -496,7 +580,7 @@ export class SubmissionService implements ISubmissionService {
         where: { id: submission_id },
         data: {
           status: 'SUBMITTED',
-          submitted_at: new Date(),
+          ...(opts.preserveSubmittedAt ? {} : { submitted_at: new Date() }),
           submitted_by: human_user_id,
         },
       });

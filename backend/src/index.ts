@@ -30,6 +30,7 @@ import disputeRoutes from './routes/dispute.routes';
 import trainerRoutes from './routes/trainer.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import auditLogRoutes from './routes/auditLog.routes';
+import unlockRoutes from './routes/unlock.routes';
 import userRoutes from './routes/user.routes';
 import roleRoutes from './routes/role.routes';
 import departmentRoutes from './routes/department.routes';
@@ -216,6 +217,7 @@ app.use('/api/disputes', disputeRoutes);
 app.use('/api/trainer', trainerRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/unlocks', unlockRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/director-departments', directorDepartmentRoutes);
@@ -346,6 +348,27 @@ const server = app.listen(port, () => {
       startDigestScheduler();
     } catch (err) {
       logger.error('[EMAIL] startup failed', err);
+    }
+
+    // Admin unlock auto re-lock: restore reopened reviews/disputes that
+    // nobody re-submitted before their deadline, so a withdrawn score can
+    // never sit out of the reporting set indefinitely.
+    try {
+      const { startUnlockRelockScheduler } = await import('./services/unlock/unlock.relock.service');
+      startUnlockRelockScheduler();
+    } catch (err) {
+      logger.error('[UNLOCK RELOCK] startup failed', err);
+    }
+
+    // Inbound mailbox import: poll the QTIP mailbox for emailed Excel reports.
+    // Separate try/catch from the outbound block above because the two share
+    // nothing but the word "mail" — a dead Exchange mailbox must not stop
+    // notifications from going out. See docs/mailbox_import.md.
+    try {
+      const { startMailboxImportScheduler } = await import('./services/mailbox/MailboxImportScheduler');
+      startMailboxImportScheduler();
+    } catch (err) {
+      logger.error('[MAILBOX] startup failed', err);
     }
 
     // KB Index Scheduler: keeps `kb_page_embeddings` + the parsed

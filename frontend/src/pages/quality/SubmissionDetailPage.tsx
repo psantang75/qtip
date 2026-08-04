@@ -69,6 +69,8 @@ import { DisputePanel, type ResolutionState } from './submission-detail/DisputeP
 import { CallDetailsPanel } from './submission-detail/CallDetailsPanel'
 import { TicketTaskDetailsPanel } from './submission-detail/TicketTaskDetailsPanel'
 import { ScorePanel } from './submission-detail/ScorePanel'
+import { UnlockDialog } from './submission-detail/UnlockDialog'
+import { UnlockBanner, type ActiveUnlock } from './submission-detail/UnlockBanner'
 import { TimelinePanel } from '@/components/quality/ai/TimelinePanel'
 import { AdvisoryObservationsPanel, type AdvisoryObservation } from '@/components/quality/ai/AdvisoryObservationsPanel'
 import { AnswerEvidencePanel, type AnswerEvidenceEntry } from '@/components/quality/ai/AnswerEvidencePanel'
@@ -83,12 +85,13 @@ export default function SubmissionDetailPage() {
   const { toast } = useToast()
 
   const backLabel = (location.state as { from?: string } | null)?.from ?? 'Submissions'
-  const { roleId, isAgent, isManager, canResolveDispute } = useQualityRole()
+  const { roleId, isAdmin, isAgent, isManager, canResolveDispute } = useQualityRole()
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [showDisputeForm, setShowDisputeForm] = useState(false)
   const [finalizeSuccess, setFinalizeSuccess] = useState(false)
   const [editingDispute,  setEditingDispute]  = useState(false)
+  const [unlockTarget,    setUnlockTarget]    = useState<'SUBMISSION' | 'DISPUTE' | null>(null)
 
   // Resolution mode state
   const [resolutionMode, setResolutionMode] = useState(false)
@@ -160,6 +163,26 @@ export default function SubmissionDetailPage() {
 
   const canDispute      = isAgent && detail.status === 'SUBMITTED' && !detail.dispute
   const canAcceptReview = isAgent && detail.status !== 'FINALIZED' && detail.status !== 'DISPUTED' && detail.status !== 'RESOLVED'
+
+  // ── Admin unlock ──────────────────────────────────────────────────────────
+  const activeUnlock = (detail as SubmissionDetailWithForm & { active_unlock?: ActiveUnlock | null }).active_unlock ?? null
+  // Only offer a reopen when there isn't already one in flight, and only for
+  // the states the service will actually accept.
+  const canReopenReview = isAdmin && !activeUnlock
+    && (detail.status === 'SUBMITTED' || detail.status === 'FINALIZED')
+  const canReopenDispute = isAdmin && !activeUnlock
+    && ['UPHELD', 'REJECTED', 'ADJUSTED'].includes(detail.dispute?.status ?? '')
+  // The reviewer whose work it is drives the correction; admins can step in.
+  const canResumeDraft = activeUnlock?.entity_type === 'SUBMISSION'
+    && (isAdmin || detail.reviewer_name === user?.username)
+
+  const onUnlockSuccess = () => {
+    toast({ title: 'Record reopened', description: 'Everyone involved has been notified.' })
+    qc.invalidateQueries({ queryKey: ['submission-detail', id] })
+    qc.invalidateQueries({ queryKey: ['submissions'] })
+    qc.invalidateQueries({ queryKey: ['disputes'] })
+    qc.invalidateQueries({ queryKey: ['manager-disputes'] })
+  }
 
   // Build read-only answers map for ScoreRenderer
   const answersMap: Record<number, any> = {}
@@ -297,7 +320,23 @@ export default function SubmissionDetailPage() {
         onBack={() => navigate(-1)}
         onFinalize={() => finalize()}
         onShowDispute={() => setShowDisputeForm(true)}
+        canReopen={canReopenReview}
+        onReopen={() => setUnlockTarget('SUBMISSION')}
       />
+
+      {activeUnlock && (
+        <UnlockBanner unlock={activeUnlock} submissionId={detail.id} canResume={canResumeDraft} />
+      )}
+
+      {unlockTarget && (
+        <UnlockDialog
+          open
+          entity={unlockTarget}
+          entityId={unlockTarget === 'DISPUTE' ? Number(detail.dispute?.id) : detail.id}
+          onOpenChange={(o) => !o && setUnlockTarget(null)}
+          onSuccess={onUnlockSuccess}
+        />
+      )}
 
       {/* Resolution mode banner */}
       {resolutionMode && (
@@ -341,6 +380,8 @@ export default function SubmissionDetailPage() {
                 canResolveDispute={canResolveDispute}
                 resolution={resolution}
                 formData={formData}
+                canReopen={canReopenDispute}
+                onReopen={() => setUnlockTarget('DISPUTE')}
               />
             )}
             {/* Phase C (C6): when a multi-source case has both a ticket

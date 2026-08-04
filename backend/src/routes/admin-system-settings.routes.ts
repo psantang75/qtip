@@ -10,6 +10,8 @@
  *   GET   /kb-scheduler            -> { interval_min, last_run, recent_runs }
  *   PATCH /kb-scheduler            -> body { interval_min }; clamps 5..1440
  *   POST  /kb-scheduler/run-now    -> 202 { started_at } (async run)
+ *   GET   /unlock                  -> { window_days, relock_days, max_per_record }
+ *   PATCH /unlock                  -> any subset of the above; each clamped
  *
  * All routes require an authenticated admin (RBAC enforced by the
  * existing `authorizeAdmin` middleware — same one /api/admin/* uses).
@@ -25,6 +27,7 @@ import {
   KB_MAX_INTERVAL_MIN,
 } from '../services/SystemSettingsService';
 import { runKbIndexNow } from '../services/KbIndexScheduler';
+import { getUnlockSettings, setUnlockSettings } from '../services/unlock/unlock.config';
 
 const router = express.Router();
 
@@ -73,6 +76,35 @@ router.post('/kb-scheduler/run-now', async (_req, res) => {
     logger.error(`[admin-system-settings] run-now failed: ${(err as Error).message}`);
   });
   res.status(202).json({ started_at });
+});
+
+router.get('/unlock', async (_req, res) => {
+  try {
+    res.json(await getUnlockSettings());
+  } catch (err) {
+    logger.error(`[admin-system-settings] GET /unlock failed: ${(err as Error).message}`);
+    res.status(500).json({ error: 'Failed to load unlock settings' });
+  }
+});
+
+router.patch('/unlock', async (req, res) => {
+  const body = req.body ?? {};
+  const patch: Record<string, number> = {};
+  for (const key of ['window_days', 'relock_days', 'max_per_record'] as const) {
+    if (body[key] === undefined) continue;
+    const n = Number(body[key]);
+    if (!Number.isFinite(n)) {
+      res.status(400).json({ error: `${key} must be a number` });
+      return;
+    }
+    patch[key] = n;
+  }
+  try {
+    res.json(await setUnlockSettings(patch));
+  } catch (err) {
+    logger.error(`[admin-system-settings] PATCH /unlock failed: ${(err as Error).message}`);
+    res.status(500).json({ error: 'Failed to update unlock settings' });
+  }
 });
 
 export default router;

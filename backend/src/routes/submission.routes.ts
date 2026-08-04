@@ -3,6 +3,8 @@ import { authenticate } from '../middleware/auth';
 import { SubmissionService, SubmissionServiceError } from '../services/SubmissionService';
 import { MySQLSubmissionRepository } from '../repositories/MySQLSubmissionRepository';
 import { serviceLogger } from '../config/logger';
+import prisma from '../config/prisma';
+import { findOpenUnlock, closeUnlock } from '../services/unlock/unlock.service';
 
 const router = express.Router();
 
@@ -158,6 +160,103 @@ const flagSubmission = async (req: Request, res: Response) => {
 };
 
 /**
+ * Load a DRAFT back into the audit form.
+ *
+ * Exists for the admin-unlock flow: reopening a review parks it in DRAFT,
+ * and the AI Reviewer's draft endpoint only serves AI-owned rows.
+ */
+const getDraftForEdit = async (req: Request, res: Response) => {
+  try {
+    const user_id = req.user?.user_id;
+    if (!user_id) {
+      res.status(401).json({ message: 'Unauthorized access' });
+      return;
+    }
+    const result = await submissionService.getDraftForEdit(
+      parseInt(req.params.id, 10),
+      user_id,
+      req.user?.role === 'Admin',
+    );
+    res.status(200).json(result);
+  } catch (error: any) {
+    if (error instanceof SubmissionServiceError) {
+      res.status(error.statusCode).json({ message: error.message, code: error.code });
+    } else {
+      serviceLogger.error('SUBMISSION', 'getDraftForEdit', error as Error);
+      res.status(500).json({ message: 'Failed to load draft' });
+    }
+  }
+};
+
+/**
+ * Re-submit a review that an admin reopened.
+ *
+ * Reuses promoteDraftToSubmitted (which already does in-place answer
+ * replacement, re-scoring and CSR notification) rather than POST / , which
+ * would create a duplicate row. Requires an OPEN unlock so this cannot
+ * become a general back-door edit of any draft.
+ */
+const resubmitUnlocked = async (req: Request, res: Response) => {
+  try {
+    const user_id = req.user?.user_id;
+    if (!user_id) {
+      res.status(401).json({ message: 'Unauthorized access' });
+      return;
+    }
+    const submission_id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(submission_id) || submission_id <= 0) {
+      res.status(400).json({ message: 'Invalid submission ID' });
+      return;
+    }
+
+    const openUnlock = await findOpenUnlock('SUBMISSION', submission_id);
+    if (!openUnlock) {
+      res.status(409).json({
+        message: 'This review is not currently reopened for correction.',
+        code: 'NOT_UNLOCKED',
+      });
+      return;
+    }
+
+    const submission = await prisma.submission.findUnique({
+      where: { id: submission_id },
+      select: { submitted_by: true },
+    });
+    if (!submission) {
+      res.status(404).json({ message: 'Submission not found' });
+      return;
+    }
+    if (submission.submitted_by !== user_id && req.user?.role !== 'Admin') {
+      res.status(403).json({ message: 'This review belongs to another reviewer' });
+      return;
+    }
+
+    const result = await submissionService.promoteDraftToSubmitted(
+      submission_id,
+      { answers: req.body.answers || [], metadata: req.body.metadata || [] },
+      user_id,
+      // Keep the original review date so the correction doesn't jump the
+      // audit into the current reporting period.
+      { preserveSubmittedAt: true },
+    );
+
+    await closeUnlock('SUBMISSION', submission_id, user_id, {
+      new_status: 'SUBMITTED',
+      new_score: result.total_score,
+    });
+
+    res.status(200).json(result);
+  } catch (error: any) {
+    if (error instanceof SubmissionServiceError) {
+      res.status(error.statusCode).json({ message: error.message, code: error.code });
+    } else {
+      serviceLogger.error('SUBMISSION', 'resubmitUnlocked', error as Error);
+      res.status(500).json({ message: 'Failed to re-submit review' });
+    }
+  }
+};
+
+/**
  * @route GET /api/submissions/assigned
  * @desc Get all assigned audits for the current QA Analyst
  * @access Private (QA Analyst)
@@ -191,5 +290,19 @@ router.post('/draft', authenticate as unknown as RequestHandler, saveDraft);
  * @access Private (CSR, QA Analyst)
  */
 router.post('/flag', authenticate as unknown as RequestHandler, flagSubmission);
+
+/**
+ * @route GET /api/submissions/:id/draft
+ * @desc Load a DRAFT's saved answers back into the audit form
+ * @access Private (draft owner or Admin)
+ */
+router.get('/:id/draft', authenticate as unknown as RequestHandler, getDraftForEdit);
+
+/**
+ * @route POST /api/submissions/:id/resubmit
+ * @desc Re-submit a review an admin reopened; closes the unlock event
+ * @access Private (original reviewer or Admin, only while unlocked)
+ */
+router.post('/:id/resubmit', authenticate as unknown as RequestHandler, resubmitUnlocked);
 
 export default router; 

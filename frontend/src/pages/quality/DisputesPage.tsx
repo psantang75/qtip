@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Eye } from 'lucide-react'
+import { AlertTriangle, Eye, RotateCcw } from 'lucide-react'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import qaService, { type DisputeRecord, type DisputeHistoryItem } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
@@ -246,7 +246,20 @@ function DisputeListView() {
                     })}>
                     <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">#{d.id ?? '—'}</TableCell>
                     <TableCell className="text-[13px] text-slate-500 whitespace-nowrap">#{d.submission_id ?? '—'}</TableCell>
-                    <TableCell><StatusBadge status={d.status} /></TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1.5">
+                        <StatusBadge status={d.status} />
+                        {(d.reopen_count ?? 0) > 0 && (
+                          <span
+                            title="An administrator reopened this decision after it was closed."
+                            className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-amber-700"
+                          >
+                            <RotateCcw className="h-2.5 w-2.5" />
+                            {d.reopen_count}
+                          </span>
+                        )}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-[13px] text-slate-600">{d.form_name ?? '—'}</TableCell>
                     {!isAgent && <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{d.csr_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{fmtDate(d.created_at)}</TableCell>

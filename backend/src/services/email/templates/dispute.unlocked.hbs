@@ -1,0 +1,18 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">A dispute decision has been reopened</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+<p style="margin:0 0 16px 0;">An administrator has reopened the resolved dispute on review <strong>#{{submission.id}}</strong>. It is back in an open state, so the dispute can be edited and re-decided.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;width:160px;">Form</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{form.form_name}}</td></tr>
+  {{#if csr.username}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Agent</td><td style="padding:6px 0;font-size:13px;">{{csr.username}}</td></tr>{{/if}}
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Previous decision</td><td style="padding:6px 0;font-size:13px;">{{unlock.prior_status}}</td></tr>
+  {{#if priorScore}}<tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Current score</td><td style="padding:6px 0;font-size:13px;">{{priorScore}}%</td></tr>{{/if}}
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Reason</td><td style="padding:6px 0;font-size:13px;font-weight:600;">{{unlock.reason_label}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Reopened by</td><td style="padding:6px 0;font-size:13px;">{{actor.username}}</td></tr>
+  <tr><td style="padding:6px 0;font-size:13px;color:#64748b;">Must be re-decided by</td><td style="padding:6px 0;font-size:13px;">{{formatDateTime unlock.relock_due_at}}</td></tr>
+</table>
+{{#if unlock.reason_note}}
+<p style="margin:0 0 6px 0;font-size:13px;color:#0f172a;font-weight:600;">Justification</p>
+<blockquote style="margin:0 0 16px 0;padding:8px 14px;border-left:3px solid #cbd5e1;background:#f8fafc;font-size:13px;color:#0f172a;">{{unlock.reason_note}}</blockquote>
+{{/if}}
+{{> button url=(appUrl deepLinkPath) label="View Dispute" }}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">If the dispute is not re-decided by the date above, the previous decision is automatically restored.</p>
