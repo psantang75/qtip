@@ -100,6 +100,18 @@ interface EnvironmentConfig {
   MAIL_GLOBAL_RATE_LIMIT?: number;  // emails per 5-min window before circuit-breaker trips
   MAIL_TIMEZONE?: string;           // IANA tz used to render dates and digest windows
 
+  // Inbound mailbox import (Exchange Web Services). EXCHANGE_EWS_URL blank =>
+  // the poller never starts, same leave-blank-to-disable pattern as SMTP above.
+  // On-prem Exchange only; NTLM, so EXCHANGE_USER is DOMAIN\user.
+  EXCHANGE_EWS_URL?: string;
+  EXCHANGE_USER?: string;
+  EXCHANGE_PASSWORD?: string;
+  EXCHANGE_MAILBOX?: string;
+  MAILBOX_IMPORT_POLL_MINUTES?: number;
+  MAILBOX_IMPORT_DRY_RUN?: boolean;
+  MAILBOX_IMPORT_USER_ID?: number;
+  MAILBOX_IMPORT_IGNORE_BEFORE?: string;  // 'YYYY-MM-DD'; ignore mail received before this
+
   APP_BASE_URL?: string;            // used for deep links in emails
 
   
@@ -306,6 +318,22 @@ export const config: EnvironmentConfig = {
     : undefined,
   MAIL_TIMEZONE: process.env.MAIL_TIMEZONE,
 
+  // Inbound mailbox import (Exchange Web Services)
+  EXCHANGE_EWS_URL: process.env.EXCHANGE_EWS_URL,
+  EXCHANGE_USER: process.env.EXCHANGE_USER,
+  EXCHANGE_PASSWORD: process.env.EXCHANGE_PASSWORD,
+  EXCHANGE_MAILBOX: process.env.EXCHANGE_MAILBOX,
+  MAILBOX_IMPORT_POLL_MINUTES: process.env.MAILBOX_IMPORT_POLL_MINUTES
+    ? parseInt(process.env.MAILBOX_IMPORT_POLL_MINUTES, 10)
+    : undefined,
+  MAILBOX_IMPORT_DRY_RUN: process.env.MAILBOX_IMPORT_DRY_RUN
+    ? /^(1|true|yes)$/i.test(process.env.MAILBOX_IMPORT_DRY_RUN)
+    : undefined,
+  MAILBOX_IMPORT_USER_ID: process.env.MAILBOX_IMPORT_USER_ID
+    ? parseInt(process.env.MAILBOX_IMPORT_USER_ID, 10)
+    : undefined,
+  MAILBOX_IMPORT_IGNORE_BEFORE: process.env.MAILBOX_IMPORT_IGNORE_BEFORE,
+
   APP_BASE_URL: process.env.APP_BASE_URL,
 
   
@@ -468,6 +496,33 @@ export const mailConfig = {
   quietHours: config.MAIL_QUIET_HOURS || '',
   globalRateLimit: config.MAIL_GLOBAL_RATE_LIMIT ?? 1000,
   timezone: config.MAIL_TIMEZONE || 'America/New_York',
+};
+
+/**
+ * Inbound mailbox import: QTIP polls an Exchange mailbox and loads any Excel
+ * report emailed to it. See docs/mailbox_import.md.
+ *
+ * `enabled` is keyed on the EWS URL so a deployment that never sets it simply
+ * never starts the poller — no error, no log noise.
+ *
+ * `dryRun` defaults ON everywhere including production, because this reads live
+ * mail and writes to warehouse tables. It must be switched off deliberately,
+ * once the sender allowlist is populated and the inbox is known to be clean.
+ *
+ * `importedByUserId` is normally the only attribution available: the punch
+ * report arrives from an automated no-reply address that will never match a
+ * QTIP user.
+ */
+export const mailboxImportConfig = {
+  enabled: !!config.EXCHANGE_EWS_URL,
+  ewsUrl: config.EXCHANGE_EWS_URL || '',
+  user: config.EXCHANGE_USER || '',
+  password: config.EXCHANGE_PASSWORD || '',
+  mailbox: config.EXCHANGE_MAILBOX || '',
+  pollMinutes: Math.max(1, config.MAILBOX_IMPORT_POLL_MINUTES ?? 10),
+  dryRun: config.MAILBOX_IMPORT_DRY_RUN ?? true,
+  importedByUserId: config.MAILBOX_IMPORT_USER_ID,
+  ignoreBefore: config.MAILBOX_IMPORT_IGNORE_BEFORE || '',
 };
 
 /**

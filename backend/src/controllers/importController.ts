@@ -1,41 +1,8 @@
 import { Request, Response } from 'express';
-import {
-  importCallActivity,
-  importSalesMargin,
-  importLeadSalesMargin,
-  importLeadSource,
-  importTicketTask,
-  importEmailStats,
-  importPunchData,
-  previewImport,
-} from '../services/importService';
+import { DATA_TYPES, previewImport } from '../services/importService';
+import { isDataType, runImport } from '../services/imports/runImport';
 import prisma from '../config/prisma';
 import logger from '../config/logger';
-
-const VALID_DATA_TYPES = [
-  'call_activity',
-  'sales_margin',
-  'lead_sales_margin',
-  'lead_source',
-  'ticket_task',
-  'email_stats',
-  'punch_data',
-] as const;
-
-type DataType = typeof VALID_DATA_TYPES[number];
-
-function getImportHandler(dataType: DataType) {
-  const handlers: Record<DataType, Function> = {
-    call_activity:     importCallActivity,
-    sales_margin:      importSalesMargin,
-    lead_sales_margin: importLeadSalesMargin,
-    lead_source:       importLeadSource,
-    ticket_task:       importTicketTask,
-    email_stats:       importEmailStats,
-    punch_data:        importPunchData,
-  };
-  return handlers[dataType];
-}
 
 /**
  * POST /api/imports/upload
@@ -51,10 +18,10 @@ export const uploadImport = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const dataType = req.body?.data_type as DataType;
-    if (!dataType || !VALID_DATA_TYPES.includes(dataType)) {
+    const dataType = req.body?.data_type;
+    if (!isDataType(dataType)) {
       res.status(400).json({
-        message: `Invalid or missing data_type. Must be one of: ${VALID_DATA_TYPES.join(', ')}`,
+        message: `Invalid or missing data_type. Must be one of: ${DATA_TYPES.join(', ')}`,
       });
       return;
     }
@@ -65,13 +32,9 @@ export const uploadImport = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const handler = getImportHandler(dataType);
-    const result = await handler(file.buffer, file.originalname, userId);
+    const result = await runImport(dataType, file.buffer, file.originalname, userId);
 
-    res.status(200).json({
-      message: 'Import completed',
-      ...result,
-    });
+    res.status(200).json({ message: 'Import completed', ...result });
   } catch (error: any) {
     logger.error('[IMPORT CONTROLLER] uploadImport error:', error);
     res.status(500).json({
@@ -93,10 +56,10 @@ export const previewImportHandler = async (req: Request, res: Response): Promise
       return;
     }
 
-    const dataType = req.body?.data_type as DataType;
-    if (!dataType || !VALID_DATA_TYPES.includes(dataType)) {
+    const dataType = req.body?.data_type;
+    if (!isDataType(dataType)) {
       res.status(400).json({
-        message: `Invalid or missing data_type. Must be one of: ${VALID_DATA_TYPES.join(', ')}`,
+        message: `Invalid or missing data_type. Must be one of: ${DATA_TYPES.join(', ')}`,
       });
       return;
     }

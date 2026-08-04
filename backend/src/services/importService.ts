@@ -36,6 +36,23 @@ export interface ImportResult {
 }
 
 /**
+ * Every kind of workbook this service knows how to load. Declared here rather
+ * than in the controller because `REQUIRED_COLUMNS` below is the real authority
+ * on what a type means, and two lists that must agree eventually stop agreeing.
+ */
+export const DATA_TYPES = [
+  'call_activity',
+  'sales_margin',
+  'lead_sales_margin',
+  'lead_source',
+  'ticket_task',
+  'email_stats',
+  'punch_data',
+] as const;
+
+export type DataType = typeof DATA_TYPES[number];
+
+/**
  * Parse an Excel buffer into an array of row objects.
  * Uses the first sheet found. Returns raw: true to preserve negative values.
  */
@@ -73,6 +90,30 @@ async function buildEmailMap(): Promise<Map<string, number>> {
   });
   const map = new Map<string, number>();
   users.forEach(u => map.set(u.email.toLowerCase().trim(), u.id));
+  return map;
+}
+
+/** Collapse runs of whitespace and trim. Paychex emits "PTO -  Approved". */
+function squish(val: any): string | null {
+  if (val == null) return null;
+  const s = String(val).replace(/\s+/g, ' ').trim();
+  return s || null;
+}
+
+/**
+ * "First Last" (lower-cased, whitespace-collapsed) to user id, for punch rows
+ * Paychex sent without an Alert Email. A name shared by two users maps to null
+ * rather than guessing — a punch on the wrong person's roster is worse than a
+ * missing one, because it earns them points they can see and dispute.
+ */
+async function buildNameMap(): Promise<Map<string, number | null>> {
+  const users = await prisma.user.findMany({ select: { id: true, username: true } });
+  const map = new Map<string, number | null>();
+  for (const u of users) {
+    const key = u.username.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!key) continue;
+    map.set(key, map.has(key) ? null : u.id);
+  }
   return map;
 }
 
@@ -708,12 +749,19 @@ export async function importEmailStats(
  * Paychex "employee-time-cards" punch export. One row per punch segment.
  * Expected Excel columns:
  *   Post ID, Alert Email, Actual Date/Time In, Regular Duration
- * Optional: Punch Type In, Punch Type Out, Actual Time Out
+ * Optional: Pay Type, First Name, Last Name, Punch Type In, Punch Type Out,
+ *           Actual Time Out
  *
- * Identity is matched by `Alert Email` (blank/unmatched emails are skipped and
- * surfaced as warnings, never errors). Dedup key is `Post ID`: the importer
- * UPSERTS on it, so overlapping or re-sent 14-day exports never duplicate and
- * later Paychex edits to an existing punch heal in place.
+ * Identity is matched by `Alert Email`, falling back to an exact "First Last"
+ * match against username when Paychex left the email blank — roughly one row in
+ * eight, which used to vanish silently and read as absences. Rows that resolve
+ * to neither are skipped and surfaced as warnings, never errors.
+ *
+ * `Pay Type` is what makes a Start Non-Work block self-describing ("PTO -
+ * Approved" vs "Holiday"); scheduling derives excused exceptions from it.
+ *
+ * Dedup key is `Post ID`: the importer UPSERTS on it, so overlapping or re-sent
+ * 14-day exports never duplicate and later Paychex edits heal in place.
  */
 export async function importPunchData(
   buffer: Buffer,
@@ -726,12 +774,13 @@ export async function importPunchData(
   try {
     const rows = parseExcel(buffer);
     validateColumns(rows, REQUIRED);
-    const emailMap = await buildEmailMap();
+    const [emailMap, nameMap] = await Promise.all([buildEmailMap(), buildNameMap()]);
 
     const warnings: string[] = [];
     const unmatchedEmails = new Set<string>();
+    const unresolvedNames = new Set<string>();
     const seenPostIds = new Set<string>();
-    let blankEmailRows = 0;
+    let nameMatchedRows = 0;
     let unmatchedRows = 0;
     let errored = 0;
     const prepared: any[] = [];
@@ -747,10 +796,19 @@ export async function importPunchData(
         }
 
         const email = str(row['Alert Email'])?.toLowerCase() ?? '';
-        if (!email) { blankEmailRows++; continue; }
+        const fullName = squish(`${str(row['First Name']) ?? ''} ${str(row['Last Name']) ?? ''}`);
 
-        const userId = emailMap.get(email) ?? null;
-        if (!userId) { unmatchedEmails.add(email); unmatchedRows++; continue; }
+        let userId = email ? (emailMap.get(email) ?? null) : null;
+        if (!userId && email) unmatchedEmails.add(email);
+        if (!userId && fullName) {
+          userId = nameMap.get(fullName.toLowerCase()) ?? null;
+          if (userId) nameMatchedRows++;
+        }
+        if (!userId) {
+          unmatchedRows++;
+          if (!email && fullName) unresolvedNames.add(fullName);
+          continue;
+        }
 
         const punchInAt = parseDateTime(row['Actual Date/Time In']);
         const punchOutAt = derivePunchOut(punchInAt, row['Actual Time Out']);
@@ -763,6 +821,7 @@ export async function importPunchData(
           punch_out_at: punchOutAt,
           punch_type_in: str(row['Punch Type In']),
           punch_type_out: str(row['Punch Type Out']),
+          pay_type: squish(row['Pay Type']),
           regular_duration: num(row['Regular Duration'], true),
           import_id: logId,
         });
@@ -786,6 +845,7 @@ export async function importPunchData(
               punch_out_at: rec.punch_out_at,
               punch_type_in: rec.punch_type_in,
               punch_type_out: rec.punch_type_out,
+              pay_type: rec.pay_type,
               regular_duration: rec.regular_duration,
               import_id: rec.import_id,
             },
@@ -795,8 +855,11 @@ export async function importPunchData(
       imported += chunk.length;
     }
 
-    if (blankEmailRows > 0) {
-      warnings.push(`${blankEmailRows} row(s) had no Alert Email and were skipped.`);
+    if (nameMatchedRows > 0) {
+      warnings.push(`${nameMatchedRows} row(s) had no usable Alert Email and were matched by name. Add the alert email in Paychex for these employees.`);
+    }
+    if (unresolvedNames.size > 0) {
+      warnings.push(`${unresolvedNames.size} employee(s) had no Alert Email and no name match: ${[...unresolvedNames].slice(0, 10).join(', ')}${unresolvedNames.size > 10 ? '...' : ''}`);
     }
     if (unmatchedEmails.size > 0) {
       warnings.push(`${unmatchedEmails.size} email(s) not matched to any user: ${[...unmatchedEmails].slice(0, 10).join(', ')}${unmatchedEmails.size > 10 ? '...' : ''}`);
@@ -806,7 +869,7 @@ export async function importPunchData(
       import_log_id: logId,
       rows_total: rows.length,
       rows_imported: imported,
-      rows_skipped: blankEmailRows + unmatchedRows,
+      rows_skipped: unmatchedRows,
       rows_errored: errored,
       warnings,
     };
@@ -838,7 +901,7 @@ export interface PreviewResult {
   };
 }
 
-const REQUIRED_COLUMNS: Record<string, string[]> = {
+const REQUIRED_COLUMNS: Record<DataType, string[]> = {
   call_activity:      ['Email', 'ReportDate', 'CallsOffered', 'CallsHandled', 'HoldMinutes', 'LineMinutes'],
   sales_margin:       ['Email', 'ReportDate', 'OrderCount', 'Revenue', 'COGS', 'GrossMargin'],
   lead_sales_margin:  ['Email', 'ReportDate', 'LeadsAssigned', 'LeadsContacted', 'Orders', 'LeadRevenue', 'LeadMargin'],
@@ -854,12 +917,67 @@ const EMAIL_COLUMN: Record<string, string> = {
   punch_data: 'Alert Email',
 };
 
+export interface DetectionResult {
+  /** Null when the columns matched nothing, or matched ambiguously. */
+  dataType: DataType | null;
+  columns: string[];
+  /** Plain-English reason detection failed, for the log. Null on success. */
+  reason: string | null;
+}
+
+/**
+ * Work out which kind of import a workbook is from its column headers alone.
+ *
+ * Exists for the mailbox poller, which has no human to ask. Every other caller
+ * is told the type by whoever picked the file, and should keep doing that —
+ * an explicit choice beats a good guess.
+ *
+ * A type qualifies only if EVERY one of its required columns is present, and
+ * the most specific qualifying type wins. That tie-break is load-bearing rather
+ * than decorative: `ticket_task` requires only Email/ReportDate/Status, so it is
+ * a strict subset of several other types and would otherwise swallow them.
+ * Anything still ambiguous is refused rather than guessed at, because guessing
+ * wrong writes real rows into the wrong warehouse table.
+ */
+export function detectDataType(buffer: Buffer): DetectionResult {
+  const rows = parseExcel(buffer);
+  if (rows.length === 0) {
+    return { dataType: null, columns: [], reason: 'The workbook has no data rows.' };
+  }
+
+  const columns = Object.keys(rows[0]);
+  const present = new Set(columns);
+  const qualifying = DATA_TYPES
+    .map(type => ({ type, required: REQUIRED_COLUMNS[type] }))
+    .filter(({ required }) => required.every(col => present.has(col)));
+
+  if (qualifying.length === 0) {
+    return {
+      dataType: null,
+      columns,
+      reason: `No import type matches these columns: ${columns.join(', ')}`,
+    };
+  }
+
+  const mostSpecific = Math.max(...qualifying.map(q => q.required.length));
+  const best = qualifying.filter(q => q.required.length === mostSpecific);
+  if (best.length > 1) {
+    return {
+      dataType: null,
+      columns,
+      reason: `Columns match more than one import type equally well: ${best.map(b => b.type).join(', ')}`,
+    };
+  }
+
+  return { dataType: best[0].type, columns, reason: null };
+}
+
 export async function previewImport(
   buffer: Buffer,
   dataType: string,
 ): Promise<PreviewResult> {
   const rows = parseExcel(buffer);
-  const required = REQUIRED_COLUMNS[dataType] ?? [];
+  const required = REQUIRED_COLUMNS[dataType as DataType] ?? [];
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
   const missing = required.filter(c => !columns.includes(c));
 
