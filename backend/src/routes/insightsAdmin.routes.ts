@@ -12,6 +12,9 @@ import { getCalendar, updateCalendarDay, saveCalendarMonth } from '../controller
 import {
   listSourceReportsAdmin, updateSourceReport, runSourceReportNow,
 } from '../controllers/insightsAdminSourceReport.controller';
+import {
+  getAttendanceConfig, savePointRules, saveWarningThresholds, recalculateAttendance,
+} from '../controllers/insightsAdminAttendance.controller';
 
 const router = express.Router();
 
@@ -42,5 +45,14 @@ const auth = [authenticate as unknown as RequestHandler, authorizeAdmin as unkno
 router.get('/calendar',            ...auth, getCalendar       as unknown as RequestHandler);
 router.put('/calendar/:date',      ...auth, updateCalendarDay as unknown as RequestHandler);
 router.post('/calendar/save-month',...auth, saveCalendarMonth as unknown as RequestHandler);
+
+// ── Attendance points ─────────────────────────────────────────────────────────
+// The bands and discipline ladder are edited in Admin -> List Management ->
+// Attendance; these are the endpoints behind that editor. Saving inserts a new
+// effective-dated version rather than mutating history.
+router.get('/attendance/config',      ...auth, getAttendanceConfig      as unknown as RequestHandler);
+router.put('/attendance/rules',       ...auth, savePointRules           as unknown as RequestHandler);
+router.put('/attendance/thresholds',  ...auth, saveWarningThresholds    as unknown as RequestHandler);
+router.post('/attendance/recalculate',...auth, recalculateAttendance    as unknown as RequestHandler);
 
 export default router;

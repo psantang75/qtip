@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { ScheduleDayCell } from './ScheduleDayCell'
+import { DeptCoverageRow } from './DeptCoverageRow'
+import type { CoverageSettings } from './ScheduleDayTimeline'
 import {
   addDays, isWeekend, MOCK_HOLIDAYS, parseLocal, toLocalIso,
   type MockPerson,
@@ -42,10 +44,12 @@ interface GridProps {
   selected: Set<number>
   /** Sets the selected state for a group of people at once. */
   onSelect: (ids: number[], next: boolean) => void
+  /** Live per-department green/yellow minimums from Coverage settings. */
+  coverage?: CoverageSettings
 }
 
 export function ScheduleGrid({
-  people, weekStarts, variant, onEditShift, selected, onSelect,
+  people, weekStarts, variant, onEditShift, selected, onSelect, coverage,
 }: GridProps) {
   const today = toLocalIso(new Date())
   const days = weekStarts.flatMap(ws => Array.from({ length: 7 }, (_, i) => addDays(ws, i)))
@@ -264,6 +268,26 @@ export function ScheduleGrid({
                 </tr>
               )
             })}
+
+            {/* Coverage heat row — only when the department has coverage turned
+                on (Scheduling > Coverage Thresholds) and has more than one
+                person, mirroring the day view's strip gating. */}
+            {(() => {
+              const cov = coverage?.get(dept)
+              if (!cov?.enabled || members.length <= 1) return null
+              return (
+                <DeptCoverageRow
+                  dept={dept}
+                  members={members}
+                  days={days}
+                  weekStarts={weekStarts}
+                  windows={cov.windows}
+                  selCol={SEL_COL}
+                  nameCol={NAME_COL}
+                  nameLeft={NAME_LEFT}
+                />
+              )
+            })()}
           </Fragment>
         ))}
       </TableBody>

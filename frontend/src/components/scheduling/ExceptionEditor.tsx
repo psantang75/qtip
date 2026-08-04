@@ -1,11 +1,12 @@
 /**
- * MOCKUP — Phase 1 design probe only. Local state, saves nothing.
- *
  * Exceptions live in the shift drawer because they are an adjustment to that
  * specific day's schedule, not a separate record a manager should have to go
  * find. Whether an exception is excused comes from its type, never from a
- * checkbox here — the paired list (Excused/Unexcused Late Arrival, and so on)
- * is what carries that decision.
+ * checkbox here.
+ *
+ * Types come from the admin list, so the eight Paychex-linked types are the same
+ * eight the punch import writes. Anything typed here has no paychex_reference
+ * and therefore wins over the import, which is the whole point of the drawer.
  */
 import { useState } from 'react'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
@@ -18,7 +19,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { MOCK_EXCEPTION_TYPES, type MockException, type MockShift } from './mockScheduleData'
+import { useExceptionTypes, windowMode } from '@/hooks/useExceptionTypes'
+import { type MockException, type MockShift } from './mockScheduleData'
 import { fmtCompact, findExceptionOverlap, minutesOf } from './scheduleTime'
 
 interface Props {
@@ -30,15 +32,15 @@ interface Props {
 
 export function ExceptionEditor({ value, onChange, date, shift }: Props) {
   const [adding, setAdding] = useState(false)
-  const [typeLabel, setTypeLabel] = useState('')
+  const [typeId, setTypeId] = useState('')
   const [isFullDay, setIsFullDay] = useState(false)
   const [start, setStart] = useState(shift?.start ?? '08:00')
   const [end, setEnd] = useState('10:00')
 
-  const type = MOCK_EXCEPTION_TYPES.find(t => t.label === typeLabel)
-  const forcesFullDay = type?.mode === 'FULL_DAY'
-  const forcesWindow = type?.mode === 'WINDOW'
-  const effectiveFullDay = forcesFullDay || (!forcesWindow && isFullDay)
+  const typesQ = useExceptionTypes()
+  const types = typesQ.data ?? []
+  const type = types.find(t => String(t.id) === typeId)
+  const { forcesFullDay, forcesWindow, isFullDay: effectiveFullDay } = windowMode(type, isFullDay)
 
   const windowValid = effectiveFullDay || minutesOf(end) > minutesOf(start)
   const outsideShift = !effectiveFullDay && shift
@@ -50,7 +52,7 @@ export function ExceptionEditor({ value, onChange, date, shift }: Props) {
 
   const reset = () => {
     setAdding(false)
-    setTypeLabel('')
+    setTypeId('')
     setIsFullDay(false)
     setStart(shift?.start ?? '08:00')
     setEnd('10:00')
@@ -60,8 +62,9 @@ export function ExceptionEditor({ value, onChange, date, shift }: Props) {
     if (!type || overlap) return
     onChange([...value, {
       date,
+      exceptionTypeId: type.id,
       typeLabel: type.label,
-      excused: type.excused,
+      excused: type.is_excused,
       isFullDay: effectiveFullDay,
       ...(effectiveFullDay ? {} : { start, end }),
     }])
@@ -103,6 +106,14 @@ export function ExceptionEditor({ value, onChange, date, shift }: Props) {
           )}>
             {ex.typeLabel}
           </span>
+          {ex.isImported && (
+            <span
+              className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500"
+              title="Derived from the Paychex punch feed. Removing it here comes back on the next import — change it in Paychex instead."
+            >
+              Paychex
+            </span>
+          )}
           <span className="ml-auto whitespace-nowrap text-[11px] tabular-nums text-slate-500">
             {ex.isFullDay ? 'Full day' : `${fmtCompact(ex.start!)}\u2013${fmtCompact(ex.end!)}`}
           </span>
@@ -121,13 +132,13 @@ export function ExceptionEditor({ value, onChange, date, shift }: Props) {
         <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/[0.03] p-3">
           <div className="space-y-1.5">
             <Label className="text-[11px]">Type</Label>
-            <Select value={typeLabel} onValueChange={setTypeLabel}>
+            <Select value={typeId} onValueChange={setTypeId} disabled={typesQ.isLoading}>
               <SelectTrigger className="h-9">
-                <SelectValue placeholder={'Choose an exception type\u2026'} />
+                <SelectValue placeholder={typesQ.isLoading ? 'Loading\u2026' : 'Choose an exception type\u2026'} />
               </SelectTrigger>
               <SelectContent>
-                {MOCK_EXCEPTION_TYPES.map(t => (
-                  <SelectItem key={t.label} value={t.label}>{t.label}</SelectItem>
+                {types.map(t => (
+                  <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -136,9 +147,9 @@ export function ExceptionEditor({ value, onChange, date, shift }: Props) {
           {type && (
             <p className={cn(
               'text-[11px] font-medium',
-              type.excused ? 'text-warning' : 'text-destructive',
+              type.is_excused ? 'text-warning' : 'text-destructive',
             )}>
-              {type.excused
+              {type.is_excused
                 ? 'Excused \u2014 does not count against the employee.'
                 : 'Not excused \u2014 counts against the employee.'}
             </p>

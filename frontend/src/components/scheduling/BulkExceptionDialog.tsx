@@ -23,9 +23,8 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import {
-  addDays, MOCK_EXCEPTION_TYPES, parseLocal, type MockPerson,
-} from './mockScheduleData'
+import { useExceptionTypes, windowMode } from '@/hooks/useExceptionTypes'
+import { addDays, parseLocal, type MockPerson } from './mockScheduleData'
 import { findExceptionOverlap, minutesOf } from './scheduleTime'
 
 const fmtDay = (iso: string) =>
@@ -37,15 +36,15 @@ interface Props {
   people: MockPerson[]
   /** Seeds the date, so the dialog opens on whatever you were looking at. */
   defaultDate: string
-  /** Commit handler. When absent the dialog is inert (mockup). */
-  onConfirm?: (payload: { from: string; to: string; typeLabel: string; isFullDay: boolean; start: string; end: string }) => Promise<void> | void
+  /** Commit handler. When absent the dialog is read-only. */
+  onConfirm?: (payload: { from: string; to: string; exceptionTypeId: number; isFullDay: boolean; start: string; end: string }) => Promise<void> | void
   submitting?: boolean
 }
 
 export function BulkExceptionDialog({ open, onOpenChange, people, defaultDate, onConfirm, submitting }: Props) {
   const [from, setFrom] = useState(defaultDate)
   const [to, setTo] = useState(defaultDate)
-  const [typeLabel, setTypeLabel] = useState('')
+  const [typeId, setTypeId] = useState('')
   const [isFullDay, setIsFullDay] = useState(false)
   const [start, setStart] = useState('08:00')
   const [end, setEnd] = useState('10:00')
@@ -54,14 +53,14 @@ export function BulkExceptionDialog({ open, onOpenChange, people, defaultDate, o
     if (!open) return
     setFrom(defaultDate)
     setTo(defaultDate)
-    setTypeLabel('')
+    setTypeId('')
     setIsFullDay(false)
   }, [open, defaultDate])
 
-  const type = MOCK_EXCEPTION_TYPES.find(t => t.label === typeLabel)
-  const forcesFullDay = type?.mode === 'FULL_DAY'
-  const forcesWindow = type?.mode === 'WINDOW'
-  const effectiveFullDay = forcesFullDay || (!forcesWindow && isFullDay)
+  const typesQ = useExceptionTypes(open)
+  const types = typesQ.data ?? []
+  const type = types.find(t => String(t.id) === typeId)
+  const { forcesFullDay, forcesWindow, isFullDay: effectiveFullDay } = windowMode(type, isFullDay)
 
   const rangeValid = to >= from
   const windowValid = effectiveFullDay || minutesOf(end) > minutesOf(start)
@@ -119,24 +118,31 @@ export function BulkExceptionDialog({ open, onOpenChange, people, defaultDate, o
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-[12px]">Type</Label>
-            <Select value={typeLabel} onValueChange={setTypeLabel}>
+            <Select value={typeId} onValueChange={setTypeId} disabled={typesQ.isLoading}>
               <SelectTrigger className="h-9 max-w-sm">
-                <SelectValue placeholder={'Choose an exception type\u2026'} />
+                <SelectValue placeholder={typesQ.isLoading ? 'Loading\u2026' : 'Choose an exception type\u2026'} />
               </SelectTrigger>
               <SelectContent>
-                {MOCK_EXCEPTION_TYPES.map(t => (
-                  <SelectItem key={t.label} value={t.label}>{t.label}</SelectItem>
+                {types.map(t => (
+                  <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {type && (
               <p className={cn(
                 'text-[11.5px] font-medium',
-                type.excused ? 'text-warning' : 'text-destructive',
+                type.is_excused ? 'text-warning' : 'text-destructive',
               )}>
-                {type.excused
+                {type.is_excused
                   ? 'Excused \u2014 does not count against the employee.'
                   : 'Not excused \u2014 counts against the employee.'}
+              </p>
+            )}
+            {type?.paychex_pay_type && (
+              <p className="text-[11.5px] leading-relaxed text-slate-500">
+                Normally imported from Paychex as{' '}
+                <span className="font-medium">{type.paychex_pay_type}</span>. Logging it here
+                overrides the import for those days.
               </p>
             )}
           </div>
@@ -222,7 +228,7 @@ export function BulkExceptionDialog({ open, onOpenChange, people, defaultDate, o
                       an overlapping exception &mdash; the existing one stands.
                     </li>
                   )}
-                  {effectiveFullDay && type.excused && (
+                  {effectiveFullDay && type.is_excused && (
                     <li>
                       Full-day excused days drop out of the attendance denominator rather than
                       counting as compliant shifts.
@@ -250,7 +256,7 @@ export function BulkExceptionDialog({ open, onOpenChange, people, defaultDate, o
             disabled={!ready || preview.outside > 0 || submitting}
             onClick={async () => {
               if (onConfirm && type) {
-                await onConfirm({ from, to, typeLabel: type.label, isFullDay: effectiveFullDay, start, end })
+                await onConfirm({ from, to, exceptionTypeId: type.id, isFullDay: effectiveFullDay, start, end })
               }
               onOpenChange(false)
             }}

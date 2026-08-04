@@ -41,9 +41,10 @@ import { BulkExceptionDialog } from '@/components/scheduling/BulkExceptionDialog
 import { ExceptionSummary } from '@/components/scheduling/ExceptionSummary'
 import { ScheduleLegend } from '@/components/scheduling/ScheduleLegend'
 import {
-  addDays, parseLocal, startOfWeek, toLocalIso, type MockBreak, type MockTemplate,
+  addDays, parseLocal, startOfWeek, toLocalIso,
+  type MockBreak, type MockException, type MockTemplate,
 } from '@/components/scheduling/mockScheduleData'
-import { rangeStatus } from '@/components/scheduling/scheduleTime'
+import { minutesOf, rangeStatus, type CoverageWindow } from '@/components/scheduling/scheduleTime'
 import { useScheduleGrid } from '@/hooks/useScheduleGrid'
 import { useScheduleTemplates } from '@/hooks/useScheduleTemplates'
 import { useScheduleRole } from '@/hooks/useScheduleRole'
@@ -51,6 +52,17 @@ import schedulingService from '@/services/schedulingService'
 
 const UNASSIGNED = 'Unassigned'
 type ViewMode = 'day' | 'week' | 'period'
+
+/** One drawer save: the shift itself plus the day's exception diff. */
+interface DaySave {
+  userId: number
+  date: string
+  start: string
+  end: string
+  breaks: MockBreak[]
+  exceptionAdds: MockException[]
+  exceptionRemoveIds: number[]
+}
 
 const VIEWS: { id: ViewMode; label: string }[] = [
   { id: 'day', label: 'Day' },
@@ -104,14 +116,27 @@ export default function SchedulingPage() {
   const personOptions = useMemo(() => allPeople.map(p => p.name).sort(), [allPeople])
 
   const templatesQ = useScheduleTemplates()
-  const exceptionTypesQ = useQuery({
-    queryKey: ['schedule-exception-types'],
-    queryFn: () => schedulingService.listExceptionTypes(false),
-  })
   const activityTypesQ = useQuery({
     queryKey: ['schedule-activity-types'],
     queryFn: () => schedulingService.listActivityTypes(false),
   })
+  const coverageQ = useQuery({
+    queryKey: ['schedule-coverage-thresholds'],
+    queryFn: () => schedulingService.listCoverageThresholds(),
+  })
+  const coverageByDept = useMemo(() => {
+    const m = new Map<string, { enabled: boolean; windows: CoverageWindow[] }>()
+    for (const c of coverageQ.data ?? []) {
+      // Configured time frames win; a department with none falls back to a
+      // single all-day window from its flat green/yellow, so today's behavior
+      // is preserved until frames are added.
+      const windows: CoverageWindow[] = c.windows.length
+        ? c.windows.map(w => ({ startMin: minutesOf(w.start), endMin: minutesOf(w.end), green: w.green_min, yellow: w.yellow_min }))
+        : [{ startMin: 0, endMin: 24 * 60, green: c.green_min, yellow: c.yellow_min }]
+      m.set(c.department_name, { enabled: c.is_enabled, windows })
+    }
+    return m
+  }, [coverageQ.data])
 
   const invalidateGrid = () => qc.invalidateQueries({ queryKey: ['schedule-grid'] })
 
@@ -130,9 +155,43 @@ export default function SchedulingPage() {
     onSuccess: (r) => { invalidateGrid(); toast({ title: 'Exceptions logged', description: `${r.write} written, ${r.conflict + r.unscheduled + r.outside} skipped.` }) },
     onError: (e) => toast(t.fromError(e)),
   })
+  // The drawer saves the shift and the day's exceptions together, so it is one
+  // mutation rather than three: a partial save that wrote the shift but dropped
+  // the exception is worse than a clean failure.
   const shiftMut = useMutation({
-    mutationFn: schedulingService.upsertShift,
-    onSuccess: () => { invalidateGrid(); toast({ title: 'Shift saved' }) },
+    mutationFn: async ({ userId, date, start, end, breaks, exceptionAdds, exceptionRemoveIds }: DaySave) => {
+      await schedulingService.upsertShift({
+        user_id: userId,
+        shift_date: date,
+        is_day_off: false,
+        start, end,
+        segments: breaks
+          .map(b => ({ activity_type_id: activityId(b.kind) ?? 0, start: b.start, end: b.end }))
+          .filter(s => s.activity_type_id > 0),
+      })
+      // Removals first, so freeing a window lets a replacement land on the same
+      // hours in the same save without tripping the overlap guard.
+      for (const id of exceptionRemoveIds) await schedulingService.deleteException(id)
+      for (const ex of exceptionAdds) {
+        await schedulingService.createException({
+          user_id: userId,
+          exception_date: date,
+          exception_type_id: ex.exceptionTypeId,
+          is_full_day: ex.isFullDay,
+          start: ex.isFullDay ? null : ex.start ?? null,
+          end: ex.isFullDay ? null : ex.end ?? null,
+        })
+      }
+      return { added: exceptionAdds.length, removed: exceptionRemoveIds.length }
+    },
+    onSuccess: (r) => {
+      invalidateGrid()
+      const parts = [
+        r.added > 0 ? `${r.added} exception${r.added === 1 ? '' : 's'} added` : null,
+        r.removed > 0 ? `${r.removed} removed` : null,
+      ].filter(Boolean)
+      toast({ title: 'Shift saved', ...(parts.length ? { description: parts.join(', ') + '.' } : {}) })
+    },
     onError: (e) => toast(t.fromError(e)),
   })
 
@@ -193,10 +252,7 @@ export default function SchedulingPage() {
     const start = parseLocal(anchor)
     const end = parseLocal(addDays(anchor, span))
     const startFmt = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    const endFmt = end.toLocaleDateString('en-US', {
-      month: start.getMonth() === end.getMonth() ? undefined : 'short',
-      day: 'numeric', year: 'numeric',
-    })
+    const endFmt = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     return `${startFmt} \u2013 ${endFmt}`
   }, [view, day, anchor])
 
@@ -218,17 +274,9 @@ export default function SchedulingPage() {
   const activityId = (kind: MockBreak['kind']) =>
     activityTypesQ.data?.find(a => a.label.toLowerCase() === (kind === 'LUNCH' ? 'lunch' : 'break'))?.id
 
-  const onSaveShift = async ({ start, end, breaks }: { start: string; end: string; breaks: MockBreak[] }) => {
+  const onSaveShift = async (payload: Omit<DaySave, 'userId' | 'date'>) => {
     if (!editing) return
-    await shiftMut.mutateAsync({
-      user_id: editing.personId,
-      shift_date: editing.date,
-      is_day_off: false,
-      start, end,
-      segments: breaks
-        .map(b => ({ activity_type_id: activityId(b.kind) ?? 0, start: b.start, end: b.end }))
-        .filter(s => s.activity_type_id > 0),
-    })
+    await shiftMut.mutateAsync({ ...payload, userId: editing.personId, date: editing.date })
   }
 
   const onPublish = async () => {
@@ -359,6 +407,7 @@ export default function SchedulingPage() {
                 onEditShift={(personId, date) => canEdit && setEditing({ personId, date })}
                 selected={selectedIds}
                 onSelect={setSelection}
+                coverage={coverageByDept}
               />
             ) : (
               <ScheduleGrid
@@ -368,12 +417,16 @@ export default function SchedulingPage() {
                 onEditShift={(personId, date) => canEdit && setEditing({ personId, date })}
                 selected={selectedIds}
                 onSelect={setSelection}
+                coverage={coverageByDept}
               />
             )}
           </ListCard>
         )}
 
-        <ScheduleLegend className="px-1" showCoverage={view === 'day'} />
+        <ScheduleLegend
+          className="px-1"
+          showCoverage={view === 'day' || [...coverageByDept.values()].some(c => c.enabled)}
+        />
 
         {view === 'period' && (
           <ExceptionSummary people={visible} from={anchor} to={addDays(anchor, 13)} />
@@ -411,12 +464,10 @@ export default function SchedulingPage() {
           people={selectedPeople}
           defaultDate={view === 'day' ? day : today >= anchor && today <= addDays(anchor, 13) ? today : anchor}
           submitting={bulkExcMut.isPending}
-          onConfirm={canEdit ? async ({ from, to, typeLabel, isFullDay, start, end }) => {
-            const typeId = exceptionTypesQ.data?.find(x => x.label === typeLabel)?.id
-            if (!typeId) { toast(t.eSave('exception')); return }
+          onConfirm={canEdit ? async ({ from, to, exceptionTypeId, isFullDay, start, end }) => {
             await bulkExcMut.mutateAsync({
               user_ids: selectedPeople.map(p => p.id),
-              from, to, exception_type_id: typeId, is_full_day: isFullDay,
+              from, to, exception_type_id: exceptionTypeId, is_full_day: isFullDay,
               start: isFullDay ? null : start, end: isFullDay ? null : end,
             })
           } : undefined}

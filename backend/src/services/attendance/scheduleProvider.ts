@@ -29,15 +29,20 @@ export interface ScheduledSegment {
 }
 
 export interface ScheduledException {
+  id: number;
+  typeId: number;
   typeKey: string;
   label: string;
   isExcused: boolean;
   isFullDay: boolean;
+  affectsArrival: boolean;
+  affectsDeparture: boolean;
   start: string | null;
   end: string | null;
 }
 
 export interface ScheduledDay {
+  shiftId: number;
   start: string | null;
   end: string | null;
   isDayOff: boolean;
@@ -46,17 +51,52 @@ export interface ScheduledDay {
   exceptions: ScheduledException[];
 }
 
+const DAY_MINUTES = 24 * 60;
+
 function minutesOf(hm: string): number {
   const [h, m] = hm.split(':').map(Number);
   return h * 60 + m;
 }
 
-/** Net scheduled minutes: span minus unpaid segment minutes, wall-clock only. */
-function netMinutes(start: string | null, end: string | null, segments: ScheduledSegment[]): number {
+/**
+ * Net scheduled minutes: span minus the unpaid minutes that fall INSIDE the span,
+ * wall-clock only.
+ *
+ * Clamping to the span is what keeps compliance from exceeding 100%. Segments can
+ * outlive the shift they hang off — shorten a shift and the original lunch stays
+ * put — and the current data has three such days, where a shift ending at 16:30
+ * still carries a 17:30 lunch. The actuals side can only ever subtract overlap it
+ * finds inside the shift window, so deducting the full segment here would make the
+ * denominator smaller than the numerator: 100.21% compliant, which is indefensible
+ * on a report people are disciplined from.
+ *
+ * Exported for tests: it is the compliance DENOMINATOR, so it has to agree with
+ * the engine's numerator on exactly which unpaid minutes count.
+ */
+export function netMinutes(start: string | null, end: string | null, segments: ScheduledSegment[]): number {
   if (!start || !end) return 0;
-  let mins = minutesOf(end) - minutesOf(start);
+
+  const spanStart = minutesOf(start);
+  // An end at or before the start means the shift crosses midnight. Without the
+  // roll the span is negative, scheduled_minutes lands on 0, and the engine skips
+  // the day entirely for having no denominator — a silent hole rather than a
+  // visible wrong answer, but a hole all the same.
+  let spanEnd = minutesOf(end);
+  if (spanEnd <= spanStart) spanEnd += DAY_MINUTES;
+
+  let mins = spanEnd - spanStart;
   for (const s of segments) {
-    if (!s.isPaid) mins -= Math.max(0, minutesOf(s.end) - minutesOf(s.start));
+    if (s.isPaid) continue;
+    let segStart = minutesOf(s.start);
+    let segEnd = minutesOf(s.end);
+    if (segEnd < segStart) segEnd += DAY_MINUTES;
+    // A segment starting before the shift on an overnight shift belongs to the
+    // morning half, not to the evening before it began.
+    if (segStart < spanStart) {
+      segStart += DAY_MINUTES;
+      segEnd += DAY_MINUTES;
+    }
+    mins -= Math.max(0, Math.min(spanEnd, segEnd) - Math.max(spanStart, segStart));
   }
   return Math.max(0, mins);
 }
@@ -88,10 +128,14 @@ export async function getScheduledShifts(
   for (const e of exceptions) {
     const k = key(e.user_id, dateStrFromDate(e.exception_date));
     const mapped: ScheduledException = {
+      id: e.id,
+      typeId: e.exception_type_id,
       typeKey: e.exception_type.type_key,
       label: e.exception_type.label,
       isExcused: e.exception_type.is_excused,
       isFullDay: e.is_full_day,
+      affectsArrival: e.exception_type.affects_arrival,
+      affectsDeparture: e.exception_type.affects_departure,
       start: e.starts_at ? hmFromDateTime(e.starts_at) : null,
       end: e.ends_at ? hmFromDateTime(e.ends_at) : null,
     };
@@ -117,6 +161,7 @@ export async function getScheduledShifts(
     const end = s.end_at ? hmFromDateTime(s.end_at) : null;
 
     out.set(key(s.user_id, dateStr), {
+      shiftId: s.id,
       start,
       end,
       isDayOff: s.is_day_off || closed,

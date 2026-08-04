@@ -161,6 +161,19 @@ export function hmsFromTime(t: Date): string {
   return `${hh}:${mm}:${ss}`;
 }
 
+/** Read 'HH:MM' wall-clock from a `@db.Time` column value. */
+export function hmFromTime(t: Date): string {
+  const hh = String(t.getUTCHours()).padStart(2, '0');
+  const mm = String(t.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+/** Build the Date to store in a `@db.Time` column from an 'HH:MM' string. */
+export function timeValue(hm: string): Date {
+  const [h, m] = hm.split(':').map(Number);
+  return new Date(Date.UTC(1970, 0, 1, h, m, 0));
+}
+
 // ── Prisma column mapping ─────────────────────────────────────────────────────
 // `@db.Date` round-trips through UTC midnight, so date-only columns use UTC
 // getters/setters. `@db.DateTime` round-trips a wall-clock instant through the

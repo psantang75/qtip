@@ -11,7 +11,7 @@ export type EmailSendStatus =
 export type RoleToken =
   | 'self' | 'agent' | 'direct_manager' | 'department_director'
   | 'creator' | 'original_qa' | 'qa_pool' | 'hr_witness'
-  | 'assignee' | 'coach' | 'admins'
+  | 'assignee' | 'coach' | 'admins' | 'designated'
 
 export interface EmailTemplate {
   id: number
@@ -73,6 +73,21 @@ export interface EmailLogRow {
   to_user?: { id: number; username: string } | null
 }
 
+/** A notification waiting for the digest scheduler to mail it. */
+export interface QueuedNotification {
+  id: number
+  user_id: number
+  template_key: string
+  payload: Record<string, unknown>
+  scheduled_for: string
+  dedupe_key: string
+  created_at: string
+  user?: { id: number; username: string; email: string | null; is_active: boolean } | null
+  /** False means no template backs this key, so it can never send. */
+  template_exists: boolean
+  template_enabled: boolean | null
+}
+
 export interface EmailHealth {
   configured: boolean
   dryRun: boolean
@@ -102,6 +117,10 @@ const emailTemplatesService = {
     (await api.get<{ rows: EmailLogRow[] }>('/admin/email-templates/_recent-sends', { params })).data.rows,
   resend: async (logId: number) =>
     (await api.post<{ ok: boolean; messageId?: string; error?: string }>(`/admin/email-templates/_resend/${logId}`, {})).data,
+  queue: async (params?: { limit?: number }): Promise<{ rows: QueuedNotification[]; total: number }> =>
+    (await api.get<{ rows: QueuedNotification[]; total: number }>('/admin/email-templates/_queue', { params })).data,
+  discardQueued: async (body: { ids?: number[]; template_key?: string }): Promise<number> =>
+    (await api.post<{ discarded: number }>('/admin/email-templates/_queue/discard', body)).data.discarded,
 }
 
 export default emailTemplatesService

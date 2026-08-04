@@ -1,0 +1,34 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#0f172a;">Attendance point threshold reached</h2>
+<p style="margin:0 0 16px 0;">Hi {{recipient.username}},</p>
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:0 0 16px 0;">Your attendance points over the last 90 days have reached {{#if (gt itemCount 1)}}the thresholds{{else}}a threshold{{/if}} defined in the attendance policy.</p>
+{{else}}
+<p style="margin:0 0 16px 0;">{{#if (gt itemCount 1)}}The following agents have{{else}}An agent has{{/if}} reached an attendance point threshold defined in the attendance policy.</p>
+{{/if}}
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;border:1px solid #e2e8f0;">
+  <thead>
+    <tr style="background:#f8fafc;">
+      {{#unless (eq recipient.matchedRole "agent")}}<th style="padding:8px 12px;text-align:left;font-size:12px;font-weight:600;color:#475569;border-bottom:1px solid #e2e8f0;">Agent</th>{{/unless}}
+      <th style="padding:8px 12px;text-align:left;font-size:12px;font-weight:600;color:#475569;border-bottom:1px solid #e2e8f0;">Level</th>
+      <th style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;color:#475569;border-bottom:1px solid #e2e8f0;">{{#if (eq recipient.matchedRole "agent")}}Your points{{else}}Points{{/if}}</th>
+      <th style="padding:8px 12px;text-align:right;font-size:12px;font-weight:600;color:#475569;border-bottom:1px solid #e2e8f0;">Threshold</th>
+      <th style="padding:8px 12px;text-align:left;font-size:12px;font-weight:600;color:#475569;border-bottom:1px solid #e2e8f0;">As of</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each items}}
+    <tr>
+      {{#unless (eq ../recipient.matchedRole "agent")}}<td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #f1f5f9;">{{this.csrName}}</td>{{/unless}}
+      <td style="padding:8px 12px;font-size:13px;font-weight:600;border-bottom:1px solid #f1f5f9;">{{this.level}}</td>
+      <td style="padding:8px 12px;font-size:13px;text-align:right;font-weight:600;border-bottom:1px solid #f1f5f9;">{{this.points}}</td>
+      <td style="padding:8px 12px;font-size:13px;text-align:right;color:#64748b;border-bottom:1px solid #f1f5f9;">{{this.threshold}}</td>
+      <td style="padding:8px 12px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9;">{{this.asOf}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+<p style="margin:0 0 16px 0;font-size:13px;color:#64748b;">Points are counted over a rolling 90-day window and roll off on their own as occurrences age out of it. The link below shows every occurrence behind {{#if (eq recipient.matchedRole "agent")}}this total{{else}}these totals{{/if}}, including the date, the scheduled time, the actual punch, and the points each one carried.</p>
+{{> button url=(appUrl deepLinkPath) label="View Attendance" }}
+{{#if (eq recipient.matchedRole "agent")}}
+<p style="margin:16px 0 0 0;font-size:13px;color:#64748b;">If something here looks wrong — a shift you were not scheduled for, or approved time off that was not applied — reply to your manager so it can be reviewed and corrected.</p>
+{{/if}}

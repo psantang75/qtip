@@ -7,8 +7,8 @@ import { Response } from 'express';
 import {
   AuthReq,
   listExceptionTypes, createExceptionType, updateExceptionType, setExceptionTypeActive, reorderExceptionTypes,
-  listActivityTypes, createActivityType, updateActivityType, setActivityTypeActive,
-  listCoverageThresholds, upsertCoverageThreshold, deleteCoverageThreshold,
+  listActivityTypes, createActivityType, updateActivityType, setActivityTypeActive, reorderActivityTypes,
+  listCoverageThresholds, upsertCoverageThreshold, deleteCoverageThreshold, saveCoverageWindows,
 } from '../../services/scheduling';
 import { respondWithError } from './respond';
 
@@ -53,6 +53,10 @@ export const patchActivityTypeActive = async (req: AuthReq, res: Response) => {
   try { res.json({ success: true, data: await setActivityTypeActive(parseInt(req.params.id), !!req.body.is_active) }); }
   catch (error) { respondWithError(res, 'patchActivityTypeActive', error); }
 };
+export const postReorderActivityTypes = async (req: AuthReq, res: Response) => {
+  try { res.json({ success: true, data: await reorderActivityTypes(req.body.order) }); }
+  catch (error) { respondWithError(res, 'postReorderActivityTypes', error); }
+};
 
 // ── Coverage thresholds ──────────────────────────────────────────────────────
 export const getCoverageThresholds = async (_req: AuthReq, res: Response) => {
@@ -66,4 +70,8 @@ export const putCoverageThreshold = async (req: AuthReq, res: Response) => {
 export const removeCoverageThreshold = async (req: AuthReq, res: Response) => {
   try { res.json({ success: true, data: await deleteCoverageThreshold(parseInt(req.params.departmentId)) }); }
   catch (error) { respondWithError(res, 'removeCoverageThreshold', error); }
+};
+export const putCoverageWindows = async (req: AuthReq, res: Response) => {
+  try { res.json({ success: true, data: await saveCoverageWindows(parseInt(req.params.departmentId), req.body.windows) }); }
+  catch (error) { respondWithError(res, 'putCoverageWindows', error); }
 };

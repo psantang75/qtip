@@ -91,6 +91,9 @@ export async function readGrid(scope: ScheduleScope, from: string, to: string) {
       start: e.starts_at ? hmFromDateTime(e.starts_at) : null,
       end: e.ends_at ? hmFromDateTime(e.ends_at) : null,
       notes: e.notes,
+      // Derived by the punch import, so deleting it here only holds until the
+      // next import re-derives it. The drawer says so rather than pretending.
+      is_imported: !!e.paychex_reference,
     })),
   };
 }

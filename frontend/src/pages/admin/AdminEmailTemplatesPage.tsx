@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import emailTemplatesService, {
-  type EmailTemplate, type EmailLogRow, type RoleToken,
+  type EmailTemplate, type EmailLogRow, type RoleToken, type QueuedNotification,
 } from '@/services/emailTemplatesService'
 import { cn } from '@/lib/utils'
 
@@ -38,7 +38,7 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
 
 export default function AdminEmailTemplatesPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [tab, setTab] = useState<'editor' | 'history' | 'recent' | 'health'>('editor')
+  const [tab, setTab] = useState<'editor' | 'history' | 'recent' | 'health' | 'queue'>('editor')
   const [search, setSearch] = useState('')
   const [openCategory, setOpenCategory] = useState<string | null>(null)
 
@@ -46,6 +46,14 @@ export default function AdminEmailTemplatesPage() {
     queryKey: ['emailTemplates'],
     queryFn: emailTemplatesService.list,
   })
+
+  // Shares its cache key with the queue card, so the badge and the table are one
+  // request. A non-zero count is the signal that something is stuck.
+  const { data: queue } = useQuery({
+    queryKey: ['notificationQueue'],
+    queryFn: () => emailTemplatesService.queue({ limit: 200 }),
+  })
+  const pendingCount = queue?.total ?? 0
 
   useEffect(() => {
     if (openCategory === null && templates.length > 0) {
@@ -75,9 +83,22 @@ export default function AdminEmailTemplatesPage() {
         title="Email Templates"
         subtitle="Edit copy, cadence, and recipient cadence per notification."
         actions={
-          <Button variant="outline" size="sm" onClick={() => setTab('health')}>
-            <Activity size={14} className="mr-1.5" /> System Health
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setTab('queue')}>
+              <Inbox size={14} className="mr-1.5" /> Queue
+              {pendingCount > 0 && (
+                <Badge
+                  variant="outline"
+                  className="ml-1.5 text-[10px] py-0 px-1.5 bg-amber-100 text-amber-800 border-amber-200"
+                >
+                  {pendingCount}
+                </Badge>
+              )}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setTab('health')}>
+              <Activity size={14} className="mr-1.5" /> System Health
+            </Button>
+          </div>
         }
       />
 
@@ -85,7 +106,11 @@ export default function AdminEmailTemplatesPage() {
         <SystemHealthCard onClose={() => setTab('editor')} />
       )}
 
-      {tab !== 'health' && (
+      {tab === 'queue' && (
+        <NotificationQueueCard onClose={() => setTab('editor')} />
+      )}
+
+      {tab !== 'health' && tab !== 'queue' && (
         <div className="grid grid-cols-12 gap-4">
           <aside className="col-span-12 md:col-span-4 lg:col-span-3 space-y-3">
             <Input
@@ -601,6 +626,161 @@ function RecentSendsTable({ templateKey }: { templateKey: string }) {
         </tbody>
       </table>
     </div>
+  )
+}
+
+// ── Notification queue ─────────────────────────────────────────────────────
+
+/** One-line description of what an entry is for, so the table reads at a glance. */
+function queueSummary(row: QueuedNotification): string {
+  const p = row.payload as { level?: string; points?: number; csr?: { username?: string } }
+  if (p?.level) {
+    const who = p.csr?.username && p.csr.username !== row.user?.username ? `${p.csr.username} — ` : ''
+    return `${who}${p.level}${p.points != null ? ` at ${p.points} pts` : ''}`
+  }
+  return row.dedupe_key
+}
+
+function NotificationQueueCard({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+  const [confirm, setConfirm] = useState<{ ids: number[]; label: string } | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['notificationQueue'],
+    queryFn: () => emailTemplatesService.queue({ limit: 200 }),
+  })
+  const rows = data?.rows ?? []
+
+  const discardMut = useMutation({
+    mutationFn: (ids: number[]) => emailTemplatesService.discardQueued({ ids }),
+    onSuccess: (discarded) => {
+      toast({
+        title: `Discarded ${discarded} ${discarded === 1 ? 'notification' : 'notifications'}`,
+        description: 'Marked as handled, so they will not be emailed.',
+      })
+      setConfirm(null)
+      void queryClient.invalidateQueries({ queryKey: ['notificationQueue'] })
+    },
+    onError: (err) => {
+      toast({ title: "Couldn't discard", description: getErrorMessage(err), variant: 'destructive' })
+    },
+  })
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-[15px] font-semibold text-slate-900">Notification Queue</h2>
+        <div className="flex items-center gap-2">
+          {rows.length > 0 && (
+            <Button
+              variant="outline" size="sm"
+              onClick={() => setConfirm({ ids: rows.map(r => r.id), label: `all ${rows.length} queued` })}
+            >
+              Discard all
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={onClose}>Back to templates</Button>
+        </div>
+      </div>
+      <p className="text-[13px] text-slate-500 mb-4">
+        Notifications waiting to be emailed. The scheduler drains this every 5 minutes, so a
+        healthy queue is empty. Discarding marks an entry handled — it is not deleted, because
+        the entry is also what stops the same event being raised again.
+      </p>
+
+      {isLoading ? (
+        <div className="text-center text-slate-400 py-8"><Loader2 size={18} className="animate-spin mx-auto" /></div>
+      ) : (
+        <div className="rounded-md border border-slate-200 overflow-hidden">
+          <table className="w-full text-[12px]">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium text-slate-500">Queued</th>
+                <th className="px-3 py-2 text-left font-medium text-slate-500">Recipient</th>
+                <th className="px-3 py-2 text-left font-medium text-slate-500">Notification</th>
+                <th className="px-3 py-2 text-left font-medium text-slate-500">Detail</th>
+                <th className="px-3 py-2 text-right font-medium text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
+                    Nothing queued — everything has been sent or handled.
+                  </td>
+                </tr>
+              )}
+              {rows.map(row => (
+                <tr key={row.id} className="border-t border-slate-100">
+                  <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
+                    {new Date(row.scheduled_for).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2 truncate max-w-[160px]" title={row.user?.email ?? undefined}>
+                    {row.user?.username ?? `user ${row.user_id}`}
+                    {row.user && !row.user.is_active && (
+                      <span className="ml-1.5 text-slate-400">(inactive)</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="truncate max-w-[240px]" title={row.template_key}>{row.template_key}</div>
+                    {!row.template_exists && (
+                      <Badge
+                        variant="outline"
+                        className="mt-1 text-[10px] py-0 px-1.5 bg-red-100 text-red-800 border-red-200"
+                      >
+                        no such template
+                      </Badge>
+                    )}
+                    {row.template_exists && row.template_enabled === false && (
+                      <Badge
+                        variant="outline"
+                        className="mt-1 text-[10px] py-0 px-1.5 bg-slate-100 text-slate-700 border-slate-200"
+                      >
+                        disabled
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 truncate max-w-[260px]">{queueSummary(row)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <Button
+                      size="sm" variant="outline"
+                      onClick={() => setConfirm({ ids: [row.id], label: queueSummary(row) })}
+                      disabled={discardMut.isPending}
+                    >
+                      Discard
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Dialog open={!!confirm} onOpenChange={(open) => { if (!open) setConfirm(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard queued notification?</DialogTitle>
+            <DialogDescription>
+              {confirm?.label} will be marked handled and never emailed. The entry stays in the
+              queue as a record, which also means the same event will not be raised again — so
+              this recipient will not be notified about it later.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button>
+            <Button
+              onClick={() => confirm && discardMut.mutate(confirm.ids)}
+              disabled={discardMut.isPending}
+            >
+              {discardMut.isPending && <Loader2 size={13} className="mr-1.5 animate-spin" />}
+              Discard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   )
 }
 

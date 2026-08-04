@@ -18,6 +18,7 @@ import { toLocalIso } from './mockScheduleData'
 import { DeptCoverageStrip } from './DeptCoverageStrip'
 import {
   buildDayAxis, fmtCompact, hhmmOf, hourLabel, minutesOf, pctOf, SEGMENT_CLS, shiftSegments,
+  type CoverageWindow,
 } from './scheduleTime'
 
 const UNASSIGNED = 'Unassigned'
@@ -25,15 +26,23 @@ const UNASSIGNED = 'Unassigned'
 const SEL_COL = 'w-11 min-w-[44px] border-r border-slate-200'
 const NAME_COL = 'w-[186px] min-w-[186px]'
 
+/**
+ * Live per-department coverage settings keyed by department name. `windows` is
+ * always non-empty when enabled — a department with no configured time frames
+ * gets a synthetic all-day window from its flat threshold upstream.
+ */
+export type CoverageSettings = Map<string, { enabled: boolean; windows: CoverageWindow[] }>
+
 interface Props {
   people: MockPerson[]
   date: string
   onEditShift?: (personId: number, date: string) => void
   selected: Set<number>
   onSelect: (ids: number[], next: boolean) => void
+  coverage?: CoverageSettings
 }
 
-export function ScheduleDayTimeline({ people, date, onEditShift, selected, onSelect }: Props) {
+export function ScheduleDayTimeline({ people, date, onEditShift, selected, onSelect, coverage }: Props) {
   const allIds = people.map(p => p.id)
   const dayShifts = people
     .map(p => p.shifts.find(s => s.date === date))
@@ -216,19 +225,24 @@ export function ScheduleDayTimeline({ people, date, onEditShift, selected, onSel
               )
             })}
 
-            {/* A one-person department has no coverage question — the strip
-                would just restate the row above it. */}
-            {members.length > 1 && (
-              <DeptCoverageStrip
-                dept={dept}
-                members={members}
-                date={date}
-                axis={axis}
-                selCol={SEL_COL}
-                nameCol={NAME_COL}
-                gridlines={<Gridlines />}
-              />
-            )}
+            {/* Coverage strip shows only when the department has coverage turned
+                on (Scheduling > Coverage Thresholds) and has more than one person
+                — a one-person department's strip would just restate the row. */}
+            {(() => {
+              const cov = coverage?.get(dept)
+              if (!cov?.enabled || members.length <= 1) return null
+              return (
+                <DeptCoverageStrip
+                  members={members}
+                  date={date}
+                  axis={axis}
+                  windows={cov.windows}
+                  selCol={SEL_COL}
+                  nameCol={NAME_COL}
+                  gridlines={<Gridlines />}
+                />
+              )
+            })()}
           </Fragment>
         ))}
       </div>

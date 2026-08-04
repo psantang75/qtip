@@ -213,6 +213,8 @@ router.get('/email-templates',                ...adminAuth, emailTemplatesContro
 router.get('/email-templates/_health',        ...adminAuth, emailTemplatesController.getEmailHealth   as unknown as RequestHandler);
 router.get('/email-templates/_recent-sends',  ...adminAuth, emailTemplatesController.getRecentSends   as unknown as RequestHandler);
 router.post('/email-templates/_resend/:logId',...adminAuth, emailTemplatesController.resendLogged     as unknown as RequestHandler);
+router.get('/email-templates/_queue',         ...adminAuth, emailTemplatesController.getQueue        as unknown as RequestHandler);
+router.post('/email-templates/_queue/discard',...adminAuth, emailTemplatesController.discardQueued   as unknown as RequestHandler);
 router.get('/email-templates/:id',            ...adminAuth, emailTemplatesController.getTemplate      as unknown as RequestHandler);
 router.put('/email-templates/:id',            ...adminAuth, emailTemplatesController.updateTemplate   as unknown as RequestHandler);
 router.post('/email-templates/:id/preview',   ...adminAuth, emailTemplatesController.previewTemplate  as unknown as RequestHandler);

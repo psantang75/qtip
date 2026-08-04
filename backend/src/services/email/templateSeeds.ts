@@ -31,7 +31,8 @@ export type RoleToken =
   | 'hr_witness'
   | 'assignee'
   | 'coach'
-  | 'admins';
+  | 'admins'
+  | 'designated';
 
 export interface SeedSpec {
   template_key: string;
@@ -74,6 +75,7 @@ export const ROLE_LABELS: Record<RoleToken, string> = {
   assignee: 'The follow-up assignee',
   coach: 'The session coach',
   admins: 'All active admins',
+  designated: 'Named people (List Management > Notifications > Alert Recipients)',
 };
 
 const SEEDS: SeedSpec[] = [
@@ -352,6 +354,21 @@ const SEEDS: SeedSpec[] = [
     fixed_roles: ['direct_manager'],
     digest_eligible: false,
     deep_link_target: 'Manager team dashboard (/app/insights/team).' },
+
+  // ── Attendance ─────────────────────────────────────────────────────
+  { template_key: 'attendance_threshold_reached', category: 'Attendance',
+    name: 'Attendance — point threshold reached',
+    description: 'Sent when a CSR\'s rolling 90-day attendance points reach a discipline rung. '
+      + 'Fires once per rung per person: points rolling off and being re-crossed cannot re-send it.',
+    cadence: 'IMMEDIATE', is_locked: false,
+    recipient_summary: 'The CSR who reached the threshold + named alert recipients',
+    allowed_variables: ['recipient', 'items', 'itemCount', 'hasMore', 'deepLinkPath'],
+    available_roles: ['agent', 'admins', 'designated'],
+    default_recipient_roles: ['agent', 'designated'],
+    fixed_roles: ['agent'],
+    digest_eligible: false,
+    deep_link_target: 'CSR attendance page (/app/insights/csr-attendance). '
+      + 'Admins land on the same page, where the roster is not self-scoped.' },
 
   // ── System ─────────────────────────────────────────────────────────
   { template_key: 'system.circuit_tripped', category: 'System', name: 'Email circuit-breaker tripped',

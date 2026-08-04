@@ -14,15 +14,15 @@ import { validateSchema } from '../validation/csr.validation';
 import {
   GridQuerySchema, ShiftUpsertSchema, ApplyScheduleSchema, PublishSchema, UnpublishSchema,
   TemplateSchema, ExceptionCreateSchema, BulkExceptionSchema,
-  ExceptionTypeSchema, ActivityTypeSchema, CoverageThresholdSchema,
+  ExceptionTypeSchema, ActivityTypeSchema, CoverageThresholdSchema, CoverageWindowsSchema, ReorderTypesSchema,
 } from '../validation/schedule.validation';
 import {
   getGrid, getRoster, getMySchedule, putShift, removeShift, postApply, postPublish, postUnpublish, postUnlock,
   getTemplates, getTemplateById, postTemplate, putTemplate, patchTemplateActive, postDuplicateTemplate,
-  getExceptions, postException, removeException, postBulkException,
+  getExceptions, postException, removeException, postBulkException, getTimeOffImportReview,
   getExceptionTypes, postExceptionType, putExceptionType, patchExceptionTypeActive, postReorderExceptionTypes,
-  getActivityTypes, postActivityType, putActivityType, patchActivityTypeActive,
-  getCoverageThresholds, putCoverageThreshold, removeCoverageThreshold,
+  getActivityTypes, postActivityType, putActivityType, patchActivityTypeActive, postReorderActivityTypes,
+  getCoverageThresholds, putCoverageThreshold, removeCoverageThreshold, putCoverageWindows,
 } from '../controllers/scheduling';
 
 const router = Router();
@@ -43,12 +43,14 @@ router.get('/coverage-thresholds', calView, getCoverageThresholds as unknown as 
 router.post('/exception-types',        admin, validateSchema(ExceptionTypeSchema), postExceptionType as unknown as RequestHandler);
 router.put('/exception-types/:id',     admin, putExceptionType as unknown as RequestHandler);
 router.patch('/exception-types/:id/active', admin, patchExceptionTypeActive as unknown as RequestHandler);
-router.post('/exception-types/reorder', admin, postReorderExceptionTypes as unknown as RequestHandler);
+router.post('/exception-types/reorder', admin, validateSchema(ReorderTypesSchema), postReorderExceptionTypes as unknown as RequestHandler);
 router.post('/activity-types',         admin, validateSchema(ActivityTypeSchema), postActivityType as unknown as RequestHandler);
 router.put('/activity-types/:id',      admin, putActivityType as unknown as RequestHandler);
 router.patch('/activity-types/:id/active', admin, patchActivityTypeActive as unknown as RequestHandler);
-router.put('/coverage-thresholds',     admin, validateSchema(CoverageThresholdSchema), putCoverageThreshold as unknown as RequestHandler);
-router.delete('/coverage-thresholds/:departmentId', admin, removeCoverageThreshold as unknown as RequestHandler);
+router.post('/activity-types/reorder', admin, validateSchema(ReorderTypesSchema), postReorderActivityTypes as unknown as RequestHandler);
+  router.put('/coverage-thresholds',     admin, validateSchema(CoverageThresholdSchema), putCoverageThreshold as unknown as RequestHandler);
+  router.put('/coverage-thresholds/:departmentId/windows', admin, validateSchema(CoverageWindowsSchema), putCoverageWindows as unknown as RequestHandler);
+  router.delete('/coverage-thresholds/:departmentId', admin, removeCoverageThreshold as unknown as RequestHandler);
 
 // ── Self schedule (OWN) ──────────────────────────────────────────────────────
 router.get('/my-schedule', calView, validateSchema(GridQuerySchema), getMySchedule as unknown as RequestHandler);
@@ -76,5 +78,6 @@ router.get('/exceptions',        excViewAll, getExceptions as unknown as Request
 router.post('/exceptions',       excEdit, validateSchema(ExceptionCreateSchema), postException as unknown as RequestHandler);
 router.delete('/exceptions/:id', excEdit, removeException as unknown as RequestHandler);
 router.post('/exceptions/bulk',  excEdit, validateSchema(BulkExceptionSchema), postBulkException as unknown as RequestHandler);
+router.get('/exceptions/time-off-import', excViewAll, getTimeOffImportReview as unknown as RequestHandler);
 
 export default router;

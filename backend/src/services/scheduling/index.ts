@@ -9,3 +9,5 @@ export * from './schedule.template.service';
 export * from './schedule.shift.service';
 export * from './schedule.apply.service';
 export * from './schedule.exception.service';
+export * from './timeOff.classify';
+export * from './timeOff.derive.service';

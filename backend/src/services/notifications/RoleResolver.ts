@@ -2,6 +2,7 @@ import prisma from '../../config/prisma';
 import logger from '../../config/logger';
 import { isAiReviewer } from './ReviewerClassifier';
 import { getTemplateSpec, ROLE_LABELS, type RoleToken } from '../email/templateSeeds';
+import { loadDesignatedRecipients } from './designatedRecipients';
 
 /**
  * Recipient lookup, configurable per template.
@@ -186,6 +187,14 @@ async function resolveToken(token: RoleToken, payload: Record<string, any>): Pro
     case 'admins': {
       const rows = await fetchUsersByRoleAndDept('Admin', null);
       return rows.map(r => toRecipient(r, 'admins')).filter((x): x is Recipient => !!x);
+    }
+
+    case 'designated': {
+      // Chosen by address in List Management rather than derived from a role, for
+      // the case where "every admin" is too many and no role describes the few
+      // people who actually watch a given alert.
+      const rows = await loadDesignatedRecipients();
+      return rows.map(r => toRecipient(r, 'designated')).filter((x): x is Recipient => !!x);
     }
   }
 }

@@ -26,6 +26,8 @@ import { getState as getCircuitState } from '../../services/notifications/circui
  * GET    /api/admin/email-templates/_health         transport + circuit status
  * GET    /api/admin/email-templates/_recent-sends   tail of email_log (paged)
  * POST   /api/admin/email-templates/_resend/:logId  resend a single message
+ * GET    /api/admin/email-templates/_queue          notifications waiting to send
+ * POST   /api/admin/email-templates/_queue/discard  suppress queued rows
  */
 
 /**
@@ -308,6 +310,77 @@ export const resendLogged = async (req: Request, res: Response) => {
 };
 
 /**
+ * Notifications still waiting to be mailed.
+ *
+ * `DigestScheduler` drains this every five minutes, so a healthy queue is empty
+ * or nearly so. Rows that linger mean something is wrong — usually a template
+ * that no longer exists, or a batch raised by a backfill that nobody wants sent.
+ */
+export const getQueue = async (req: Request, res: Response) => {
+  const take = Math.min(500, Math.max(10, parseInt(String(req.query.limit ?? '100'), 10) || 100));
+  const rows = await prisma.notificationQueueEntry.findMany({
+    where: { processed_at: null },
+    orderBy: { scheduled_for: 'asc' },
+    take,
+    include: { user: { select: { id: true, username: true, email: true, is_active: true } } },
+  });
+
+  // Which of these can never send, so the UI can say so rather than implying
+  // they are merely waiting their turn.
+  const keys = [...new Set(rows.map(r => r.template_key))];
+  const known = await prisma.emailTemplate.findMany({
+    where: { template_key: { in: keys } },
+    select: { template_key: true, is_enabled: true },
+  });
+  const byKey = new Map(known.map(t => [t.template_key, t]));
+
+  res.json({
+    rows: rows.map(row => ({
+      ...row,
+      template_exists: byKey.has(row.template_key),
+      template_enabled: byKey.get(row.template_key)?.is_enabled ?? null,
+    })),
+    total: await prisma.notificationQueueEntry.count({ where: { processed_at: null } }),
+  });
+};
+
+/**
+ * Suppress queued rows: mark them processed so the scheduler passes over them.
+ *
+ * Deliberately not a delete. `dedupe_key` is what stops an event being queued a
+ * second time, so deleting a row invites the next run to raise it again. Marking
+ * it processed both suppresses the send and keeps the event claimed.
+ */
+export const discardQueued = async (req: Request, res: Response) => {
+  const ids: unknown = req.body?.ids;
+  const templateKey: unknown = req.body?.template_key;
+
+  let where: any;
+  if (Array.isArray(ids) && ids.length > 0) {
+    const numeric = ids.map(Number).filter(n => Number.isFinite(n));
+    if (numeric.length === 0) return res.status(400).json({ message: 'No valid ids supplied' });
+    where = { id: { in: numeric }, processed_at: null };
+  } else if (typeof templateKey === 'string' && templateKey.trim()) {
+    where = { template_key: templateKey.trim(), processed_at: null };
+  } else {
+    return res.status(400).json({ message: 'Supply either ids[] or template_key' });
+  }
+
+  const affected = await prisma.notificationQueueEntry.updateMany({
+    where, data: { processed_at: new Date() },
+  });
+
+  logger.warn('[email-templates] queued notifications discarded by admin', {
+    discarded: affected.count,
+    by: (req as any).user?.user_id ?? null,
+    ids: Array.isArray(ids) ? ids : undefined,
+    templateKey: typeof templateKey === 'string' ? templateKey : undefined,
+  });
+
+  return res.json({ discarded: affected.count });
+};
+
+/**
  * Stable sample data per template_key for preview / test-send flows.
  * Keeps the admin from seeing literal {{recipient.username}} in the
  * preview and means "Send test" produces a realistic email.
@@ -410,6 +483,20 @@ function sampleData(templateKey: string): Record<string, unknown> {
       eventEntityLabel: 'digest',
     };
   }
+  if (templateKey === 'attendance_threshold_reached') {
+    return {
+      // Previewed as the agent, which is the variant with the second-person copy.
+      // Admins receive the same template with a leading Agent column.
+      recipient: baseUser, itemCount: 1, hasMore: false,
+      // Shaped by DigestScheduler.buildDigestItem — level/points/threshold/asOf,
+      // with asOf already MM-DD-YYYY rather than a Date.
+      items: [{
+        csrName: 'sample.user', level: 'Coaching',
+        points: 3.25, threshold: 3, asOf: '08-03-2026',
+      }],
+      eventEntityLabel: 'attendance',
+    };
+  }
   if (templateKey === 'system.circuit_tripped') {
     return {
       threshold: 1000, count: 1234, trippedAt: new Date(),
@@ -425,6 +512,5 @@ export default {
   listTemplates, getTemplate, updateTemplate, previewTemplate,
   testSendTemplate, resetTemplate, rollbackTemplate,
   getEmailHealth, getRecentSends, resendLogged,
+  getQueue, discardQueued,
 };
-
-void logger;

@@ -1,11 +1,14 @@
 /**
- * Exception log endpoints (single + bulk). Transport-only.
+ * Exception log endpoints (single + bulk) plus the Paychex time-off import
+ * review. Transport-only.
  */
 import { Response } from 'express';
 import {
   AuthReq, resolveScope, listExceptions, createException, deleteException, bulkLogException,
+  deriveTimeOffExceptions,
 } from '../../services/scheduling';
 import { respondWithError } from './respond';
+import { addDays, fmtLocal } from '../../services/scheduling/schedule.dates';
 
 export const getExceptions = async (req: AuthReq, res: Response) => {
   try {
@@ -38,6 +41,23 @@ export const removeException = async (req: AuthReq, res: Response) => {
     res.json({ success: true, data });
   } catch (error) {
     respondWithError(res, 'removeException', error);
+  }
+};
+
+/**
+ * What the punch feed's Non-Work blocks currently mean, classified live rather
+ * than read from a stored snapshot. Running the same derivation the importer
+ * runs — with dryRun — is what keeps the review page honest: it can never show a
+ * result the engine did not actually score.
+ */
+export const getTimeOffImportReview = async (req: AuthReq, res: Response) => {
+  try {
+    const to = (req.query.to as string) || fmtLocal(new Date());
+    const from = (req.query.from as string) || addDays(to, -29);
+    const data = await deriveTimeOffExceptions(from, to, { dryRun: true });
+    res.json({ success: true, data });
+  } catch (error) {
+    respondWithError(res, 'getTimeOffImportReview', error);
   }
 };
 

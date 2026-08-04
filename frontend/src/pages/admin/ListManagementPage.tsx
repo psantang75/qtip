@@ -10,6 +10,11 @@ import {
   ActivityTypesEditor,
   CoverageThresholdsEditor,
 } from './list-management/SchedulingListEditors'
+import { CampaignListEditor } from './list-management/CampaignListEditor'
+import {
+  AttendancePointBandsEditor,
+  AttendanceThresholdsEditor,
+} from './list-management/AttendanceListEditors'
 
 // ── List catalogue ────────────────────────────────────────────────────────────
 
@@ -24,6 +29,9 @@ const CUSTOM_EDITORS = {
   sched_exception_type: ExceptionTypesEditor,
   sched_activity_type: ActivityTypesEditor,
   sched_coverage: CoverageThresholdsEditor,
+  campaign_library: CampaignListEditor,
+  attendance_bands: AttendancePointBandsEditor,
+  attendance_thresholds: AttendanceThresholdsEditor,
 } as const
 
 interface ManagedList {
@@ -80,6 +88,29 @@ const SECTIONS: ListSection[] = [
       { key: 'sched_exception_types', label: 'Attendance Exception Types', description: 'Exception reasons (absence, late, early leave, PTO…) selectable when logging attendance exceptions.', tier: 'dynamic', implemented: true, editor: 'sched_exception_type' },
       { key: 'sched_activity_types',  label: 'Shift Activity Types',       description: 'Break/lunch (and future) segment types available when building shifts and templates.',              tier: 'dynamic', implemented: true, editor: 'sched_activity_type' },
       { key: 'sched_coverage',        label: 'Coverage Thresholds',        description: 'Per-department green/yellow staffing minimums that drive the schedule coverage heatmap.',              tier: 'dynamic', implemented: true, editor: 'sched_coverage' },
+      { key: 'campaign_library',      label: 'Call Campaigns',             description: 'Campaign categories (with a color) and campaigns (with a timing rule) projected onto the call-campaign calendar.', tier: 'dynamic', implemented: true, editor: 'campaign_library' },
+    ],
+  },
+  {
+    id: 'attendance',
+    label: 'Attendance',
+    lists: [
+      { key: 'attendance_bands',      label: 'Point Bands',          description: 'How much a late arrival, an early departure or an absence is worth. Drives the rolling 90-day point totals on the Attendance report.', tier: 'dynamic', implemented: true, editor: 'attendance_bands' },
+      { key: 'attendance_thresholds', label: 'Discipline Thresholds', description: 'Point totals at which Coaching, Verbal, Written, Final and Separation are recommended.', tier: 'dynamic', implemented: true, editor: 'attendance_thresholds' },
+    ],
+  },
+  {
+    id: 'imports',
+    label: 'Data Imports',
+    lists: [
+      { key: 'mailbox_senders', label: 'Import Email Senders', description: 'Addresses allowed to email an Excel report to the QTIP mailbox for automatic import. Anything from another sender is filed as Failed and never read.', tier: 'dynamic', implemented: true, listType: 'mailbox_import_sender' },
+    ],
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    lists: [
+      { key: 'alert_recipients', label: 'Alert Recipients', description: 'Addresses of the specific people who should receive operational alerts, for templates where "every admin" is too many. Each address must belong to an active QTIP user. Choose which alerts use this list under Admin > Email Templates.', tier: 'dynamic', implemented: true, listType: 'notification_recipient' },
     ],
   },
 ]

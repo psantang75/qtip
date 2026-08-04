@@ -117,6 +117,54 @@ export function isBlockedForScheduling(dateStr: string, types: Map<string, strin
   return t === 'HOLIDAY' || t === 'CLOSURE';
 }
 
+/** Every 'YYYY-MM-DD' date in a calendar month, in order. month is 1-based. */
+export function monthDateStrings(year: number, month: number): string[] {
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const out: string[] = [];
+  for (let d = 1; d <= last; d++) {
+    out.push(`${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+  }
+  return out;
+}
+
+/**
+ * Ordered list of WORKING business days in a month as 'YYYY-MM-DD' strings.
+ * A day counts when its stored day_type is WORKDAY/ADJUSTMENT, or — with no
+ * stored row — it is Mon–Fri. WEEKEND/HOLIDAY/CLOSURE are excluded. This is the
+ * spine the campaign anchor resolver counts over (Nth from start / Nth from end
+ * / relative-to-campaign). One DB round-trip for the whole month.
+ */
+export async function businessDaysOfMonth(year: number, month: number): Promise<string[]> {
+  const all = monthDateStrings(year, month);
+  const types = await getCalendarDayTypes(all);
+  return all.filter((ds) => {
+    const t = types.get(ds);
+    if (t) return t === 'WORKDAY' || t === 'ADJUSTMENT';
+    const dow = dowOf(ds);
+    return dow >= 1 && dow <= 5;
+  });
+}
+
+/**
+ * Day-type map for a whole month (every date present), applying the Mon–Fri
+ * default where no row exists so the caller never has to. Used by the campaign
+ * grid to grey out WEEKEND/HOLIDAY/CLOSURE days.
+ */
+export async function getMonthDayTypes(year: number, month: number): Promise<Map<string, string>> {
+  const all = monthDateStrings(year, month);
+  const stored = await getCalendarDayTypes(all);
+  const out = new Map<string, string>();
+  for (const ds of all) {
+    const t = stored.get(ds);
+    if (t) out.set(ds, t);
+    else {
+      const dow = dowOf(ds);
+      out.set(ds, dow >= 1 && dow <= 5 ? 'WORKDAY' : 'WEEKEND');
+    }
+  }
+  return out;
+}
+
 export interface BusinessDaySummary {
   totalDays:       number;
   businessDays:    number;

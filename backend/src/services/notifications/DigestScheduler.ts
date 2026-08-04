@@ -25,10 +25,23 @@ import { mailConfig } from '../../config/environment';
  * Failures on a single user/template group are logged and that group is
  * left unprocessed so the next tick can retry. We never let one user's
  * SMTP error stop the entire batch.
+ *
+ * The exception is a failure that retrying cannot fix — a template key with no
+ * row and no file behind it. Those rows are discarded rather than retried, or a
+ * single missing seed spins in the log every five minutes indefinitely.
  */
 
 const TICK_MS = 5 * 60 * 1000;
 const MAX_ITEMS_PER_DIGEST = 50;
+
+/**
+ * Where a template's CTA button should land. Anything not listed here falls back
+ * to the personal dashboard, which is right for the CSR-facing digests.
+ */
+const DEEP_LINKS: Record<string, string> = {
+  'digest.manager_weekly': '/app/insights/team',
+  attendance_threshold_reached: '/app/insights/csr-attendance',
+};
 
 let intervalHandle: NodeJS.Timeout | null = null;
 let running = false;
@@ -100,6 +113,18 @@ export async function runOnce(): Promise<{ groups: number; sent: number; skipped
   }
 }
 
+/**
+ * Marks queue rows handled so no later tick can pick them up again. Every exit
+ * from `processGroup` has to end in one of these, or the rows are retried on the
+ * next tick forever.
+ */
+async function markProcessed(rows: QueueRow[]): Promise<void> {
+  await prisma.notificationQueueEntry.updateMany({
+    where: { id: { in: rows.map(r => r.id) } },
+    data: { processed_at: new Date() },
+  });
+}
+
 async function processGroup(
   userId: number,
   templateKey: string,
@@ -110,10 +135,7 @@ async function processGroup(
     select: { id: true, username: true, email: true, is_active: true },
   });
   if (!user || !user.is_active || !user.email) {
-    await prisma.notificationQueueEntry.updateMany({
-      where: { id: { in: rows.map(r => r.id) } },
-      data: { processed_at: new Date() },
-    });
+    await markProcessed(rows);
     return 'skipped';
   }
 
@@ -126,22 +148,23 @@ async function processGroup(
     .slice(0, MAX_ITEMS_PER_DIGEST);
 
   if (filteredItems.length === 0) {
-    await prisma.notificationQueueEntry.updateMany({
-      where: { id: { in: rows.map(r => r.id) } },
-      data: { processed_at: new Date() },
-    });
+    await markProcessed(rows);
     return 'skipped';
   }
 
-  const recipient = { id: user.id, username: user.username, email: user.email, role_id: 0 };
+  // Every row in a group shares a user and a template, so they also share the
+  // audience role that surfaced them. Templates read it to address the subject of
+  // the event in the second person and everybody else in the third.
+  const recipient = {
+    id: user.id, username: user.username, email: user.email, role_id: 0,
+    matchedRole: rows[0]?.payload?.forRole ?? undefined,
+  };
   const digestKey = templateKey.startsWith('digest.')
     ? templateKey
     : pickDigestTemplate(templateKey);
 
-  // Land each digest on the dashboard it summarizes, not the generic home.
-  const digestDeepLink = digestKey === 'digest.manager_weekly'
-    ? '/app/insights/team'
-    : '/app/insights/dashboard';
+  // Land each digest on the page it summarizes, not the generic home.
+  const digestDeepLink = DEEP_LINKS[digestKey] ?? '/app/insights/dashboard';
 
   const rendered = await renderTemplate({
     templateKey: digestKey,
@@ -153,7 +176,17 @@ async function processGroup(
       deepLinkPath: digestDeepLink,
     },
   });
-  if (!rendered) return 'skipped';
+  if (!rendered) {
+    // renderTemplate returns null only when the key exists in neither the DB nor
+    // the templates folder — a missing seed, not a transient failure. Retrying it
+    // can never succeed, so discard the rows and say so at error level, because
+    // the fix is a code change somebody has to make.
+    await markProcessed(rows);
+    logger.error('[DigestScheduler] no such template — queued notifications discarded', {
+      templateKey: digestKey, userId, discarded: rows.length,
+    });
+    return 'skipped';
+  }
 
   if (!emailService.isConfigured()) {
     await logEmail({
@@ -161,10 +194,7 @@ async function processGroup(
       subject: rendered.subject, status: 'SKIPPED_NOT_CONFIGURED',
       dedupeKey: digestDedupeKey(digestKey, user.id, new Date()),
     });
-    await prisma.notificationQueueEntry.updateMany({
-      where: { id: { in: rows.map(r => r.id) } },
-      data: { processed_at: new Date() },
-    });
+    await markProcessed(rows);
     return 'skipped';
   }
 
@@ -184,32 +214,61 @@ async function processGroup(
     sentAt: result.ok ? new Date() : null,
   });
 
-  await prisma.notificationQueueEntry.updateMany({
-    where: { id: { in: rows.map(r => r.id) } },
-    data: { processed_at: new Date() },
-  });
+  await markProcessed(rows);
   return result.ok ? 'sent' : 'skipped';
 }
 
+/**
+ * Flattens a queued payload into the row shape templates iterate over.
+ *
+ * Two payload shapes share this queue. QA submission events carry a form and a
+ * score; attendance threshold crossings carry a discipline level and a point
+ * total. The fields of the other shape stay null rather than being faked, so a
+ * template that prints the wrong ones renders visibly empty instead of showing
+ * "Unknown form" next to a real name.
+ */
 function buildDigestItem(payload: any): {
-  formName: string; csrName: string; score: number | string; status: string;
+  formName: string | null; csrName: string; score: number | string | null; status: string | null;
   ai_overall_confidence?: number | null;
   routed_to_qa?: boolean;
+  level: string | null; points: number | null; threshold: number | null; asOf: string | null;
 } {
+  const isAttendance = payload?.level != null || payload?.levelKey != null;
   return {
-    formName: payload?.form?.form_name ?? 'Unknown form',
+    formName: isAttendance ? null : (payload?.form?.form_name ?? 'Unknown form'),
     csrName: payload?.csr?.username ?? 'Unknown',
-    score: payload?.submission?.total_score ?? '—',
-    status: payload?.submission?.status ?? 'finalized',
+    score: isAttendance ? null : (payload?.submission?.total_score ?? '—'),
+    status: isAttendance ? null : (payload?.submission?.status ?? 'finalized'),
     ai_overall_confidence: payload?.submission?.ai_overall_confidence ?? null,
     routed_to_qa: payload?.routedToQa ?? false,
+    level: payload?.level ?? null,
+    points: payload?.points ?? null,
+    threshold: payload?.threshold ?? null,
+    asOf: attendanceDateLabel(payload?.asOf),
   };
+}
+
+/**
+ * 'YYYY-MM-DD' to 'MM-DD-YYYY', matching what the attendance screens show.
+ *
+ * String surgery rather than the `formatDate` Handlebars helper on purpose: that
+ * helper runs the value through `new Date()`, which reads a date-only string as
+ * UTC midnight and then renders it in eastern time as the day before.
+ */
+function attendanceDateLabel(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return parts ? `${parts[2]}-${parts[3]}-${parts[1]}` : value;
 }
 
 function passesFilter(item: ReturnType<typeof buildDigestItem>, filter: string): boolean {
   if (filter === 'ALL') return true;
   if (filter === 'ROUTED_TO_QA') return !!item.routed_to_qa;
   if (filter === 'BELOW_THRESHOLD') {
+    // An item with no score at all is not a scored event, so a score-based
+    // filter has no opinion on it. Keep it rather than silently dropping it —
+    // Number(null) is 0, which would otherwise sneak past as "below threshold".
+    if (item.score == null) return true;
     const score = Number(item.score);
     return Number.isFinite(score) && score < 80;
   }

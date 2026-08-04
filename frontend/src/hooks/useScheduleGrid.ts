@@ -35,10 +35,13 @@ export function adaptGrid(grid: ApiGrid): { people: MockPerson[]; departments: s
   for (const e of grid.exceptions) {
     const arr = exByUser.get(e.user_id) ?? exByUser.set(e.user_id, []).get(e.user_id)!
     arr.push({
+      id: e.id,
       date: e.exception_date,
+      exceptionTypeId: e.exception_type_id,
       typeLabel: e.label,
       excused: e.is_excused,
       isFullDay: e.is_full_day,
+      isImported: e.is_imported,
       start: e.start ?? undefined,
       end: e.end ?? undefined,
     })

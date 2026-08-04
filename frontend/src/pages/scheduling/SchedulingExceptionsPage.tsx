@@ -5,8 +5,9 @@
  * is a review + cleanup surface, not an entry form.
  */
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarX, Trash2 } from 'lucide-react'
+import { CalendarX, FileInput, Trash2 } from 'lucide-react'
 
 import { ListPageShell } from '@/components/common/ListPageShell'
 import { ListPageHeader } from '@/components/common/ListPageHeader'
@@ -26,13 +27,19 @@ import { parseLocal, toLocalIso, addDays } from '@/components/scheduling/mockSch
 
 const fmt = (iso: string) => parseLocal(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
+/** The rolling attendance-point window, mirroring attendance.rollup.service. */
+const POINT_WINDOW_DAYS = 90
+
 export default function SchedulingExceptionsPage() {
   const { toast } = useToast()
   const qc = useQueryClient()
   const { canEdit } = useScheduleRole()
 
-  const [from, setFrom] = useState(addDays(toLocalIso(new Date()), -30))
-  const [to, setTo] = useState(addDays(toLocalIso(new Date()), 14))
+  // Defaults to the rolling 90-day point window, because that is the range these
+  // exceptions are actually being scored over. Widen the filter to see leave
+  // logged ahead, or anything that has already rolled off.
+  const [from, setFrom] = useState(addDays(toLocalIso(new Date()), -(POINT_WINDOW_DAYS - 1)))
+  const [to, setTo] = useState(toLocalIso(new Date()))
 
   const { data, isLoading } = useQuery({
     queryKey: ['schedule-exceptions', from, to],
@@ -49,7 +56,17 @@ export default function SchedulingExceptionsPage() {
 
   return (
     <ListPageShell>
-      <ListPageHeader title="Attendance Exceptions" subtitle="Every logged absence, late arrival, early leave and PTO day." />
+      <ListPageHeader
+        title="Attendance Exceptions"
+        subtitle="Exceptions the rolling 90-day point totals are scored against — every day forgiven, and every one that carries points."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/app/scheduling/time-off-import">
+              <FileInput className="mr-1.5 h-4 w-4" /> Time Off Import
+            </Link>
+          </Button>
+        }
+      />
 
       <ListFilterBar hasFilters={false} onReset={() => {}} resultCount={{ filtered: rows.length, total: rows.length }}>
         <div className="flex items-center gap-2">

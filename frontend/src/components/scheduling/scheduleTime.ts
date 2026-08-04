@@ -240,11 +240,18 @@ export function peakAway(slots: CoverageSlot[]): number {
   return slots.reduce((max, s) => Math.max(max, s.onBreak + s.onException), 0)
 }
 
-/** Fewest people working at any point in the day, ignoring the closed tails. */
-export function troughWorking(slots: CoverageSlot[]): number {
-  const staffed = slots.filter(s => s.working + s.onBreak + s.onException > 0)
-  if (!staffed.length) return 0
-  return staffed.reduce((min, s) => Math.min(min, s.working), Infinity)
+/**
+ * Fewest people working at any *monitored* moment — a slot inside a coverage
+ * window and with someone scheduled. Unmonitored minutes (before open, after
+ * the evening drop, or any gap between windows) are excluded, so a shift that
+ * runs past the last window no longer drags the low down.
+ */
+export function troughWorking(slots: CoverageSlot[], windows: CoverageWindow[]): number {
+  const monitored = slots.filter(
+    s => windowAt(s.startMin, windows) && s.working + s.onBreak + s.onException > 0,
+  )
+  if (!monitored.length) return 0
+  return monitored.reduce((min, s) => Math.min(min, s.working), Infinity)
 }
 
 export type CoverageLevel = 'none' | 'red' | 'yellow' | 'green' | 'closed'
@@ -259,6 +266,54 @@ export function coverageLevel(
   if (working >= t.green) return 'green'
   if (working >= t.yellow) return 'yellow'
   return 'red'
+}
+
+// ── Time-of-day coverage windows ─────────────────────────────────────────────
+
+/**
+ * One staffing bar for a slice of the day. Staffing is not flat: a call centre
+ * needs nobody at 7am, its full bar from open, and a thinner bar after the
+ * evening drop. Each window carries its own green/yellow, and the minutes
+ * outside every window are unmonitored — the fix for the phantom red at the
+ * open and close of every day.
+ */
+export interface CoverageWindow {
+  startMin: number
+  endMin: number
+  green: number
+  yellow: number
+}
+
+/** The window governing a wall-clock minute, or null when unmonitored. */
+export function windowAt(mins: number, windows: CoverageWindow[]): CoverageWindow | null {
+  for (const w of windows) if (mins >= w.startMin && mins < w.endMin) return w
+  return null
+}
+
+/** Grade a single slot against the window it falls in. Unmonitored or unstaffed
+ *  slots read 'closed' — grey, and never a warning. */
+export function slotLevel(slot: CoverageSlot, windows: CoverageWindow[]): CoverageLevel {
+  const w = windowAt(slot.startMin, windows)
+  if (!w) return 'closed'
+  const scheduled = slot.working + slot.onBreak + slot.onException
+  if (scheduled === 0) return 'closed'
+  return coverageLevel(slot.working, scheduled, w)
+}
+
+/** Escalation order, so "the worst thing that happened today" is comparable. */
+export const COVERAGE_SEVERITY: Record<CoverageLevel, number> = {
+  closed: 0, green: 1, yellow: 2, red: 3, none: 4,
+}
+
+/** The most severe grade across a set of slots — the day's headline status. */
+export function worstCoverageLevel(slots: CoverageSlot[], windows: CoverageWindow[]): CoverageLevel {
+  let level: CoverageLevel = 'closed'
+  let sev = -1
+  for (const s of slots) {
+    const lvl = slotLevel(s, windows)
+    if (COVERAGE_SEVERITY[lvl] > sev) { sev = COVERAGE_SEVERITY[lvl]; level = lvl }
+  }
+  return level
 }
 
 /** Heat map fill, kept muted — this is a background signal you scan, not a
@@ -322,4 +377,95 @@ export const COVERAGE_LABEL: Record<CoverageLevel, string> = {
   red: 'Below minimum',
   yellow: 'Thin',
   green: 'Covered',
+}
+
+// ── Week / period per-day coverage summary ───────────────────────────────────
+
+/**
+ * One block of the day's strip (an hour, or two). Its grade is the worst
+ * monitored slot inside it, so a single thin dip still colours the whole block;
+ * `level: 'closed'` marks a block that is unmonitored or unstaffed throughout.
+ */
+export interface HourCoverage {
+  startMin: number
+  endMin: number
+  working: number
+  onBreak: number
+  onException: number
+  level: CoverageLevel
+}
+
+/**
+ * A whole day's coverage boiled down for the week and period grids, where each
+ * day is a single narrow column with no room for the day view's intraday strip.
+ *
+ * The cell colour grades the day's *trough* (its worst simultaneous working
+ * count) against the department threshold — a day is only as covered as its
+ * thinnest moment. The hourly breakdown is carried in the hover, so the colour
+ * you scan and the numbers you check come from the same basis.
+ */
+export interface DayCoverage {
+  /** Grade of the day's worst monitored moment — drives the headline status. */
+  level: CoverageLevel
+  /** Working headcount at that worst moment, so the colour and number agree. */
+  trough: number
+  /** Peak headcount scheduled that day, used to tell 'closed' from 'thin'. */
+  scheduled: number
+  /** Blocks spanning the whole day, one per `blockMins`, for the strip + hover. */
+  hours: HourCoverage[]
+}
+
+export function dayCoverage(
+  people: MockPerson[],
+  date: string,
+  windows: CoverageWindow[],
+  slotMins = 15,
+  blockMins = 60,
+): DayCoverage {
+  const dayShifts = people
+    .map(p => p.shifts.find(s => s.date === date))
+    .filter((s): s is MockShift => !!s)
+  const axis = buildDayAxis(dayShifts)
+  const slots = buildCoverage(people, date, axis, slotMins)
+
+  const scheduled = slots.reduce((m, s) => Math.max(m, s.working + s.onBreak + s.onException), 0)
+
+  // The worst monitored, staffed slot drives the headline count.
+  let level: CoverageLevel = 'closed'
+  let trough = 0
+  let worstSev = -1
+  for (const s of slots) {
+    const lvl = slotLevel(s, windows)
+    if (lvl === 'closed') continue
+    if (COVERAGE_SEVERITY[lvl] > worstSev) { worstSev = COVERAGE_SEVERITY[lvl]; level = lvl; trough = s.working }
+  }
+
+  // Blocks span the whole day so the strip reads as the day's timeframe. Each
+  // block takes the worst (lowest) monitored slot inside it for its colour; a
+  // block with no monitored slot is 'closed' and renders as a faint gap.
+  const hours: HourCoverage[] = []
+  for (let b = axis.startMin; b < axis.endMin; b += blockMins) {
+    const end = Math.min(b + blockMins, axis.endMin)
+    const monitored = slots.filter(s => s.startMin >= b && s.startMin < end && slotLevel(s, windows) !== 'closed')
+    if (!monitored.length) {
+      hours.push({ startMin: b, endMin: end, working: 0, onBreak: 0, onException: 0, level: 'closed' })
+      continue
+    }
+    let worst = monitored[0]
+    let sev = COVERAGE_SEVERITY[slotLevel(worst, windows)]
+    for (const s of monitored) {
+      const sSev = COVERAGE_SEVERITY[slotLevel(s, windows)]
+      if (sSev > sev) { sev = sSev; worst = s }
+    }
+    hours.push({
+      startMin: b,
+      endMin: end,
+      working: worst.working,
+      onBreak: worst.onBreak,
+      onException: worst.onException,
+      level: slotLevel(worst, windows),
+    })
+  }
+
+  return { level, trough, scheduled, hours }
 }

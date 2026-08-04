@@ -85,25 +85,46 @@ export const BulkExceptionSchema = z.object({
   dry_run: z.boolean().optional(),
 });
 
+const ReorderSchema = z.object({
+  order: z.array(z.object({ id: posInt, sort_order: z.coerce.number().int() })).min(1),
+});
+
 export const ExceptionTypeSchema = z.object({
-  type_key: z.string().min(1).max(50),
+  type_key: z.string().min(1).max(50).optional(),
   label: z.string().min(1).max(100),
+  category: z.string().max(100).nullish(),
   description: z.string().max(255).nullish(),
-  is_excused: z.boolean(),
-  duration_mode: z.enum(['FULL_DAY', 'WINDOW', 'EITHER']),
+  paychex_pay_type: z.string().max(100).nullish(),
+  is_excused: z.boolean().optional(),
+  duration_mode: z.enum(['FULL_DAY', 'WINDOW', 'EITHER']).optional(),
   affects_arrival: z.boolean().optional(),
   affects_departure: z.boolean().optional(),
 });
 
 export const ActivityTypeSchema = z.object({
   label: z.string().min(1).max(50),
-  is_paid: z.boolean(),
+  category: z.string().max(100).nullish(),
+  is_paid: z.boolean().optional(),
   counts_as_coverage: z.boolean().optional(),
   color: z.string().max(20).nullish(),
 });
+
+export const ReorderTypesSchema = ReorderSchema;
 
 export const CoverageThresholdSchema = z.object({
   department_id: posInt,
   green_min: z.coerce.number().int().min(0),
   yellow_min: z.coerce.number().int().min(0),
+  is_enabled: z.boolean().optional(),
+});
+
+const hm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must be HH:MM');
+
+export const CoverageWindowsSchema = z.object({
+  windows: z.array(z.object({
+    start: hm,
+    end: hm,
+    green_min: z.coerce.number().int().min(0),
+    yellow_min: z.coerce.number().int().min(0),
+  })).max(12),
 });

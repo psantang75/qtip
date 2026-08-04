@@ -57,6 +57,7 @@ export async function listExceptions(scope: ScheduleScope, filters: { from?: str
     start: e.starts_at ? hmFromDateTime(e.starts_at) : null,
     end: e.ends_at ? hmFromDateTime(e.ends_at) : null,
     notes: e.notes,
+    is_imported: !!e.paychex_reference,
   }));
 }
 

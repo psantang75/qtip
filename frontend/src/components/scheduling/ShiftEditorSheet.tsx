@@ -1,11 +1,12 @@
 /**
- * MOCKUP — Phase 1 design probe only.
- *
  * Editing one person's day: shift start and end plus up to three break or
- * lunch pairs. It is a drawer rather than an inline cell edit because seven
- * times will not fit in a grid cell at any column width we can afford.
+ * lunch pairs, and the day's exceptions. It is a drawer rather than an inline
+ * cell edit because seven times will not fit in a grid cell at any column width
+ * we can afford.
  *
- * Local state only — Save closes the sheet and changes nothing.
+ * Exceptions are diffed rather than replaced — Save reports which were added and
+ * which were removed, because the API creates and deletes them one at a time and
+ * an untouched row must not be rewritten (that would drop its paychex_reference).
  */
 import { useEffect, useState } from 'react'
 import { Plus, Trash2, Coffee, UtensilsCrossed } from 'lucide-react'
@@ -31,8 +32,14 @@ interface Props {
   date?: string
   shift?: MockShift
   exceptions?: MockException[]
-  /** Commit handler. When absent the sheet is inert (mockup). */
-  onSave?: (payload: { start: string; end: string; breaks: MockBreak[] }) => Promise<void> | void
+  /** Commit handler. When absent the sheet is read-only. */
+  onSave?: (payload: {
+    start: string
+    end: string
+    breaks: MockBreak[]
+    exceptionAdds: MockException[]
+    exceptionRemoveIds: number[]
+  }) => Promise<void> | void
   onDelete?: () => Promise<void> | void
   saving?: boolean
 }
@@ -205,7 +212,16 @@ export function ShiftEditorSheet({
             variant="primary"
             disabled={!spanValid || outOfRange > 0 || saving}
             onClick={async () => {
-              if (onSave) await onSave({ start, end, breaks })
+              if (onSave) {
+                const keptIds = new Set(exs.map(e => e.id).filter((id): id is number => !!id))
+                await onSave({
+                  start, end, breaks,
+                  exceptionAdds: exs.filter(e => !e.id),
+                  exceptionRemoveIds: exceptions
+                    .map(e => e.id)
+                    .filter((id): id is number => !!id && !keptIds.has(id)),
+                })
+              }
               onOpenChange(false)
             }}
           >

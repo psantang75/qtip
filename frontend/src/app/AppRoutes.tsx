@@ -85,6 +85,8 @@ const MyWriteUpDetailPage  = React.lazy(() => import('../pages/writeups/MyWriteU
 const SchedulingPage           = React.lazy(() => import('../pages/scheduling/SchedulingPage'))
 const MySchedulePage           = React.lazy(() => import('../pages/scheduling/MySchedulePage'))
 const SchedulingExceptionsPage = React.lazy(() => import('../pages/scheduling/SchedulingExceptionsPage'))
+const TimeOffImportReviewPage  = React.lazy(() => import('../pages/scheduling/TimeOffImportReviewPage'))
+const CampaignSchedulePage     = React.lazy(() => import('../pages/scheduling/CampaignSchedulePage'))
 
 const DashboardPage          = React.lazy(() => import('../pages/insights/DashboardPage'))
 const TeamDashboardPage      = React.lazy(() => import('../pages/insights/TeamDashboardPage'))
@@ -343,6 +345,22 @@ export default function AppRoutes(): React.ReactElement {
               element={
                 <RequirePageAccess pageKey="sched_exceptions" minLevel="viewAll" fallback="/app/scheduling/calendar">
                   <PageLoader><SchedulingExceptionsPage /></PageLoader>
+                </RequirePageAccess>
+              }
+            />
+            <Route
+              path="time-off-import"
+              element={
+                <RequirePageAccess pageKey="sched_exceptions" minLevel="viewAll" fallback="/app/scheduling/calendar">
+                  <PageLoader><TimeOffImportReviewPage /></PageLoader>
+                </RequirePageAccess>
+              }
+            />
+            <Route
+              path="campaigns"
+              element={
+                <RequirePageAccess pageKey="sched_campaigns" minLevel="view">
+                  <PageLoader><CampaignSchedulePage /></PageLoader>
                 </RequirePageAccess>
               }
             />

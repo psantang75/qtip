@@ -54,6 +54,9 @@ model Department {
   metric_thresholds             MetricThreshold[]
   report_definition_departments ReportDefinitionDepartment[]
   schedule_coverage_thresholds  ScheduleCoverageThreshold[]
+  schedule_coverage_windows     ScheduleCoverageWindow[]
+  campaign_schedules            CampaignSchedule[]
+  campaign_schedule_departments CampaignScheduleDepartment[]
 
   @@map("departments")
 }
@@ -109,6 +112,8 @@ model User {
   punch_raw                             PunchRaw[]
   schedule_shifts                       ScheduleShift[]
   schedule_exceptions                   ScheduleException[]
+  attendance_daily                      AttendanceDaily[]
+  attendance_occurrences                AttendanceOccurrence[]
   quiz_attempts                         QuizAttempt[]
   training_resources                    TrainingResource[]
   write_ups_as_csr                      WriteUp[]          @relation("WriteUpCsr")
@@ -1144,6 +1149,9 @@ model PunchRaw {
   punch_out_at     DateTime? @db.DateTime(0)
   punch_type_in    String?   @db.VarChar(50)
   punch_type_out   String?   @db.VarChar(50)
+  /// Paychex pay type on the block — Work, Break, Meal, or a time-off reason such
+  /// as "PTO - Approved". What lets a Non-Work block become a typed exception.
+  pay_type         String?   @db.VarChar(50)
   regular_duration Decimal   @default(0) @db.Decimal(10, 2)
   import_id        Int?
   created_at       DateTime  @default(now()) @db.DateTime(0)
@@ -2171,6 +2179,7 @@ enum ScheduleDurationMode {
 model ScheduleActivityType {
   id                 Int      @id @default(autoincrement())
   label              String   @unique(map: "uq_schedule_activity_type_label") @db.VarChar(50)
+  category           String?  @db.VarChar(100)
   is_paid            Boolean  @default(true)
   counts_as_coverage Boolean  @default(false)
   color              String?  @db.VarChar(20)
@@ -2190,7 +2199,11 @@ model ScheduleExceptionType {
   id                Int                  @id @default(autoincrement())
   type_key          String               @unique(map: "uq_schedule_exception_type_key") @db.VarChar(50)
   label             String               @db.VarChar(100)
+  category          String?              @db.VarChar(100)
   description       String?              @db.VarChar(255)
+  /// Paychex pay type this maps to, so imported time off lands on the right type.
+  /// Editable in Admin > List Management; NULL means the type is manual-only.
+  paychex_pay_type  String?              @unique(map: "uq_schedule_exception_type_paychex") @db.VarChar(100)
   is_excused        Boolean              @default(false)
   duration_mode     ScheduleDurationMode @default(WINDOW)
   affects_arrival   Boolean              @default(false)
@@ -2201,7 +2214,8 @@ model ScheduleExceptionType {
   created_at        DateTime             @default(now()) @db.DateTime(0)
   updated_at        DateTime             @default(now()) @updatedAt @db.DateTime(0)
 
-  exceptions ScheduleException[]
+  exceptions  ScheduleException[]
+  point_rules AttendancePointRule[]
 
   @@map("schedule_exception_type")
 }
@@ -2209,6 +2223,7 @@ model ScheduleExceptionType {
 model ScheduleCoverageThreshold {
   id            Int      @id @default(autoincrement())
   department_id Int      @unique(map: "uq_schedule_coverage_threshold_department")
+  is_enabled    Boolean  @default(true)
   green_min     Int      @default(1)
   yellow_min    Int      @default(1)
   created_at    DateTime @default(now()) @db.DateTime(0)
@@ -2217,6 +2232,29 @@ model ScheduleCoverageThreshold {
   department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
 
   @@map("schedule_coverage_threshold")
+}
+
+// Time-of-day coverage bars. A department's staffing expectation is not flat:
+// nothing is required before open, the full bar applies mid-day, and a lower
+// bar applies after the evening drop. Each row is one window with its own
+// green/yellow minimums; minutes outside every window are unmonitored (no
+// warning). When a department has no windows, the flat threshold above applies
+// all day (backward compatible).
+model ScheduleCoverageWindow {
+  id            Int      @id @default(autoincrement())
+  department_id Int
+  start_time    DateTime @db.Time(0)
+  end_time      DateTime @db.Time(0)
+  green_min     Int      @default(1)
+  yellow_min    Int      @default(1)
+  sort_order    Int      @default(0)
+  created_at    DateTime @default(now()) @db.DateTime(0)
+  updated_at    DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
+
+  @@index([department_id], map: "idx_schedule_coverage_window_department")
+  @@map("schedule_coverage_window")
 }
 
 model ScheduleTemplate {
@@ -2285,6 +2323,7 @@ model ScheduleShift {
   template ScheduleTemplate?  @relation(fields: [template_id], references: [id], onDelete: SetNull)
   segments ScheduleShiftSegment[]
   exceptions ScheduleException[]
+  attendance_daily AttendanceDaily[]
 
   @@unique([user_id, shift_date], map: "uq_schedule_shift_user_date")
   @@index([shift_date], map: "idx_schedule_shift_date")
@@ -2327,7 +2366,263 @@ model ScheduleException {
   exception_type ScheduleExceptionType @relation(fields: [exception_type_id], references: [id], onDelete: Restrict)
   shift          ScheduleShift?        @relation(fields: [shift_id], references: [id], onDelete: SetNull)
 
+  attendance_daily AttendanceDaily[]
+
   @@index([user_id, exception_date], map: "idx_schedule_exception_user_date")
   @@index([exception_date], map: "idx_schedule_exception_date")
   @@map("schedule_exception")
+}
+
+// ── Attendance points ────────────────────────────────────────────────────────
+// The scoring layer over scheduling + punch data. Two config models (bands and
+// discipline ladder, both effective-dated so editing a band cannot rewrite
+// history) and two derived models rebuilt by attendance.engine.ts.
+
+enum AttendanceRuleKind {
+  LATE
+  EARLY_LEAVE
+  ABSENT
+  EXCEPTION
+}
+
+model AttendancePointRule {
+  id                Int                @id @default(autoincrement())
+  rule_key          String             @db.VarChar(50)
+  label             String             @db.VarChar(100)
+  kind              AttendanceRuleKind
+  min_seconds       Int                @default(0)
+  max_seconds       Int?
+  points            Decimal            @default(0) @db.Decimal(4, 2)
+  exception_type_id Int?
+  effective_from    DateTime           @db.Date
+  effective_to      DateTime?          @db.Date
+  sort_order        Int                @default(0)
+  is_active         Boolean            @default(true)
+  created_at        DateTime           @default(now()) @db.DateTime(0)
+  updated_at        DateTime           @default(now()) @updatedAt @db.DateTime(0)
+
+  exception_type ScheduleExceptionType? @relation(fields: [exception_type_id], references: [id], onDelete: Cascade)
+  occurrences    AttendanceOccurrence[]
+
+  @@unique([rule_key, effective_from], map: "uq_attendance_point_rule_key_effective")
+  @@index([kind, is_active, effective_from], map: "idx_attendance_point_rule_lookup")
+  @@map("attendance_point_rule")
+}
+
+model AttendanceWarningThreshold {
+  id               Int       @id @default(autoincrement())
+  level_key        String    @db.VarChar(50)
+  label            String    @db.VarChar(100)
+  points_threshold Decimal   @db.Decimal(4, 2)
+  effective_from   DateTime  @db.Date
+  effective_to     DateTime? @db.Date
+  sort_order       Int       @default(0)
+  is_active        Boolean   @default(true)
+  created_at       DateTime  @default(now()) @db.DateTime(0)
+  updated_at       DateTime  @default(now()) @updatedAt @db.DateTime(0)
+
+  @@unique([level_key, effective_from], map: "uq_attendance_warning_threshold_level_effective")
+  @@index([is_active, effective_from], map: "idx_attendance_warning_threshold_lookup")
+  @@map("attendance_warning_threshold")
+}
+
+// One row per user per SCHEDULED day, clean days included — compliance needs
+// scheduled_minutes for every scheduled day. late_seconds is stored even when it
+// earns no points, which is what makes grace usage measurable.
+model AttendanceDaily {
+  id                   Int       @id @default(autoincrement())
+  user_id              Int
+  work_date            DateTime  @db.Date
+  shift_id             Int?
+  scheduled_minutes    Int       @default(0)
+  adherent_minutes     Int       @default(0)
+  late_seconds         Int       @default(0)
+  early_leave_seconds  Int       @default(0)
+  is_absent            Boolean   @default(false)
+  first_punch_at       DateTime? @db.DateTime(0)
+  last_punch_at        DateTime? @db.DateTime(0)
+  is_excused           Boolean   @default(false)
+  excused_exception_id Int?
+  computed_at          DateTime  @default(now()) @db.DateTime(0)
+
+  user      User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  shift     ScheduleShift?     @relation(fields: [shift_id], references: [id], onDelete: SetNull)
+  exception ScheduleException? @relation(fields: [excused_exception_id], references: [id], onDelete: SetNull)
+
+  @@unique([user_id, work_date], map: "uq_attendance_daily_user_date")
+  @@index([work_date], map: "idx_attendance_daily_date")
+  @@map("attendance_daily")
+}
+
+// Point-bearing detail. Unique on (user, date, kind): a day carries at most one
+// Late and one Leave Early. Points are summed from here, never denormalised onto
+// AttendanceDaily, so there is one source of truth.
+model AttendanceOccurrence {
+  id                Int                @id @default(autoincrement())
+  user_id           Int
+  work_date         DateTime           @db.Date
+  rule_id           Int?
+  kind              AttendanceRuleKind
+  deviation_seconds Int                @default(0)
+  points            Decimal            @default(0) @db.Decimal(4, 2)
+  reason_label      String             @db.VarChar(100)
+  computed_at       DateTime           @default(now()) @db.DateTime(0)
+
+  user User                 @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  rule AttendancePointRule? @relation(fields: [rule_id], references: [id], onDelete: SetNull)
+
+  @@unique([user_id, work_date, kind], map: "uq_attendance_occurrence_user_date_kind")
+  @@index([work_date], map: "idx_attendance_occurrence_date")
+  @@map("attendance_occurrence")
+}
+
+enum CampaignAnchorType {
+  BD_FROM_START
+  BD_FROM_END
+  RELATIVE_TO_CAMPAIGN
+}
+
+/// Mirrors ScheduleShiftStatus for campaigns: nothing is visible to agents until
+/// an Admin or Manager publishes it.
+enum CampaignPublishStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum CampaignOverrideAction {
+  ADD
+  REMOVE
+}
+
+model CampaignCategory {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique(map: "uq_campaign_category_name") @db.VarChar(100)
+  color      String   @default("#00aeef") @db.VarChar(20)
+  sort_order Int      @default(0)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.DateTime(0)
+  updated_at DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  items CampaignItem[]
+
+  @@map("campaign_category")
+}
+
+model CampaignItem {
+  id                 Int                @id @default(autoincrement())
+  category_id        Int
+  label              String             @db.VarChar(150)
+  anchor_type        CampaignAnchorType @default(BD_FROM_START)
+  anchor_offset      Int                @default(1)
+  anchor_ref_item_id Int?
+  not_on_friday      Boolean            @default(false)
+  sort_order         Int                @default(0)
+  is_active          Boolean            @default(true)
+  created_at         DateTime           @default(now()) @db.DateTime(0)
+  updated_at         DateTime           @default(now()) @updatedAt @db.DateTime(0)
+
+  category      CampaignCategory           @relation(fields: [category_id], references: [id], onDelete: Cascade)
+  anchor_ref    CampaignItem?              @relation("CampaignItemRef", fields: [anchor_ref_item_id], references: [id], onDelete: SetNull)
+  referenced_by CampaignItem[]             @relation("CampaignItemRef")
+  schedule_items CampaignScheduleItem[]
+  overrides      CampaignScheduleOverride[]
+
+  @@index([category_id], map: "idx_campaign_item_category")
+  @@index([anchor_ref_item_id], map: "idx_campaign_item_ref")
+  @@map("campaign_item")
+}
+
+model CampaignSchedule {
+  id            Int                   @id @default(autoincrement())
+  name          String                @db.VarChar(120)
+  /// The OWNING department: backs the unique name and the write-scope guard.
+  /// Which departments SEE the calendar is campaign_schedule_department.
+  department_id Int
+  is_active     Boolean               @default(true)
+  /// A DRAFT schedule is invisible to agents entirely, whatever its months say.
+  status        CampaignPublishStatus @default(DRAFT)
+  published_at  DateTime?             @db.DateTime(0)
+  published_by  Int?
+  created_by    Int?
+  created_at    DateTime              @default(now()) @db.DateTime(0)
+  updated_at    DateTime              @default(now()) @updatedAt @db.DateTime(0)
+
+  department  Department                    @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  departments CampaignScheduleDepartment[]
+  items       CampaignScheduleItem[]
+  overrides   CampaignScheduleOverride[]
+  months      CampaignScheduleMonth[]
+
+  @@unique([department_id, name], map: "uq_campaign_schedule_dept_name")
+  @@index([department_id], map: "idx_campaign_schedule_department")
+  @@map("campaign_schedule")
+}
+
+/// Departments a campaign calendar is visible to — the only source visibility
+/// reads. Always includes the owning department.
+model CampaignScheduleDepartment {
+  id            Int      @id @default(autoincrement())
+  schedule_id   Int
+  department_id Int
+  created_at    DateTime @default(now()) @db.DateTime(0)
+
+  schedule   CampaignSchedule @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+  department Department       @relation(fields: [department_id], references: [id], onDelete: Cascade)
+
+  @@unique([schedule_id, department_id], map: "uq_campaign_schedule_department")
+  @@index([department_id], map: "idx_campaign_schedule_department_dept")
+  @@map("campaign_schedule_department")
+}
+
+model CampaignScheduleItem {
+  id               Int     @id @default(autoincrement())
+  schedule_id      Int
+  campaign_item_id Int
+  is_enabled       Boolean @default(true)
+
+  schedule      CampaignSchedule @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+  campaign_item CampaignItem     @relation(fields: [campaign_item_id], references: [id], onDelete: Cascade)
+
+  @@unique([schedule_id, campaign_item_id], map: "uq_campaign_schedule_item")
+  @@index([schedule_id], map: "idx_campaign_schedule_item_schedule")
+  @@map("campaign_schedule_item")
+}
+
+/// Publish state for one (schedule, month). Occurrences themselves are still
+/// computed on read — this row only says whether that month is releasable, so a
+/// month with no row is DRAFT and simply does not exist for an agent.
+model CampaignScheduleMonth {
+  id           Int                   @id @default(autoincrement())
+  schedule_id  Int
+  year         Int
+  month        Int
+  status       CampaignPublishStatus @default(DRAFT)
+  published_at DateTime?             @db.DateTime(0)
+  published_by Int?
+  created_at   DateTime              @default(now()) @db.DateTime(0)
+  updated_at   DateTime              @default(now()) @updatedAt @db.DateTime(0)
+
+  schedule CampaignSchedule @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+
+  @@unique([schedule_id, year, month], map: "uq_campaign_schedule_month")
+  @@index([schedule_id, status], map: "idx_campaign_schedule_month_status")
+  @@map("campaign_schedule_month")
+}
+
+model CampaignScheduleOverride {
+  id               Int                    @id @default(autoincrement())
+  schedule_id      Int
+  occurrence_date  DateTime               @db.Date
+  campaign_item_id Int
+  action           CampaignOverrideAction
+  created_by       Int?
+  created_at       DateTime               @default(now()) @db.DateTime(0)
+  updated_at       DateTime               @default(now()) @updatedAt @db.DateTime(0)
+
+  schedule      CampaignSchedule @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+  campaign_item CampaignItem     @relation(fields: [campaign_item_id], references: [id], onDelete: Cascade)
+
+  @@unique([schedule_id, occurrence_date, campaign_item_id], map: "uq_campaign_schedule_override")
+  @@index([schedule_id, occurrence_date], map: "idx_campaign_schedule_override_schedule_date")
+  @@map("campaign_schedule_override")
 }

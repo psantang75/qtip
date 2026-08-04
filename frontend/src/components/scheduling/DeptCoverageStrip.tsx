@@ -14,32 +14,39 @@ import type { ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import { thresholdFor, type MockPerson } from './mockScheduleData'
+import type { MockPerson } from './mockScheduleData'
+import { CoverageBars } from './CoverageBars'
 import {
-  buildCoverage, coverageLevel, COVERAGE_CLS, COVERAGE_LABEL, hourLabel, peakAway, troughWorking,
-  type DayAxis,
+  buildCoverage, fmtCompact, hhmmOf, peakAway,
+  troughWorking, worstCoverageLevel, type CoverageWindow, type DayAxis,
 } from './scheduleTime'
 
 interface Props {
-  dept: string
   members: MockPerson[]
   date: string
   axis: DayAxis
+  /** Live per-department time-of-day staffing bars from Coverage settings. */
+  windows: CoverageWindow[]
   /** Column widths are owned by the timeline so the two stay aligned. */
   selCol: string
   nameCol: string
   gridlines: ReactNode
 }
 
+/** '8:30a–5p 2+' per window, joined — the day's staffing expectation in a line. */
+function summarize(windows: CoverageWindow[]): string {
+  return windows
+    .map(w => `${fmtCompact(hhmmOf(w.startMin))}\u2013${fmtCompact(hhmmOf(w.endMin))} ${w.green}+`)
+    .join('  \u00b7  ')
+}
+
 export function DeptCoverageStrip({
-  dept, members, date, axis, selCol, nameCol, gridlines,
+  members, date, axis, windows, selCol, nameCol, gridlines,
 }: Props) {
   const coverage = buildCoverage(members, date, axis)
-  const maxScheduled = Math.max(1, ...coverage.map(s => s.working + s.onBreak + s.onException))
-  const threshold = thresholdFor(dept, members.length)
   const peak = peakAway(coverage)
-  const trough = troughWorking(coverage)
-  const troughLevel = coverageLevel(trough, maxScheduled, threshold)
+  const trough = troughWorking(coverage, windows)
+  const worst = worstCoverageLevel(coverage, windows)
 
   return (
     <div className="mt-2 flex items-stretch border-y border-slate-200 bg-slate-50/60">
@@ -49,51 +56,22 @@ export function DeptCoverageStrip({
           <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Coverage
           </span>
-          <span className="text-[10px] text-slate-400">
-            green {threshold.green}+, red under {threshold.yellow}
+          <span className="truncate text-[10px] text-slate-400" title={summarize(windows)}>
+            {summarize(windows)}
           </span>
         </div>
         <div className={cn(
           'flex items-center gap-1 text-[10px] font-medium',
-          troughLevel === 'green' ? 'text-slate-400' : 'text-destructive',
+          worst === 'green' || worst === 'closed' ? 'text-slate-400' : 'text-destructive',
         )}>
-          {troughLevel !== 'green' && <AlertTriangle className="h-3 w-3" />}
+          {worst !== 'green' && worst !== 'closed' && <AlertTriangle className="h-3 w-3" />}
           low of {trough} &middot; peak {peak} away
         </div>
       </div>
 
       <div className="relative h-8 flex-1">
         {gridlines}
-        <div className="absolute inset-0 flex items-end">
-          {coverage.map(slot => {
-            const scheduled = slot.working + slot.onBreak + slot.onException
-            const level = coverageLevel(slot.working, scheduled, threshold)
-            return (
-              <div
-                key={slot.startMin}
-                className="flex h-full flex-1 flex-col justify-end"
-                title={`${hourLabel(slot.startMin)} \u00b7 ${COVERAGE_LABEL[level]} \u2014 ${slot.working} working, ${slot.onBreak} on break, ${slot.onException} on exception`}
-              >
-                <div
-                  className="w-full bg-warning/25"
-                  style={{ height: `${(slot.onException / maxScheduled) * 100}%` }}
-                />
-                <div
-                  className="w-full bg-slate-200"
-                  style={{ height: `${(slot.onBreak / maxScheduled) * 100}%` }}
-                />
-                {/* A staffed slot with nobody working still gets a sliver, so
-                    the red is visible rather than collapsing to zero height. */}
-                <div
-                  className={cn('w-full', COVERAGE_CLS[level])}
-                  style={{
-                    height: `${(Math.max(slot.working, scheduled ? 0.35 : 0) / maxScheduled) * 100}%`,
-                  }}
-                />
-              </div>
-            )
-          })}
-        </div>
+        <CoverageBars members={members} date={date} axis={axis} windows={windows} withTitles />
       </div>
     </div>
   )

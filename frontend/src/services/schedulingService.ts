@@ -42,6 +42,8 @@ export interface ApiException {
   start: string | null
   end: string | null
   notes: string | null
+  /** Owned by the Paychex import — a manual delete returns on the next import. */
+  is_imported: boolean
 }
 export interface ApiRosterUser {
   id: number
@@ -56,18 +58,23 @@ export interface ApiGrid {
 }
 
 export interface ApiActivityType {
-  id: number; label: string; is_paid: boolean; counts_as_coverage: boolean
+  id: number; label: string; category: string | null; is_paid: boolean; counts_as_coverage: boolean
   color: string | null; sort_order: number; is_active: boolean; is_system: boolean
 }
 export interface ApiExceptionType {
-  id: number; type_key: string; label: string; description: string | null
+  id: number; type_key: string; label: string; category: string | null; description: string | null
+  paychex_pay_type: string | null
   is_excused: boolean; duration_mode: 'FULL_DAY' | 'WINDOW' | 'EITHER'
   affects_arrival: boolean; affects_departure: boolean; is_system: boolean
   sort_order: number; is_active: boolean
 }
+export interface ApiCoverageWindow {
+  id?: number; start: string; end: string; green_min: number; yellow_min: number
+}
 export interface ApiCoverageThreshold {
-  id: number; department_id: number; green_min: number; yellow_min: number
-  department?: { department_name: string }
+  department_id: number; department_name: string; is_enabled: boolean
+  green_min: number; yellow_min: number; configured: boolean
+  windows: ApiCoverageWindow[]
 }
 
 export interface ApiTemplateSegment { id: number; activity_type_id: number; start_time: string; end_time: string; sort_order: number }
@@ -76,6 +83,21 @@ export interface ApiTemplate { id: number; template_name: string; description: s
 
 export interface ApplyPreview { write: number; overwrite: number; clearDays: number; holiday: number; published: number }
 export interface BulkExceptionPreview { write: number; unscheduled: number; conflict: number; outside: number }
+
+// What each Paychex Non-Work block became. Classified live on every request, so
+// the review always matches what attendance actually scored.
+export type TimeOffOutcome =
+  | 'FULL_DAY' | 'PARTIAL' | 'NO_SHIFT' | 'DAY_OFF' | 'OUTSIDE_SHIFT' | 'MANUAL_OVERRIDE' | 'UNMAPPED'
+export interface TimeOffImportRow {
+  user_id: number; username: string; exception_date: string
+  pay_type: string; type_label: string | null; outcome: TimeOffOutcome
+  block_minutes: number; scheduled_minutes: number
+  is_full_day: boolean; start: string | null; end: string | null
+}
+export interface TimeOffImportReview {
+  from: string; to: string; blocks: number; created: number; removed: number
+  rows: TimeOffImportRow[]
+}
 
 // ── Request payloads ─────────────────────────────────────────────────────────
 
@@ -141,14 +163,18 @@ const schedulingService = {
   deleteException: async (id: number) => unwrap((await api.delete(`/scheduling/exceptions/${id}`)).data),
   bulkException: async (body: BulkExceptionInput): Promise<BulkExceptionPreview> =>
     unwrap<BulkExceptionPreview>((await api.post('/scheduling/exceptions/bulk', body)).data),
+  timeOffImportReview: async (from: string, to: string): Promise<TimeOffImportReview> =>
+    unwrap<TimeOffImportReview>(
+      (await api.get(`/scheduling/exceptions/time-off-import?from=${from}&to=${to}`)).data,
+    ),
 
   // Admin lists
   listActivityTypes: async (includeInactive = false): Promise<ApiActivityType[]> =>
     unwrap<ApiActivityType[]>((await api.get(`/scheduling/activity-types?include_inactive=${includeInactive}`)).data),
-  createActivityType: async (body: { label: string; is_paid: boolean; counts_as_coverage?: boolean; color?: string | null }) =>
-    unwrap((await api.post('/scheduling/activity-types', body)).data),
+  createActivityType: async (body: Record<string, unknown>) => unwrap((await api.post('/scheduling/activity-types', body)).data),
   updateActivityType: async (id: number, body: Record<string, unknown>) => unwrap((await api.put(`/scheduling/activity-types/${id}`, body)).data),
   setActivityTypeActive: async (id: number, is_active: boolean) => unwrap((await api.patch(`/scheduling/activity-types/${id}/active`, { is_active })).data),
+  reorderActivityTypes: async (order: Array<{ id: number; sort_order: number }>) => unwrap((await api.post('/scheduling/activity-types/reorder', { order })).data),
 
   listExceptionTypes: async (includeInactive = false): Promise<ApiExceptionType[]> =>
     unwrap<ApiExceptionType[]>((await api.get(`/scheduling/exception-types?include_inactive=${includeInactive}`)).data),
@@ -159,8 +185,10 @@ const schedulingService = {
 
   listCoverageThresholds: async (): Promise<ApiCoverageThreshold[]> =>
     unwrap<ApiCoverageThreshold[]>((await api.get('/scheduling/coverage-thresholds')).data),
-  upsertCoverageThreshold: async (body: { department_id: number; green_min: number; yellow_min: number }) =>
+  upsertCoverageThreshold: async (body: { department_id: number; green_min: number; yellow_min: number; is_enabled?: boolean }) =>
     unwrap((await api.put('/scheduling/coverage-thresholds', body)).data),
+  saveCoverageWindows: async (departmentId: number, windows: ApiCoverageWindow[]): Promise<ApiCoverageThreshold[]> =>
+    unwrap<ApiCoverageThreshold[]>((await api.put(`/scheduling/coverage-thresholds/${departmentId}/windows`, { windows })).data),
   deleteCoverageThreshold: async (departmentId: number) => unwrap((await api.delete(`/scheduling/coverage-thresholds/${departmentId}`)).data),
 }
 

@@ -743,6 +743,50 @@ below changes per template.
 
 ---
 
+## Attendance
+
+### `attendance_threshold_reached` — Attendance point threshold reached
+
+Queued by a punch import's attendance recompute, one row per recipient. Goes to
+the CSR who crossed (locked on) plus the named people on List Management >
+Notifications > Alert Recipients. Fires once per rung per person, ever — see
+`docs/insights_csr_attendance.md`.
+
+The single template serves both audiences by branching on
+`recipient.matchedRole`, so the subject and copy change for anyone who is not the
+subject of the event.
+
+**Subject (agent):** Attendance Points — {{level}} Threshold Reached
+**Subject (everyone else):** Attendance Threshold Reached — {{csrName}} at {{level}}
+
+**Body:**
+
+> **Attendance point threshold reached**
+>
+> Hi {{recipient.username}},
+>
+> *(agent)* Your attendance points over the last 90 days have reached a threshold
+> defined in the attendance policy.
+> *(others)* An agent has reached an attendance point threshold defined in the
+> attendance policy.
+>
+> | Agent* | Level | Points | Threshold | As of |
+> |---|---|---|---|---|
+> | {{this.csrName}} | {{this.level}} | {{this.points}} | {{this.threshold}} | {{this.asOf}} |
+>
+> \* Agent column is omitted in the agent's own copy.
+>
+> *Points are counted over a rolling 90-day window and roll off on their own as
+> occurrences age out of it.*
+>
+> **[View Attendance]**
+>
+> *(agent only)* If something here looks wrong — a shift you were not scheduled
+> for, or approved time off that was not applied — reply to your manager so it can
+> be reviewed and corrected.
+
+---
+
 ## System
 
 ### `system.circuit_tripped` — Email circuit-breaker tripped
