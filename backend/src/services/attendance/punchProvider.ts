@@ -30,7 +30,18 @@ export interface PunchWindow {
 export interface PunchDay {
   firstPunchAt: Date | null;
   lastPunchAt: Date | null;
+  /** Minutes on the clock in a `Work` pay-type block. Make-up worked past the
+   * scheduled end lands here, which is what lets the adherence numerator credit it. */
+  workMinutes: number;
+  /** Minutes in a `Break` pay-type block. Credited only up to the scheduled break
+   * allowance, so the overage is what costs adherence. */
+  breakMinutes: number;
 }
+
+/** Pay-type values that count as productive on-clock time in the numerator. */
+const WORK_PAY_TYPES = new Set(['Work']);
+/** Pay-type values for paid rest blocks, measured so overage can be caught. */
+const BREAK_PAY_TYPES = new Set(['Break']);
 
 /**
  * How far a punch may sit from a shift anchor and still belong to it. Twelve
@@ -175,6 +186,7 @@ export async function getPunchDays(windows: PunchWindow[]): Promise<Map<string, 
       punch_out_at: true,
       punch_type_in: true,
       punch_type_out: true,
+      pay_type: true,
     },
   });
 
@@ -183,7 +195,12 @@ export async function getPunchDays(windows: PunchWindow[]): Promise<Map<string, 
     const list = anchorsByUser.get(w.userId) ?? [];
     list.push({ dateStr: w.dateStr, startMs: w.start.getTime(), endMs: w.end.getTime() });
     anchorsByUser.set(w.userId, list);
-    out.set(key(w.userId, w.dateStr), { firstPunchAt: null, lastPunchAt: null });
+    out.set(key(w.userId, w.dateStr), {
+      firstPunchAt: null,
+      lastPunchAt: null,
+      workMinutes: 0,
+      breakMinutes: 0,
+    });
   }
 
   for (const p of punches) {
@@ -206,6 +223,29 @@ export async function getPunchDays(windows: PunchWindow[]): Promise<Map<string, 
         const slot = out.get(key(p.user_id, a.dateStr))!;
         if (slot.lastPunchAt === null || p.punch_out_at > slot.lastPunchAt) {
           slot.lastPunchAt = p.punch_out_at;
+        }
+      }
+    }
+
+    // Sum the actual on-clock minutes per state so the adherence numerator can be
+    // total time worked rather than mere presence. A Work block anchors on its
+    // start; a missing Clock Out (a data problem, not evidence of leaving early)
+    // is treated as running to the scheduled shift end, matching the old presence
+    // rule. Break blocks are measured so anything over the scheduled allowance
+    // can be dropped from the numerator.
+    if (p.pay_type && p.punch_in_at) {
+      const isWork = WORK_PAY_TYPES.has(p.pay_type);
+      const isBreak = BREAK_PAY_TYPES.has(p.pay_type);
+      if (isWork || isBreak) {
+        const a = nearestAnchor(anchors, p.punch_in_at.getTime(), 'startMs');
+        if (a) {
+          const slot = out.get(key(p.user_id, a.dateStr))!;
+          const endMs = p.punch_out_at ? p.punch_out_at.getTime() : (isWork ? a.endMs : null);
+          if (endMs !== null) {
+            const mins = Math.max(0, Math.round((endMs - p.punch_in_at.getTime()) / 60000));
+            if (isWork) slot.workMinutes += mins;
+            else slot.breakMinutes += mins;
+          }
         }
       }
     }

@@ -50,30 +50,37 @@ export interface UnlockRow {
 
 const ENTITY_TYPES = new Set(['SUBMISSION', 'DISPUTE']);
 const STATES = new Set(['OPEN', 'CLOSED', 'AUTO_RELOCKED']);
-const REASON_CODES = new Set([
-  'SCORING_ERROR',
-  'WRONG_INTERACTION',
-  'CALIBRATION_CORRECTION',
-  'POLICY_CHANGE',
-  'TECHNICAL_ISSUE',
-  'AGENT_APPEAL',
-  'OTHER',
-]);
+
+/**
+ * Filters arrive as comma-separated lists (the register's multi-select filters
+ * send one CSV per field). Split, trim, drop blanks, and de-dupe. When `allow`
+ * is given, keep only recognised values so a bad query param can't widen the
+ * IN() clause. Reason codes are admin-managed, so they have no fixed allow-list.
+ */
+function toList(csv: string | undefined, allow?: Set<string>): string[] {
+  if (!csv) return [];
+  const values = csv
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && (!allow || allow.has(s)));
+  return Array.from(new Set(values));
+}
 
 function buildWhere(params: UnlockListParams): Prisma.Sql {
   const conditions: Prisma.Sql[] = [Prisma.sql`1 = 1`];
 
   if (params.dateStart) conditions.push(Prisma.sql`ru.unlocked_at >= ${params.dateStart + ' 00:00:00'}`);
   if (params.dateEnd) conditions.push(Prisma.sql`ru.unlocked_at <= ${params.dateEnd + ' 23:59:59'}`);
-  if (params.entityType && ENTITY_TYPES.has(params.entityType)) {
-    conditions.push(Prisma.sql`ru.entity_type = ${params.entityType}`);
-  }
-  if (params.reasonCode && REASON_CODES.has(params.reasonCode)) {
-    conditions.push(Prisma.sql`ru.reason_code = ${params.reasonCode}`);
-  }
-  if (params.state && STATES.has(params.state)) {
-    conditions.push(Prisma.sql`ru.state = ${params.state}`);
-  }
+
+  const entityTypes = toList(params.entityType, ENTITY_TYPES);
+  if (entityTypes.length) conditions.push(Prisma.sql`ru.entity_type IN (${Prisma.join(entityTypes)})`);
+
+  const reasonCodes = toList(params.reasonCode);
+  if (reasonCodes.length) conditions.push(Prisma.sql`ru.reason_code IN (${Prisma.join(reasonCodes)})`);
+
+  const states = toList(params.state, STATES);
+  if (states.length) conditions.push(Prisma.sql`ru.state IN (${Prisma.join(states)})`);
+
   if (params.unlockedBy) conditions.push(Prisma.sql`ru.unlocked_by = ${params.unlockedBy}`);
   if (params.search) {
     const like = `%${params.search}%`;
@@ -250,6 +257,53 @@ export async function getUnlockStats(params: UnlockListParams): Promise<UnlockSt
     })),
     by_assignee: byAssignee.map((r) => ({ user_id: r.user_id, name: r.name, count: Number(r.count) })),
     by_reason: byReason.map((r) => ({ reason_code: r.reason_code, count: Number(r.count) })),
+  };
+}
+
+export interface LastReopen {
+  id: number;
+  entity_type: 'SUBMISSION' | 'DISPUTE';
+  /** CLOSED when it was corrected and re-submitted, AUTO_RELOCKED when it expired. */
+  state: 'CLOSED' | 'AUTO_RELOCKED';
+  reason_code: string;
+  reason_note: string;
+  unlocked_at: Date;
+  unlocked_by_name: string | null;
+  closed_at: Date | null;
+  /** The score this review carried before the correction. */
+  prior_score: number | null;
+  /** The score it carries after. Null when the reopen expired without an edit. */
+  new_score: number | null;
+}
+
+/**
+ * The most recent reopen that has finished, so a corrected review can say so on
+ * its own page. `prior_score` / `new_score` are the before and after, which is
+ * the part that matters to the agent: the score they were shown originally and
+ * the score that now stands.
+ *
+ * Lives here rather than in one detail service because all three detail
+ * endpoints need it — QA/admin, manager team audits, and the agent's own
+ * reviews. The admin-only Unlock Register is the wrong source: the agent whose
+ * score changed is the person with the strongest claim to see that it changed.
+ */
+export async function getLastReopenForSubmission(submissionId: number): Promise<LastReopen | null> {
+  const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
+    SELECT ru.id, ru.entity_type, ru.state, ru.reason_code, ru.reason_note,
+           ru.unlocked_at, ru.closed_at, ru.prior_score, ru.new_score,
+           actor.username AS unlocked_by_name
+    FROM record_unlock ru
+    LEFT JOIN users actor ON ru.unlocked_by = actor.id
+    WHERE ru.submission_id = ${submissionId} AND ru.state <> 'OPEN'
+    ORDER BY ru.unlocked_at DESC
+    LIMIT 1
+  `);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    ...row,
+    prior_score: row.prior_score == null ? null : Number(row.prior_score),
+    new_score: row.new_score == null ? null : Number(row.new_score),
   };
 }
 

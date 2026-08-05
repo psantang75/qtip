@@ -1,5 +1,20 @@
 import { api } from './authService';
-import { logError } from '../utils/errorHandling';
+import { logError, logWarn } from '../utils/errorHandling';
+
+/**
+ * The reopen endpoints answer 409 as a guard, not a failure: the review was
+ * never reopened, or its unlock was already closed by an earlier re-submit.
+ * The UI turns those into an explanatory panel, so logging them at error
+ * level buries genuine faults under stack traces the reader has to triage.
+ */
+function logGuardedRequestError(operation: string, error: unknown): void {
+  const status = (error as { response?: { status?: number } })?.response?.status;
+  if (status === 409) {
+    logWarn('submissionService', `${operation}: rejected by the reopen guard (409)`);
+    return;
+  }
+  logError('submissionService', `${operation} failed:`, error);
+}
 
 // ── Submission payload + response types ──────────────────────────────────────
 // Mirrors backend `CreateSubmissionDTO` / `CreateSubmissionAnswerDTO` /
@@ -145,12 +160,24 @@ export interface DraftForEdit {
   submitted_at: string;
   submitted_by: number;
   /**
+   * True when an admin reopened a previously-scored review into DRAFT (the
+   * draft carries an OPEN unlock). False for a plain saved draft being
+   * finished. Drives whether the editor shows the "correction" banner.
+   */
+  reopened?: boolean;
+  /**
    * Never sent for a human draft — declared only so this stays assignable
    * wherever `AiDraftDetail` is, letting AuditFormPage share one prefill
    * code path across AI drafts and reopened human reviews.
    */
   ai_overall_confidence?: number | null;
   ai_extras?: null;
+  /**
+   * The agent this review is about. Sent because the audit form's agent picker
+   * lists only active CSRs, so a review of someone who has left would show an
+   * empty Agent field without it.
+   */
+  agent?: { id: number; username: string } | null;
   answers: Array<{ question_id: number; answer: string; notes: string }>;
   metadata: Array<{ field_id: number; value: string }>;
   ticket_tasks: Array<{ kind: 'TICKET' | 'TASK'; external_id: number }>;
@@ -294,7 +321,7 @@ const submissionService = {
       const response = await api.get<DraftForEdit>(`/submissions/${submissionId}/draft`);
       return response.data;
     } catch (error) {
-      logError('submissionService', 'Error loading draft for edit:', error);
+      logGuardedRequestError('Loading draft for edit', error);
       throw error;
     }
   },
@@ -312,7 +339,7 @@ const submissionService = {
       const response = await api.post(`/submissions/${submissionId}/resubmit`, payload);
       return response.data;
     } catch (error) {
-      logError('submissionService', 'Error re-submitting reopened review:', error);
+      logGuardedRequestError('Re-submitting reopened review', error);
       throw error;
     }
   },

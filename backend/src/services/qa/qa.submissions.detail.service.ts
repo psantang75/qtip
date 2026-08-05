@@ -16,6 +16,7 @@ import { Prisma } from '../../generated/prisma/client'
 import { dbLogger } from '../../config/logger'
 import { QAServiceError } from './qa.types'
 import { attachPhoneSystemRecordings } from '../callRecordingEnrichment'
+import { getLastReopenForSubmission, type LastReopen } from '../unlock/unlock.query.service'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -46,6 +47,8 @@ export interface SubmissionDetail {
   reopen_count: number
   /** The still-open unlock, when this record is currently reopened. */
   active_unlock: ActiveUnlock | null
+  /** The most recent finished reopen, so the record shows it was corrected. */
+  last_reopen: LastReopen | null
 }
 
 export interface ActiveUnlock {
@@ -61,11 +64,14 @@ export interface ActiveUnlock {
   prior_score: number | null
 }
 
+export type { LastReopen } from '../unlock/unlock.query.service'
+
 /**
- * Fetch a finalised / disputed / submitted submission with all related
- * data. Throws `QAServiceError` 404 when the row is missing or in a
- * non-readable status, and 500 (DATABASE_ERROR) for raw db failures so the
- * controller can preserve the existing two-tier error envelope.
+ * Fetch a finalised / disputed / submitted submission (or a review an admin
+ * reopened, which sits in DRAFT under an open unlock) with all related data.
+ * Throws `QAServiceError` 404 when the row is missing or in a non-readable
+ * status, and 500 (DATABASE_ERROR) for raw db failures so the controller can
+ * preserve the existing two-tier error envelope.
  */
 export async function getSubmissionDetail(
   submissionId: number,
@@ -100,7 +106,7 @@ export async function getSubmissionDetail(
     )
   }
 
-  const [metadata, calls, ticket_tasks, answers, disputes, scoreBreakdown, activeUnlock] = await Promise.all([
+  const [metadata, calls, ticket_tasks, answers, disputes, scoreBreakdown, activeUnlock, lastReopen] = await Promise.all([
     loadMetadata(submissionId),
     loadCalls(submissionId),
     loadTicketTasks(submissionId),
@@ -108,6 +114,7 @@ export async function getSubmissionDetail(
     loadDispute(submissionId),
     loadScoreBreakdown(submissionId),
     loadActiveUnlock(submissionId),
+    getLastReopenForSubmission(submissionId),
   ])
 
   const result: SubmissionDetail = {
@@ -141,6 +148,7 @@ export async function getSubmissionDetail(
     scoreBreakdown,
     reopen_count: Number(submission.reopen_count ?? 0),
     active_unlock: activeUnlock,
+    last_reopen: lastReopen,
   }
 
   if (includeFullForm) {
@@ -183,6 +191,7 @@ async function loadSubmission(submissionId: number): Promise<any | null> {
         s.status IN ('FINALIZED', 'DISPUTED', 'SUBMITTED')
         -- A review an admin reopened sits in DRAFT. It still has to render
         -- here, or the detail page 404s the moment anyone clicks Reopen.
+        -- A plain saved DRAFT is opened in the audit editor, not here.
         OR EXISTS (
           SELECT 1 FROM record_unlock ru
           WHERE ru.entity_type = 'SUBMISSION' AND ru.entity_id = s.id AND ru.state = 'OPEN'

@@ -4,6 +4,7 @@ import cacheService from './CacheService';
 import { handleDatabaseError, createNotFoundError, createValidationError } from '../utils/errorHandler';
 import { dbPerformanceTracker } from '../middleware/performance';
 import logger from '../config/logger';
+import { getLastReopenForSubmission, type LastReopen } from './unlock/unlock.query.service';
 // `attachPhoneSystemRecordings` is intentionally NOT imported here: this
 // service is CSR-only, and CSRs are blocked from recording access. Audit
 // details still include the call's metadata + transcript so the reviewee
@@ -40,6 +41,12 @@ export interface CSRAuditDetail {
   calls: any[];
   answers: any[];
   dispute: any;
+  /**
+   * The most recent finished reopen. The agent whose score was withdrawn and
+   * re-issued has the strongest claim to see that it happened and why, so this
+   * is served here rather than only from the admin-only Unlock Register.
+   */
+  last_reopen: LastReopen | null;
 }
 
 export interface CSRAuditFilters {
@@ -83,7 +90,11 @@ export class CSRService {
       
       const sqlConditions: Prisma.Sql[] = [
         Prisma.sql`fmf.field_name = 'CSR'`,
-        Prisma.sql`sm.value = ${csrId.toString()}`
+        Prisma.sql`sm.value = ${csrId.toString()}`,
+        // Agents only ever see a review once it is submitted or beyond. A DRAFT
+        // (a QA in-progress draft, or a review an admin reopened for correction)
+        // is withdrawn from the reviewee until it is re-submitted.
+        Prisma.sql`s.status IN ('SUBMITTED', 'DISPUTED', 'FINALIZED')`
       ];
       
       if (filters.formName) {
@@ -221,6 +232,9 @@ export class CSRService {
           JOIN submission_metadata sm ON sm.submission_id = s.id
           JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
           WHERE s.id = ${auditId} AND fmf.field_name = 'CSR' AND sm.value = ${csrId.toString()}
+            -- A DRAFT (in-progress or reopened-for-correction) is not readable
+            -- by the reviewee; it 404s here just like a review they don't own.
+            AND s.status IN ('SUBMITTED', 'DISPUTED', 'FINALIZED')
         `
       );
       
@@ -231,7 +245,7 @@ export class CSRService {
         });
       }
       
-      const [auditDetails, metadata, categories, questions, answers, calls, ticket_tasks, disputes] = await Promise.all([
+      const [auditDetails, metadata, categories, questions, answers, calls, ticket_tasks, disputes, lastReopen] = await Promise.all([
         prisma.$queryRaw<any[]>(
           Prisma.sql`
             SELECT 
@@ -349,7 +363,8 @@ export class CSRService {
             ORDER BY d.created_at DESC
             LIMIT 1
           `
-        )
+        ),
+        getLastReopenForSubmission(auditId)
       ]);
       
       if (auditDetails.length === 0) {
@@ -392,7 +407,8 @@ export class CSRService {
           sort_order: r.sort_order,
         })),
         answers: answers,
-        dispute: disputes.length > 0 ? disputes[0] : null
+        dispute: disputes.length > 0 ? disputes[0] : null,
+        last_reopen: lastReopen
       };
 
       dbPerformanceTracker.recordQuery(

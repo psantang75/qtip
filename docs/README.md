@@ -51,6 +51,7 @@ lives at the [top-level README](../README.md); deploy templates live in
 - [`qa_manual_reviews.md`](./qa_manual_reviews.md)
 - [`qa_form_reference.md`](./qa_form_reference.md)
 - [`qa_submissions_api.md`](./qa_submissions_api.md) — QA audit submission API
+- [`unlock_reopen_flow.md`](./unlock_reopen_flow.md) — reopening and correcting a closed review or dispute
 - [`form_api_examples.md`](./form_api_examples.md)
 - [`form_builder_instructions.md`](./form_builder_instructions.md)
 - [`scoring_preview.md`](./scoring_preview.md) — form-preview scoring panel

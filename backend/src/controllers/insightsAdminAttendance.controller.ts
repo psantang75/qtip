@@ -17,15 +17,18 @@ import prisma from '../config/prisma';
 import logger from '../config/logger';
 import { dateStrFromDate, dateOnlyValue, addDays } from '../services/scheduling/schedule.dates';
 import { loadPointRules, loadWarningThresholds } from '../services/attendance/attendance.config';
+import { getPointsStartDate, setPointsStartDate } from '../services/attendance/attendance.settings';
 import { validateBands } from '../services/attendance/attendance.rules';
 import type { AttendanceKind } from '../services/attendance/attendance.rules';
 import { recomputeRange } from '../services/attendance/attendance.engine';
-import { pointRulesSaveSchema, thresholdsSaveSchema, recalculateSchema } from '../validation/attendance.validation';
+import {
+  pointRulesSaveSchema, thresholdsSaveSchema, recalculateSchema, pointsStartSaveSchema,
+} from '../validation/attendance.validation';
 
 /** Current bands and ladder, plus the exception types an EXCEPTION band can bind to. */
 export async function getAttendanceConfig(_req: Request, res: Response): Promise<void> {
   try {
-    const [rules, thresholds, exceptionTypes] = await Promise.all([
+    const [rules, thresholds, exceptionTypes, pointsStartDate] = await Promise.all([
       loadPointRules(),
       loadWarningThresholds(),
       prisma.scheduleExceptionType.findMany({
@@ -33,10 +36,40 @@ export async function getAttendanceConfig(_req: Request, res: Response): Promise
         select: { id: true, type_key: true, label: true },
         orderBy: { sort_order: 'asc' },
       }),
+      getPointsStartDate(),
     ]);
-    res.json({ rules, thresholds, exceptionTypes });
+    res.json({ rules, thresholds, exceptionTypes, pointsStartDate });
   } catch (err) {
     logger.error('insightsAdminAttendance [config] error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * The date the point policy took effect. Days before it are never scored or
+ * counted, so this is not effective-dated like the bands — it is a single floor.
+ * Changing it does NOT rescore on its own; the admin rescans the last 90 days to
+ * drop occurrences that now fall before the new start.
+ */
+export async function savePointsStartDate(req: Request, res: Response): Promise<void> {
+  const parsed = pointsStartSaveSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid payload' });
+    return;
+  }
+  try {
+    const pointsStartDate = await setPointsStartDate(parsed.data.pointsStartDate);
+    await prisma.auditLog.create({
+      data: {
+        user_id: req.user!.user_id,
+        action: 'UPDATE',
+        target_type: 'attendance_points_start_date',
+        details: JSON.stringify({ pointsStartDate }),
+      },
+    });
+    res.json({ success: true, pointsStartDate });
+  } catch (err) {
+    logger.error('insightsAdminAttendance [savePointsStartDate] error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

@@ -939,7 +939,9 @@ model RecordUnlock {
   submission_id Int
   unlocked_by   Int
   unlocked_at   DateTime         @default(now()) @db.DateTime(0)
-  reason_code   UnlockReasonCode
+  /// A code from the admin-managed `unlock_reason` list (list_items). Stored as
+  /// a string rather than an enum so reasons can be curated in List Management.
+  reason_code   String           @db.VarChar(100)
   reason_note   String           @db.Text
 
   prior_status   String   @db.VarChar(20)
@@ -1699,16 +1701,6 @@ enum DisputeScoreHistoryType {
 enum UnlockEntityType {
   SUBMISSION
   DISPUTE
-}
-
-enum UnlockReasonCode {
-  SCORING_ERROR
-  WRONG_INTERACTION
-  CALIBRATION_CORRECTION
-  POLICY_CHANGE
-  TECHNICAL_ISSUE
-  AGENT_APPEAL
-  OTHER
 }
 
 enum UnlockState {

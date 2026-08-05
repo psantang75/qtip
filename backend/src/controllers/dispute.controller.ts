@@ -11,6 +11,7 @@ import { getDisputeScoreHistory, recordDisputeScore } from '../utils/disputeScor
 import prisma from '../config/prisma';
 import { Prisma, DisputeStatus as PrismaDisputeStatus, DisputeScoreHistoryType } from '../generated/prisma/client';
 import logger from '../config/logger';
+import cacheService from '../services/CacheService';
 
 // NOTE: getCSRAudits used to live here (mounted at GET /api/disputes/audits)
 // but it was a parallel implementation of the same product feature served by
@@ -200,6 +201,11 @@ export const submitDispute = async (req: Request, res: Response): Promise<void> 
 
       return newDispute;
     });
+
+    // The review just moved SUBMITTED/FINALIZED -> DISPUTED. The reviewee's
+    // audit list is cached in-memory (csr:audits:<id>:*), so without this the
+    // list keeps showing the pre-dispute status until the 2-min TTL expires.
+    cacheService.invalidateCSRCache(user_id);
 
     // Notify QA + manager. Wrapped so a mail failure can't break the dispute.
     try {

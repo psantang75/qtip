@@ -5,6 +5,7 @@ import { MySQLSubmissionRepository } from '../repositories/MySQLSubmissionReposi
 import { serviceLogger } from '../config/logger';
 import prisma from '../config/prisma';
 import { findOpenUnlock, closeUnlock } from '../services/unlock/unlock.service';
+import { isManagerOfSubmissionAgent } from '../services/manager/manager.access';
 
 const router = express.Router();
 
@@ -175,7 +176,7 @@ const getDraftForEdit = async (req: Request, res: Response) => {
     const result = await submissionService.getDraftForEdit(
       parseInt(req.params.id, 10),
       user_id,
-      req.user?.role === 'Admin',
+      req.user?.role,
     );
     res.status(200).json(result);
   } catch (error: any) {
@@ -189,14 +190,22 @@ const getDraftForEdit = async (req: Request, res: Response) => {
 };
 
 /**
- * Re-submit a review that an admin reopened.
+ * Submit / re-score a DRAFT review.
  *
- * Reuses promoteDraftToSubmitted (which already does in-place answer
- * replacement, re-scoring and CSR notification) rather than POST / , which
- * would create a duplicate row. Requires an OPEN unlock so this cannot
- * become a general back-door edit of any draft.
+ * A draft can arise two ways — a reviewer saved their in-progress work, or an
+ * admin reopened a closed review (which parks it in DRAFT and leaves an OPEN
+ * unlock). Either way this promotes it back to SUBMITTED, replacing answers in
+ * place and re-scoring via `promoteDraftToSubmitted` (which only ever touches a
+ * DRAFT, so this can never edit an already-scored review out from under the
+ * unlock system).
+ *
+ * Allowed for the reviewer who authored it, an admin, or the manager of the CSR
+ * agent the review is about. When an unlock is open it is closed here, and the
+ * original review date + author are preserved so a correction does not restate
+ * when the audit happened or who ran it. Who re-scored it is recorded in
+ * `audit_logs` regardless.
  */
-const resubmitUnlocked = async (req: Request, res: Response) => {
+const submitDraft = async (req: Request, res: Response) => {
   try {
     const user_id = req.user?.user_id;
     if (!user_id) {
@@ -209,15 +218,6 @@ const resubmitUnlocked = async (req: Request, res: Response) => {
       return;
     }
 
-    const openUnlock = await findOpenUnlock('SUBMISSION', submission_id);
-    if (!openUnlock) {
-      res.status(409).json({
-        message: 'This review is not currently reopened for correction.',
-        code: 'NOT_UNLOCKED',
-      });
-      return;
-    }
-
     const submission = await prisma.submission.findUnique({
       where: { id: submission_id },
       select: { submitted_by: true },
@@ -226,23 +226,52 @@ const resubmitUnlocked = async (req: Request, res: Response) => {
       res.status(404).json({ message: 'Submission not found' });
       return;
     }
-    if (submission.submitted_by !== user_id && req.user?.role !== 'Admin') {
-      res.status(403).json({ message: 'This review belongs to another reviewer' });
+
+    const role = req.user?.role;
+    let allowed = role === 'Admin' || submission.submitted_by === user_id;
+    if (!allowed && role === 'Manager') {
+      allowed = await isManagerOfSubmissionAgent(user_id, submission_id);
+    }
+    if (!allowed) {
+      res.status(403).json({ message: 'This review belongs to another reviewer', code: 'FORBIDDEN' });
       return;
     }
+
+    // A reopened review carries an OPEN unlock; a plain saved draft does not.
+    // Preserve the original date/author only for a reopen — a fresh draft is
+    // being submitted for the first time and should stamp its submit time.
+    const openUnlock = await findOpenUnlock('SUBMISSION', submission_id);
 
     const result = await submissionService.promoteDraftToSubmitted(
       submission_id,
       { answers: req.body.answers || [], metadata: req.body.metadata || [] },
       user_id,
-      // Keep the original review date so the correction doesn't jump the
-      // audit into the current reporting period.
-      { preserveSubmittedAt: true },
+      openUnlock
+        ? { preserveSubmittedAt: true, preserveSubmittedBy: true }
+        : { preserveSubmittedBy: true },
     );
 
-    await closeUnlock('SUBMISSION', submission_id, user_id, {
-      new_status: 'SUBMITTED',
-      new_score: result.total_score,
+    if (openUnlock) {
+      await closeUnlock('SUBMISSION', submission_id, user_id, {
+        new_status: 'SUBMITTED',
+        new_score: result.total_score,
+      });
+    }
+
+    // Attribute the re-score even when it did not go through an unlock event,
+    // so "who re-scored this draft" is always answerable.
+    await prisma.auditLog.create({
+      data: {
+        user_id,
+        action: 'submission.draft_submit',
+        target_id: submission_id,
+        target_type: 'SUBMISSION',
+        details: JSON.stringify({
+          new_score: result.total_score,
+          reviewer_id: submission.submitted_by,
+          via_reopen: !!openUnlock,
+        }),
+      },
     });
 
     res.status(200).json(result);
@@ -250,8 +279,8 @@ const resubmitUnlocked = async (req: Request, res: Response) => {
     if (error instanceof SubmissionServiceError) {
       res.status(error.statusCode).json({ message: error.message, code: error.code });
     } else {
-      serviceLogger.error('SUBMISSION', 'resubmitUnlocked', error as Error);
-      res.status(500).json({ message: 'Failed to re-submit review' });
+      serviceLogger.error('SUBMISSION', 'submitDraft', error as Error);
+      res.status(500).json({ message: 'Failed to submit review' });
     }
   }
 };
@@ -300,9 +329,9 @@ router.get('/:id/draft', authenticate as unknown as RequestHandler, getDraftForE
 
 /**
  * @route POST /api/submissions/:id/resubmit
- * @desc Re-submit a review an admin reopened; closes the unlock event
- * @access Private (original reviewer or Admin, only while unlocked)
+ * @desc Submit / re-score a DRAFT; closes an unlock event if one is open
+ * @access Private (the reviewer who authored it, the CSR agent's manager, or Admin)
  */
-router.post('/:id/resubmit', authenticate as unknown as RequestHandler, resubmitUnlocked);
+router.post('/:id/resubmit', authenticate as unknown as RequestHandler, submitDraft);
 
 export default router; 

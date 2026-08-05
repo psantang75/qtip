@@ -12,18 +12,11 @@ import { z } from 'zod';
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 const posInt = z.coerce.number().int().positive();
 
-export const UNLOCK_REASON_CODES = [
-  'SCORING_ERROR',
-  'WRONG_INTERACTION',
-  'CALIBRATION_CORRECTION',
-  'POLICY_CHANGE',
-  'TECHNICAL_ISSUE',
-  'AGENT_APPEAL',
-  'OTHER',
-] as const;
-
 export const UnlockRequestSchema = z.object({
-  reason_code: z.enum(UNLOCK_REASON_CODES),
+  // Reasons are admin-managed (Admin -> List Management -> Quality), so the
+  // schema only enforces shape here; unlock.service.ts checks the code against
+  // the active list, which is the source of truth.
+  reason_code: z.string().trim().min(1, 'A reason is required').max(100),
   reason_note: z
     .string()
     .trim()
@@ -37,9 +30,12 @@ export const UnlockListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
   date_start: dateStr.optional(),
   date_end: dateStr.optional(),
-  entity_type: z.enum(['SUBMISSION', 'DISPUTE']).optional(),
-  reason_code: z.enum(UNLOCK_REASON_CODES).optional(),
-  state: z.enum(['OPEN', 'CLOSED', 'AUTO_RELOCKED']).optional(),
+  // The register's multi-select filters send comma-separated lists; the query
+  // service splits and sanitises each against its allow-list (entity_type /
+  // state) or treats them as opaque codes (admin-managed reason_code).
+  entity_type: z.string().max(100).optional(),
+  reason_code: z.string().max(500).optional(),
+  state: z.string().max(100).optional(),
   unlocked_by: posInt.optional(),
   search: z.string().max(200).optional(),
 });

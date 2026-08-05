@@ -35,6 +35,10 @@ export const pointRulesSaveSchema = z.object({
   rules: z.array(pointRule).min(1),
 });
 
+export const pointsStartSaveSchema = z.object({
+  pointsStartDate: dateStr,
+});
+
 export const thresholdsSaveSchema = z.object({
   effectiveFrom: dateStr,
   thresholds: z

@@ -15,7 +15,6 @@
  * the columns they govern rather than in a card of their own.
  */
 import { useState } from 'react'
-import { CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import StatusBadge from './StatusBadge'
 import ExpandableRow from './ExpandableRow'
@@ -68,9 +67,6 @@ interface RosterProps {
   /** Occurrence detail per userId, fetched lazily as rows expand. */
   detail: Record<number, AttendanceOccurrence[] | undefined>
   onExpand: (userId: number) => void
-  /** The window every figure in the table covers, both ends inclusive. */
-  windowFrom: string
-  asOf: string
   /** Point bands and discipline ladder in force, for the header tooltips. */
   bands: AttendancePointBand[]
   levels: AttendanceWarningLevel[]
@@ -79,7 +75,7 @@ interface RosterProps {
 }
 
 export default function AttendancePointsRoster({
-  rows, detail, onExpand, windowFrom, asOf, bands, levels, graceCeilingSeconds,
+  rows, detail, onExpand, bands, levels, graceCeilingSeconds,
 }: RosterProps) {
   const [expanded, setExpanded] = useState<number | null>(null)
 
@@ -103,18 +99,9 @@ export default function AttendancePointsRoster({
 
   return (
     <div>
-      {/* The window every figure below covers, stated once at table level in the
-          same form as the Insights filter bar's Date Range row. */}
-      <div className="flex items-center gap-1.5 text-[12px] text-slate-500 mb-3">
-        <CalendarDays size={13} className="text-primary" />
-        <span className="w-2.5 h-px bg-primary inline-block" />
-        <CalendarDays size={13} className="text-primary" />
-        <span className="ml-1">Date Range:</span>
-        <strong className="text-slate-700">{fmtDate(windowFrom)}</strong>
-        <span className="text-slate-400">to</span>
-        <strong className="text-slate-700">{fmtDate(asOf)}</strong>
-      </div>
-
+      {/* The window every figure below covers is stated once at page level in the
+          filter bar's Date Range row (see CSRAttendancePage), so it is not
+          repeated here. */}
       <div className="overflow-x-auto">
         <div className="min-w-[960px]">
           <div className={cn(GRID, 'text-xs text-slate-400 border-b border-slate-200 pb-2 px-3')}>
@@ -189,14 +176,14 @@ function RowDetail({ row, occurrences }: {
     <div>
       {/* One equal-width column per fact so the strip spans the row instead of
           bunching at the left, each value centred beneath its own label. The date
-          range is not repeated here: it is stated once above the table. */}
+          range is not repeated here: it is stated once in the filter bar. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-3 text-[12px]">
         <Fact label="Days Measured">{row.daysMeasured}</Fact>
         <Fact label="Roll-Off Date">{row.rollOffDate ? fmtDate(row.rollOffDate) : '—'}</Fact>
         <Fact label="Points Expire">{row.rollOffDate ? row.rollOffPoints.toFixed(2) : '—'}</Fact>
         <Fact label="Hours Scheduled">{fmtHours(row.scheduledMinutes)}</Fact>
         <Fact label="Hours Worked">{fmtHours(row.adherentMinutes)}</Fact>
-        <Fact label="Compliance">
+        <Fact label="Adherence">
           {row.compliancePct === null ? '—' : `${row.compliancePct.toFixed(1)}%`}
         </Fact>
       </div>

@@ -198,11 +198,17 @@ export interface AttendanceConfigResponse {
   rules: AttendancePointRuleConfig[]
   thresholds: AttendanceThresholdConfig[]
   exceptionTypes: Array<{ id: number; type_key: string; label: string }>
+  // The day the point policy took effect; days before it are never counted.
+  pointsStartDate: string
 }
 
 export const getAttendanceConfig = async (): Promise<AttendanceConfigResponse> => {
   const response = await api.get('/insights/admin/attendance/config')
   return response.data
+}
+
+export const savePointsStartDate = async (pointsStartDate: string): Promise<void> => {
+  await api.put('/insights/admin/attendance/points-start', { pointsStartDate })
 }
 
 export interface PointRuleSavePayload {

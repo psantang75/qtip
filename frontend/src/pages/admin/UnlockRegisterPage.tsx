@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { unlockService, UNLOCK_REASON_CODES, UNLOCK_REASON_LABELS } from '@/services/unlockService'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
+import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
+import { DateRangeFilter } from '@/components/common/DateRangeFilter'
+import { unlockService } from '@/services/unlockService'
+import { useUnlockReasons } from '@/hooks/useUnlockReasons'
 import { UnlockKpis } from './unlock-register/UnlockKpis'
 import { UnlockGrouping } from './unlock-register/UnlockGrouping'
 import { UnlockRegisterTable } from './unlock-register/UnlockRegisterTable'
@@ -23,19 +26,48 @@ function isoDaysAgo(days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-const DEFAULT_FILTERS = {
-  date_start: isoDaysAgo(90),
-  date_end: new Date().toISOString().slice(0, 10),
-  entity_type: 'all',
-  reason_code: 'all',
-  state: 'all',
-  search: '',
-}
+const DEFAULT_START = isoDaysAgo(90)
+const DEFAULT_END = new Date().toISOString().slice(0, 10)
+
+// code ↔ label pairs so the multi-selects can show friendly labels while the
+// query keeps sending the stored codes.
+const ENTITY_OPTS = [
+  { code: 'SUBMISSION', label: 'Reviews' },
+  { code: 'DISPUTE', label: 'Disputes' },
+]
+const STATE_OPTS = [
+  { code: 'OPEN', label: 'Awaiting fix' },
+  { code: 'CLOSED', label: 'Corrected' },
+  { code: 'AUTO_RELOCKED', label: 'Auto re-locked' },
+]
+
+const codesToLabels = (codes: string[], opts: { code: string; label: string }[]) =>
+  codes.map((c) => opts.find((o) => o.code === c)?.label ?? c)
+const labelsToCodes = (labels: string[], opts: { code: string; label: string }[]) =>
+  labels.map((l) => opts.find((o) => o.label === l)?.code ?? l)
 
 export default function UnlockRegisterPage() {
-  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const { options: reasonOpts } = useUnlockReasons()
 
-  const query = { ...filters, limit: 200 }
+  const [dateStart, setDateStart] = useState(DEFAULT_START)
+  const [dateEnd, setDateEnd] = useState(DEFAULT_END)
+  const [entityCodes, setEntityCodes] = useState<string[]>([])
+  const [reasonCodes, setReasonCodes] = useState<string[]>([])
+  const [stateCodes, setStateCodes] = useState<string[]>([])
+  const [search, setSearch] = useState('')
+
+  const query = useMemo(
+    () => ({
+      date_start: dateStart,
+      date_end: dateEnd,
+      entity_type: entityCodes.join(','),
+      reason_code: reasonCodes.join(','),
+      state: stateCodes.join(','),
+      search,
+      limit: 200,
+    }),
+    [dateStart, dateEnd, entityCodes, reasonCodes, stateCodes, search],
+  )
 
   const { data: list, isLoading, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['unlock-register', query],
@@ -47,8 +79,22 @@ export default function UnlockRegisterPage() {
     queryFn: () => unlockService.getStats(query),
   })
 
-  const set = (patch: Partial<typeof DEFAULT_FILTERS>) => setFilters((prev) => ({ ...prev, ...patch }))
-  const isDefault = JSON.stringify(filters) === JSON.stringify(DEFAULT_FILTERS)
+  const hasFilters =
+    entityCodes.length > 0 ||
+    reasonCodes.length > 0 ||
+    stateCodes.length > 0 ||
+    search.trim() !== '' ||
+    dateStart !== DEFAULT_START ||
+    dateEnd !== DEFAULT_END
+
+  const resetFilters = () => {
+    setDateStart(DEFAULT_START)
+    setDateEnd(DEFAULT_END)
+    setEntityCodes([])
+    setReasonCodes([])
+    setStateCodes([])
+    setSearch('')
+  }
 
   return (
     <div className="space-y-5">
@@ -71,60 +117,61 @@ export default function UnlockRegisterPage() {
 
       {stats && <UnlockKpis stats={stats} />}
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
-        <Input
-          type="date"
-          className="w-[160px]"
-          value={filters.date_start}
-          onChange={(e) => set({ date_start: e.target.value })}
+      <ListFilterBar
+        hasFilters={hasFilters}
+        onReset={resetFilters}
+        resultCount={{ total: list?.pagination.total ?? 0 }}
+      >
+        {/* 1. Record type */}
+        <StagedMultiSelect
+          options={ENTITY_OPTS.map((o) => o.label)}
+          selected={codesToLabels(entityCodes, ENTITY_OPTS)}
+          onApply={(labels) => setEntityCodes(labelsToCodes(labels, ENTITY_OPTS))}
+          placeholder="All records"
+          width="w-[160px]"
         />
-        <span className="text-[12px] text-muted-foreground">to</span>
-        <Input
-          type="date"
-          className="w-[160px]"
-          value={filters.date_end}
-          onChange={(e) => set({ date_end: e.target.value })}
+
+        {/* 2. Reason — sourced from the admin-managed unlock_reason list */}
+        <StagedMultiSelect
+          options={reasonOpts.map((o) => o.label)}
+          selected={reasonCodes.map((c) => reasonOpts.find((o) => o.code === c)?.label ?? c)}
+          onApply={(labels) =>
+            setReasonCodes(labels.map((l) => reasonOpts.find((o) => o.label === l)?.code ?? l))
+          }
+          placeholder="All reasons"
+          width="w-[230px]"
         />
-        <Select value={filters.entity_type} onValueChange={(v) => set({ entity_type: v })}>
-          <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All records</SelectItem>
-            <SelectItem value="SUBMISSION">Reviews</SelectItem>
-            <SelectItem value="DISPUTE">Disputes</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filters.reason_code} onValueChange={(v) => set({ reason_code: v })}>
-          <SelectTrigger className="w-[210px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All reasons</SelectItem>
-            {UNLOCK_REASON_CODES.map((c) => (
-              <SelectItem key={c} value={c}>{UNLOCK_REASON_LABELS[c]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filters.state} onValueChange={(v) => set({ state: v })}>
-          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All states</SelectItem>
-            <SelectItem value="OPEN">Awaiting fix</SelectItem>
-            <SelectItem value="CLOSED">Corrected</SelectItem>
-            <SelectItem value="AUTO_RELOCKED">Auto re-locked</SelectItem>
-          </SelectContent>
-        </Select>
-        <Input
-          placeholder="Search reason, person, form…"
-          className="w-[240px]"
-          value={filters.search}
-          onChange={(e) => set({ search: e.target.value })}
+
+        {/* 3. State */}
+        <StagedMultiSelect
+          options={STATE_OPTS.map((o) => o.label)}
+          selected={codesToLabels(stateCodes, STATE_OPTS)}
+          onApply={(labels) => setStateCodes(labelsToCodes(labels, STATE_OPTS))}
+          placeholder="All states"
+          width="w-[170px]"
         />
-        <button
-          onClick={() => setFilters(DEFAULT_FILTERS)}
-          disabled={isDefault}
-          className="ml-auto text-[12px] font-medium text-primary hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          Reset Filters
-        </button>
-      </div>
+
+        {/* Line break — date + search on the second row */}
+        <div className="basis-full" />
+
+        {/* 4. Date range */}
+        <DateRangeFilter
+          value={{ start: dateStart, end: dateEnd }}
+          onChange={(v) => { setDateStart(v.start); setDateEnd(v.end) }}
+        />
+
+        {/* 5. Search */}
+        <div className="relative w-[240px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+          <Input
+            type="text"
+            placeholder="Search reason or person…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-9 text-[13px]"
+          />
+        </div>
+      </ListFilterBar>
 
       {stats && <UnlockGrouping stats={stats} />}
 

@@ -18,6 +18,7 @@ import { deriveRollupAnswers, type RollupQuestionShape, type RollupAnswerShape }
 import prisma from '../config/prisma';
 import logger from '../config/logger';
 import { notifySubmissionGraded } from './qa/qa.submissions.notify';
+import { isManagerOfSubmissionAgent } from './manager/manager.access';
 
 /**
  * Custom error class for submission service business logic errors
@@ -408,10 +409,12 @@ export class SubmissionService implements ISubmissionService {
    *
    * The response shape deliberately matches that endpoint's payload so
    * AuditFormPage's existing prefill effect works without a second branch.
-   * Callers other than the owner must be admins — enforced here rather than
+   *
+   * A draft is editable by the reviewer who authored it, an admin, or the
+   * manager of the CSR agent the review is about — enforced here rather than
    * only at the route.
    */
-  async getDraftForEdit(submission_id: number, requester_id: number, isAdmin: boolean) {
+  async getDraftForEdit(submission_id: number, requester_id: number, requesterRole: string | undefined) {
     if (!Number.isInteger(submission_id) || submission_id <= 0) {
       throw new SubmissionServiceError('Invalid submission ID', 'INVALID_SUBMISSION_ID', 400);
     }
@@ -421,7 +424,7 @@ export class SubmissionService implements ISubmissionService {
       include: {
         form: { select: { id: true, form_name: true } },
         submission_answers: true,
-        submission_metadata: true,
+        submission_metadata: { include: { field: true } },
         submission_ticket_tasks: true,
         submission_calls: { include: { call: true } },
       },
@@ -436,9 +439,40 @@ export class SubmissionService implements ISubmissionService {
         409
       );
     }
-    if (submission.submitted_by !== requester_id && !isAdmin) {
+    const isAdmin = requesterRole === 'Admin';
+    const isAuthor = submission.submitted_by === requester_id;
+    let allowed = isAdmin || isAuthor;
+    if (!allowed && requesterRole === 'Manager') {
+      allowed = await isManagerOfSubmissionAgent(requester_id, submission_id);
+    }
+    if (!allowed) {
       throw new SubmissionServiceError('This draft belongs to another reviewer', 'FORBIDDEN', 403);
     }
+
+    // The agent picker on the audit form only lists ACTIVE CSRs, so a review
+    // of someone who has since left renders an empty Agent field even though
+    // the id is saved. Hand back the agent this review actually belongs to and
+    // the form can show them regardless of their current status.
+    const agentField = submission.submission_metadata.find(
+      (m) => m.field?.field_name === 'CSR' || m.field?.field_name === 'Agent'
+    );
+    const agentId = Number(agentField?.value);
+    const agent =
+      Number.isInteger(agentId) && agentId > 0
+        ? await prisma.user.findUnique({
+            where: { id: agentId },
+            select: { id: true, username: true },
+          })
+        : null;
+
+    // A draft is "reopened" when an admin returned a previously-scored review
+    // to DRAFT (it carries an OPEN unlock). A plain saved draft has none. The
+    // editor uses this to show the right copy: a correction ("Reopened for
+    // correction", preserves the original date) vs. simply finishing a draft.
+    const openUnlock = await prisma.recordUnlock.findFirst({
+      where: { entity_type: 'SUBMISSION', entity_id: submission_id, state: 'OPEN' },
+      select: { id: true },
+    });
 
     return {
       submission_id: submission.id,
@@ -446,6 +480,8 @@ export class SubmissionService implements ISubmissionService {
       form_name: submission.form?.form_name ?? null,
       submitted_at: submission.submitted_at,
       submitted_by: submission.submitted_by,
+      reopened: openUnlock != null,
+      agent,
       answers: submission.submission_answers.map((a) => ({
         question_id: a.question_id,
         answer: a.answer ?? '',
@@ -491,12 +527,18 @@ export class SubmissionService implements ISubmissionService {
    * every trend that buckets on submitted_at. The AI promote path leaves it
    * off and keeps stamping "now", which is correct there — that draft has
    * never been submitted before.
+   *
+   * `opts.preserveSubmittedBy` is the same idea for authorship. An admin
+   * correcting someone else's review must not become its reviewer: that would
+   * move the audit onto the admin's completed count and off the person who
+   * actually did it. The AI promote path leaves it off, because there the whole
+   * point is that the human takes ownership of the AI's draft.
    */
   async promoteDraftToSubmitted(
     submission_id: number,
     edits: { answers: CreateSubmissionAnswerDTO[]; metadata?: import('../models').SubmissionMetadataDTO[] },
     human_user_id: number,
-    opts: { preserveSubmittedAt?: boolean } = {}
+    opts: { preserveSubmittedAt?: boolean; preserveSubmittedBy?: boolean } = {}
   ): Promise<{
     submission_id: number;
     total_score: number;
@@ -581,7 +623,7 @@ export class SubmissionService implements ISubmissionService {
         data: {
           status: 'SUBMITTED',
           ...(opts.preserveSubmittedAt ? {} : { submitted_at: new Date() }),
-          submitted_by: human_user_id,
+          ...(opts.preserveSubmittedBy ? {} : { submitted_by: human_user_id }),
         },
       });
 
@@ -597,17 +639,20 @@ export class SubmissionService implements ISubmissionService {
         });
       }
 
-      if (edits.metadata) {
+      // An empty array means "the caller sent no metadata", not "delete the
+      // metadata". Both callers default to `req.body.metadata || []`, so
+      // treating empty as a replace would let a malformed request wipe the
+      // reviewer, review date and agent off a review. Clearing all of it is
+      // never legitimate — those fields are required by the form.
+      if (edits.metadata && edits.metadata.length > 0) {
         await tx.submissionMetadata.deleteMany({ where: { submission_id } });
-        if (edits.metadata.length > 0) {
-          await tx.submissionMetadata.createMany({
-            data: edits.metadata.map((m) => ({
-              submission_id,
-              field_id: Number(m.field_id),
-              value: m.value ?? null,
-            })),
-          });
-        }
+        await tx.submissionMetadata.createMany({
+          data: edits.metadata.map((m) => ({
+            submission_id,
+            field_id: Number(m.field_id),
+            value: m.value ?? null,
+          })),
+        });
       }
     });
 
@@ -664,21 +709,28 @@ export class SubmissionService implements ISubmissionService {
         submitted_at: null
       };
 
-      // Check if draft already exists. When a case_id is supplied, key dedup
-      // off the case so multi-source / ticket-only / call-only runs each get
-      // their own DRAFT row instead of clobbering unrelated stale drafts that
-      // share (form_id, submitted_by, call_id IS NULL).
-      // Pass `ai_provider` so AI Reviewer compare-mode runs (Claude vs
-      // ChatGPT on the same case) land in two distinct DRAFT rows
-      // instead of clobbering each other. Human saves and legacy callers
-      // omit it and behave exactly as before.
-      const existingDraft = await this.submissionRepository.getExistingDraft(
-        submissionData.call_id ?? null,
-        submissionData.form_id,
-        qa_id,
-        submissionData.case_id ?? null,
-        submissionData.ai_provider ?? undefined
-      );
+      // Dedup only applies to the automated flows that have a stable key to
+      // group runs by: a case_id (multi-source / ticket-only / call-only runs),
+      // an ai_provider tag (compare-mode: Claude vs ChatGPT on the same case),
+      // or a legacy single call_id. A purely manual human "Save Draft" has none
+      // of these — and its button only ever appears on a brand-new audit (never
+      // in resume mode), so every click is a distinct in-progress review and
+      // must get its OWN row. Keying such saves off (form_id, submitted_by,
+      // call_id IS NULL) made three separate manual drafts clobber each other.
+      const hasDedupKey =
+        (submissionData.call_id ?? null) !== null ||
+        !!(submissionData.case_id && submissionData.case_id !== '') ||
+        (submissionData.ai_provider ?? null) !== null;
+
+      const existingDraft = hasDedupKey
+        ? await this.submissionRepository.getExistingDraft(
+            submissionData.call_id ?? null,
+            submissionData.form_id,
+            qa_id,
+            submissionData.case_id ?? null,
+            submissionData.ai_provider ?? undefined
+          )
+        : null;
 
       let submission_id: number;
 

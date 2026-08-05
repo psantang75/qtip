@@ -100,7 +100,7 @@ export default function FormMetadataDisplay({
                 }
 
                 return (
-                  <Select value={val ? val : undefined} onValueChange={v => handleChange(field, v)}>
+                  <Select value={val} onValueChange={v => handleChange(field, v)}>
                     <SelectTrigger className="h-9 text-[13px]">
                       <SelectValue placeholder={`Select ${displayFieldName(field.field_name)}…`} />
                     </SelectTrigger>

@@ -189,7 +189,8 @@ export default function AppRoutes(): React.ReactElement {
           <Route path="list-management"  element={<ListManagementPage />} />
           <Route path="email-templates"  element={<AdminEmailTemplatesPage />} />
           <Route path="system-settings"  element={<SystemSettingsPage />} />
-          <Route path="quality/unlocks"  element={<UnlockRegisterPage />} />
+          {/* Moved to Quality → Unlock Register; keep old bookmarks working. */}
+          <Route path="quality/unlocks"  element={<Navigate to="/app/quality/unlocks" replace />} />
           <Route path="insights/kpis"       element={<InsightsKpiManagementPage />} />
           <Route path="insights/pages"      element={<InsightsPageManagementPage />} />
           <Route path="insights/calendar"   element={<InsightsCalendarPage />} />
@@ -245,6 +246,11 @@ export default function AppRoutes(): React.ReactElement {
               }
             />
             <Route path="ai-reviewer/:formId"    element={<RequirePageAccess pageKey="quality_ai_reviewer"><PageLoader><AIReviewerFormDetail /></PageLoader></RequirePageAccess>} />
+
+            {/* Unlock Register — admin-only audit of reopened reviews. Lives
+                under Quality; gated by the `quality_unlock_register` app_page
+                (only Admin is granted, so ALL+ = admin here). */}
+            <Route path="unlocks"        element={<RequirePageAccess pageKey="quality_unlock_register" minLevel="viewAll" fallback="/app/quality/submissions"><PageLoader><UnlockRegisterPage /></PageLoader></RequirePageAccess>} />
           </Route>
 
           {/* Training. Coaching is one logical page (`training_coaching`):

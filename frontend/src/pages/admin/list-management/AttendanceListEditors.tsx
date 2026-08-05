@@ -28,6 +28,7 @@ import { useToast } from '@/hooks/use-toast'
 import { t } from '@/lib/t'
 import {
   getAttendanceConfig, savePointRules, saveWarningThresholds, recalculateAttendance,
+  savePointsStartDate,
 } from '@/services/insightsCsrService'
 import type {
   AttendancePointRuleConfig, AttendanceThresholdConfig, PointRuleSavePayload, ThresholdSavePayload,
@@ -69,11 +70,15 @@ export function AttendancePointBandsEditor() {
 
   const [draft, setDraft] = useState<AttendancePointRuleConfig[]>([])
   const [effectiveFrom, setEffectiveFrom] = useState(today())
+  const [pointsStart, setPointsStart] = useState('')
 
   // Only the CURRENT version of each band is editable; retired versions are
   // history and are shown read-only below.
   useEffect(() => {
-    if (data) setDraft(data.rules.filter(r => r.effectiveTo === null))
+    if (data) {
+      setDraft(data.rules.filter(r => r.effectiveTo === null))
+      setPointsStart(data.pointsStartDate)
+    }
   }, [data])
 
   const save = useMutation({
@@ -90,6 +95,15 @@ export function AttendancePointBandsEditor() {
   const recalc = useMutation({
     mutationFn: () => recalculateAttendance(addDays(today(), -90), today()),
     onSuccess: (r) => toast({ title: `Rescored ${r.daysScored} days through ${r.to}` }),
+    onError: (e) => toast(t.fromError(e)),
+  })
+
+  const saveStart = useMutation({
+    mutationFn: () => savePointsStartDate(pointsStart),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-attendance-config'] })
+      toast({ title: `Points start date saved (${pointsStart})` })
+    },
     onError: (e) => toast(t.fromError(e)),
   })
 
@@ -181,6 +195,35 @@ export function AttendancePointBandsEditor() {
           onSave={() => save.mutate()}
           saving={save.isPending}
         />
+      </div>
+
+      <div className={CARD}>
+        <p className={SUBHEAD}>Points start date</p>
+        <div className="flex items-end justify-between gap-4 mt-2">
+          <div className="space-y-1">
+            <p className="text-[13px] text-slate-500 max-w-xl">
+              The day the point system took effect. Punches and schedules before this date are never scored or counted,
+              even though earlier history exists. After changing it, rescore the last 90 days to drop points that now
+              fall before the new date.
+            </p>
+            <Input
+              type="date"
+              value={pointsStart}
+              onChange={e => setPointsStart(e.target.value)}
+              className="h-8 w-[160px] text-[13px]"
+            />
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            disabled={saveStart.isPending || !pointsStart}
+            onClick={() => saveStart.mutate()}
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saveStart.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
       </div>
 
       <div className={CARD}>

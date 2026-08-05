@@ -93,6 +93,23 @@ export default function TopBar() {
     })
   }, [user, insightsKeys, appSectionsWithPages])
 
+  // First reachable route per app-driven section (Quality / Training /
+  // Performance Warnings / Scheduling). The static `section.defaultPath` points
+  // at that section's *primary* page (e.g. `sched_calendar`), which a user may
+  // not have when they were only granted a secondary page (e.g. QA/Trainer with
+  // just `sched_campaigns`). Landing them there bounces through the guard chain
+  // back to Quality, so we send the tab to the first page they can actually
+  // reach instead. Insights self-resolves via InsightsIndexRedirect on
+  // `/app/insights`, so it keeps its defaultPath.
+  const sectionLandingPath = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const sec of appNav ?? []) {
+      const firstPage = sec.pages[0]
+      if (firstPage) map[sec.section] = firstPage.route_path
+    }
+    return map
+  }, [appNav])
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-[72px] flex items-center px-6 bg-neutral-900 border-b border-white/5">
 
@@ -113,10 +130,11 @@ export default function TopBar() {
         {visibleSections.map(section => {
           const Icon = SECTION_ICONS[section.id]
           const isActive = getSectionFromPath(location.pathname) === section.id
+          const to = sectionLandingPath[section.id] ?? section.defaultPath
           return (
             <NavLink
               key={section.id}
-              to={section.defaultPath}
+              to={to}
               className={cn(
                 'flex items-center gap-2 px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors',
                 isActive

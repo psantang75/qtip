@@ -12,6 +12,7 @@ import { Prisma } from '../../generated/prisma/client'
 import { serviceLogger } from '../../config/logger'
 import { ManagerServiceError } from './manager.types'
 import { attachPhoneSystemRecordings } from '../callRecordingEnrichment'
+import { getLastReopenForSubmission, type LastReopen } from '../unlock/unlock.query.service'
 
 export interface AuditDetailParams {
   userId: number
@@ -43,6 +44,11 @@ export interface AuditDetailResponse {
   answers: Array<Record<string, unknown>>
   dispute: Record<string, unknown> | null
   scoreBreakdown?: unknown
+  /**
+   * The most recent finished reopen. A manager reading a team audit has to be
+   * able to tell that the score in front of them replaced an earlier one.
+   */
+  last_reopen: LastReopen | null
 }
 
 const CSR_FIELD_NAME = 'CSR'
@@ -144,7 +150,7 @@ export async function getManagerTeamAuditDetails(
   }
   const submission = submissionRows[0]
 
-  const [metadata, callsRaw, ticketTaskRows, answers, qaResults] = await Promise.all([
+  const [metadata, callsRaw, ticketTaskRows, answers, qaResults, lastReopen] = await Promise.all([
     prisma.$queryRaw<Array<{ field_name: string; value: string }>>(Prisma.sql`
       SELECT fmf.field_name, sm.value
       FROM submission_metadata sm
@@ -179,6 +185,7 @@ export async function getManagerTeamAuditDetails(
     prisma.$queryRaw<Array<{ username: string }>>(Prisma.sql`
       SELECT username FROM users WHERE id = ${submission.submitted_by}
     `),
+    getLastReopenForSubmission(params.submissionId),
   ])
 
   const calls = await attachPhoneSystemRecordings(callsRaw)
@@ -240,6 +247,7 @@ export async function getManagerTeamAuditDetails(
     })),
     answers,
     dispute: disputeRows.length > 0 ? disputeRows[0] : null,
+    last_reopen: lastReopen,
   }
 
   // Form structure + score breakdown are best-effort: log and continue if

@@ -8,9 +8,11 @@ import { getFormById } from '@/services/formService'
 import { normalizeFormMetadata } from '@/pages/quality/form-builder/formBuilderUtils'
 import submissionService from '@/services/submissionService'
 import aiReviewerService from '@/services/aiReviewerService'
-import { unlockService, UNLOCK_REASON_LABELS } from '@/services/unlockService'
+import { unlockService } from '@/services/unlockService'
+import { useUnlockReasons } from '@/hooks/useUnlockReasons'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
+import { Field, fmtScore } from './submission-detail/ReopenedNotice'
 import MultipleCallSelector from '@/components/common/MultipleCallSelector'
 import { CallDetailsPanel } from './submission-detail/CallDetailsPanel'
 import TicketTaskSelector, { type TicketTaskRef } from '@/components/common/TicketTaskSelector'
@@ -24,6 +26,7 @@ import {
   FormRenderer,
   getQuestionScore,
   deriveRollupAnswers,
+  buildInitialMetadata,
   type FormRenderData,
 } from '@/utils/forms'
 import { validateAnswers } from '@/utils/submissionUtils'
@@ -183,6 +186,22 @@ export default function AuditFormPage() {
     }
   }, [aiPrefillError, aiPrefillErrorObj, aiSubmissionId])
 
+  // A reopened review answers 409 once it has been re-submitted or relocked.
+  // There is nothing left to edit and nothing worth explaining, so go straight
+  // to the submission instead of an interstitial. `replace` matters: the usual
+  // way to land here is Back after a successful re-submit, and without it Back
+  // would drop the reader into this dead editor a second time.
+  const resumeAlreadyClosed =
+    prefillMode === 'resume' &&
+    aiPrefillError &&
+    ((aiPrefillErrorObj as any)?.response?.status === 409 ||
+      (aiPrefillErrorObj as any)?.response?.data?.code === 'NOT_A_DRAFT')
+
+  useEffect(() => {
+    if (!resumeAlreadyClosed || !aiSubmissionId) return
+    navigate(`/app/quality/submissions/${aiSubmissionId}`, { replace: true })
+  }, [resumeAlreadyClosed, aiSubmissionId, navigate])
+
   const formId = prefillMode && aiPrefill?.form_id ? String(aiPrefill.form_id) : formIdParam
 
   // includeInactive=true: a submission is always tied to a specific
@@ -218,6 +237,8 @@ export default function AuditFormPage() {
     retry: false,
   })
 
+  const { labelOf: unlockReasonLabel } = useUnlockReasons()
+
   const { data: agentUsers = [] } = useQuery({
     queryKey: ['agent-dropdown-users'],
     queryFn:  () => userService.fetchActiveCsrsForDropdown(),
@@ -225,10 +246,19 @@ export default function AuditFormPage() {
     retry: 1,
   })
   const agentUserOptions = useMemo(
-    () => agentUsers
-      .map(u => ({ id: u.id, username: u.username }))
-      .sort((a, b) => a.username.localeCompare(b.username)),
-    [agentUsers],
+    () => {
+      const options = agentUsers.map(u => ({ id: u.id, username: u.username }))
+      // The list is active CSRs only, which is right for a new audit but wrong
+      // when correcting an old one: if that agent has since been deactivated
+      // there is no option to match the saved id and the picker reads empty.
+      // Add them back for this review only.
+      const savedAgent = (aiPrefill as { agent?: { id: number; username: string } | null })?.agent
+      if (savedAgent && !options.some(o => o.id === savedAgent.id)) {
+        options.push({ id: savedAgent.id, username: savedAgent.username })
+      }
+      return options.sort((a, b) => a.username.localeCompare(b.username))
+    },
+    [agentUsers, aiPrefill],
   )
 
   const [score, setScore] = useState(0)
@@ -279,7 +309,19 @@ export default function AuditFormPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['submissions'] })
       qc.invalidateQueries({ queryKey: ['ai-reviewer-inbox'] })
+      // Drop the prefill so navigating back to this editor refetches instead
+      // of rendering a cached, still-submittable form. The draft/promote
+      // endpoints now answer 409, which surfaces aiPrefillErrorDetail's
+      // "no longer a draft" panel rather than a second doomed submit.
+      qc.removeQueries({ queryKey: ['ai-reviewer-prefill'] })
       if (prefillMode === 'resume' && aiSubmissionId) {
+        // The detail page we are about to land on holds its payload for five
+        // minutes, so without these it re-serves the pre-correction score,
+        // answers and unlock banner — the review looks like it never left
+        // draft. `submission-detail` keys off the route param, which is a
+        // string, so the id has to be stringified to match.
+        qc.invalidateQueries({ queryKey: ['submission-detail', String(aiSubmissionId)] })
+        qc.invalidateQueries({ queryKey: ['submission-active-unlock', aiSubmissionId] })
         navigate(`/app/quality/submissions/${aiSubmissionId}`, {
           state: { message: 'Correction submitted and re-scored.' },
         })
@@ -298,7 +340,12 @@ export default function AuditFormPage() {
 
   const { mutate: doSaveDraft, isPending: isSavingDraft } = useMutation({
     mutationFn: (payload: any) => submissionService.saveDraft(payload),
-    onSuccess: () => navigate('/app/quality/submissions', { state: { message: 'Draft saved.' } }),
+    onSuccess: () => {
+      // This navigates straight to the Completed Forms list, so the new/updated
+      // draft has to be there. Without this the list re-serves its cached copy.
+      qc.invalidateQueries({ queryKey: ['submissions'] })
+      navigate('/app/quality/submissions', { state: { message: 'Draft saved.' } })
+    },
     onError: () => setErrorMessage("Couldn't save draft. Try again."),
   })
   const [metadataValues, setMetadataValues] = useState<Record<string, string>>({})
@@ -358,35 +405,13 @@ export default function AuditFormPage() {
     setScore(totalScore)
     setFormRenderData(prepareFormForRender(form, seededWithRollups, initialVisibility, initCatScores, totalScore))
 
-    const today = new Date().toISOString().split('T')[0]
-    const initialMeta: Record<string, string> = {}
-    ;(form.metadata_fields ?? []).forEach((field: any) => {
-      const key = (field.id && field.id !== 0) ? field.id.toString() : field.field_name
-      if (field.field_type === 'AUTO') {
-        if ((field.field_name === 'Reviewer Name' || field.field_name === 'Auditor Name') && user)
-          initialMeta[key] = user.username
-        else if (field.field_name === 'Review Date' || field.field_name === 'Audit Date')
-          initialMeta[key] = today
-      }
-    })
-
-    // In AI Reviewer modes, overlay the AI's saved metadata (Interaction
-    // Date, CSR, etc.) on top of the auto defaults so the human reviewer
-    // sees what the AI captured. Auto fields stay live (current user /
-    // today) — those are the human's stamp, not the AI's.
-    if (prefillMode && aiPrefill?.metadata) {
-      const autoFieldKeys = new Set(
-        (form.metadata_fields ?? [])
-          .filter((f: any) => f.field_type === 'AUTO')
-          .map((f: any) => ((f.id && f.id !== 0) ? f.id.toString() : f.field_name))
-      )
-      for (const m of aiPrefill.metadata) {
-        const key = String(m.field_id)
-        if (autoFieldKeys.has(key)) continue
-        if (m.value != null && m.value !== '') initialMeta[key] = String(m.value)
-      }
-    }
-    setMetadataValues(initialMeta)
+    setMetadataValues(buildInitialMetadata({
+      metadataFields: form.metadata_fields ?? [],
+      savedMetadata: prefillMode ? aiPrefill?.metadata : null,
+      prefillMode,
+      currentUsername: user?.username,
+      today: new Date().toISOString().split('T')[0],
+    }))
 
     // Hydrate the linked ticket(s) / task(s) from the AI submission so
     // the left-pane TicketTaskSelector shows what's already attached.
@@ -533,7 +558,9 @@ export default function AuditFormPage() {
     })
   }
 
-  if (loading || (prefillMode && aiPrefillLoading)) {
+  // `resumeAlreadyClosed` holds the skeleton for the one frame before the
+  // redirect effect fires, so the reader never sees the error panel flash.
+  if (loading || resumeAlreadyClosed || (prefillMode && aiPrefillLoading)) {
     return (
       <div className="p-6 space-y-4">
         <div className="h-8 bg-slate-100 rounded animate-pulse w-1/3" />
@@ -563,10 +590,12 @@ export default function AuditFormPage() {
                     onClick={() => navigate(`/app/quality/submissions/${aiSubmissionId}`)}>
                     Open submission #{aiSubmissionId}
                   </Button>
-                  <Button size="sm" variant="ghost" className="text-amber-900 hover:bg-amber-100"
-                    onClick={() => navigate('/app/quality/ai-inbox')}>
-                    Back to AI Inbox
-                  </Button>
+                  {aiMode && (
+                    <Button size="sm" variant="ghost" className="text-amber-900 hover:bg-amber-100"
+                      onClick={() => navigate('/app/quality/ai-inbox')}>
+                      Back to AI Inbox
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -616,41 +645,46 @@ export default function AuditFormPage() {
                 className="bg-primary hover:bg-primary/90 text-white">
                 <Send className="h-4 w-4 mr-1.5" />
                 {isSubmitting
-                  ? (prefillMode === 'promote' ? 'Promoting…' : prefillMode === 'overlay' ? 'Recording…' : prefillMode === 'resume' ? 'Re-submitting…' : 'Submitting…')
-                  : (prefillMode === 'promote' ? 'Promote to Submitted' : prefillMode === 'overlay' ? 'Save Calibration' : prefillMode === 'resume' ? 'Re-submit Review' : 'Submit Review')}
+                  ? (prefillMode === 'promote' ? 'Promoting…' : prefillMode === 'overlay' ? 'Recording…' : prefillMode === 'resume' && aiPrefill?.reopened ? 'Re-submitting…' : 'Submitting…')
+                  : (prefillMode === 'promote' ? 'Promote to Submitted' : prefillMode === 'overlay' ? 'Save Calibration' : prefillMode === 'resume' && aiPrefill?.reopened ? 'Re-submit Review' : 'Submit Review')}
               </Button>
             </div>
           </div>
         </div>
 
-        {prefillMode === 'resume' && (
-          <div className="mt-2 mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12px] text-amber-800 flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div>
-                <span className="font-semibold">Reopened for correction</span>{' '}
-                {resumeUnlock
-                  ? `${UNLOCK_REASON_LABELS[resumeUnlock.reason_code] ?? resumeUnlock.reason_code}${resumeUnlock.unlocked_by_name ? ` — reopened by ${resumeUnlock.unlocked_by_name}` : ''}.`
-                  : 'An administrator returned this review to you so it can be corrected.'}{' '}
-                Your edits replace the existing review; the original review date is preserved.
-              </div>
-              {resumeUnlock && (
+        {prefillMode === 'resume' && aiPrefill?.reopened && (
+          <div className="mt-2 mb-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+            <div className="space-y-2">
+              <span className="text-[13px] font-semibold text-neutral-900">Reopened for Correction</span>
+
+              {resumeUnlock ? (
                 <>
-                  <div className="text-amber-700">{resumeUnlock.reason_note}</div>
-                  <div className="text-[11px] text-amber-600">
-                    Re-submit by {fmtDate(resumeUnlock.relock_due_at)} or the previous score is automatically restored.
+                  {/* Reason and note as side-by-side labelled fields, matching
+                      the reopen cards on the submission detail page. */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-x-6 gap-y-2">
+                    <Field label="Reopen reason" value={unlockReasonLabel(resumeUnlock.reason_code)} />
+                    {resumeUnlock.reason_note && (
+                      <Field label="Note" value={resumeUnlock.reason_note} className="sm:col-span-3" />
+                    )}
                   </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 pt-1">
+                    <Field label="Reopened by" value={resumeUnlock.unlocked_by_name ?? '—'} />
+                    <Field label="Re-submit by" value={fmtDate(resumeUnlock.relock_due_at)} />
+                    <Field label="Score before" value={fmtScore(resumeUnlock.prior_score)} />
+                    <Field label="Score after" value="Pending" />
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    Your edits replace the existing review; the original review date is preserved. If not re-submitted by {fmtDate(resumeUnlock.relock_due_at)}, the previous score is automatically restored.
+                  </p>
                 </>
+              ) : (
+                <p className="text-[12.5px] text-slate-600">
+                  An administrator returned this review to you so it can be corrected. Your edits replace the existing review; the original review date is preserved.
+                </p>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setShowScoreBreakdown(true)}
-              className="shrink-0 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-mono tabular-nums text-amber-800 hover:bg-amber-100 hover:border-amber-400 transition-colors cursor-pointer"
-              title="Click to see how this score is calculated"
-            >
-              <Calculator className="h-3 w-3" />
-              Score {score.toFixed(1)}%
-            </button>
           </div>
         )}
 

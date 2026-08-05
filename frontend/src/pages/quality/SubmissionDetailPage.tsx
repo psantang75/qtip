@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getErrorMessage } from '@/utils/errorHandling'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -71,6 +71,7 @@ import { TicketTaskDetailsPanel } from './submission-detail/TicketTaskDetailsPan
 import { ScorePanel } from './submission-detail/ScorePanel'
 import { UnlockDialog } from './submission-detail/UnlockDialog'
 import { UnlockBanner, type ActiveUnlock } from './submission-detail/UnlockBanner'
+import { ReopenedNotice, type LastReopen } from './submission-detail/ReopenedNotice'
 import { TimelinePanel } from '@/components/quality/ai/TimelinePanel'
 import { AdvisoryObservationsPanel, type AdvisoryObservation } from '@/components/quality/ai/AdvisoryObservationsPanel'
 import { AnswerEvidencePanel, type AnswerEvidenceEntry } from '@/components/quality/ai/AnswerEvidencePanel'
@@ -138,6 +139,17 @@ export default function SubmissionDetailPage() {
     }),
   })
 
+  // Pages that finish a job and send the reader here — the correction
+  // re-submit, for one — pass their confirmation in router state. Announce it
+  // once: the state outlives re-renders, and StrictMode mounts twice in dev.
+  const announced = useRef(false)
+  useEffect(() => {
+    const message = (location.state as { message?: string } | null)?.message
+    if (!message || announced.current) return
+    announced.current = true
+    toast({ title: message })
+  }, [location.state, toast])
+
   if (isLoading) {
     return (
       <div className="p-6 space-y-4">
@@ -166,14 +178,24 @@ export default function SubmissionDetailPage() {
 
   // ── Admin unlock ──────────────────────────────────────────────────────────
   const activeUnlock = (detail as SubmissionDetailWithForm & { active_unlock?: ActiveUnlock | null }).active_unlock ?? null
+  // History rather than live state: the most recent finished reopen, shown so
+  // the record itself says it was corrected and what the score used to be.
+  const lastReopen = (detail as SubmissionDetailWithForm & { last_reopen?: LastReopen | null }).last_reopen ?? null
   // Only offer a reopen when there isn't already one in flight, and only for
   // the states the service will actually accept.
-  const canReopenReview = isAdmin && !activeUnlock
+  // A disputed review is re-decided through the dispute, not by reopening the
+  // form: reopening the form would drop it to DRAFT and put the whole audit
+  // back in play when all that is wanted is an edit to the dispute.
+  const canReopenReview = isAdmin && !activeUnlock && !detail.dispute
     && (detail.status === 'SUBMITTED' || detail.status === 'FINALIZED')
   const canReopenDispute = isAdmin && !activeUnlock
     && ['UPHELD', 'REJECTED', 'ADJUSTED'].includes(detail.dispute?.status ?? '')
   // The reviewer whose work it is drives the correction; admins can step in.
+  // The DRAFT check keeps a stale payload from offering a correction the
+  // server will reject: once the re-submit lands, the review is SUBMITTED
+  // again and the draft endpoint answers 409.
   const canResumeDraft = activeUnlock?.entity_type === 'SUBMISSION'
+    && detail.status === 'DRAFT'
     && (isAdmin || detail.reviewer_name === user?.username)
 
   const onUnlockSuccess = () => {
@@ -327,6 +349,8 @@ export default function SubmissionDetailPage() {
       {activeUnlock && (
         <UnlockBanner unlock={activeUnlock} submissionId={detail.id} canResume={canResumeDraft} />
       )}
+
+      {lastReopen && <ReopenedNotice reopen={lastReopen} isAgent={isAgent} />}
 
       {unlockTarget && (
         <UnlockDialog

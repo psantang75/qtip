@@ -17,20 +17,7 @@ import { Prisma } from '../../generated/prisma/client';
 import logger from '../../config/logger';
 import notificationService from '../notifications/NotificationService';
 import type { UnlockResult } from './unlock.types';
-
-const REASON_LABELS: Record<string, string> = {
-  SCORING_ERROR: 'Scoring error',
-  WRONG_INTERACTION: 'Wrong interaction attached',
-  CALIBRATION_CORRECTION: 'Calibration correction',
-  POLICY_CHANGE: 'Policy change',
-  TECHNICAL_ISSUE: 'Technical issue',
-  AGENT_APPEAL: 'Agent appeal',
-  OTHER: 'Other',
-};
-
-export function reasonLabel(code: string): string {
-  return REASON_LABELS[code] ?? code;
-}
+import { unlockReasonLabel } from './unlock.reasons';
 
 export async function notifyRecordUnlocked(
   result: UnlockResult,
@@ -63,6 +50,8 @@ export async function notifyRecordUnlocked(
       LIMIT 1
     `);
 
+    const reasonLbl = await unlockReasonLabel(reasonCode);
+
     let disputantId: number | null = null;
     if (result.entity_type === 'DISPUTE') {
       const dispute = await prisma.dispute.findUnique({
@@ -87,7 +76,7 @@ export async function notifyRecordUnlocked(
           prior_status: result.prior_status,
           new_status: result.new_status,
           reason_code: reasonCode,
-          reason_label: reasonLabel(reasonCode),
+          reason_label: reasonLbl,
           reason_note: reasonNote,
           relock_due_at: result.relock_due_at,
           beyond_window: result.beyond_window,

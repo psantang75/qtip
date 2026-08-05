@@ -21,7 +21,7 @@ import { fmtLocal } from '../services/scheduling/schedule.dates';
 import { getPunchWatermark } from '../services/attendance/punchProvider';
 import prisma from '../config/prisma';
 import {
-  getAgentRows, getFilterOptions, getOccurrences, windowFor,
+  getAgentRows, getFilterOptions, getOccurrences, windowForFloored,
 } from '../services/attendance/attendance.rollup.service';
 import { getComplianceMatrix, getDayOfWeek } from '../services/attendance/attendance.analytics.service';
 import { loadPointRules, loadWarningThresholds } from '../services/attendance/attendance.config';
@@ -128,7 +128,7 @@ export const getAttendanceSummary = csrHandler(async (ctx) => {
     getFilterOptions(ctx.deptFilter, ctx.asOf, ctx.selfUserId),
   ]);
   const [rules, thresholds] = await Promise.all([loadPointRules(), loadWarningThresholds()]);
-  const { from } = windowFor(ctx.asOf);
+  const { from } = await windowForFloored(ctx.asOf);
   return {
     asOf: ctx.asOf,
     asOfClamped: ctx.asOfClamped,
@@ -175,7 +175,7 @@ export const getAttendanceCompliance = csrHandler(async (ctx, req) => {
 });
 
 export const getAttendanceDayOfWeek = csrHandler(async (ctx) => {
-  const { from } = windowFor(ctx.asOf);
+  const { from } = await windowForFloored(ctx.asOf);
   return {
     asOf: ctx.asOf,
     windowFrom: from,

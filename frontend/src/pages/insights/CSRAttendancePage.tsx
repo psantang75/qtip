@@ -14,7 +14,7 @@
  * — point bands and the discipline ladder — lives in the roster's own column
  * header tooltips rather than in a card of its own.
  */
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { InsightsSection, AttendanceMatrix, StatusBadge } from '@/components/insights'
 import AttendancePointsRoster from '@/components/insights/AttendancePointsRoster'
@@ -29,8 +29,17 @@ import type { AttendanceAgentRow, AttendanceOccurrence } from '@/services/insigh
 
 const COMPLIANCE_MONTHS = 6
 
+/** 'YYYY-MM-DD' -> 'MM-DD-YYYY'. Split, never parsed as a Date, so a date near
+ *  midnight is not shifted a day west of Greenwich. */
+function fmtMdy(ymd: string): string {
+  const [y, m, d] = ymd.split('-')
+  return `${m}-${d}-${y}`
+}
+
 export default function CSRAttendancePage() {
-  const filters = useActivityFilters()
+  // Own storage key: this report drives the filter bar to a Custom rolling-90
+  // range, which must not leak onto the sales reports that share the default key.
+  const filters = useActivityFilters('aa-attendance-filters')
   const queryClient = useQueryClient()
   const { data: kpiConfig } = useKpiConfig()
   const [detail, setDetail] = useState<Record<number, AttendanceOccurrence[] | undefined>>({})
@@ -71,7 +80,29 @@ export default function CSRAttendancePage() {
   )
 
   const asOf = summaryQ.data?.asOf
+  const windowFrom = summaryQ.data?.windowFrom
   const isSelf = summaryQ.data?.isSelfView ?? false
+
+  // The rolling window covers the whole page, so it belongs in the filter bar's
+  // Date Range row (like the other Insights reports) rather than above the roster.
+  // Pre-formatted MM-DD-YYYY to match how the filter bar renders margin's range.
+  const currentDateRange = windowFrom && asOf
+    ? { start: fmtMdy(windowFrom), end: fmtMdy(asOf) }
+    : undefined
+
+  // Reflect reality in the filter bar: this is a rolling 90-day report, not a
+  // month, so the Period must read "Custom" over the actual window the backend
+  // returned (floored to the 2026-06-21 policy start until 90 days have passed,
+  // then rolling forward on its own). Driving it from the response keeps the
+  // Period, the Custom date inputs and the Date Range row from ever disagreeing.
+  const { period, customStart, customEnd, setPeriod, setCustomStart, setCustomEnd } = filters
+  useEffect(() => {
+    if (!windowFrom || !asOf) return
+    if (period === 'Custom' && customStart === windowFrom && customEnd === asOf) return
+    setPeriod('Custom')
+    setCustomStart(windowFrom)
+    setCustomEnd(asOf)
+  }, [windowFrom, asOf, period, customStart, customEnd, setPeriod, setCustomStart, setCustomEnd])
 
   // Grace is the gap below the lowest late band, so it is derived from the bands
   // in force rather than configured separately. Reading it from the response keeps
@@ -86,9 +117,11 @@ export default function CSRAttendancePage() {
   return (
     <ActivityReportShell
       title="Attendance"
+      description="Rolling 90-day attendance points and schedule adherence by agent, since the 06-21-2026 policy start."
       filters={filters}
       availableUsers={summaryQ.data?.availableUsers ?? []}
       availableDepts={summaryQ.data?.availableDepartments ?? []}
+      currentDateRange={currentDateRange}
       live
       hideBusinessDays
     >
@@ -117,8 +150,6 @@ export default function CSRAttendancePage() {
             rows={rows}
             detail={detail}
             onExpand={loadDetail}
-            windowFrom={summaryQ.data?.windowFrom ?? ''}
-            asOf={asOf ?? ''}
             bands={summaryQ.data?.pointBands ?? []}
             levels={levels}
             graceCeilingSeconds={graceCeiling}
@@ -126,11 +157,11 @@ export default function CSRAttendancePage() {
         )}
       </InsightsSection>
 
-      <InsightsSection title={`Schedule Compliance by Month (last ${COMPLIANCE_MONTHS})`} infoKpiCodes={['csr_att_compliance']}>
+      <InsightsSection title={`Schedule Adherence (last ${COMPLIANCE_MONTHS} months)`} infoKpiCodes={['csr_att_compliance']}>
         {complianceQ.isLoading ? (
           <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
         ) : complianceQ.isError || !complianceQ.data ? (
-          <p className="text-sm text-danger text-center py-6">Couldn't load compliance. Refresh to try again.</p>
+          <p className="text-sm text-danger text-center py-6">Couldn't load adherence. Refresh to try again.</p>
         ) : (
           <AttendanceMatrix data={complianceQ.data} thresholds={complianceThresholds} />
         )}
@@ -169,7 +200,7 @@ export default function CSRAttendancePage() {
 function SelfTiles({ row }: { row: AttendanceAgentRow }) {
   const tiles: Array<[string, string]> = [
     ['Rolling 90 Points', row.rolling90.toFixed(2)],
-    ['Schedule Compliance', row.compliancePct === null ? '—' : `${row.compliancePct.toFixed(1)}%`],
+    ['Schedule Adherence', row.compliancePct === null ? '—' : `${row.compliancePct.toFixed(1)}%`],
     ['Standing', row.level ?? 'Clear'],
     ['Next Roll-Off', row.rollOffDate ? `${row.rollOffPoints.toFixed(2)} on ${row.rollOffDate}` : 'None pending'],
   ]

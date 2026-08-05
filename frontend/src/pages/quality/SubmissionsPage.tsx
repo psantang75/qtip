@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { FileText, Eye, Search, RotateCcw } from 'lucide-react'
+import { FileText, Eye, Search, RotateCcw, Pencil } from 'lucide-react'
 import qaService, { type Submission } from '@/services/qaService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -97,6 +97,13 @@ export default function SubmissionsPage() {
     },
     enabled: roleId > 0,
     placeholderData: (prev) => prev,
+    // A just-submitted audit (or a draft promoted to SUBMITTED) has to show the
+    // moment the reviewer lands back here. Leaning on the global 5-min staleTime
+    // re-serves the pre-submit list until it expires, so force a fresh read on
+    // every mount — same posture as the other mutation-sensitive lists
+    // (AATicketsTasksPage, CSRAttendancePage).
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
 
   const allItems = data?.items ?? []
@@ -225,11 +232,21 @@ export default function SubmissionsPage() {
             </TableHeader>
             <TableBody>
               {sortedItems.length ? (
-                sortedItems.map((row: Submission) => (
+                sortedItems.map((row: Submission) => {
+                  // A DRAFT is still being worked on — open it in the audit
+                  // editor to finish and re-score, rather than the read-only
+                  // detail page. Agents never edit reviews, so they still get
+                  // the detail view. The backend enforces who may actually
+                  // load and submit the draft.
+                  const openRow = () =>
+                    row.status === 'DRAFT' && !isAgent
+                      ? navigate(`/app/quality/audit?resumeDraft=${row.id}`)
+                      : navigate(`/app/quality/submissions/${row.id}`, {
+                          state: { from: pageTitle, fromPath: '/app/quality/submissions' },
+                        })
+                  return (
                   <TableRow key={row.id} className="cursor-pointer hover:bg-slate-50/50"
-                    onClick={() => navigate(`/app/quality/submissions/${row.id}`, {
-                      state: { from: pageTitle, fromPath: '/app/quality/submissions' },
-                    })}>
+                    onClick={openRow}>
                     <TableCell className="text-[13px] text-slate-500">{row.id}</TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5">
@@ -293,18 +310,17 @@ export default function SubmissionsPage() {
                       <ConfidenceChip value={row.ai_overall_confidence ?? null} />
                     </TableCell>
                     <TableCell className="pl-2">
-                      <RowActionButton icon={Eye}
+                      <RowActionButton icon={row.status === 'DRAFT' && !isAgent ? Pencil : Eye}
                         onClick={e => {
                           e.stopPropagation()
-                          navigate(`/app/quality/submissions/${row.id}`, {
-                            state: { from: pageTitle, fromPath: '/app/quality/submissions' },
-                          })
+                          openRow()
                         }}>
-                        View
+                        {row.status === 'DRAFT' && !isAgent ? 'Edit' : 'View'}
                       </RowActionButton>
                     </TableCell>
                   </TableRow>
-                ))
+                  )
+                })
               ) : (
                 <TableEmptyState
                   colSpan={colSpan}

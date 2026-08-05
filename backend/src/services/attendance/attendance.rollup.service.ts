@@ -18,6 +18,7 @@ import { deptClause } from '../insightsScope';
 import { addDays } from '../scheduling/schedule.dates';
 import { loadPointRules, loadWarningThresholds } from './attendance.config';
 import { bandsFor, resolveWarningLevel } from './attendance.rules';
+import { getPointsStartDate, floorFrom } from './attendance.settings';
 
 /** The policy window. Ninety CALENDAR days, matching how the policy is written. */
 const WINDOW_DAYS = 90;
@@ -30,6 +31,18 @@ export interface AttendanceWindow {
 /** The 90-day window ending on asOf, inclusive on both ends. */
 export function windowFor(asOf: string): AttendanceWindow {
   return { asOf, from: addDays(asOf, -(WINDOW_DAYS - 1)) };
+}
+
+/**
+ * The 90-day window with its lower bound raised to the policy start date. Every
+ * read goes through here so days before the policy existed are never counted,
+ * even when the rolling window still reaches back past the start date. The engine
+ * likewise refuses to score before the start, so the two sides agree.
+ */
+export async function windowForFloored(asOf: string): Promise<AttendanceWindow> {
+  const start = await getPointsStartDate();
+  const { from } = windowFor(asOf);
+  return { asOf, from: floorFrom(from, start) };
 }
 
 /**
@@ -124,7 +137,7 @@ export async function getAgentRows(
   selfUserId?: number,
   userNames: string[] = [],
 ): Promise<AgentAttendanceRow[]> {
-  const { from } = windowFor(asOf);
+  const { from } = await windowForFloored(asOf);
   const rules = await loadPointRules();
   const thresholds = await loadWarningThresholds();
   const grace = graceCeiling(asOf, rules);
@@ -268,7 +281,7 @@ export async function getFilterOptions(
   asOf: string,
   selfUserId?: number,
 ): Promise<{ availableUsers: string[]; availableDepartments: string[] }> {
-  const { from } = windowFor(asOf);
+  const { from } = await windowForFloored(asOf);
   const dc = deptClause(deptFilter, 'u');
   const selfSql = selfUserId ? 'AND u.id = ?' : '';
   const selfParams = selfUserId ? [selfUserId] : [];
@@ -330,7 +343,7 @@ function bandLabel(reasonLabel: string): string {
  * disciplined over.
  */
 export async function getOccurrences(userId: number, asOf: string): Promise<OccurrenceDetail[]> {
-  const { from } = windowFor(asOf);
+  const { from } = await windowForFloored(asOf);
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT o.work_date, o.kind, o.reason_label, o.deviation_seconds, o.points,
             s.start_at AS sched_start, s.end_at AS sched_end,

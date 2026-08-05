@@ -69,16 +69,11 @@ export async function notifySubmissionGraded(
 
     await notificationService.notify(baseEvent, payload, ctx)
 
-    // Per-question critical-fail check.
-    const criticalCount = await prisma.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`
-      SELECT COUNT(*) as n
-      FROM submission_answers sa
-      JOIN form_questions fq ON sa.question_id = fq.id
-      WHERE sa.submission_id = ${submissionId}
-        AND fq.is_critical_fail = 1
-        AND sa.score = 0
-    `)
-    const failed = criticalCount[0] ? Number(criticalCount[0].n) : 0
+    // Critical-fail check. `submissions.critical_fail_count` is written by
+    // saveScoreData during the scoring pass that precedes every call site
+    // here, so it is the authoritative count — re-deriving it from the
+    // answers would duplicate the visibility / N-A rules in scoringUtil.
+    const failed = submission.critical_fail_count ?? 0
     if (failed > 0) {
       await notificationService.notify(
         `submission.critical_fail_by_${reviewerKind}` as const,

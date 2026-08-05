@@ -25,6 +25,7 @@ import logger from '../../config/logger';
 import { Prisma } from '../../generated/prisma/client';
 import type { UnlockEntityType } from '../../generated/prisma/client';
 import { getUnlockSettings } from './unlock.config';
+import { assertKnownReasonCode } from './unlock.reasons';
 import {
   UnlockServiceError,
   type UnlockRequest,
@@ -137,6 +138,7 @@ export async function unlockSubmission(
 ): Promise<UnlockResult> {
   assertAdmin(isAdmin);
   assertReason(req);
+  await assertKnownReasonCode(req.reason_code);
 
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
@@ -250,6 +252,7 @@ export async function unlockDispute(
 ): Promise<UnlockResult> {
   assertAdmin(isAdmin);
   assertReason(req);
+  await assertKnownReasonCode(req.reason_code);
 
   const dispute = await prisma.dispute.findUnique({
     where: { id: disputeId },

@@ -35,6 +35,11 @@ export {
   normalizeWeights
 } from './formBuilder';
 
+// Audit-form metadata seeding — decides which fields keep their saved value
+// and which are re-stamped for the current user.
+export { buildInitialMetadata, metadataFieldKey } from './metadataSeed';
+export type { MetadataPrefillMode } from './metadataSeed';
+
 // Form validation 
 export {
   validateForm,

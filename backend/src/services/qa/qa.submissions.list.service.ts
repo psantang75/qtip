@@ -57,7 +57,10 @@ export async function listCompletedSubmissions(params: CompletedSubmissionsParam
     LEFT JOIN calls c ON s.call_id = c.id
   `
 
-  const rows = await prisma.$queryRaw<{
+  // `unlock_open` is CAST to CHAR because MySQL types EXISTS() as BIGINT and
+  // mysql2 hands that back as a JS BigInt, which res.json() cannot serialize.
+  // Same guard as loadTicketTasks in qa.submissions.detail.service.
+  const rawRows = await prisma.$queryRaw<{
     id: number
     form_id: number
     form_name: string
@@ -71,7 +74,7 @@ export async function listCompletedSubmissions(params: CompletedSubmissionsParam
     score_capped: number
     ai_overall_confidence: number | null
     reopen_count: number
-    unlock_open: number
+    unlock_open: string
   }[]>(
     Prisma.sql`
       SELECT
@@ -87,10 +90,10 @@ export async function listCompletedSubmissions(params: CompletedSubmissionsParam
         s.score_capped,
         s.ai_overall_confidence,
         s.reopen_count,
-        EXISTS (
+        CAST(EXISTS (
           SELECT 1 FROM record_unlock ru
           WHERE ru.entity_type = 'SUBMISSION' AND ru.entity_id = s.id AND ru.state = 'OPEN'
-        ) AS unlock_open,
+        ) AS CHAR) AS unlock_open,
         (
           SELECT sm.value
           FROM submission_metadata sm
@@ -104,6 +107,8 @@ export async function listCompletedSubmissions(params: CompletedSubmissionsParam
       LIMIT ${limit} OFFSET ${offset}
     `,
   )
+
+  const rows = rawRows.map(r => ({ ...r, unlock_open: Number(r.unlock_open) }))
 
   const countResult = await prisma.$queryRaw<{ total: bigint }[]>(
     Prisma.sql`SELECT COUNT(DISTINCT s.id) AS total ${baseFrom} ${whereClause}`,

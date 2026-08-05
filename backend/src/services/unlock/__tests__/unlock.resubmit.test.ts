@@ -37,6 +37,7 @@ type Mock = ReturnType<typeof vi.fn>;
 const db = prisma as unknown as {
   submission: { findUnique: Mock; update: Mock }
   submissionAnswer: { deleteMany: Mock; createMany: Mock }
+  submissionMetadata: { deleteMany: Mock; createMany: Mock }
 };
 
 const QA = 4;
@@ -68,20 +69,60 @@ beforeEach(() => {
   db.submission.update.mockReset().mockResolvedValue({});
   db.submissionAnswer.deleteMany.mockReset().mockResolvedValue({});
   db.submissionAnswer.createMany.mockReset().mockResolvedValue({});
+  db.submissionMetadata.deleteMany.mockReset().mockResolvedValue({});
+  db.submissionMetadata.createMany.mockReset().mockResolvedValue({});
   updateSubmissionScore.mockClear();
 });
 
-describe('promoteDraftToSubmitted — preserveSubmittedAt', () => {
+describe('promoteDraftToSubmitted — metadata replacement', () => {
+  it('replaces the metadata the caller sent', async () => {
+    await service.promoteDraftToSubmitted(
+      100,
+      { ...edits, metadata: [{ field_id: 7, value: 'Cheryl Campbell' }] },
+      QA,
+      { preserveSubmittedAt: true, preserveSubmittedBy: true },
+    );
+
+    expect(db.submissionMetadata.deleteMany).toHaveBeenCalled();
+    expect(db.submissionMetadata.createMany).toHaveBeenCalled();
+  });
+
+  it('treats an empty array as "nothing sent" so a bad request cannot wipe the reviewer and agent', async () => {
+    await service.promoteDraftToSubmitted(100, { ...edits, metadata: [] }, QA, {
+      preserveSubmittedAt: true,
+      preserveSubmittedBy: true,
+    });
+
+    expect(db.submissionMetadata.deleteMany).not.toHaveBeenCalled();
+    expect(db.submissionMetadata.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('promoteDraftToSubmitted — preserveSubmittedAt / preserveSubmittedBy', () => {
   it('leaves the original review date alone on a correction', async () => {
     await service.promoteDraftToSubmitted(100, edits, QA, { preserveSubmittedAt: true });
 
-    expect(flip()).toMatchObject({ status: 'SUBMITTED', submitted_by: QA });
+    expect(flip()).toMatchObject({ status: 'SUBMITTED' });
     expect(flip()).not.toHaveProperty('submitted_at');
   });
 
   it('still stamps a fresh date for the AI promote path, which never submitted before', async () => {
     await service.promoteDraftToSubmitted(100, edits, QA);
     expect(flip().submitted_at).toBeInstanceOf(Date);
+  });
+
+  it('leaves authorship with the original reviewer when someone else corrects it', async () => {
+    await service.promoteDraftToSubmitted(100, edits, QA, {
+      preserveSubmittedAt: true,
+      preserveSubmittedBy: true,
+    });
+
+    expect(flip()).not.toHaveProperty('submitted_by');
+  });
+
+  it('hands authorship to the human on the AI promote path, where they own the draft', async () => {
+    await service.promoteDraftToSubmitted(100, edits, QA);
+    expect(flip().submitted_by).toBe(QA);
   });
 
   it('re-scores the corrected answers and returns the new score for the unlock event', async () => {

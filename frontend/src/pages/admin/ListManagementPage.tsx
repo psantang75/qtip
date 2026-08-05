@@ -56,6 +56,7 @@ const SECTIONS: ListSection[] = [
     label: 'Quality',
     lists: [
       { key: 'qa_form_types', label: 'QA Form Types', description: 'Form type categories used to classify quality audit forms.', tier: 'dynamic', implemented: true, listType: 'qa_form_type' },
+      { key: 'unlock_reasons', label: 'Unlock / Reopen Reasons', description: 'Reasons an admin can pick when reopening a scored review or dispute. Shown in the reopen dialog and the Unlock Register.', tier: 'dynamic', implemented: true, listType: 'unlock_reason' },
     ],
   },
   {

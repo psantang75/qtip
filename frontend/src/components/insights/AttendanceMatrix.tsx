@@ -16,6 +16,7 @@ import { Fragment } from 'react'
 import { cn } from '@/lib/utils'
 import { getThresholdStatus } from '@/constants/kpiDefs'
 import type { KpiDef } from '@/constants/kpiDefs'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { ComplianceMatrixResponse, ComplianceCell } from '@/services/insightsCsrService'
 
 const STATUS_CELL: Record<string, string> = {
@@ -62,6 +63,7 @@ export default function AttendanceMatrix({ data, thresholds }: AttendanceMatrixP
   let lastDept = ''
 
   return (
+    <>
     <div className="overflow-x-auto">
       <table className="w-full text-sm min-w-[760px]">
         <thead>
@@ -116,5 +118,64 @@ export default function AttendanceMatrix({ data, thresholds }: AttendanceMatrixP
         </tbody>
       </table>
     </div>
+    <AdherenceLegend thresholds={thresholds} />
+    </>
+  )
+}
+
+/**
+ * Colour-band key for the matrix. The chip itself is the hover trigger (per the UI
+ * rules — no info-icon buttons), and the ranges are read from the live thresholds
+ * so they always match the cell colouring and the KPI registry.
+ */
+function AdherenceLegend({ thresholds }: { thresholds: AttendanceMatrixProps['thresholds'] }) {
+  const { goal, crit } = thresholds
+  if (goal == null || crit == null) return null
+
+  const bands = [
+    {
+      status: 'good',
+      range: `\u2265 ${goal}%`,
+      label: 'On standard',
+      tip: 'Full scheduled hours delivered. Timing that was made up the same day still lands here.',
+    },
+    {
+      status: 'warning',
+      range: `${crit}\u2013${goal}%`,
+      label: 'Watch',
+      tip: 'A small amount of unworked time — a long lunch or a break beyond the allowance — that was not made up.',
+    },
+    {
+      status: 'critical',
+      range: `< ${crit}%`,
+      label: 'Below standard',
+      tip: 'Meaningful unworked time across the window.',
+    },
+  ]
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="text-[11px] text-slate-400">Adherence scale:</span>
+        {bands.map((b) => (
+          <Tooltip key={b.status}>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] tabular-nums cursor-help',
+                  STATUS_CELL[b.status],
+                )}
+              >
+                <span className="font-semibold">{b.range}</span>
+                <span className="opacity-80">{b.label}</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[240px] text-[11px] leading-relaxed">
+              {b.tip}
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+    </TooltipProvider>
   )
 }

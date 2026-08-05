@@ -100,7 +100,7 @@ export default function ActivityReportShell({
         businessDaysTotal={hideBusinessDays ? undefined : businessDaysTotal}
         dataThroughDate={hideBusinessDays ? undefined : dataThroughDate}
         priorBusinessDays={hideBusinessDays ? undefined : priorBusinessDays}
-        currentDateRange={hideBusinessDays ? undefined : currentDateRange}
+        currentDateRange={currentDateRange}
         priorDateRange={hideBusinessDays ? undefined : priorDateRange}
         onReset={resetFilters}
       />

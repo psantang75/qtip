@@ -14,6 +14,7 @@ import pool from '../../config/database';
 import { RowDataPacket } from 'mysql2';
 import { deptClause } from '../insightsScope';
 import { userNameClause } from './attendance.rollup.service';
+import { getPointsStartDate, floorFrom } from './attendance.settings';
 
 export interface ComplianceCell {
   month: string;
@@ -59,7 +60,9 @@ export async function getComplianceMatrix(
 ): Promise<ComplianceMatrix> {
   const months: string[] = [];
   for (let i = monthsBack - 1; i >= 0; i--) months.push(monthKey(asOf, -i));
-  const from = `${months[0]}-01`;
+  // Floor to the policy start so months before the point system existed contribute
+  // no compliance data, matching the roster's rolling window.
+  const from = floorFrom(`${months[0]}-01`, await getPointsStartDate());
 
   const dc = deptClause(deptFilter, 'u');
   const uc = userNameClause(userNames, 'u');

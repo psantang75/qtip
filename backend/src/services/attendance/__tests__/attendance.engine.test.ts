@@ -10,6 +10,12 @@
  *
  * Baseline shift is 09:00-17:00 with an unpaid 30-minute lunch, so
  * scheduledMinutes is 450 and a flawless day is 450 adherent.
+ *
+ * adherent_minutes is now Schedule Adherence measured as CONFORMANCE: it comes
+ * from the actual minutes worked (workMinutes) plus paid break up to the scheduled
+ * allowance, capped at scheduledMinutes — NOT from the arrival/departure span.
+ * Arrival/departure timing still drives late_seconds/early_leave_seconds and the
+ * LATE/EARLY_LEAVE/ABSENT occurrences, which is why those cases below are unchanged.
  */
 import { describe, it, expect } from 'vitest';
 import { scoreDay } from '../attendance.engine';
@@ -66,9 +72,21 @@ function exception(o: Partial<ScheduledException> = {}): ScheduledException {
 /** Local wall-clock instant on the test date. */
 const at = (hhmm: string, dateStr = D): Date => new Date(`${dateStr}T${hhmm}:00`);
 
-const punches = (first: string | null, last: string | null) => ({
+/**
+ * Punches for a day. `work` and `brk` are the actual on-clock Work and Break
+ * minutes that feed the adherence numerator; they default to 0 for the cases that
+ * only assert timing/occurrences (which come from first/last punch, not minutes).
+ */
+const punches = (
+  first: string | null,
+  last: string | null,
+  work = 0,
+  brk = 0,
+) => ({
   firstPunchAt: first ? at(first) : null,
   lastPunchAt: last ? at(last) : null,
+  workMinutes: work,
+  breakMinutes: brk,
 });
 
 describe('scoreDay — days that carry no denominator', () => {
@@ -87,7 +105,8 @@ describe('scoreDay — days that carry no denominator', () => {
 
 describe('scoreDay — a flawless day', () => {
   it('reads exactly 100% compliant and earns nothing', () => {
-    const r = scoreDay(USER, D, day(), punches('09:00', '17:00'), RULES)!;
+    // 450 on-task minutes delivered against a 450-minute schedule.
+    const r = scoreDay(USER, D, day(), punches('09:00', '17:00', 450), RULES)!;
     expect(r.occurrences).toEqual([]);
     expect(r.daily.adherent_minutes).toBe(450);
     expect(r.daily.scheduled_minutes).toBe(450);
@@ -95,8 +114,9 @@ describe('scoreDay — a flawless day', () => {
     expect(r.daily.is_absent).toBe(false);
   });
 
-  it('does not reward arriving early or staying late', () => {
-    const r = scoreDay(USER, D, day(), punches('08:30', '17:45'), RULES)!;
+  it('caps overtime at 100% rather than rewarding it', () => {
+    // Worked 480 minutes but the day is only worth 450, so it lands at the cap.
+    const r = scoreDay(USER, D, day(), punches('08:30', '17:45', 480), RULES)!;
     expect(r.daily.adherent_minutes).toBe(450);
     expect(r.occurrences).toEqual([]);
   });
@@ -120,8 +140,9 @@ describe('scoreDay — late arrival', () => {
     expect(r.occurrences[0].reason_label).toBe('Late 3+ (0:10:00)');
   });
 
-  it('loses the late minutes from compliance', () => {
-    const r = scoreDay(USER, D, day(), punches('09:30', '17:00'), RULES)!;
+  it('loses the late minutes from adherence when not made up', () => {
+    // 30 minutes late and out on time: 420 worked of 450.
+    const r = scoreDay(USER, D, day(), punches('09:30', '17:00', 420), RULES)!;
     expect(r.daily.adherent_minutes).toBe(420);
     expect(r.occurrences[0]).toMatchObject({ rule_id: 2, points: 0.5 });
   });
@@ -141,7 +162,8 @@ describe('scoreDay — late arrival', () => {
 
 describe('scoreDay — early departure', () => {
   it('charges the early-leave band', () => {
-    const r = scoreDay(USER, D, day(), punches('09:00', '16:30'), RULES)!;
+    // Left 30 minutes early: 420 worked of 450.
+    const r = scoreDay(USER, D, day(), punches('09:00', '16:30', 420), RULES)!;
     expect(r.occurrences).toHaveLength(1);
     expect(r.occurrences[0]).toMatchObject({ kind: 'EARLY_LEAVE', points: 0.5, deviation_seconds: 1800 });
     expect(r.daily.adherent_minutes).toBe(420);
@@ -149,8 +171,8 @@ describe('scoreDay — early departure', () => {
 
   it('treats a missing clock-out as working to the end of shift', () => {
     // A missed punch is a data problem, not evidence somebody left early.
-    // Guessing otherwise invents points that cannot be defended.
-    const r = scoreDay(USER, D, day(), punches('09:00', null), RULES)!;
+    // punchProvider runs the open Work block to shift end, so a full 450 arrives.
+    const r = scoreDay(USER, D, day(), punches('09:00', null, 450), RULES)!;
     expect(r.occurrences).toEqual([]);
     expect(r.daily.early_leave_seconds).toBe(0);
     expect(r.daily.adherent_minutes).toBe(450);
@@ -429,58 +451,56 @@ describe('unapproved time short of a full day scores as lateness', () => {
   });
 });
 
-describe('scoreDay — unpaid segments and overnight shifts', () => {
-  it('excludes an unpaid lunch actually worked through', () => {
-    // Working the lunch does not raise compliance above the schedule; the
-    // denominator is net of unpaid time, so the numerator must be too.
-    const r = scoreDay(USER, D, day(), punches('09:00', '17:00'), RULES)!;
-    expect(r.daily.adherent_minutes).toBe(450);
-  });
+describe('scoreDay — adherence numerator (conformance)', () => {
+  const PAID_BREAK: ScheduledSegment = {
+    activity: 'Break', start: '12:00', end: '12:30', isPaid: true, countsAsCoverage: false,
+  };
+  /** 09:00-17:00 with a single paid 30-min break: 480 scheduled, 30 allowance. */
+  const brkDay = (o: Partial<ScheduledDay> = {}) =>
+    day({ segments: [PAID_BREAK], scheduledMinutes: 480, ...o });
 
-  it('counts a paid break as time worked', () => {
-    const paidBreak: ScheduledSegment = { ...LUNCH, activity: 'Break', isPaid: true };
-    const r = scoreDay(USER, D, day({ segments: [paidBreak], scheduledMinutes: 480 }), punches('09:00', '17:00'), RULES)!;
+  it('credits work plus paid break up to the allowance for a flawless day', () => {
+    // 450 on-task + 30 in the paid break = 480 of 480.
+    const r = scoreDay(USER, D, brkDay(), punches('09:00', '17:00', 450, 30), RULES)!;
     expect(r.daily.adherent_minutes).toBe(480);
   });
 
-  it('cannot exceed 100% when an unpaid segment sits outside the shift', () => {
-    // Three days in the real data look like this: a shift shortened to 16:30 that
-    // still carries its original 17:30 lunch. scheduleProvider now clamps the
-    // deduction to the shift window, so scheduledMinutes is the full 240 and the
-    // numerator cannot outrun it. Before the clamp this produced 100.21%.
-    const strayLunch: ScheduledSegment = {
-      activity: 'Lunch', start: '17:30', end: '18:00', isPaid: false, countsAsCoverage: false,
-    };
-    const d = day({ start: '12:30', end: '16:30', scheduledMinutes: 240, segments: [strayLunch] });
-    const r = scoreDay(USER, D, d, { firstPunchAt: at('12:30'), lastPunchAt: at('16:30') }, RULES)!;
-    expect(r.daily.adherent_minutes).toBe(240);
+  it('does not credit break minutes beyond the allowance', () => {
+    // 45 minutes of break, 15 over. The extra is not credited and the 15 was not
+    // worked, so 435 work + 30 credited break = 465 of 480.
+    const r = scoreDay(USER, D, brkDay(), punches('09:00', '17:00', 435, 45), RULES)!;
+    expect(r.daily.adherent_minutes).toBe(465);
+  });
+
+  it('lowers adherence for a long lunch that is not made up', () => {
+    // Baseline unpaid lunch, no paid-break allowance. A 45-minute lunch means 15
+    // fewer on-task minutes: 435 of 450.
+    const r = scoreDay(USER, D, day(), punches('09:00', '17:00', 435, 0), RULES)!;
+    expect(r.daily.adherent_minutes).toBe(435);
+  });
+
+  it('credits make-up time: a late start worked off still reads 100%', () => {
+    // 15 minutes late but stayed 15 late, so the full 450 is delivered. Adherence
+    // is 100% even though the LATE occurrence still fires from the punch timing —
+    // the two lenses are independent by design.
+    const r = scoreDay(USER, D, day(), punches('09:15', '17:15', 450, 0), RULES)!;
+    expect(r.daily.adherent_minutes).toBe(450);
+    expect(r.occurrences.map((o) => o.kind)).toEqual(['LATE']);
+  });
+
+  it('caps at 100% when the lunch is worked through', () => {
+    // Working the unpaid lunch yields 480 on-task minutes but the day is worth 450.
+    const r = scoreDay(USER, D, day(), punches('09:00', '17:00', 480, 0), RULES)!;
+    expect(r.daily.adherent_minutes).toBe(450);
     expect(r.daily.adherent_minutes).toBeLessThanOrEqual(r.daily.scheduled_minutes);
   });
 
-  it('deducts an unpaid break that falls after midnight on an overnight shift', () => {
-    // 22:00-06:00 with a 02:00 lunch. Timed against the shift's own date the
-    // segment would overlap nothing, leaving it in the numerator while the
-    // schedule takes it out of the denominator.
-    const nightLunch: ScheduledSegment = {
-      activity: 'Lunch', start: '02:00', end: '02:30', isPaid: false, countsAsCoverage: false,
-    };
-    const overnight = day({ start: '22:00', end: '06:00', scheduledMinutes: 450, segments: [nightLunch] });
-    const r = scoreDay(
-      USER, D, overnight,
-      { firstPunchAt: at('22:00'), lastPunchAt: at('06:00', '2026-07-16') },
-      RULES,
-    )!;
-    expect(r.daily.adherent_minutes).toBe(450);
-    expect(r.occurrences).toEqual([]);
-  });
-
-  it('rolls the end of an overnight shift to the next day', () => {
-    // 22:00-06:00. Punching out at 06:00 the following morning is a full clean
-    // shift, not an eight-hour early departure.
+  it('scores an overnight shift from the worked minutes', () => {
+    // 22:00-06:00, a full clean shift is 480 worked of 480.
     const overnight = day({ start: '22:00', end: '06:00', scheduledMinutes: 480, segments: [] });
     const r = scoreDay(
       USER, D, overnight,
-      { firstPunchAt: at('22:00'), lastPunchAt: at('06:00', '2026-07-16') },
+      { firstPunchAt: at('22:00'), lastPunchAt: at('06:00', '2026-07-16'), workMinutes: 480, breakMinutes: 0 },
       RULES,
     )!;
     expect(r.occurrences).toEqual([]);

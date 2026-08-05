@@ -25,6 +25,7 @@ import type { ScheduledDay } from './scheduleProvider';
 import { getPunchCoverage, getPunchDays } from './punchProvider';
 import type { PunchWindow } from './punchProvider';
 import { loadPointRules } from './attendance.config';
+import { getPointsStartDate } from './attendance.settings';
 import {
   matchBand,
   exceedsLateBands,
@@ -86,48 +87,49 @@ function overlapMs(aStart: number, aEnd: number, bStart: number, bEnd: number): 
   return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
 }
 
+function minutesOfHm(hm: string): number {
+  const [h, m] = hm.split(':').map(Number);
+  return h * 60 + m;
+}
+
 /**
- * Minutes actually worked inside the scheduled window, net of unpaid segments.
- * A flawless day therefore equals scheduled_minutes exactly, which is what makes
- * compliance read 100% rather than 87.5%.
+ * Scheduled PAID break minutes for the day — the allowance actual break time is
+ * credited up to. Anything beyond it is overage and never reaches the numerator.
+ * Unpaid segments (lunch) are excluded: lunch is already out of the denominator
+ * and a long lunch simply shows up as fewer worked minutes.
+ */
+function breakAllowanceMinutes(day: ScheduledDay): number {
+  let mins = 0;
+  for (const seg of day.segments) {
+    if (!seg.isPaid) continue;
+    let s = minutesOfHm(seg.start);
+    let e = minutesOfHm(seg.end);
+    if (e < s) e += 24 * 60; // segment crosses midnight
+    mins += Math.max(0, e - s);
+  }
+  return mins;
+}
+
+/**
+ * Total minutes actually worked, as Schedule Adherence measured by CONFORMANCE:
+ * it counts the total time delivered regardless of WHEN, so a break delayed for
+ * coverage or a late arrival made up by staying late both net to 100%. Only time
+ * genuinely not worked pulls it down — a long lunch (unpaid, never in workMinutes)
+ * or break time beyond the paid allowance.
  *
- * A missing Clock Out is treated as working to the end of shift. It is a data
- * problem (there is a `missed_punch` exception type for it), not evidence that
- * somebody left early, and guessing otherwise would invent points.
+ * A flawless day therefore still reads 100%: workMinutes covers the on-task time
+ * and the scheduled paid break is credited in full. Capped at scheduled_minutes so
+ * overtime never reads above 100%. A missing Clock Out is handled upstream (the
+ * open Work block runs to shift end), so it counts as worked, not as leaving early.
  */
 function adherentMinutes(
-  dateStr: string,
-  day: ScheduledDay,
-  bounds: { start: Date; end: Date },
-  firstPunch: Date | null,
-  lastPunch: Date | null,
+  scheduledMinutes: number,
+  breakAllowance: number,
+  workMinutes: number,
+  breakMinutes: number,
 ): number {
-  if (!firstPunch) return 0;
-  const workedStart = Math.max(firstPunch.getTime(), bounds.start.getTime());
-  const workedEnd = Math.min((lastPunch ?? bounds.end).getTime(), bounds.end.getTime());
-  if (workedEnd <= workedStart) return 0;
-
-  let ms = workedEnd - workedStart;
-  for (const seg of day.segments) {
-    if (seg.isPaid) continue;
-    let segStart = combineLocal(dateStr, seg.start).getTime();
-    let segEnd = combineLocal(dateStr, seg.end).getTime();
-    if (segEnd <= segStart) segEnd = combineLocal(addDays(dateStr, 1), seg.end).getTime();
-    // On an overnight shift a segment timed before the shift start belongs to the
-    // morning half. Left on the shift's own date it would overlap nothing and the
-    // unpaid break would never come out of the numerator, while scheduleProvider
-    // takes it out of the denominator — the two sides have to agree.
-    if (segStart < bounds.start.getTime()) {
-      const rolled = combineLocal(addDays(dateStr, 1), seg.start).getTime();
-      if (rolled <= bounds.end.getTime()) {
-        segStart = rolled;
-        segEnd = combineLocal(addDays(dateStr, 1), seg.end).getTime();
-        if (segEnd <= segStart) segEnd = combineLocal(addDays(dateStr, 2), seg.end).getTime();
-      }
-    }
-    ms -= overlapMs(workedStart, workedEnd, segStart, segEnd);
-  }
-  return Math.max(0, Math.round(ms / 60000));
+  const creditedBreak = Math.min(breakMinutes, breakAllowance);
+  return Math.min(scheduledMinutes, Math.max(0, workMinutes + creditedBreak));
 }
 
 /**
@@ -174,7 +176,12 @@ export function scoreDay(
   userId: number,
   dateStr: string,
   day: ScheduledDay,
-  punch: { firstPunchAt: Date | null; lastPunchAt: Date | null },
+  punch: {
+    firstPunchAt: Date | null;
+    lastPunchAt: Date | null;
+    workMinutes: number;
+    breakMinutes: number;
+  },
   rules: PointRule[],
 ): { daily: DailyRow; occurrences: OccurrenceRow[] } | null {
   const bounds = shiftBounds(dateStr, day);
@@ -276,7 +283,12 @@ export function scoreDay(
 
   daily.late_seconds = lateSeconds;
   daily.early_leave_seconds = earlySeconds;
-  daily.adherent_minutes = adherentMinutes(dateStr, day, bounds, punch.firstPunchAt, punch.lastPunchAt);
+  daily.adherent_minutes = adherentMinutes(
+    day.scheduledMinutes,
+    breakAllowanceMinutes(day),
+    punch.workMinutes,
+    punch.breakMinutes,
+  );
 
   const lateBand = matchBand(rules, 'LATE', lateSeconds, dateStr);
   if (lateBand) {
@@ -333,6 +345,12 @@ async function runRecompute(
   toStr: string,
   explicitUserIds?: number[],
 ): Promise<RecomputeResult> {
+  // The policy did not exist before this date, so nothing earlier is ever scored
+  // or deleted — raising the lower bound keeps recompute off pre-policy days
+  // entirely, and the read layer floors to the same date.
+  const start = await getPointsStartDate();
+  if (fromStr < start) fromStr = start;
+
   const coverage = await getPunchCoverage();
   const effectiveTo = coverage.maxDate && coverage.maxDate < toStr ? coverage.maxDate : toStr;
   const empty: RecomputeResult = {
@@ -420,7 +438,7 @@ async function runRecompute(
       Number(uidStr),
       dateStr,
       day,
-      punches.get(k) ?? { firstPunchAt: null, lastPunchAt: null },
+      punches.get(k) ?? { firstPunchAt: null, lastPunchAt: null, workMinutes: 0, breakMinutes: 0 },
       rules,
     );
     if (!scored) continue;

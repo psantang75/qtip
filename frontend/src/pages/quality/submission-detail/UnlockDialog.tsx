@@ -2,16 +2,11 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { AlertTriangle, Unlock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  unlockService,
-  UNLOCK_REASON_CODES,
-  UNLOCK_REASON_LABELS,
-  UNLOCK_MIN_NOTE,
-  type UnlockReasonCode,
-} from '@/services/unlockService'
+import { unlockService, UNLOCK_MIN_NOTE } from '@/services/unlockService'
+import { useUnlockReasons } from '@/hooks/useUnlockReasons'
 
 /**
  * Admin "reopen" confirmation. Mirrors the required-reason refusal dialog in
@@ -37,7 +32,8 @@ interface ApiError {
 }
 
 export function UnlockDialog({ open, entity, entityId, onOpenChange, onSuccess }: Props) {
-  const [reasonCode, setReasonCode] = useState<UnlockReasonCode | ''>('')
+  const { options: reasonOptions } = useUnlockReasons()
+  const [reasonCode, setReasonCode] = useState<string>('')
   const [note, setNote] = useState('')
   const [beyondWindowPrompt, setBeyondWindowPrompt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -54,7 +50,7 @@ export function UnlockDialog({ open, entity, entityId, onOpenChange, onSuccess }
   const mutation = useMutation({
     mutationFn: (confirmBeyondWindow: boolean) => {
       const payload = {
-        reason_code: reasonCode as UnlockReasonCode,
+        reason_code: reasonCode,
         reason_note: note.trim(),
         confirm_beyond_window: confirmBeyondWindow,
       }
@@ -93,25 +89,25 @@ export function UnlockDialog({ open, entity, entityId, onOpenChange, onSuccess }
           <DialogTitle>{isDispute ? 'Reopen Dispute Decision' : 'Reopen Review'}</DialogTitle>
         </DialogHeader>
 
-        <p className="text-[13px] text-slate-600">
+        <DialogDescription className="text-[13px] text-slate-600">
           {isDispute
             ? 'This puts the dispute back in an open state so it can be edited and re-decided. The agent, the original reviewer, and the agent\u2019s manager are notified.'
             : 'This withdraws the score and returns the review to the reviewer as a draft. The agent, the reviewer, and the agent\u2019s manager are notified.'}{' '}
           Every reopen is recorded in the Unlock Register with your name and the reason below.
-        </p>
+        </DialogDescription>
 
         <div className="space-y-1.5">
           <p className="text-[12px] font-medium text-slate-600">
             Reason <span className="text-red-500">*</span>
           </p>
-          <Select value={reasonCode} onValueChange={(v) => setReasonCode(v as UnlockReasonCode)}>
+          <Select value={reasonCode} onValueChange={setReasonCode}>
             <SelectTrigger className="text-[13px]">
-              <SelectValue placeholder="Select a reason code" />
+              <SelectValue placeholder="Select a reason" />
             </SelectTrigger>
             <SelectContent>
-              {UNLOCK_REASON_CODES.map((code) => (
-                <SelectItem key={code} value={code} className="text-[13px]">
-                  {UNLOCK_REASON_LABELS[code]}
+              {reasonOptions.map((opt) => (
+                <SelectItem key={opt.code} value={opt.code} className="text-[13px]">
+                  {opt.label}
                 </SelectItem>
               ))}
             </SelectContent>

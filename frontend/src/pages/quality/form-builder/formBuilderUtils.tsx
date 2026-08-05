@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import { CheckCircle2 } from 'lucide-react'
 import type { Form, FormMetadataField, FormCategory, RadioOption } from '@/types/form.types'
-import { normalizeStandardMetadataOrder } from '@/utils/formMetadataOrder'
+import { normalizeStandardMetadataOrder, isAgentMetadataField } from '@/utils/formMetadataOrder'
 
 export type Step = 'metadata' | 'categories' | 'questions' | 'preview'
 export const STEPS: Step[] = ['metadata', 'categories', 'questions', 'preview']
@@ -13,36 +13,30 @@ export const STEP_LABELS: Record<Step, string> = {
 }
 
 /**
- * When opening an existing form for editing, upgrade its required metadata fields
- * so that any Spacer at index 3 is replaced by "Interaction Date" (DATE).
- * If no such spacer exists and "Interaction Date" is already present, it's a no-op.
+ * Puts a form's metadata fields into the canonical order. Nothing more: a form
+ * shows exactly the fields it defines.
+ *
+ * This used to also rewrite a `SPACER` in the first four slots into a required
+ * "Interaction Date" (DATE), as a bridge for forms predating the current
+ * default template. It was removed because the invented field was mandatory yet
+ * saved against a row the database still classified as `SPACER`, which every
+ * read path filters out — so reviewers were blocked until they filled in a date
+ * that was then discarded. A form that wants an Interaction Date should declare
+ * one in the form builder.
  */
 export function normalizeFormMetadata(form: Form): Form {
   const fields = form.metadata_fields ? [...form.metadata_fields] : []
-  let next = fields
-
-  const hasInteractionDate = fields.slice(0, 4).some(f => f.field_name === 'Interaction Date')
-  if (!hasInteractionDate) {
-    const spacerIdx = fields.slice(0, 4).findIndex(f => f.field_type === 'SPACER')
-    if (spacerIdx !== -1) {
-      next = [...fields]
-      next[spacerIdx] = {
-        ...next[spacerIdx],
-        field_name: 'Interaction Date',
-        field_type: 'DATE',
-        is_required: true,
-      }
-    }
-  }
-
-  return { ...form, metadata_fields: normalizeStandardMetadataOrder(next) }
+  return { ...form, metadata_fields: normalizeStandardMetadataOrder(fields) }
 }
 
 export function freshForm(): Form {
   const defaultMetadata: FormMetadataField[] = [
     { field_name: 'Reviewer Name', field_type: 'AUTO',     is_required: true,  interaction_type: 'CALL', sort_order: 0 },
     { field_name: 'Review Date',   field_type: 'AUTO',     is_required: true,  interaction_type: 'CALL', sort_order: 1 },
-    { field_name: 'Agent',         field_type: 'DROPDOWN', is_required: true,  interaction_type: 'CALL', sort_order: 2 },
+    // Canonical tag is 'CSR' (joined against the users table everywhere on the
+    // backend). The UI relabels it "Agent" via displayFieldName — do NOT store
+    // 'Agent' here or the CSR-keyed joins (list, detail, register) miss it.
+    { field_name: 'CSR',           field_type: 'DROPDOWN', is_required: true,  interaction_type: 'CALL', sort_order: 2 },
     { field_name: 'Interaction Date', field_type: 'DATE',   is_required: true,  interaction_type: 'CALL', sort_order: 3 },
     { field_name: 'Customer ID',   field_type: 'TEXT',     is_required: true,  interaction_type: 'CALL', sort_order: 4 },
     { field_name: 'Customer Name', field_type: 'TEXT',     is_required: true,  interaction_type: 'CALL', sort_order: 5 },
@@ -132,9 +126,16 @@ export function stripRadioFreeTextFlags(form: Form): Form {
 /** Final normalization before create/update API (stable option ids + no free-text flags + metadata order). */
 export function normalizeFormBuilderPayload(form: Form): Form {
   const stripped = stripRadioFreeTextFlags(ensureFormRadioOptionValues(form))
+  // The agent picker is stored under the canonical 'CSR' tag (the UI shows it
+  // as "Agent"). Whatever the admin typed, force it back to 'CSR' so every
+  // CSR-keyed backend join (submissions list, review detail, unlock register)
+  // resolves the agent from the users table.
+  const canonicalized = (stripped.metadata_fields || []).map(f =>
+    isAgentMetadataField(f) ? { ...f, field_name: 'CSR' } : f,
+  )
   return {
     ...stripped,
-    metadata_fields: normalizeStandardMetadataOrder(stripped.metadata_fields || []),
+    metadata_fields: normalizeStandardMetadataOrder(canonicalized),
   }
 }
 

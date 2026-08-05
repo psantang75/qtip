@@ -54,6 +54,38 @@ export async function getManagedDepartmentIds(managerId: number): Promise<number
 }
 
 /**
+ * True when `managerId` manages the department of the CSR agent on
+ * `submissionId`. Mirrors the access check in
+ * `manager.audits.detail.service.assertAccess` so "a manager can act on their
+ * own people's reviews" is enforced identically everywhere (team-audit view
+ * and draft edit/re-score share one rule).
+ *
+ * The agent is the `CSR` metadata value on the submission; the manager owns
+ * that agent's department through an active `department_managers` grant.
+ */
+export async function isManagerOfSubmissionAgent(
+  managerId: number,
+  submissionId: number,
+): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+    SELECT s.id
+    FROM submissions s
+    JOIN submission_metadata sm ON sm.submission_id = s.id
+    JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
+    JOIN users csr_user ON CAST(sm.value AS UNSIGNED) = csr_user.id
+    JOIN departments dept ON csr_user.department_id = dept.id
+    JOIN department_managers dm ON dept.id = dm.department_id
+    WHERE s.id = ${submissionId}
+      AND fmf.field_name = 'CSR'
+      AND dm.manager_id = ${managerId}
+      AND dm.is_active = 1
+      AND dept.is_active = 1
+    LIMIT 1
+  `)
+  return rows.length > 0
+}
+
+/**
  * Returns active department ids visible to the caller.
  * - `Manager`: only the departments they own.
  * - any other authorised role: every active department.

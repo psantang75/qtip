@@ -28,7 +28,7 @@ import prisma from '../../config/prisma';
 import logger from '../../config/logger';
 import { loadWarningThresholds } from './attendance.config';
 import { resolveWarningLevel } from './attendance.rules';
-import { windowFor } from './attendance.rollup.service';
+import { windowForFloored } from './attendance.rollup.service';
 import { dateOnlyValue } from '../scheduling/schedule.dates';
 import { resolveRecipients } from '../notifications/RoleResolver';
 
@@ -46,7 +46,7 @@ function dedupeKeyFor(claimKey: string, recipientId: number, csrId: number): str
  */
 export async function queueThresholdCrossings(asOf: string): Promise<number> {
   try {
-    const { from } = windowFor(asOf);
+    const { from } = await windowForFloored(asOf);
     const thresholds = await loadWarningThresholds();
 
     const totals = await prisma.attendanceOccurrence.groupBy({

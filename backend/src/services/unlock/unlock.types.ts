@@ -1,7 +1,7 @@
 /**
  * Shared types for the admin unlock / reopen feature.
  */
-import type { UnlockEntityType, UnlockReasonCode } from '../../generated/prisma/client';
+import type { UnlockEntityType } from '../../generated/prisma/client';
 
 export class UnlockServiceError extends Error {
   public readonly statusCode: number;
@@ -16,7 +16,8 @@ export class UnlockServiceError extends Error {
 }
 
 export interface UnlockRequest {
-  reason_code: UnlockReasonCode;
+  /** A code from the admin-managed `unlock_reason` list (validated server-side). */
+  reason_code: string;
   reason_note: string;
   /**
    * Break-glass. Required when the record is older than the configured

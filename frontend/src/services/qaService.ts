@@ -198,6 +198,19 @@ export interface SubmissionDetail extends Submission {
     prior_status: string
     prior_score: number | null
   } | null
+  /** The most recent finished reopen, so a corrected review shows its history. */
+  last_reopen?: {
+    id: number
+    entity_type: 'SUBMISSION' | 'DISPUTE'
+    state: 'CLOSED' | 'AUTO_RELOCKED'
+    reason_code: string
+    reason_note: string
+    unlocked_at: string
+    unlocked_by_name: string | null
+    closed_at: string | null
+    prior_score: number | null
+    new_score: number | null
+  } | null
 }
 
 export interface FormQuestion {
