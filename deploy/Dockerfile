@@ -14,6 +14,11 @@ COPY backend/tsconfig.json ./
 COPY backend/prisma ./prisma/
 RUN npm install --legacy-peer-deps
 COPY backend/ ./
+# Regenerate the Prisma client from the copied schema. The generated client under
+# src/generated is git-ignored, so the build context can carry a stale copy from an
+# older schema; regenerating here guarantees the client matches schema.prisma before
+# tsc compiles it. Without this, new models are missing from the shipped client.
+RUN npx prisma generate
 RUN npx tsc --skipLibCheck || true
 RUN npm run copy:assets
 
