@@ -19,6 +19,9 @@ vi.mock('../../../config/prisma', () => {
     dispute: { findUnique: vi.fn(), update: vi.fn() },
     recordUnlock: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     auditLog: { create: vi.fn() },
+    // getActiveUnlockReasons falls back to the built-in set (which includes
+    // SCORING_ERROR) when the managed list query returns nothing.
+    $queryRaw: vi.fn(async () => []),
     $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(db)),
   };
   return { default: db };

@@ -147,6 +147,12 @@ export default function AuditFormPage() {
     retry: false, // 403/404/409 from the draft endpoint are deterministic — don't retry
   })
 
+  // `reopened` only lives on the resume-mode DraftForEdit shape; aiPrefill's
+  // union also covers AiDraftDetail and the overlay object, so read it
+  // defensively rather than narrowing the whole union.
+  const isReopenedResume =
+    prefillMode === 'resume' && (aiPrefill as { reopened?: boolean } | null | undefined)?.reopened === true
+
   // Pull the most useful error detail off an axios error so the
   // AI-mode error state can show "this submission isn't an AI draft"
   // instead of a generic "request failed" or — worse — a blank page.
@@ -645,14 +651,14 @@ export default function AuditFormPage() {
                 className="bg-primary hover:bg-primary/90 text-white">
                 <Send className="h-4 w-4 mr-1.5" />
                 {isSubmitting
-                  ? (prefillMode === 'promote' ? 'Promoting…' : prefillMode === 'overlay' ? 'Recording…' : prefillMode === 'resume' && aiPrefill?.reopened ? 'Re-submitting…' : 'Submitting…')
-                  : (prefillMode === 'promote' ? 'Promote to Submitted' : prefillMode === 'overlay' ? 'Save Calibration' : prefillMode === 'resume' && aiPrefill?.reopened ? 'Re-submit Review' : 'Submit Review')}
+                  ? (prefillMode === 'promote' ? 'Promoting…' : prefillMode === 'overlay' ? 'Recording…' : isReopenedResume ? 'Re-submitting…' : 'Submitting…')
+                  : (prefillMode === 'promote' ? 'Promote to Submitted' : prefillMode === 'overlay' ? 'Save Calibration' : isReopenedResume ? 'Re-submit Review' : 'Submit Review')}
               </Button>
             </div>
           </div>
         </div>
 
-        {prefillMode === 'resume' && aiPrefill?.reopened && (
+        {isReopenedResume && (
           <div className="mt-2 mb-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
             <div className="space-y-2">
               <span className="text-[13px] font-semibold text-neutral-900">Reopened for Correction</span>

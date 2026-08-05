@@ -32,7 +32,9 @@ export const UNLOCK_REASON_LABELS: Record<UnlockReasonCode, string> = {
 export const UNLOCK_MIN_NOTE = 20
 
 export interface UnlockPayload {
-  reason_code: UnlockReasonCode
+  // A code from the admin-managed `unlock_reason` list, not a fixed enum, so
+  // admin-added reasons work. The server validates it against the live list.
+  reason_code: string
   reason_note: string
   confirm_beyond_window?: boolean
 }
@@ -57,7 +59,7 @@ export interface UnlockRegisterRow {
   unlocked_at: string
   unlocked_by: number
   unlocked_by_name: string | null
-  reason_code: UnlockReasonCode
+  reason_code: string
   reason_note: string
   prior_status: string
   prior_score: number | null
@@ -87,7 +89,7 @@ export interface UnlockStats {
   per_hundred_finalized: number | null
   by_admin: Array<{ user_id: number; name: string | null; count: number; avg_score_delta: number | null }>
   by_assignee: Array<{ user_id: number; name: string | null; count: number }>
-  by_reason: Array<{ reason_code: UnlockReasonCode; count: number }>
+  by_reason: Array<{ reason_code: string; count: number }>
 }
 
 export interface UnlockRegisterFilters {

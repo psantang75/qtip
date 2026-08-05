@@ -34,6 +34,10 @@ vi.mock('../attendance.config', () => ({
   loadWarningThresholds: mocks.loadWarningThresholds,
 }));
 
+vi.mock('../attendance.rollup.service', () => ({
+  windowForFloored: vi.fn(async () => ({ asOf: '2026-08-03', from: '2026-05-05' })),
+}));
+
 vi.mock('../../notifications/RoleResolver', () => ({
   resolveRecipients: mocks.resolveRecipients,
 }));
