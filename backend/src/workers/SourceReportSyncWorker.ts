@@ -118,7 +118,12 @@ export class SourceReportSyncWorker extends BaseInsightsWorker {
     let fields: FieldPacket[] = [];
 
     if (statements.length <= 1) {
-      [rows, fields] = (await sourcePool.query({ sql, namedPlaceholders: true }, params)) as [
+      // Use the comment-stripped statement, not the raw file: mysql2's
+      // named-placeholder parser leaves :params unbound when comments are present
+      // (e.g. a `:pFromDate` mention in the header comment), sending literal
+      // `:pFromDate` to MySQL. splitSqlStatements already strips comments.
+      const single = statements[0] ?? sql;
+      [rows, fields] = (await sourcePool.query({ sql: single, namedPlaceholders: true }, params)) as [
         RowDataPacket[],
         FieldPacket[],
       ];
