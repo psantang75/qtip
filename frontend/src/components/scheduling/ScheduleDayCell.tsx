@@ -104,11 +104,13 @@ interface CellProps {
   /** Shared day axis — week view only, so shifts line up across columns. */
   axis?: DayAxis
   onClick?: () => void
+  /** Self/agent view: no edit affordances, cells are not interactive. */
+  readOnly?: boolean
 }
 
 export function ScheduleDayCell({
   personName, dateLabel, shift, exceptions, isWeekend, holidayName,
-  variant = 'period', axis, onClick,
+  variant = 'period', axis, onClick, readOnly,
 }: CellProps) {
   const isWeek = variant === 'week'
   const minH = isWeek ? 'min-h-[66px]' : 'min-h-[46px]'
@@ -122,6 +124,9 @@ export function ScheduleDayCell({
   }
 
   if (!shift) {
+    if (readOnly) {
+      return <div className={cn('h-full w-full', minH, isWeekend ? 'bg-slate-50' : 'bg-white')} />
+    }
     return (
       <button
         type="button"
@@ -145,60 +150,65 @@ export function ScheduleDayCell({
   const worst = exceptions.find(e => !e.excused) ?? exceptions[0]
   const ordered = [...shift.breaks].sort((a, b) => minutesOf(a.start) - minutesOf(b.start))
 
+  const cellClass = cn(
+    'h-full w-full px-1.5 py-1.5 text-left',
+    !readOnly && 'transition-colors hover:bg-primary/5',
+    minH,
+    isDraft && 'bg-[repeating-linear-gradient(135deg,transparent,transparent_5px,rgba(148,163,184,0.09)_5px,rgba(148,163,184,0.09)_10px)]',
+    worst && (worst.excused
+      ? 'border-l-2 border-l-warning bg-warning/[0.06]'
+      : 'border-l-2 border-l-destructive bg-destructive/[0.06]'),
+  )
+
+  const cellInner = (
+    <>
+      <div className={cn(
+        'whitespace-nowrap font-semibold tabular-nums',
+        isWeek ? 'text-[13px]' : 'text-[11px]',
+        isDraft ? 'text-slate-400' : 'text-slate-800',
+      )}>
+        {fmtCompact(shift.start)}&ndash;{fmtCompact(shift.end)}
+      </div>
+
+      {isWeek && axis
+        ? <ScaledBar shift={shift} axis={axis} muted={isDraft} exceptions={exceptions} />
+        : <BreakRibbon shift={shift} exceptions={exceptions} />}
+
+      {/* Breaks in the order they happen — break, lunch, break — so the
+          line reads as the shape of the day rather than a grouping. */}
+      {isWeek && ordered.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 text-[10px] tabular-nums leading-tight text-slate-500">
+          {ordered.map((b, i) => (
+            <span key={i} className="whitespace-nowrap">
+              <span className={cn(
+                'font-bold',
+                b.kind === 'LUNCH' ? 'text-warning' : 'text-warning/70',
+              )}>
+                {b.kind === 'LUNCH' ? 'L' : 'B'}
+              </span>{' '}
+              {fmtCompact(b.start)}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {worst && (
+        <div className={cn(
+          'mt-0.5 truncate text-[10px] font-medium leading-tight',
+          worst.excused ? 'text-warning' : 'text-destructive',
+        )}>
+          {worst.isFullDay ? worst.typeLabel : `${fmtCompact(worst.start!)}\u2013${fmtCompact(worst.end!)}`}
+        </div>
+      )}
+    </>
+  )
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onClick}
-          className={cn(
-            'h-full w-full px-1.5 py-1.5 text-left transition-colors hover:bg-primary/5',
-            minH,
-            isDraft && 'bg-[repeating-linear-gradient(135deg,transparent,transparent_5px,rgba(148,163,184,0.09)_5px,rgba(148,163,184,0.09)_10px)]',
-            worst && (worst.excused
-              ? 'border-l-2 border-l-warning bg-warning/[0.06]'
-              : 'border-l-2 border-l-destructive bg-destructive/[0.06]'),
-          )}
-        >
-          <div className={cn(
-            'whitespace-nowrap font-semibold tabular-nums',
-            isWeek ? 'text-[13px]' : 'text-[11px]',
-            isDraft ? 'text-slate-400' : 'text-slate-800',
-          )}>
-            {fmtCompact(shift.start)}&ndash;{fmtCompact(shift.end)}
-          </div>
-
-          {isWeek && axis
-            ? <ScaledBar shift={shift} axis={axis} muted={isDraft} exceptions={exceptions} />
-            : <BreakRibbon shift={shift} exceptions={exceptions} />}
-
-          {/* Breaks in the order they happen — break, lunch, break — so the
-              line reads as the shape of the day rather than a grouping. */}
-          {isWeek && ordered.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 text-[10px] tabular-nums leading-tight text-slate-500">
-              {ordered.map((b, i) => (
-                <span key={i} className="whitespace-nowrap">
-                  <span className={cn(
-                    'font-bold',
-                    b.kind === 'LUNCH' ? 'text-warning' : 'text-warning/70',
-                  )}>
-                    {b.kind === 'LUNCH' ? 'L' : 'B'}
-                  </span>{' '}
-                  {fmtCompact(b.start)}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {worst && (
-            <div className={cn(
-              'mt-0.5 truncate text-[10px] font-medium leading-tight',
-              worst.excused ? 'text-warning' : 'text-destructive',
-            )}>
-              {worst.isFullDay ? worst.typeLabel : `${fmtCompact(worst.start!)}\u2013${fmtCompact(worst.end!)}`}
-            </div>
-          )}
-        </button>
+        {readOnly
+          ? <div className={cellClass}>{cellInner}</div>
+          : <button type="button" onClick={onClick} className={cellClass}>{cellInner}</button>}
       </TooltipTrigger>
 
       <TooltipContent side="bottom" className="w-[248px] rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
@@ -244,9 +254,11 @@ export function ScheduleDayCell({
           </div>
         )}
 
-        <div className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-primary">
-          Click to edit this shift
-        </div>
+        {!readOnly && (
+          <div className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-primary">
+            Click to edit this shift
+          </div>
+        )}
       </TooltipContent>
     </Tooltip>
   )

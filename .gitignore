@@ -8,6 +8,10 @@ node_modules/
 .env.*.local
 backend/.env
 frontend/.env
+# Backups/exports of env files hold the same live secrets — never commit them.
+.env.bak*
+*.env.bak*
+**/.env.*bak*
 
 # ── Build Output ─────────────────────────────────────────────────────────────
 dist/

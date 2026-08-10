@@ -9,7 +9,10 @@ import schedulingService, { type ApiTemplate } from '@/services/schedulingServic
 import type { MockTemplate, TemplateDay, MockBreak } from '@/components/scheduling/mockScheduleData'
 
 const OFF: TemplateDay = { working: false, start: '08:00', end: '17:00', breaks: [] }
-const hm = (t: string) => t.slice(0, 5) // 'HH:MM:SS' | 'HH:MM' -> 'HH:MM'
+// Prisma Time columns come back as an epoch-anchored Date, so JSON gives an ISO
+// datetime ('1970-01-01T08:00:00.000Z'); take the UTC wall-clock. Plain
+// 'HH:MM(:SS)' strings are handled too.
+const hm = (t: string) => (t.includes('T') ? t.slice(11, 16) : t.slice(0, 5))
 
 export function adaptTemplate(t: ApiTemplate): MockTemplate {
   const days: TemplateDay[] = Array.from({ length: 7 }, () => ({ ...OFF }))

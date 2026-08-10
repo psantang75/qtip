@@ -13,7 +13,7 @@ import type { MockPerson, MockShift, MockException, MockBreak } from '@/componen
 
 const UNASSIGNED = 'Unassigned'
 
-function toBreak(label: string, start: string, end: string): MockBreak {
+export function toBreak(label: string, start: string, end: string): MockBreak {
   return { kind: label.toLowerCase().includes('lunch') ? 'LUNCH' : 'BREAK', start, end }
 }
 

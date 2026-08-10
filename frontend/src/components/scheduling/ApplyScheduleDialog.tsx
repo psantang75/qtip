@@ -12,6 +12,7 @@
  * is written, because a bulk write between 1 and 14 days has no undo.
  */
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { CalendarPlus, Copy } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -21,10 +22,11 @@ import {
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import {
-  addDays, MOCK_HOLIDAYS, MOCK_TEMPLATES, parseLocal, startOfWeek, toLocalIso,
+  addDays, MOCK_TEMPLATES, parseLocal, startOfWeek,
   type MockPerson, type MockTemplate,
 } from './mockScheduleData'
 import { TemplateTable } from './TemplateTable'
+import schedulingService from '@/services/schedulingService'
 
 export type ApplyMode = 'template' | 'copy'
 export type ApplyScope = 'day' | 'week' | 'period'
@@ -105,7 +107,6 @@ export function ApplyScheduleDialog({
     setTemplateId(undefined)
   }, [open, view])
 
-  const today = toLocalIso(new Date())
   const targetWeek = view === 'day' ? startOfWeek(day) : anchor
 
   const dates = useMemo(() => {
@@ -118,34 +119,25 @@ export function ApplyScheduleDialog({
   const sourceFor = (iso: string) => addDays(sourceWeek, parseLocal(iso).getDay())
 
   const template = templateList.find(t => t.id === templateId)
+  const ready = mode === 'copy' || !!template
 
-  const preview = useMemo(() => {
-    let write = 0
-    let overwrite = 0
-    let locked = 0
-    let holiday = 0
-    let clearDays = 0
-
-    for (const p of people) {
-      for (const iso of dates) {
-        if (MOCK_HOLIDAYS[iso]) { holiday += 1; continue }
-
-        const existing = p.shifts.find(s => s.date === iso)
-        if (existing && existing.status === 'PUBLISHED' && iso <= today) { locked += 1; continue }
-
-        const hasSource = mode === 'copy'
-          ? p.shifts.some(s => s.date === sourceFor(iso))
-          : !!template?.days[parseLocal(iso).getDay()].working
-
-        if (!hasSource) { if (existing) clearDays += 1; continue }
-
-        write += 1
-        if (existing) overwrite += 1
-      }
-    }
-    return { write, overwrite, locked, holiday, clearDays }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [people, dates, mode, sourceWeek, template, today])
+  // Preview runs the identical server code path with dry_run, so the counts shown
+  // can never drift from what the write does — and copy mode can see the prior
+  // week, which the loaded grid does not contain (the old client-side tally could
+  // not, which is why it always read 0).
+  const previewQ = useQuery({
+    queryKey: ['apply-preview', mode, dates, sourceWeek, templateId, people.map(p => p.id)],
+    queryFn: () => schedulingService.apply({
+      mode,
+      dates,
+      user_ids: people.map(p => p.id),
+      template_id: mode === 'template' ? templateId : undefined,
+      source_week_start: mode === 'copy' ? sourceWeek : undefined,
+      dry_run: true,
+    }),
+    enabled: open && people.length > 0 && ready,
+  })
+  const preview = previewQ.data
 
   /** The one sentence that has to be unambiguous. */
   const sentence = mode === 'copy'
@@ -161,7 +153,6 @@ export function ApplyScheduleDialog({
         : `Writes "${template?.name}" onto both ${fmtWeek(targetWeek)} and ${fmtWeek(addDays(targetWeek, 7))}.`
 
   const Icon = mode === 'copy' ? Copy : CalendarPlus
-  const ready = mode === 'copy' || !!template
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -224,27 +215,35 @@ export function ApplyScheduleDialog({
             <p className="mt-1 text-[12.5px] leading-snug text-slate-700">
               {ready ? sentence : 'Pick a template above.'}
             </p>
-            <ul className={cn('mt-2 space-y-1 text-[12.5px] text-slate-600', !ready && 'hidden')}>
-              <li>
-                Writes <span className="font-semibold text-neutral-900">{preview.write}</span>{' '}
-                {preview.write === 1 ? 'shift' : 'shifts'} across {dates.length}{' '}
-                {dates.length === 1 ? 'day' : 'days'}.
-              </li>
-              {preview.overwrite > 0 && (
-                <li>Replaces {preview.overwrite} existing draft {preview.overwrite === 1 ? 'shift' : 'shifts'}.</li>
-              )}
-              {preview.clearDays > 0 && (
-                <li>Clears {preview.clearDays} {preview.clearDays === 1 ? 'day' : 'days'} the source leaves off.</li>
-              )}
-              {preview.holiday > 0 && (
-                <li>Skips {preview.holiday} company {preview.holiday === 1 ? 'holiday' : 'holidays'}.</li>
-              )}
-              {preview.locked > 0 && (
-                <li className="text-destructive">
-                  Skips {preview.locked} published {preview.locked === 1 ? 'day' : 'days'} that have already elapsed.
-                </li>
-              )}
-            </ul>
+            {ready && (
+              previewQ.isFetching && !preview ? (
+                <p className="mt-2 text-[12.5px] text-slate-500">{'Calculating\u2026'}</p>
+              ) : previewQ.isError ? (
+                <p className="mt-2 text-[12.5px] text-destructive">Couldn't calculate this. Try again.</p>
+              ) : preview ? (
+                <ul className="mt-2 space-y-1 text-[12.5px] text-slate-600">
+                  <li>
+                    Writes <span className="font-semibold text-neutral-900">{preview.write}</span>{' '}
+                    {preview.write === 1 ? 'shift' : 'shifts'} across {dates.length}{' '}
+                    {dates.length === 1 ? 'day' : 'days'}.
+                  </li>
+                  {preview.overwrite > 0 && (
+                    <li>Replaces {preview.overwrite} existing draft {preview.overwrite === 1 ? 'shift' : 'shifts'}.</li>
+                  )}
+                  {preview.clearDays > 0 && (
+                    <li>Clears {preview.clearDays} {preview.clearDays === 1 ? 'day' : 'days'} the source leaves off.</li>
+                  )}
+                  {preview.holiday > 0 && (
+                    <li>Skips {preview.holiday} company {preview.holiday === 1 ? 'holiday' : 'holidays'}.</li>
+                  )}
+                  {preview.published > 0 && (
+                    <li className="text-destructive">
+                      Skips {preview.published} published {preview.published === 1 ? 'day' : 'days'}.
+                    </li>
+                  )}
+                </ul>
+              ) : null
+            )}
           </div>
         </div>
 
@@ -252,7 +251,11 @@ export function ApplyScheduleDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
             variant="primary"
-            disabled={!ready || !people.length || preview.write + preview.clearDays === 0 || submitting}
+            disabled={
+              !ready || !people.length || submitting ||
+              previewQ.isFetching || !preview ||
+              preview.write + preview.overwrite + preview.clearDays === 0
+            }
             onClick={async () => {
               if (onConfirm) {
                 await onConfirm({

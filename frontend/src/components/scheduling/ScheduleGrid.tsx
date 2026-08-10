@@ -30,6 +30,8 @@ const UNASSIGNED = 'Unassigned'
 const SEL_COL = 'w-11 min-w-[44px] max-w-[44px] border-r border-slate-200'
 const NAME_COL = 'w-[186px] min-w-[186px]'
 const NAME_LEFT = 'left-[44px]'
+/** Stable empty selection for read-only callers that pass no selection state. */
+const EMPTY_SELECTION: Set<number> = new Set()
 
 function weekLabel(iso: string): string {
   const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -41,20 +43,25 @@ interface GridProps {
   weekStarts: string[]
   variant: 'week' | 'period'
   onEditShift?: (personId: number, date: string) => void
-  selected: Set<number>
+  selected?: Set<number>
   /** Sets the selected state for a group of people at once. */
-  onSelect: (ids: number[], next: boolean) => void
+  onSelect?: (ids: number[], next: boolean) => void
   /** Live per-department green/yellow minimums from Coverage settings. */
   coverage?: CoverageSettings
+  /** Self/agent view: no checkboxes, no publish, no edit; one ungrouped person. */
+  readOnly?: boolean
 }
 
 export function ScheduleGrid({
-  people, weekStarts, variant, onEditShift, selected, onSelect, coverage,
+  people, weekStarts, variant, onEditShift, selected, onSelect, coverage, readOnly,
 }: GridProps) {
   const today = toLocalIso(new Date())
   const days = weekStarts.flatMap(ws => Array.from({ length: 7 }, (_, i) => addDays(ws, i)))
   const isWeek = variant === 'week'
   const colW = isWeek ? 'min-w-[150px]' : 'min-w-[92px]'
+  const sel = selected ?? EMPTY_SELECTION
+  // With no checkbox column, the sticky name column sits flush against the edge.
+  const nameLeft = readOnly ? 'left-0' : NAME_LEFT
 
   /** One axis for the whole week so bars are comparable across columns. */
   const axis = isWeek
@@ -79,8 +86,8 @@ export function ScheduleGrid({
       <TableHeader>
         {/* Week band — publish is a per-week act, so it lives here. */}
         <tr>
-          <th className={cn(SEL_COL, 'sticky left-0 z-20 border-b border-slate-200 bg-white')} />
-          <th className={cn(NAME_COL, NAME_LEFT, 'sticky z-20 border-b border-r border-slate-200 bg-white')} />
+          {!readOnly && <th className={cn(SEL_COL, 'sticky left-0 z-20 border-b border-slate-200 bg-white')} />}
+          <th className={cn(NAME_COL, nameLeft, 'sticky z-20 border-b border-r border-slate-200 bg-white')} />
           {weekStarts.map(ws => {
             const state = weekState(ws)
             const stale = state === 'draft' && ws <= today
@@ -114,7 +121,7 @@ export function ScheduleGrid({
                       bars scaled {hourLabel(axis.startMin)}&ndash;{hourLabel(axis.endMin)}
                     </span>
                   )}
-                  {state === 'draft' && (
+                  {!readOnly && state === 'draft' && (
                     <Button size="sm" variant="primary" className={cn('h-6 px-2 text-[11px]', !axis && 'ml-auto')}>
                       Publish week
                     </Button>
@@ -126,14 +133,16 @@ export function ScheduleGrid({
         </tr>
 
         <tr>
-          <th className={cn(SEL_COL, 'sticky left-0 z-20 border-b border-slate-200 bg-white px-0 py-2 text-center align-middle')}>
-            <Checkbox
-              checked={allIds.length > 0 && allIds.every(id => selected.has(id))}
-              onCheckedChange={v => onSelect(allIds, v === true)}
-              aria-label="Select all employees"
-            />
-          </th>
-          <th className={cn(NAME_COL, NAME_LEFT, 'sticky z-20 border-b border-r border-slate-200 bg-white py-2 px-3 text-left align-middle text-[11px] font-semibold uppercase tracking-wide text-slate-400')}>
+          {!readOnly && (
+            <th className={cn(SEL_COL, 'sticky left-0 z-20 border-b border-slate-200 bg-white px-0 py-2 text-center align-middle')}>
+              <Checkbox
+                checked={allIds.length > 0 && allIds.every(id => sel.has(id))}
+                onCheckedChange={v => onSelect?.(allIds, v === true)}
+                aria-label="Select all employees"
+              />
+            </th>
+          )}
+          <th className={cn(NAME_COL, nameLeft, 'sticky z-20 border-b border-r border-slate-200 bg-white py-2 px-3 text-left align-middle text-[11px] font-semibold uppercase tracking-wide text-slate-400')}>
             Employee
           </th>
           {days.map(iso => {
@@ -184,55 +193,61 @@ export function ScheduleGrid({
       <TableBody>
         {groups.map(({ dept, members }) => (
           <Fragment key={dept}>
-            <tr className={dept === UNASSIGNED ? 'bg-warning/15' : 'bg-slate-200/70'}>
-              <td className={cn(
-                SEL_COL,
-                'sticky left-0 border-b border-slate-200 py-1.5 text-center align-middle',
-                dept === UNASSIGNED ? 'bg-warning/15' : 'bg-slate-200/70',
-              )}>
-                <Checkbox
-                  checked={members.every(m => selected.has(m.id))}
-                  onCheckedChange={v => onSelect(members.map(m => m.id), v === true)}
-                  aria-label={`Select everyone in ${dept}`}
-                />
-              </td>
-              <td
-                colSpan={days.length + 1}
-                className={cn(
-                  'border-b border-slate-200 px-3 py-1.5 align-middle text-[11px] font-semibold uppercase tracking-wide',
-                  dept === UNASSIGNED ? 'text-warning' : 'text-slate-700',
-                )}
-              >
-                {dept}
-                {dept === UNASSIGNED && (
-                  <span className="ml-2 font-normal normal-case tracking-normal text-slate-500">
-                    no department set &mdash; visible to admins only
-                  </span>
-                )}
-              </td>
-            </tr>
+            {/* A single self/agent view has no roster to group, so the department
+                banner (and its admin-only Unassigned note) is suppressed. */}
+            {!readOnly && (
+              <tr className={dept === UNASSIGNED ? 'bg-warning/15' : 'bg-slate-200/70'}>
+                <td className={cn(
+                  SEL_COL,
+                  'sticky left-0 border-b border-slate-200 py-1.5 text-center align-middle',
+                  dept === UNASSIGNED ? 'bg-warning/15' : 'bg-slate-200/70',
+                )}>
+                  <Checkbox
+                    checked={members.every(m => sel.has(m.id))}
+                    onCheckedChange={v => onSelect?.(members.map(m => m.id), v === true)}
+                    aria-label={`Select everyone in ${dept}`}
+                  />
+                </td>
+                <td
+                  colSpan={days.length + 1}
+                  className={cn(
+                    'border-b border-slate-200 px-3 py-1.5 align-middle text-[11px] font-semibold uppercase tracking-wide',
+                    dept === UNASSIGNED ? 'text-warning' : 'text-slate-700',
+                  )}
+                >
+                  {dept}
+                  {dept === UNASSIGNED && (
+                    <span className="ml-2 font-normal normal-case tracking-normal text-slate-500">
+                      no department set &mdash; visible to admins only
+                    </span>
+                  )}
+                </td>
+              </tr>
+            )}
 
             {members.map(person => {
               const scheduled = person.shifts.some(s => days.includes(s.date))
               return (
                 <tr key={person.id} className="group">
-                  <td className={cn(
-                    SEL_COL,
-                    'sticky left-0 z-10 border-b border-slate-200 py-1.5 text-center align-middle',
-                    selected.has(person.id) ? 'bg-primary/[0.06]' : 'bg-white group-hover:bg-slate-50',
-                  )}>
-                    <Checkbox
-                      className="mx-auto"
-                      checked={selected.has(person.id)}
-                      onCheckedChange={v => onSelect([person.id], v === true)}
-                      aria-label={`Select ${person.name}`}
-                    />
-                  </td>
+                  {!readOnly && (
+                    <td className={cn(
+                      SEL_COL,
+                      'sticky left-0 z-10 border-b border-slate-200 py-1.5 text-center align-middle',
+                      sel.has(person.id) ? 'bg-primary/[0.06]' : 'bg-white group-hover:bg-slate-50',
+                    )}>
+                      <Checkbox
+                        className="mx-auto"
+                        checked={sel.has(person.id)}
+                        onCheckedChange={v => onSelect?.([person.id], v === true)}
+                        aria-label={`Select ${person.name}`}
+                      />
+                    </td>
+                  )}
                   <td className={cn(
                     NAME_COL,
-                    NAME_LEFT,
+                    nameLeft,
                     'sticky z-10 border-b border-r border-slate-200 px-3 py-1.5 align-middle',
-                    selected.has(person.id) ? 'bg-primary/[0.06]' : 'bg-white group-hover:bg-slate-50',
+                    sel.has(person.id) ? 'bg-primary/[0.06]' : 'bg-white group-hover:bg-slate-50',
                   )}>
                     <div className="truncate text-[13px] font-medium text-slate-700">{person.name}</div>
                     {!scheduled && (
@@ -253,6 +268,7 @@ export function ScheduleGrid({
                       <ScheduleDayCell
                         variant={variant}
                         axis={axis}
+                        readOnly={readOnly}
                         personName={person.name}
                         dateLabel={parseLocal(iso).toLocaleDateString('en-US', {
                           weekday: 'long', month: 'long', day: 'numeric',

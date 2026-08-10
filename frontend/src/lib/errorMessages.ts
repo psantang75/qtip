@@ -212,7 +212,7 @@ function projectErrorToToast(error: unknown): ErrorToast {
       : eNotFound('item')
   }
   if (status === 408 || status === 504) return eTimeout()
-  if (status === 409 || status === 422) {
+  if (status === 409 || status === 422 || status === 423) {
     return {
       variant: 'destructive',
       title: "Can't complete that action",

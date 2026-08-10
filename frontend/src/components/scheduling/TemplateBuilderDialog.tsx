@@ -53,9 +53,12 @@ interface Props {
   /** Omit to build a new template. */
   template?: MockTemplate
   readOnly?: boolean
+  /** Commit handler. When absent the dialog is inert (view/mock only). */
+  onSave?: (payload: { id?: number; name: string; description: string; days: TemplateDay[] }) => Promise<void> | void
+  saving?: boolean
 }
 
-export function TemplateBuilderDialog({ open, onOpenChange, template, readOnly }: Props) {
+export function TemplateBuilderDialog({ open, onOpenChange, template, readOnly, onSave, saving }: Props) {
   const [name, setName] = useState('')
   const [days, setDays] = useState<TemplateDay[]>(
     () => DAYS.map((_, i) => (WEEKDAY_IDX.includes(i) ? { ...STANDARD } : { ...OFF })),
@@ -220,8 +223,22 @@ export function TemplateBuilderDialog({ open, onOpenChange, template, readOnly }
           ) : (
             <>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button variant="primary" disabled={!name.trim()} onClick={() => onOpenChange(false)}>
-                Save template
+              <Button
+                variant="primary"
+                disabled={!name.trim() || saving}
+                onClick={async () => {
+                  if (onSave) {
+                    await onSave({
+                      id: template?.id || undefined,
+                      name: name.trim(),
+                      description: template?.description ?? '',
+                      days,
+                    })
+                  }
+                  onOpenChange(false)
+                }}
+              >
+                {saving ? 'Saving\u2026' : 'Save template'}
               </Button>
             </>
           )}

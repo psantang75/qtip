@@ -11,6 +11,7 @@
  * last Tuesday is the normal case, and last Tuesday is exactly the locked week.
  */
 import prisma from '../../config/prisma';
+import logger from '../../config/logger';
 import {
   ScheduleScope, ExceptionInput, ScheduleServiceError,
 } from './schedule.types';
@@ -18,6 +19,25 @@ import { assertCanWriteUsers } from './schedule.permissions';
 import {
   addDays, combineLocal, dateOnlyValue, dateStrFromDate, hmFromDateTime, exceptionsOverlap,
 } from './schedule.dates';
+import { recomputeRange } from '../attendance/attendance.engine';
+
+/**
+ * Attendance points are derived, never stored at exception-write time: the engine
+ * rebuilds a day from the published schedule, punches and rules. So after an
+ * exception is added or removed we recompute just that user's day(s) so points
+ * add/remove immediately instead of waiting for the next punch import or admin
+ * recalculate. The engine is idempotent (delete + reinsert per range) and caps
+ * itself to the punch-feed watermark, so a call on an out-of-coverage day is a
+ * safe no-op. Failures are logged and swallowed — the exception write already
+ * committed and the next recompute will heal the range.
+ */
+async function safeRecompute(from: string, to: string, userIds: number[]): Promise<void> {
+  try {
+    await recomputeRange(from, to, userIds);
+  } catch (err) {
+    logger.error('[SCHEDULING] attendance recompute after exception change failed:', err);
+  }
+}
 
 function windowInsideShift(start: string, end: string, shiftStart: string | null, shiftEnd: string | null): boolean {
   if (!shiftStart || !shiftEnd) return false;
@@ -98,7 +118,7 @@ export async function createException(scope: ScheduleScope, input: ExceptionInpu
     throw new ScheduleServiceError('This overlaps an exception already logged for that day', 409, 'OVERLAP');
   }
 
-  return prisma.scheduleException.create({
+  const created = await prisma.scheduleException.create({
     data: {
       user_id: input.user_id,
       exception_date: dateOnlyValue(input.exception_date),
@@ -112,13 +132,20 @@ export async function createException(scope: ScheduleScope, input: ExceptionInpu
       entered_by: actorId,
     },
   });
+
+  await safeRecompute(input.exception_date, input.exception_date, [input.user_id]);
+  return created;
 }
 
 export async function deleteException(scope: ScheduleScope, id: number) {
   const ex = await prisma.scheduleException.findUnique({ where: { id } });
   if (!ex) throw new ScheduleServiceError('Exception not found', 404, 'NOT_FOUND');
   await assertCanWriteUsers(scope, [ex.user_id]);
+  // Capture the scope before the row is gone, so we can rebuild that day's points.
+  const affectedUser = ex.user_id;
+  const affectedDate = dateStrFromDate(ex.exception_date);
   await prisma.scheduleException.delete({ where: { id } });
+  await safeRecompute(affectedDate, affectedDate, [affectedUser]);
   return { success: true };
 }
 
@@ -222,5 +249,8 @@ export async function bulkLogException(params: BulkExceptionParams): Promise<Bul
     ),
   );
 
+  // One range recompute covers every affected user-day; the engine narrows to the
+  // days that actually changed. Runs after the write transaction commits.
+  await safeRecompute(params.from, params.to, params.userIds);
   return preview;
 }

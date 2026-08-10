@@ -42,13 +42,13 @@ import { ExceptionSummary } from '@/components/scheduling/ExceptionSummary'
 import { ScheduleLegend } from '@/components/scheduling/ScheduleLegend'
 import {
   addDays, parseLocal, startOfWeek, toLocalIso,
-  type MockBreak, type MockException, type MockTemplate,
+  type MockBreak, type MockException, type MockTemplate, type TemplateDay,
 } from '@/components/scheduling/mockScheduleData'
 import { minutesOf, rangeStatus, type CoverageWindow } from '@/components/scheduling/scheduleTime'
 import { useScheduleGrid } from '@/hooks/useScheduleGrid'
-import { useScheduleTemplates } from '@/hooks/useScheduleTemplates'
+import { useScheduleTemplates, adaptTemplate } from '@/hooks/useScheduleTemplates'
 import { useScheduleRole } from '@/hooks/useScheduleRole'
-import schedulingService from '@/services/schedulingService'
+import schedulingService, { type ApiTemplate, type TemplateInput } from '@/services/schedulingService'
 
 const UNASSIGNED = 'Unassigned'
 type ViewMode = 'day' | 'week' | 'period'
@@ -60,6 +60,8 @@ interface DaySave {
   start: string
   end: string
   breaks: MockBreak[]
+  /** False when only exceptions changed, so a locked/published shift is skipped. */
+  shiftChanged: boolean
   exceptionAdds: MockException[]
   exceptionRemoveIds: number[]
 }
@@ -116,6 +118,14 @@ export default function SchedulingPage() {
   const personOptions = useMemo(() => allPeople.map(p => p.name).sort(), [allPeople])
 
   const templatesQ = useScheduleTemplates()
+  // Management view needs inactive templates too (to reactivate); the apply flow
+  // (templatesQ) stays active-only. Both share the prefix, so one invalidation refreshes both.
+  const libraryTemplatesQ = useQuery({
+    queryKey: ['schedule-templates', 'all'],
+    queryFn: () => schedulingService.listTemplates(true),
+    select: (rows: ApiTemplate[]) => rows.map(adaptTemplate),
+    enabled: libraryOpen,
+  })
   const activityTypesQ = useQuery({
     queryKey: ['schedule-activity-types'],
     queryFn: () => schedulingService.listActivityTypes(false),
@@ -145,6 +155,43 @@ export default function SchedulingPage() {
     onSuccess: (r) => { invalidateGrid(); toast({ title: 'Schedule applied', description: `${r.write} shifts written.` }) },
     onError: (e) => toast(t.fromError(e)),
   })
+  // A template is one saved week. Create when there's no id, update otherwise;
+  // breaks map to activity-type segments the same way a shift's do.
+  const templateSaveMut = useMutation({
+    mutationFn: (payload: { id?: number; name: string; description: string; days: TemplateDay[] }) => {
+      const body: TemplateInput = {
+        template_name: payload.name,
+        description: payload.description.trim() ? payload.description.trim() : null,
+        days: payload.days.map((d, i) => ({
+          day_of_week: i,
+          is_day_off: !d.working,
+          start: d.working ? d.start : null,
+          end: d.working ? d.end : null,
+          segments: d.working
+            ? d.breaks
+                .map(b => ({ activity_type_id: activityId(b.kind) ?? 0, start: b.start, end: b.end }))
+                .filter(s => s.activity_type_id > 0)
+            : [],
+        })),
+      }
+      return payload.id
+        ? schedulingService.updateTemplate(payload.id, body)
+        : schedulingService.createTemplate(body)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['schedule-templates'] })
+      toast({ title: 'Template saved' })
+    },
+    onError: (e) => toast(t.fromError(e)),
+  })
+  const templateActiveMut = useMutation({
+    mutationFn: (tpl: MockTemplate) => schedulingService.setTemplateActive(tpl.id, !tpl.isActive),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['schedule-templates'] })
+      toast({ title: 'Template updated' })
+    },
+    onError: (e) => toast(t.fromError(e)),
+  })
   const publishMut = useMutation({
     mutationFn: (confirmElapsed: boolean) =>
       schedulingService.publish({ user_ids: [...selectedIds], dates: displayedDates, confirm_elapsed: confirmElapsed }),
@@ -159,16 +206,21 @@ export default function SchedulingPage() {
   // mutation rather than three: a partial save that wrote the shift but dropped
   // the exception is worse than a clean failure.
   const shiftMut = useMutation({
-    mutationFn: async ({ userId, date, start, end, breaks, exceptionAdds, exceptionRemoveIds }: DaySave) => {
-      await schedulingService.upsertShift({
-        user_id: userId,
-        shift_date: date,
-        is_day_off: false,
-        start, end,
-        segments: breaks
-          .map(b => ({ activity_type_id: activityId(b.kind) ?? 0, start: b.start, end: b.end }))
-          .filter(s => s.activity_type_id > 0),
-      })
+    mutationFn: async ({ userId, date, start, end, breaks, shiftChanged, exceptionAdds, exceptionRemoveIds }: DaySave) => {
+      // Skip the shift write when only exceptions changed: a published, elapsed
+      // shift is locked server-side (423), but exceptions are allowed against it,
+      // so re-saving an untouched shift would needlessly block the exception.
+      if (shiftChanged) {
+        await schedulingService.upsertShift({
+          user_id: userId,
+          shift_date: date,
+          is_day_off: false,
+          start, end,
+          segments: breaks
+            .map(b => ({ activity_type_id: activityId(b.kind) ?? 0, start: b.start, end: b.end }))
+            .filter(s => s.activity_type_id > 0),
+        })
+      }
       // Removals first, so freeing a window lets a replacement land on the same
       // hours in the same save without tripping the overlap guard.
       for (const id of exceptionRemoveIds) await schedulingService.deleteException(id)
@@ -446,9 +498,11 @@ export default function SchedulingPage() {
         <TemplateLibraryDialog
           open={libraryOpen}
           onOpenChange={setLibraryOpen}
+          templates={libraryTemplatesQ.data ?? []}
           onNew={() => { setLibraryOpen(false); setBuilder({}) }}
           onEdit={t => { setLibraryOpen(false); setBuilder({ template: t }) }}
           onView={t => { setLibraryOpen(false); setBuilder({ template: t, readOnly: true }) }}
+          onToggleActive={canEdit ? t => templateActiveMut.mutate(t) : undefined}
         />
 
         <TemplateBuilderDialog
@@ -456,6 +510,8 @@ export default function SchedulingPage() {
           onOpenChange={o => { if (!o) { setBuilder(null); setLibraryOpen(true) } }}
           template={builder?.template}
           readOnly={builder?.readOnly}
+          onSave={canEdit ? async p => { await templateSaveMut.mutateAsync(p) } : undefined}
+          saving={templateSaveMut.isPending}
         />
 
         <BulkExceptionDialog

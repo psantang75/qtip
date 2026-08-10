@@ -37,6 +37,8 @@ interface Props {
     start: string
     end: string
     breaks: MockBreak[]
+    /** False when only exceptions changed, so a locked/published shift is left alone. */
+    shiftChanged: boolean
     exceptionAdds: MockException[]
     exceptionRemoveIds: number[]
   }) => Promise<void> | void
@@ -214,8 +216,18 @@ export function ShiftEditorSheet({
             onClick={async () => {
               if (onSave) {
                 const keptIds = new Set(exs.map(e => e.id).filter((id): id is number => !!id))
+                // Only touch the shift when it actually changed. An untouched
+                // published/elapsed shift is locked server-side, so re-saving it
+                // would 423 and block logging an exception against it.
+                const breaksEqual = (a: MockBreak[], b: MockBreak[]) =>
+                  a.length === b.length &&
+                  a.every((x, i) => x.kind === b[i].kind && x.start === b[i].start && x.end === b[i].end)
+                const shiftChanged = !shift
+                  || start !== shift.start
+                  || end !== shift.end
+                  || !breaksEqual(breaks, shift.breaks)
                 await onSave({
-                  start, end, breaks,
+                  start, end, breaks, shiftChanged,
                   exceptionAdds: exs.filter(e => !e.id),
                   exceptionRemoveIds: exceptions
                     .map(e => e.id)

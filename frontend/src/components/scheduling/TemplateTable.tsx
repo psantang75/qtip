@@ -7,7 +7,7 @@
  * name in a dropdown.
  */
 import { useMemo, useState, type ReactNode } from 'react'
-import { Copy, Eye, Pencil, Trash2 } from 'lucide-react'
+import { Copy, Eye, Pencil, RotateCcw, Trash2 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -40,12 +40,14 @@ interface Props {
   onView?: (t: MockTemplate) => void
   onEdit?: (t: MockTemplate) => void
   onDuplicate?: (t: MockTemplate) => void
+  /** Toggle active/inactive. Omitted rows show a disabled control. */
+  onToggleActive?: (t: MockTemplate) => void
   /** Rendered on the search row, right aligned. */
   action?: ReactNode
 }
 
 export function TemplateTable({
-  templates, pickedId, onPick, onView, onEdit, onDuplicate, action,
+  templates, pickedId, onPick, onView, onEdit, onDuplicate, onToggleActive, action,
 }: Props) {
   const [q, setQ] = useState('')
   const picking = !!onPick
@@ -150,8 +152,14 @@ export function TemplateTable({
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-500" title="Duplicate" onClick={() => onDuplicate?.(t)}>
                           <Copy className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-destructive" title="Deactivate">
-                          <Trash2 className="h-4 w-4" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={cn('h-8 w-8 p-0 text-slate-400', t.isActive ? 'hover:text-destructive' : 'hover:text-success')}
+                          title={t.isActive ? 'Deactivate' : 'Reactivate'}
+                          onClick={() => onToggleActive?.(t)}
+                        >
+                          {t.isActive ? <Trash2 className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
                         </Button>
                       </div>
                     </TableCell>
