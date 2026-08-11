@@ -11,9 +11,11 @@
  * those methods degrade gracefully to empty results before their fact table
  * has been created/loaded, so the UI never errors on a not-yet-built report.
  */
+import mysql from 'mysql2/promise';
 import pool from '../config/database';
-import { RowDataPacket } from 'mysql2';
+import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { resolvePeriod, type DateRange } from '../utils/periodUtils';
+import { crmDatabaseConfig } from '../config/environment';
 
 /** Direction that counts as a "sent" email on the Email Activity report. */
 const SENT_DIRECTION = 'Outbound';
@@ -732,6 +734,15 @@ export interface TicketTaskFilters {
 const PAST_DUE_PREDICATE = 'f.next_contact IS NOT NULL AND DATE(f.next_contact) < CURDATE()';
 
 /**
+ * Bucket expressions shared by the live report and the daily snapshot capture.
+ * Bucket = next_contact (the task/ticket DueOn) vs today. NULL due date -> no
+ * bucket (matches the legacy proc's PastDueCurrent CASE with no ELSE).
+ */
+const TICKET_CUR_EXPR = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) > CURDATE())`;
+const TICKET_DUE_EXPR = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) = CURDATE())`;
+const TICKET_PAST_EXPR = `SUM(${PAST_DUE_PREDICATE})`;
+
+/**
  * Joins + base predicate every Tickets & Tasks query shares: conform to the
  * current employee/department dimension rows, keep CSRs only, and keep the
  * section's own department subtree. The CSR section reads the complement of the
@@ -795,11 +806,6 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
   if (!(await factTableExists('ie_fact_ticket_task'))) return empty;
 
   const { EMP_JOIN, DEPT_JOIN, baseWhere, baseParams } = ticketTaskBase(filters.area, filters.selfEmployeeKey);
-  // Bucket = next_contact (the task/ticket DueOn) vs today. NULL due date -> no
-  // bucket (matches the legacy proc's PastDueCurrent CASE with no ELSE).
-  const CUR = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) > CURDATE())`;
-  const DUE = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) = CURDATE())`;
-  const PAST = `SUM(${PAST_DUE_PREDICATE})`;
 
   const where = [...baseWhere];
   const params = [...baseParams];
@@ -816,7 +822,7 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
 
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT f.agent_name AS agent, dpt.department_name AS department, f.classification AS classification,
-            ${CUR} AS cur, ${DUE} AS dueToday, ${PAST} AS pastDue
+            ${TICKET_CUR_EXPR} AS cur, ${TICKET_DUE_EXPR} AS dueToday, ${TICKET_PAST_EXPR} AS pastDue
      FROM ie_fact_ticket_task f
      ${EMP_JOIN}
      ${DEPT_JOIN}
@@ -954,6 +960,503 @@ export async function getTicketsPastDue(filters: TicketPastDueFilters): Promise<
       crmUrl: (r.crm_url as string | null) ?? null,
     };
   });
+}
+
+// ── Tickets & Tasks daily snapshot ──────────────────────────────────────────
+
+/**
+ * Calendar-date logic for the snapshot runs in the business timezone. The
+ * ie-rollup PM2 cron is UTC and the primary DB session is pinned to UTC, so
+ * the capture gate derives the wall-clock hour/date explicitly (same
+ * toLocaleString-with-timeZone pattern as notifications/quietHours.ts) instead
+ * of trusting the host timezone.
+ */
+const BUSINESS_TZ = 'America/New_York';
+
+/** Calendar date (YYYY-MM-DD) and hour-of-day of `now` in the business timezone. */
+function businessNow(now: Date): { date: string; hour: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BUSINESS_TZ,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', hour12: false,
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  // hourCycle quirk: some ICU builds render midnight as '24'.
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, hour: parseInt(get('hour'), 10) % 24 };
+}
+
+export interface DailyCaptureResult {
+  captured: boolean;
+  rows: number;
+  /** Why the run was a no-op ('ok' when it captured). Surfaced in the rollup batch id. */
+  reason: string;
+}
+
+/**
+ * Persist today's per-agent Current / Due Today / Past Due counts into
+ * ie_ticket_task_daily — the ONLY durable history of these buckets, since
+ * ie_fact_ticket_task is a rolling DELETE+INSERT snapshot. Called by
+ * RollupWorker every half hour; the first run at/after the configured hour
+ * (ie_config.ticket_daily_capture_hour, ET) wins and later runs no-op, so each
+ * day gets exactly one morning snapshot per area per agent.
+ *
+ * Guards, in order:
+ *  - both tables must exist (degrade to no-op before migrations/first load);
+ *  - before the capture hour (ET) -> wait;
+ *  - the bucket expressions compare against CURDATE() on the UTC-pinned
+ *    primary session, so skip if the UTC date has rolled past the ET date
+ *    (>= ~8pm ET) — a late catch-up run must never bucket against tomorrow;
+ *  - already captured today -> no-op.
+ */
+export async function captureDailyTicketTotals(now: Date = new Date()): Promise<DailyCaptureResult> {
+  if (!(await factTableExists('ie_fact_ticket_task'))) return { captured: false, rows: 0, reason: 'no-fact-table' };
+  if (!(await factTableExists('ie_ticket_task_daily'))) return { captured: false, rows: 0, reason: 'no-daily-table' };
+
+  const [cfgRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT config_value FROM ie_config WHERE config_key = 'ticket_daily_capture_hour'`,
+  );
+  const captureHour = parseInt((cfgRows[0]?.config_value as string) ?? '8', 10) || 8;
+
+  const { date: etDate, hour: etHour } = businessNow(now);
+  if (etHour < captureHour) return { captured: false, rows: 0, reason: 'before-capture-hour' };
+  if (now.toISOString().slice(0, 10) !== etDate) return { captured: false, rows: 0, reason: 'utc-date-rollover' };
+
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT 1 FROM ie_ticket_task_daily WHERE snapshot_date = ? LIMIT 1`,
+    [etDate],
+  );
+  if (existing.length > 0) return { captured: false, rows: 0, reason: 'already-captured' };
+
+  let rows = 0;
+  for (const area of ['sales', 'csr'] as const) {
+    const { EMP_JOIN, DEPT_JOIN, baseWhere, baseParams } = ticketTaskBase(area);
+    const [result] = await pool.query<ResultSetHeader>(
+      `INSERT IGNORE INTO ie_ticket_task_daily
+         (snapshot_date, area, employee_key, agent_name, department_name, cur, due_today, past_due)
+       SELECT ?, ?, f.employee_key, f.agent_name, dpt.department_name,
+              ${TICKET_CUR_EXPR} AS cur, ${TICKET_DUE_EXPR} AS due_today, ${TICKET_PAST_EXPR} AS past_due
+       FROM ie_fact_ticket_task f
+       ${EMP_JOIN}
+       ${DEPT_JOIN}
+       WHERE ${baseWhere.join(' AND ')}
+       GROUP BY f.employee_key, f.agent_name, dpt.department_name
+       HAVING cur > 0 OR due_today > 0 OR past_due > 0`,
+      [etDate, area, ...baseParams],
+    );
+    rows += result.affectedRows ?? 0;
+  }
+  return { captured: true, rows, reason: 'ok' };
+}
+
+export interface TicketDailyHistoryFilters {
+  area: 'sales' | 'csr';
+  /** SELF data-scope: restrict the trend to the viewer's own rows. */
+  selfEmployeeKey?: number | null;
+  /** Agent display names (same values as the tickets report's users filter). */
+  users?: string[];
+  /** Department names as captured at snapshot time. */
+  departments?: string[];
+}
+
+export interface TicketDailyPoint {
+  /** Snapshot day, YYYY-MM-DD (formatted in SQL so no timezone shifting can occur). */
+  date: string;
+  current: number;
+  dueToday: number;
+  pastDue: number;
+}
+
+/**
+ * The daily Current / Due Today / Past Due history for one section, summed
+ * server-side per day over whoever is in scope: SELF viewers get only their own
+ * rows; everyone else gets the whole section, narrowed by the same
+ * users/departments filters that drive the tickets table. The response is
+ * always one point per day regardless of how many agents are behind it.
+ */
+export async function getTicketsDailyHistory(filters: TicketDailyHistoryFilters): Promise<TicketDailyPoint[]> {
+  if (!(await factTableExists('ie_ticket_task_daily'))) return [];
+
+  const where = ['d.area = ?'];
+  const params: (string | number)[] = [filters.area];
+  if (filters.selfEmployeeKey != null) {
+    where.push('d.employee_key = ?');
+    params.push(filters.selfEmployeeKey);
+  }
+  if (filters.departments?.length) {
+    where.push(`d.department_name IN (${filters.departments.map(() => '?').join(',')})`);
+    params.push(...filters.departments);
+  }
+  if (filters.users?.length) {
+    where.push(`d.agent_name IN (${filters.users.map(() => '?').join(',')})`);
+    params.push(...filters.users);
+  }
+
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT DATE_FORMAT(d.snapshot_date, '%Y-%m-%d') AS date,
+            SUM(d.cur) AS cur, SUM(d.due_today) AS dueToday, SUM(d.past_due) AS pastDue
+     FROM ie_ticket_task_daily d
+     WHERE ${where.join(' AND ')}
+     GROUP BY d.snapshot_date
+     ORDER BY d.snapshot_date`,
+    params,
+  );
+
+  return rows.map((r) => ({
+    date: r.date as string,
+    current: Number(r.cur),
+    dueToday: Number(r.dueToday),
+    pastDue: Number(r.pastDue),
+  }));
+}
+
+// ── Tickets & Tasks productivity roll-up ────────────────────────────────────
+
+export interface TicketProductivityFilters {
+  area: 'sales' | 'csr';
+  /** Date-range selector (same values the other AA reports accept). */
+  period: string;
+  customStart?: string;
+  customEnd?: string;
+  /** SELF data-scope: restrict to the viewer's own rows. */
+  selfEmployeeKey?: number | null;
+  /** Agent display names (same values as the tickets report's users filter). */
+  users?: string[];
+  /** Department names as captured at snapshot time. */
+  departments?: string[];
+}
+
+export interface TicketProductivityDayRow {
+  /** Snapshot day, YYYY-MM-DD (formatted in SQL so no timezone shifting can occur). */
+  date: string;
+  agent: string;
+  department: string;
+  employeeKey: number;
+  /** Sales only: which slice this row is — the Sales page renders two sections
+   *  (Contact Manager vs all other tickets/tasks). Omitted for CSR (segments are
+   *  summed server-side, so CSR output is unchanged). */
+  segment?: 'contact_manager' | 'other';
+  /** Open work items assigned at the start of the day (ie_ticket_task_daily inventory). */
+  beginning: number;
+  /** Items created/assigned to the agent on the day. */
+  newAssigned: number;
+  /** Distinct items the agent had activity on during the day. */
+  touched: number;
+  /** Items the agent closed on the day. */
+  closed: number;
+}
+
+/** YYYY-MM-DD from a Date's LOCAL components (per the date-handling convention). */
+function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Per-agent-per-day productivity rows for one section over the selected range.
+ * One row per (snapshot_date, agent); the frontend rolls these up into the
+ * per-agent summary and the expandable per-day breakdown. Same SELF-scope and
+ * users/departments narrowing as the daily-history trend. Degrades to empty if
+ * the roll-up table isn't built yet.
+ */
+export async function getTicketProductivity(filters: TicketProductivityFilters): Promise<TicketProductivityDayRow[]> {
+  if (!(await factTableExists('ie_ticket_task_productivity_daily'))) return [];
+
+  const { current } = resolvePeriod(filters.period, filters.customStart, filters.customEnd);
+  const startDate = toLocalDateStr(current.start);
+  const endDate = toLocalDateStr(current.end);
+
+  const where = ['d.area = ?', 'd.snapshot_date BETWEEN ? AND ?'];
+  const params: (string | number)[] = [filters.area, startDate, endDate];
+  if (filters.selfEmployeeKey != null) {
+    where.push('d.employee_key = ?');
+    params.push(filters.selfEmployeeKey);
+  }
+  if (filters.departments?.length) {
+    where.push(`d.department_name IN (${filters.departments.map(() => '?').join(',')})`);
+    params.push(...filters.departments);
+  }
+  if (filters.users?.length) {
+    where.push(`d.agent_name IN (${filters.users.map(() => '?').join(',')})`);
+    params.push(...filters.users);
+  }
+
+  // Sales keeps the segment so the page can render the Contact Manager split;
+  // every other area sums the segments (collapsing to one row per day/agent) so
+  // its output is byte-for-byte what it was before segmentation. SUM over the
+  // single sales row is a no-op, so one grouped query serves both.
+  const isSales = filters.area === 'sales';
+  const segSelect = isSales ? 'd.segment AS segment,' : '';
+  const segGroup = isSales ? ', d.segment' : '';
+
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT DATE_FORMAT(d.snapshot_date, '%Y-%m-%d') AS date,
+            MAX(d.agent_name) AS agent, MAX(d.department_name) AS department, d.employee_key AS employeeKey,
+            ${segSelect}
+            SUM(d.beginning) AS beginning, SUM(d.new_assigned) AS newAssigned,
+            SUM(d.touched) AS touched, SUM(d.closed) AS closed
+     FROM ie_ticket_task_productivity_daily d
+     JOIN ie_dim_employee e ON e.is_current = 1 AND e.is_active = 1 AND e.employee_key = d.employee_key
+     WHERE ${where.join(' AND ')}
+     GROUP BY d.snapshot_date, d.employee_key${segGroup}
+     ORDER BY agent, date`,
+    params,
+  );
+
+  return rows.map((r) => ({
+    date: r.date as string,
+    agent: (r.agent as string) ?? '',
+    department: (r.department as string) ?? '',
+    employeeKey: Number(r.employeeKey),
+    ...(isSales ? { segment: r.segment === 'contact_manager' ? 'contact_manager' as const : 'other' as const } : {}),
+    beginning: Number(r.beginning),
+    newAssigned: Number(r.newAssigned),
+    touched: Number(r.touched),
+    closed: Number(r.closed),
+  }));
+}
+
+/** One agent's flow count for a single day and segment, keyed by conformed email. */
+type Segment = 'contact_manager' | 'other';
+interface CrmFlowRow { email: string; agentName: string | null; segment: Segment; count: number }
+
+/**
+ * Run one grouped, single-day CRM read (READ-ONLY) and return per-(assignee-email,
+ * segment) counts. The unionSql must yield (user_id, segment) — plus an `item`
+ * column for DISTINCT-item metrics like touched. Assignee identity mirrors the
+ * live extracts: tblSalesPeople.UserID = the my_aspnet_users id stored on the
+ * task/ticket, UserID 12 (system) excluded, deduped to one email per UserID.
+ */
+async function crmFlowCounts(crm: mysql.Connection, unionSql: string, params: unknown[]): Promise<CrmFlowRow[]> {
+  const [rows] = await crm.query<mysql.RowDataPacket[]>(
+    `SELECT sp.email AS email, MAX(sp.SalesPersonName) AS agentName, x.segment AS segment, SUM(x.n) AS n
+     FROM (SELECT user_id, segment, COUNT(*) AS n FROM (${unionSql}) e GROUP BY user_id, segment) x
+     JOIN (SELECT UserID, MIN(email) AS email, MAX(SalesPersonName) AS SalesPersonName
+           FROM tblSalesPeople WHERE UserID NOT IN (12) AND email IS NOT NULL AND email <> '' GROUP BY UserID) sp
+       ON sp.UserID = x.user_id
+     GROUP BY sp.email, x.segment`,
+    params,
+  );
+  return rows.map((r) => ({
+    email: String(r.email).toLowerCase().trim(),
+    agentName: (r.agentName as string | null) ?? null,
+    segment: r.segment === 'contact_manager' ? 'contact_manager' : 'other',
+    count: Number(r.n),
+  }));
+}
+
+/**
+ * Finalize the PRIOR completed ET day's per-agent productivity into
+ * ie_ticket_task_productivity_daily (is_backfilled = 0). Called by RollupWorker;
+ * the first run at/after the capture hour that hasn't yet captured the prior day
+ * wins, later runs no-op. Beginning inventory is read from ie_ticket_task_daily
+ * (the 8am snapshot already captured that morning); new/touched/closed come from
+ * a single-day read of the CRM audit trail. Wrapped defensively — any CRM/DB
+ * hiccup returns a no-op reason and never breaks the rollup cycle.
+ */
+export async function captureDailyTicketProductivity(now: Date = new Date()): Promise<DailyCaptureResult> {
+  if (!(await factTableExists('ie_ticket_task_productivity_daily'))) return { captured: false, rows: 0, reason: 'no-productivity-table' };
+  if (!(await factTableExists('ie_ticket_task_daily'))) return { captured: false, rows: 0, reason: 'no-daily-table' };
+  if (!crmDatabaseConfig) return { captured: false, rows: 0, reason: 'no-crm-config' };
+
+  const [cfgRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT config_value FROM ie_config WHERE config_key = 'ticket_daily_capture_hour'`,
+  );
+  const captureHour = parseInt((cfgRows[0]?.config_value as string) ?? '8', 10) || 8;
+
+  const { date: etDate, hour: etHour } = businessNow(now);
+  if (etHour < captureHour) return { captured: false, rows: 0, reason: 'before-capture-hour' };
+
+  // The day we finalize is yesterday (ET) — the most recent fully-closed day.
+  const [y, m, d] = etDate.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT 1 FROM ie_ticket_task_productivity_daily WHERE snapshot_date = ? LIMIT 1`,
+    [day],
+  );
+  if (existing.length > 0) return { captured: false, rows: 0, reason: 'already-captured' };
+
+  // Conform map: email -> {employee_key, area, department_name} for current CSR
+  // agents, area decided by the Sales Department - All subtree (same rule as the
+  // backfill and the live report).
+  const [empRows] = await pool.query<RowDataPacket[]>(
+    `SELECT LOWER(TRIM(e.email)) AS email, e.employee_key AS employeeKey, dpt.department_name AS departmentName,
+            CASE WHEN dpt.hierarchy_path = ? OR dpt.hierarchy_path LIKE CONCAT(?, '/%') THEN 'sales' ELSE 'csr' END AS area
+     FROM ie_dim_employee e
+     JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key
+     WHERE e.is_current = 1 AND e.role_name = ? AND e.email IS NOT NULL AND e.email <> ''`,
+    [SALES_DEPT_ROOT_PATH, SALES_DEPT_ROOT_PATH, AGENT_ROLE],
+  );
+  const conform = new Map<string, { employeeKey: number; area: 'sales' | 'csr'; departmentName: string | null }>();
+  for (const r of empRows) {
+    conform.set(String(r.email), {
+      employeeKey: Number(r.employeeKey),
+      area: r.area === 'sales' ? 'sales' : 'csr',
+      departmentName: (r.departmentName as string | null) ?? null,
+    });
+  }
+
+  // Beginning inventory (D) straight from the morning bucket snapshot.
+  const [beginRows] = await pool.query<RowDataPacket[]>(
+    `SELECT area, employee_key AS employeeKey, MAX(agent_name) AS agentName, MAX(department_name) AS departmentName,
+            SUM(cur + due_today + past_due) AS beginning
+     FROM ie_ticket_task_daily WHERE snapshot_date = ?
+     GROUP BY area, employee_key`,
+    [day],
+  );
+  // The bucket snapshot for D isn't in place yet (first run after deploy, or the
+  // bucket capture above no-opped). Bail WITHOUT finalizing so a later run can
+  // capture once ie_ticket_task_daily is populated — otherwise we'd lock in a
+  // zero-beginning day under the already-captured guard. There is always a
+  // standing Contact Manager pool, so an empty result reliably means "no bucket".
+  if (beginRows.length === 0) return { captured: false, rows: 0, reason: 'no-bucket-day' };
+
+  // Single-day CRM reads (READ-ONLY). Population rules mirror the live extracts:
+  // task depts 1/2, task type <> 19, tickets by their status timeline. Every row
+  // carries a segment so the Sales Productivity page can split the Contact
+  // Manager task type out: tasks -> Contact Manager vs other by tblTaskType.Title;
+  // tickets are always 'other'.
+  const SEG = `CASE WHEN tt.Title = 'Contact Manager' THEN 'contact_manager' ELSE 'other' END`;
+  const newSql = `
+    SELECT t.AssignedTo AS user_id, ${SEG} AS segment FROM tblTask t
+      JOIN tblTaskType tt ON tt.TaskTypeID = t.TaskTypeID AND tt.DeptID IN (1,2)
+      WHERE t.TaskTypeID <> 19 AND DATE(t.CreatedOn) = ?
+    UNION ALL
+    SELECT tk.AssignedToUserID AS user_id, 'other' AS segment FROM tblTicket tk WHERE DATE(tk.CreatedOn) = ?`;
+  const closedSql = `
+    SELECT t.AssignedTo AS user_id, ${SEG} AS segment FROM tblTask t
+      JOIN tblTaskType tt ON tt.TaskTypeID = t.TaskTypeID AND tt.DeptID IN (1,2)
+      WHERE t.TaskTypeID <> 19 AND DATE(t.CompletedOn) = ?
+    UNION ALL
+    SELECT tk.AssignedToUserID AS user_id, 'other' AS segment FROM tblTicket tk
+      WHERE tk.TicketID IN (SELECT TicketID FROM tblTicketStatusHistory WHERE StatusID = 5 AND DATE(CreatedOn) = ?)`;
+  // Touched = distinct items the agent had a NOTED ACTION on that day, keyed by
+  // the ACTOR (who did the work) — a noted tblAction for tasks, a tblTicketNote
+  // for tickets (the same human-activity the live report uses for "last touched
+  // by"). Because only real notes/actions count, system state changes and
+  // manager reassignments are excluded, and the email conform below drops any
+  // actor who isn't a reporting CSR agent. DISTINCT (item, actor) so a single
+  // item worked multiple times in a day counts once for that agent.
+  const touchedSql = `
+    SELECT DISTINCT CONCAT('T', a.TaskID) AS item, a.CompletedBy AS user_id, ${SEG} AS segment
+    FROM tblAction a
+      JOIN tblTask t      ON t.TaskID = a.TaskID
+      JOIN tblTaskType tt ON tt.TaskTypeID = t.TaskTypeID AND tt.DeptID IN (1,2)
+    WHERE t.TaskTypeID <> 19 AND a.Note <> '' AND a.CompletedBy IS NOT NULL AND DATE(a.CompletedOn) = ?
+    UNION ALL
+    SELECT DISTINCT CONCAT('K', tn.TicketID) AS item, tn.CreatedBy AS user_id, 'other' AS segment
+    FROM tblTicketNote tn
+    WHERE tn.CreatedBy IS NOT NULL AND DATE(tn.CreatedOn) = ?`;
+  // Contact Manager beginning inventory (CURRENT open CM tasks with a due date,
+  // per assignee) — the segment slice of the bucket total. The bucket carries no
+  // task-type detail, so we read CM live from the CRM and derive
+  // other = total - CM. Mirrors task_open.extract.sql's open-task rule.
+  const cmBeginningSql = `
+    SELECT sp.email AS email, MAX(sp.SalesPersonName) AS agentName, SUM(x.n) AS n
+    FROM (
+      SELECT t.AssignedTo AS user_id, COUNT(*) AS n
+      FROM tblTask t
+        JOIN tblTaskType tt   ON tt.TaskTypeID = t.TaskTypeID AND tt.DeptID IN (1,2)
+        JOIN tblTaskStatus ts ON ts.TaskTypeID = t.TaskTypeID AND ts.TaskStatusID = t.TaskStatusID
+      WHERE tt.Title = 'Contact Manager' AND t.TaskTypeID <> 19
+        AND (t.CompletedOn = '1-1-1' OR t.CompletedOn >= DATE_SUB(NOW(), INTERVAL 2 MONTH))
+        AND (ts.Closed = 0 OR ts.Title = 'Contact Past Due')
+        AND t.DueOn > '1900-01-01'
+      GROUP BY t.AssignedTo
+    ) x
+    JOIN (SELECT UserID, MIN(email) AS email, MAX(SalesPersonName) AS SalesPersonName
+          FROM tblSalesPeople WHERE UserID NOT IN (12) AND email IS NOT NULL AND email <> '' GROUP BY UserID) sp
+      ON sp.UserID = x.user_id
+    GROUP BY sp.email`;
+
+  const crm = await mysql.createConnection({
+    host: crmDatabaseConfig.host,
+    user: crmDatabaseConfig.user,
+    password: crmDatabaseConfig.password,
+    database: crmDatabaseConfig.database,
+    connectTimeout: 60_000,
+    dateStrings: true,
+    charset: 'utf8mb4',
+  });
+  let newRows: CrmFlowRow[] = [];
+  let closedRows: CrmFlowRow[] = [];
+  let touchedRows: CrmFlowRow[] = [];
+  let cmBeginRows: Array<{ email: string; count: number }> = [];
+  try {
+    newRows = await crmFlowCounts(crm, newSql, [day, day]);
+    closedRows = await crmFlowCounts(crm, closedSql, [day, day]);
+    touchedRows = await crmFlowCounts(crm, touchedSql, [day, day]);
+    const [cmRows] = await crm.query<mysql.RowDataPacket[]>(cmBeginningSql);
+    cmBeginRows = cmRows.map((r) => ({ email: String(r.email).toLowerCase().trim(), count: Number(r.n) }));
+  } catch (err) {
+    await crm.end().catch(() => { /* socket already gone */ });
+    return { captured: false, rows: 0, reason: `crm-error:${(err as Error).message?.slice(0, 60) ?? 'unknown'}` };
+  }
+  await crm.end().catch(() => { /* socket already gone */ });
+
+  // Merge everything onto (area, employee_key, segment). Beginning seeds the rows
+  // (bucket total split into CM vs other); flow metrics are folded in via the
+  // email conform map, each carrying its own segment.
+  interface Acc { area: 'sales' | 'csr'; employeeKey: number; segment: Segment; agentName: string | null; departmentName: string | null; beginning: number; newAssigned: number; touched: number; closed: number }
+  const acc = new Map<string, Acc>();
+  const keyOf = (area: string, ek: number, seg: Segment) => `${area}:${ek}:${seg}`;
+  const ensure = (area: 'sales' | 'csr', employeeKey: number, segment: Segment, agentName: string | null, departmentName: string | null): Acc => {
+    const k = keyOf(area, employeeKey, segment);
+    let row = acc.get(k);
+    if (!row) {
+      row = { area, employeeKey, segment, agentName, departmentName, beginning: 0, newAssigned: 0, touched: 0, closed: 0 };
+      acc.set(k, row);
+    }
+    if (!row.agentName && agentName) row.agentName = agentName;
+    if (!row.departmentName && departmentName) row.departmentName = departmentName;
+    return row;
+  };
+
+  // Contact Manager beginning per (area, employee), folded from CRM via conform.
+  const cmBeginByKey = new Map<string, number>();
+  for (const r of cmBeginRows) {
+    const c = conform.get(r.email);
+    if (!c) continue;
+    const k = `${c.area}:${c.employeeKey}`;
+    cmBeginByKey.set(k, (cmBeginByKey.get(k) ?? 0) + r.count);
+  }
+  // Split each agent's bucket-total beginning: CM (capped at the total so CM +
+  // other always equals the bucket, matching the Tickets & Tasks trend) and other.
+  for (const b of beginRows) {
+    const area = b.area === 'sales' ? 'sales' : 'csr';
+    const employeeKey = Number(b.employeeKey);
+    const agentName = (b.agentName as string | null) ?? null;
+    const departmentName = (b.departmentName as string | null) ?? null;
+    const total = Number(b.beginning);
+    const cm = Math.min(cmBeginByKey.get(`${area}:${employeeKey}`) ?? 0, total);
+    const other = total - cm;
+    if (cm > 0) ensure(area, employeeKey, 'contact_manager', agentName, departmentName).beginning += cm;
+    if (other > 0) ensure(area, employeeKey, 'other', agentName, departmentName).beginning += other;
+  }
+  const foldFlow = (flow: CrmFlowRow[], field: 'newAssigned' | 'touched' | 'closed') => {
+    for (const f of flow) {
+      const c = conform.get(f.email);
+      if (!c) continue; // assignee not a conformed CSR agent -> excluded, like the live report
+      ensure(c.area, c.employeeKey, f.segment, f.agentName, c.departmentName)[field] += f.count;
+    }
+  };
+  foldFlow(newRows, 'newAssigned');
+  foldFlow(touchedRows, 'touched');
+  foldFlow(closedRows, 'closed');
+
+  const values = [...acc.values()].filter((r) => r.beginning || r.newAssigned || r.touched || r.closed);
+  if (values.length === 0) return { captured: true, rows: 0, reason: 'ok' };
+
+  const [result] = await pool.query<ResultSetHeader>(
+    `INSERT INTO ie_ticket_task_productivity_daily
+       (snapshot_date, area, employee_key, segment, agent_name, department_name, beginning, new_assigned, touched, closed, is_backfilled)
+     VALUES ${values.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)').join(', ')}
+     ON DUPLICATE KEY UPDATE
+       agent_name = VALUES(agent_name), department_name = VALUES(department_name),
+       beginning = VALUES(beginning), new_assigned = VALUES(new_assigned),
+       touched = VALUES(touched), closed = VALUES(closed)`,
+    values.flatMap((r) => [day, r.area, r.employeeKey, r.segment, r.agentName, r.departmentName, r.beginning, r.newAssigned, r.touched, r.closed]),
+  );
+  return { captured: true, rows: result.affectedRows ?? values.length, reason: 'ok' };
 }
 
 // ── Leads (Phase 4) ─────────────────────────────────────────────────────────

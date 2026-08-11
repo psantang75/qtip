@@ -7,7 +7,7 @@
  * which talks to insightsAdminService.
  */
 import { api } from './authService'
-import type { PastDueItem, PastDueQuery, TicketsTasksResponse } from './insightsService'
+import type { PastDueItem, PastDueQuery, TicketsTasksResponse, TicketDailyPoint, TicketHistoryParams, TicketProductivityRow } from './insightsService'
 
 export interface AttendanceParams {
   users?: string
@@ -162,6 +162,19 @@ export const getCsrTicketsTasks = async (p: AttendanceParams): Promise<TicketsTa
 
 export const getCsrTicketsPastDue = async (q: PastDueQuery): Promise<PastDueItem[]> => {
   const response = await api.get('/insights/csr/tickets/past-due', { params: q })
+  return response.data
+}
+
+export const getCsrTicketsDailyHistory = async (p: TicketHistoryParams): Promise<TicketDailyPoint[]> => {
+  const { users, departments } = p
+  const response = await api.get('/insights/csr/tickets/daily-history', { params: { users, departments } })
+  return response.data
+}
+
+// Productivity roll-up — the CSR twin, same response shape as the Sales report.
+// This report IS period-based, so the full period/date-range params are sent.
+export const getCsrTicketProductivity = async (p: AttendanceParams): Promise<TicketProductivityRow[]> => {
+  const response = await api.get('/insights/csr/tickets/productivity', { params: p })
   return response.data
 }
 

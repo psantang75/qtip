@@ -380,3 +380,96 @@ ssh $HOST "pm2 restart qtip-backend --update-env; sleep 5; curl -fsS http://loca
 Restore the Step 1 dump (same command as the `## Rollback` section above). The
 migrations and seed are additive, so a code revert + dump restore fully backs
 the change out.
+
+---
+
+# Prod cutover: Scheduling + Attendance + Timezone fix (LIVING CHECKLIST)
+
+> **Status: DRAFT / IN PROGRESS — this list is not exhaustive. More items
+> will be added.** Prod is being rebuilt from an old build and is
+> unreachable until tonight; every prod-side step below is verified/executed
+> at cutover, not before.
+
+## Environment model (current)
+
+Stage/prod are **Docker Compose**, not the PM2 `/opt/qtip` layout used by the
+sections above. Use these:
+
+| Env | Box | Compose dir | Container | DB env |
+| --- | --- | --- | --- | --- |
+| Stage | `dmadmin@10.90.15.6` | `/home/dmadmin/docker-staging/qtip-app` | `qtip-app-stage` | `DB_*` inside container |
+| Prod | `dmadmin@10.90.15.5` | (prod compose dir) | `qtip-app-prod` | `DB_*` inside container |
+
+Run Prisma/SQL inside the container, e.g.:
+`docker exec -i -w /app/backend qtip-app-stage node -` (pipe a script to stdin).
+
+## Why a raw data copy is correct
+
+Prod runs the **identical** Eastern-pinned build (process `TZ=America/New_York`,
+DB pool `timezone: 'Z'`). A data-only copy of stage's `DATETIME` values renders
+and scores identically on prod — **no timezone transformation during the copy.**
+The only rule: **stage must be correct before the dump** (it now is).
+
+## Already done on stage (source of truth)
+
+- [x] Timezone fix deployed (`backend/src/config/timezone.ts` pins
+  `TZ=America/New_York`; `deploy/Dockerfile` installs `tzdata` + `ENV TZ`).
+- [x] `punch_raw` healed: 8,505 UTC-era rows corrected +4h.
+- [x] Schedules healed: deleted erroneous manager shift 910; +4h corrected the
+  lone remaining 4h-early shift 912 (+ its 3 segments). **0** shifts remain with
+  start hour < 11 UTC. The Aug-3 bulk batch (`12:30`/`13:30`) was proven correct
+  by the attendance recompute (healed punches aligned to within minutes).
+- [x] CSR-only attendance filter (`CSR_ROLE_ID = 3` in
+  `attendance.engine.ts`) deployed — non-CSRs (managers/QA/etc.) no longer
+  scored.
+- [x] Attendance recomputed across the full range; no non-CSRs remain in
+  `attendance_daily`.
+
+## Tonight on prod — ordered
+
+1. **Deploy code first** (`d70133a` or later): promote → rebuild `qtip-app-prod`.
+   Verify `docker exec qtip-app-prod sh -c 'date; echo $TZ'` → `America/New_York`.
+   This deploy also **transfers Paychex mailbox ownership to prod** (see caveat).
+2. **Verify identity (prod is authoritative).** Stage descended from a prod
+   pull, so the 42 users (ids 1–42), 5 roles, 9 departments should match.
+   `SELECT id, username, role_id, department_id FROM users ORDER BY id;` on both;
+   diff. If drifted → **do NOT overwrite prod**; remap stage `user_id`s to prod
+   ids before loading.
+3. **Inventory prod.** Count rows in the domain + reference tables to decide what
+   to copy vs what prod already has (see caveat on stale Prisma seed data).
+4. **Dump from stage** (data-only) — `schedule_shift`, `schedule_shift_segment`,
+   `schedule_exception`, `punch_raw`, plus `schedule_template*` and any
+   reference/config/`business_calendar_days` prod is missing.
+   `mysqldump --single-transaction --no-create-info --skip-triggers --complete-insert`
+   (send stderr to a **separate** file, never `2>&1` into the dump).
+5. **Transfer stage → prod** via your workstation (`scp` down from `.6`, up to
+   `.5`; the boxes don't share keys).
+6. **Load into prod** in FK order (or wrap in `SET FOREIGN_KEY_CHECKS=0; … =1;`):
+   reference/config → `schedule_shift` → `_segment` → `schedule_exception` →
+   `punch_raw`. Then bump each table's `AUTO_INCREMENT` above its max id.
+   **Never** load `users`/`roles`/`departments` (prod authoritative).
+7. **Recompute attendance on prod** (`deriveTimeOffExceptions` + `recomputeRange`
+   over the full span). Do **not** copy `attendance_daily`/`attendance_occurrence`.
+8. **Verify on prod:** schedules render `8:30 AM`/`9:30 AM` (not 12:30), punches
+   align, no non-CSRs in attendance, manager (Nicholas Robinson) absent.
+
+## Caveats (raised at planning, MUST address)
+
+- **Stale Prisma seed/migration data.** Prod's migrations bring up **old/bad
+  baseline rows**. Wherever prod's seeded data conflicts with stage, the
+  **current, tested stage data wins** and must overwrite it. This is broader
+  than schedules/punches — audit each reference/config table at inventory
+  (step 3) and reconcile. *(Expand this list as specific tables are identified.)*
+- **Mailbox ownership handoff.** The Paychex poller runs live (`dryRun=false`)
+  and both envs would race for the same unread email. **Until the prod deploy,
+  stage owns the import.** The prod deploy hands ownership to prod; at that point
+  stage's poller must be set to `dryRun`/disabled so they don't split daily
+  punches.
+- **Identity is prod-authoritative** (see step 2) — never clobber prod users.
+
+## TODO / not yet scoped
+
+- [ ] Enumerate every reference/config table where prod's Prisma seed is stale
+      vs stage, with the reconcile action for each.
+- [ ] Confirm/flip stage poller to `dryRun` at the moment prod takes ownership.
+- [ ] (add more as discovered)

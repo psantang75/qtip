@@ -108,9 +108,11 @@ const AACallActivityPage     = React.lazy(() => import('../pages/insights/AACall
 const AALeadsPage            = React.lazy(() => import('../pages/insights/AALeadsPage'))
 const AAMarginPage           = React.lazy(() => import('../pages/insights/AAMarginPage'))
 const AATicketsTasksPage     = React.lazy(() => import('../pages/insights/AATicketsTasksPage'))
+const AAProductivityPage     = React.lazy(() => import('../pages/insights/AAProductivityPage'))
 const AAEmailActivityPage    = React.lazy(() => import('../pages/insights/AAEmailActivityPage'))
 const CSRAttendancePage      = React.lazy(() => import('../pages/insights/CSRAttendancePage'))
 const CSRTicketsTasksPage    = React.lazy(() => import('../pages/insights/CSRTicketsTasksPage'))
+const CSRProductivityPage    = React.lazy(() => import('../pages/insights/CSRProductivityPage'))
 
 const NotFoundPage           = React.lazy(() => import('../pages/NotFoundPage'))
 
@@ -389,10 +391,12 @@ export default function AppRoutes(): React.ReactElement {
             <Route path="aa-leads"    element={<RequireInsightsAccess pageKey="aa_sales_leads"><PageLoader><AALeadsPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="aa-margin"   element={<RequireInsightsAccess pageKey="aa_sales_margin"><PageLoader><AAMarginPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="aa-tickets"  element={<RequireInsightsAccess pageKey="aa_sales_tickets"><PageLoader><AATicketsTasksPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="aa-productivity" element={<RequireInsightsAccess pageKey="aa_sales_productivity"><PageLoader><AAProductivityPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="aa-email"    element={<RequireInsightsAccess pageKey="aa_sales_email"><PageLoader><AAEmailActivityPage /></PageLoader></RequireInsightsAccess>} />
             {/* Agent Activity - CSR */}
             <Route path="csr-attendance" element={<RequireInsightsAccess pageKey="csr_attendance"><PageLoader><CSRAttendancePage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-tickets"    element={<RequireInsightsAccess pageKey="csr_tickets"><PageLoader><CSRTicketsTasksPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="csr-productivity" element={<RequireInsightsAccess pageKey="csr_productivity"><PageLoader><CSRProductivityPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="dashboard" element={<PageLoader><DashboardPage /></PageLoader>} />
             <Route path="team"      element={<PageLoader><TeamDashboardPage /></PageLoader>} />
             <Route path="builder"   element={<PageLoader><ReportBuilderPage /></PageLoader>} />

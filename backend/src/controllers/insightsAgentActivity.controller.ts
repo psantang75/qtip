@@ -8,6 +8,8 @@ import {
   getCallActivity as svcGetCallActivity,
   getTicketsTasks as svcGetTicketsTasks,
   getTicketsPastDue as svcGetTicketsPastDue,
+  getTicketsDailyHistory as svcGetTicketsDailyHistory,
+  getTicketProductivity as svcGetTicketProductivity,
   getLeads as svcGetLeads,
   getMargin as svcGetMargin,
 } from '../services/insightsAgentActivity.service';
@@ -183,6 +185,77 @@ function pastDueHandler(pageKey: string, area: 'sales' | 'csr') {
  */
 export const getTicketsPastDue = pastDueHandler('aa_sales_tickets', 'sales');
 export const getCsrTicketsPastDue = pastDueHandler('csr_tickets', 'csr');
+
+/**
+ * Shared handler for the Tickets & Tasks daily trend. Same page grants and
+ * SELF-scope folding as the snapshot table on the same page, and the same
+ * users/departments filter params — so the trend always shows exactly the
+ * population the table above it shows, summed per day server-side.
+ */
+function dailyHistoryHandler(pageKey: string, area: 'sales' | 'csr') {
+  return async (req: Request, res: Response): Promise<void> => {
+    try {
+      const scope = await resolveAaScope(req, res, pageKey);
+      if (!scope) return;
+      const { users, departments } = req.query as Record<string, string | undefined>;
+      const points = await svcGetTicketsDailyHistory({
+        area,
+        selfEmployeeKey: scope.selfEmployeeKey,
+        users: users ? users.split(',').filter(Boolean) : undefined,
+        departments: departments ? departments.split(',').filter(Boolean) : undefined,
+      });
+      res.json(points);
+    } catch (error) {
+      logger.error('getTicketsDailyHistory error:', error);
+      res.status(500).json({ error: 'Failed to load tickets & tasks history' });
+    }
+  };
+}
+
+/**
+ * GET /api/insights/agent-activity/tickets/daily-history?users=&departments=
+ * GET /api/insights/csr/tickets/daily-history?users=&departments=
+ * Daily 8am Current/Due Today/Past Due totals over time for the trend chart.
+ */
+export const getTicketsDailyHistory = dailyHistoryHandler('aa_sales_tickets', 'sales');
+export const getCsrTicketsDailyHistory = dailyHistoryHandler('csr_tickets', 'csr');
+
+/**
+ * Shared handler for the Tickets & Tasks productivity roll-up. Unlike the
+ * snapshot table on the Tickets & Tasks page, this report IS period-based
+ * (beginning/new/touched/closed by day), so it accepts the standard
+ * period/date-range params on top of the usual users/departments/SELF scope.
+ */
+function productivityHandler(pageKey: string, area: 'sales' | 'csr') {
+  return async (req: Request, res: Response): Promise<void> => {
+    try {
+      const scope = await resolveAaScope(req, res, pageKey);
+      if (!scope) return;
+      const { period, start, end, users, departments } = req.query as Record<string, string | undefined>;
+      const rows = await svcGetTicketProductivity({
+        area,
+        period: period || 'current_month',
+        customStart: start,
+        customEnd: end,
+        selfEmployeeKey: scope.selfEmployeeKey,
+        users: users ? users.split(',').filter(Boolean) : undefined,
+        departments: departments ? departments.split(',').filter(Boolean) : undefined,
+      });
+      res.json(rows);
+    } catch (error) {
+      logger.error('getTicketProductivity error:', error);
+      res.status(500).json({ error: 'Failed to load tickets & tasks productivity' });
+    }
+  };
+}
+
+/**
+ * GET /api/insights/agent-activity/tickets/productivity
+ * GET /api/insights/csr/tickets/productivity
+ * Per-agent-per-day Beginning / New Assigned / Touched / Closed over the range.
+ */
+export const getTicketsProductivity = productivityHandler('aa_sales_productivity', 'sales');
+export const getCsrTicketsProductivity = productivityHandler('csr_productivity', 'csr');
 
 /**
  * GET /api/insights/agent-activity/leads

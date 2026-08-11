@@ -406,6 +406,42 @@ export const getTicketsPastDue = async (q: PastDueQuery): Promise<PastDueItem[]>
   return response.data
 }
 
+/** One day of the 8am snapshot history, summed server-side over the visible population. */
+export interface TicketDailyPoint {
+  date:     string   // YYYY-MM-DD
+  current:  number
+  dueToday: number
+  pastDue:  number
+}
+
+export interface TicketHistoryParams { users?: string; departments?: string }
+
+export const getTicketsDailyHistory = async (p: TicketHistoryParams): Promise<TicketDailyPoint[]> => {
+  const { users, departments } = p
+  const response = await api.get('/insights/agent-activity/tickets/daily-history', { params: { users, departments } })
+  return response.data
+}
+
+/** One agent's productivity for one day. The API returns one row per (agent, day). */
+export interface TicketProductivityRow {
+  date:        string   // YYYY-MM-DD
+  agent:       string
+  department:  string
+  employeeKey: number
+  // Sales only: which slice this row is. The Sales page renders two sections
+  // (Contact Manager vs all other tickets/tasks); CSR omits it (segments summed).
+  segment?:    'contact_manager' | 'other'
+  beginning:   number
+  newAssigned: number
+  touched:     number
+  closed:      number
+}
+
+export const getTicketProductivity = async (p: AAParams): Promise<TicketProductivityRow[]> => {
+  const response = await api.get('/insights/agent-activity/tickets/productivity', { params: p })
+  return response.data
+}
+
 // ── Agent Activity — Leads (Phase 4 live data) ────────────────────────────────
 
 export interface LeadCatSourceRow {

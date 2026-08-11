@@ -6,7 +6,7 @@ import {
   getDataFreshness,
   getKpiConfig,
 } from '../controllers/insights.controller';
-import { getAgentActivityStatus, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
+import { getAgentActivityStatus, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDailyHistory, getTicketsProductivity, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
 import qcRouter from './insightsQC.routes';
 import csrRouter from './insightsCsr.routes';
 
@@ -57,6 +57,16 @@ router.get('/agent-activity/tickets',
 router.get('/agent-activity/tickets/past-due',
   authenticate as unknown as RequestHandler,
   getTicketsPastDue as unknown as RequestHandler
+);
+
+router.get('/agent-activity/tickets/daily-history',
+  authenticate as unknown as RequestHandler,
+  getTicketsDailyHistory as unknown as RequestHandler
+);
+
+router.get('/agent-activity/tickets/productivity',
+  authenticate as unknown as RequestHandler,
+  getTicketsProductivity as unknown as RequestHandler
 );
 
 router.get('/agent-activity/leads',
