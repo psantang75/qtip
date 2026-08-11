@@ -24,6 +24,13 @@ RUN npm run copy:assets
 
 # Stage 3: Production Runtime
 FROM node:20-alpine AS production
+# Run the container in Eastern so DATETIME handling matches dev/stage/prod. The
+# app also pins process.env.TZ=America/New_York at startup
+# (backend/src/config/timezone.ts); tzdata provides the zone database that Alpine
+# needs to resolve the named zone, and this keeps OS-level tooling (logs, cron,
+# `date`) consistent as belt-and-suspenders.
+RUN apk add --no-cache tzdata
+ENV TZ=America/New_York
 RUN npm install --legacy-peer-deps -g pm2
 WORKDIR /app
 

@@ -1,3 +1,8 @@
+// Pin the process timezone (America/New_York) before anything else loads or
+// creates a Date. Keeps dev/stage/prod identical for DATETIME handling and
+// converts UTC-stored instants back to Eastern wall-clock. See config/timezone.ts.
+import './config/timezone';
+
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';

@@ -141,8 +141,9 @@ export function exceptionsOverlap(existing: OverlapCandidate[], candidate: Overl
 
 /**
  * Combine a 'YYYY-MM-DD' date with an 'HH:MM' or 'HH:MM:SS' wall-clock time into
- * a local Date. The server runs single-zone (America/New_York), so local time
- * IS wall-clock time, matching how punch data is stored.
+ * a local Date. The process is pinned to America/New_York in every environment
+ * (config/timezone.ts), so local time IS Eastern wall-clock time — identical on
+ * dev, stage, and prod, matching how punch data is stored.
  */
 export function combineLocal(dateStr: string, hms: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -176,8 +177,10 @@ export function timeValue(hm: string): Date {
 
 // ── Prisma column mapping ─────────────────────────────────────────────────────
 // `@db.Date` round-trips through UTC midnight, so date-only columns use UTC
-// getters/setters. `@db.DateTime` round-trips a wall-clock instant through the
-// process timezone (single-zone server), so datetime columns use LOCAL getters.
+// getters/setters. `@db.DateTime` is stored as a UTC instant and round-trips
+// back to a wall-clock through the process timezone, which is pinned to
+// America/New_York everywhere (config/timezone.ts), so datetime columns use
+// LOCAL getters that resolve to Eastern wall-clock on every host.
 
 /** Build the Date to store in a `@db.Date` column from a 'YYYY-MM-DD' string. */
 export function dateOnlyValue(dateStr: string): Date {
