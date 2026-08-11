@@ -36,6 +36,16 @@ import {
 import type { PointRule, AttendanceKind } from './attendance.rules';
 import { combineLocal, parseLocal, addDays, dateOnlyValue } from '../scheduling/schedule.dates';
 
+/**
+ * The attendance policy applies to CSRs only. Managers, QA, trainers and admins
+ * are never scored, even when one carries a published shift and a stray punch or
+ * two — which is exactly how a manager landed a false absence. Filtering here, at
+ * the single writer of attendance_daily, keeps every downstream read CSR-only
+ * without repeating the clause. Matches the `role_id = 3` convention used across
+ * the Insights services (QCKpiService, QCQualityData).
+ */
+const CSR_ROLE_ID = 3;
+
 interface DailyRow {
   user_id: number;
   work_date: Date;
@@ -380,18 +390,24 @@ async function runRecompute(
   // Only people the punch feed knows about can be scored. Four users in the
   // current data have published shifts and no punch history whatsoever; scoring
   // them produced 100 absences for days nobody can say anything about.
-  const userIds = scheduledUserIds.filter((id) => coverage.byUser.has(id));
-  const usersWithoutPunchData = scheduledUserIds.length - userIds.length;
-  if (userIds.length === 0) return { ...empty, usersWithoutPunchData };
+  const coveredUserIds = scheduledUserIds.filter((id) => coverage.byUser.has(id));
+  const usersWithoutPunchData = scheduledUserIds.length - coveredUserIds.length;
+  if (coveredUserIds.length === 0) return { ...empty, usersWithoutPunchData };
 
+  // CSRs only (see CSR_ROLE_ID). This query doubles as the role gate and the
+  // active-status lookup below, so a non-CSR is dropped before any day is scored.
+  //
   // An INACTIVE user's span closes at their last punch: they left, and the
   // scheduled days still sitting after that date are stale schedule rows, not
   // absences. An ACTIVE user runs to the global watermark so a genuine absence
   // in the most recent week still counts.
   const users = await prisma.user.findMany({
-    where: { id: { in: userIds } },
+    where: { id: { in: coveredUserIds }, role_id: CSR_ROLE_ID },
     select: { id: true, is_active: true },
   });
+  const userIds = users.map((u) => u.id);
+  if (userIds.length === 0) return { ...empty, usersWithoutPunchData };
+
   const spanEnd = new Map<number, string>();
   for (const u of users) {
     const bounds = coverage.byUser.get(u.id)!;
