@@ -160,8 +160,8 @@ export function WriteUpPdfDocument({ writeup }: { writeup: WriteUpDetail }) {
         <View style={s.section}>
           <SectionBar num={nextSection()} title="INCIDENT & POLICY VIOLATIONS" />
           {writeup.incidents?.length ? writeup.incidents.map((inc, i) => (
-            <View key={inc.id} style={{ marginBottom: 10 }} wrap={false}>
-              <Text style={s.incidentTitle}>Incident {i + 1}</Text>
+            <View key={inc.id} style={{ marginBottom: 10 }}>
+              <Text style={s.incidentTitle} minPresenceAhead={40}>Incident {i + 1}</Text>
               {htmlToPdfNodes(inc.description)}
               {inc.violations?.map(v => (
                 <View key={v.id} style={s.violation}>
@@ -171,13 +171,13 @@ export function WriteUpPdfDocument({ writeup }: { writeup: WriteUpDetail }) {
                   </View>
                   {v.examples?.length > 0 && (
                     <View style={{ marginTop: 4 }}>
-                      <View style={s.tblHeader}>
+                      <View style={s.tblHeader} minPresenceAhead={24}>
                         <Text style={[s.tblHeaderCell, { width: '18%' }]}>DATE</Text>
                         <Text style={[s.tblHeaderCell, { width: '68%' }]}>EXAMPLE DESCRIPTION</Text>
                         <Text style={[s.tblHeaderCell, { width: '14%' }]}>SOURCE</Text>
                       </View>
                       {v.examples.map((ex, ei) => (
-                        <View key={ex.id ?? ei} style={s.tblRow}>
+                        <View key={ex.id ?? ei} style={s.tblRow} wrap={false}>
                           <Text style={[s.tblCell, { width: '18%' }]}>{fmtDate(ex.example_date)}</Text>
                           <View style={[s.tblCell, { width: '68%' }]}>{htmlToPdfNodes(ex.description, { fontSize: 8 })}</View>
                           <Text style={[s.tblCell, { width: '14%' }]}>
@@ -243,8 +243,10 @@ export function WriteUpPdfDocument({ writeup }: { writeup: WriteUpDetail }) {
 
         {/* Section 5: Meeting Notes (optional) */}
         {writeup.meeting_notes && (
-          <View style={s.section} wrap={false}>
-            <SectionBar num={nextSection()} title="MEETING NOTES" />
+          <View style={s.section}>
+            <View wrap={false}>
+              <SectionBar num={nextSection()} title="MEETING NOTES" />
+            </View>
             {htmlToPdfNodes(writeup.meeting_notes)}
           </View>
         )}
