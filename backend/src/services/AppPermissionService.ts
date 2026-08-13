@@ -213,9 +213,12 @@ class AppPermissionService {
    * of role levels — missing roles are removed.
    *
    * CSR INVARIANT: CSR (role 3) is clamped to at most OWN here. ALL/EDIT for
-   * CSR is silently downgraded to OWN, and OWN is only kept on pages that
-   * actually have a self-view (otherwise NONE). The data-layer self-scope
-   * still wins regardless; this just keeps the table honest.
+   * CSR is silently downgraded to OWN. OWN is kept on pages that expose a
+   * self-view (`supports_self`) OR that already grant CSR OWN — the latter
+   * covers department-scoped read-only pages like Call Campaigns, where a CSR
+   * sees their own department's data on the shared page. Otherwise CSR falls to
+   * NONE. The data-layer self-scope still wins regardless; this just keeps the
+   * table honest without silently destroying a legitimate seeded grant.
    */
   async updatePageAccess(
     pageId: number,
@@ -223,15 +226,19 @@ class AppPermissionService {
   ): Promise<void> {
     const page = await prisma.appPage.findUnique({
       where:  { id: pageId },
-      select: { supports_self: true },
+      select: {
+        supports_self: true,
+        role_access: { where: { role_id: CSR_ROLE_ID }, select: { access_level: true } },
+      },
     })
     const supportsSelf = page?.supports_self ?? false
+    const csrOwnAllowed = supportsSelf || page?.role_access[0]?.access_level === 'OWN'
 
     const clamped = grants.map((g) => {
       if (g.role_id !== CSR_ROLE_ID) return g
       // CSR cap.
       if (g.access_level === 'NONE') return g
-      return { ...g, access_level: (supportsSelf ? 'OWN' : 'NONE') as AppAccessLevel }
+      return { ...g, access_level: (csrOwnAllowed ? 'OWN' : 'NONE') as AppAccessLevel }
     })
 
     await prisma.$transaction(async (tx) => {

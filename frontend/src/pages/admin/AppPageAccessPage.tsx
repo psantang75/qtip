@@ -194,11 +194,20 @@ function PageDetailSection({ page }: { page: AppPageAdmin }) {
     }),
   })
 
-  // Levels available for a given role on this page. "Own only" is offered just
-  // for self-supporting pages; CSR is capped at None / Own.
+  // CSR is capped at None / Own. "Own only" is offered on self-supporting pages
+  // (the "My X" self-view) AND on pages that already grant CSR OWN — i.e.
+  // department-scoped read-only views like Call Campaigns, where a CSR sees
+  // their own department's data on the shared page (no separate self-route).
+  // Without this, such a seeded grant is invisible here and silently wiped on
+  // the next save (the backend applies the same rule).
+  const csrOwnAllowed =
+    page.supports_self ||
+    page.grants.some(g => g.role_id === CSR_ROLE_ID && g.access_level === 'OWN')
+
+  // Levels available for a given role on this page.
   function optionsFor(roleId: number): AppAccessLevel[] {
     if (roleId === CSR_ROLE_ID) {
-      return page.supports_self ? ['NONE', 'OWN'] : ['NONE']
+      return csrOwnAllowed ? ['NONE', 'OWN'] : ['NONE']
     }
     return page.supports_self ? ['NONE', 'OWN', 'ALL', 'EDIT'] : ['NONE', 'ALL', 'EDIT']
   }
