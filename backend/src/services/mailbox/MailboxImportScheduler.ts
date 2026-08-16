@@ -27,6 +27,7 @@ import { detectDataType } from '../importService';
 import { runImport } from '../imports/runImport';
 import { ExchangeMailClient, type MailMessage } from './ExchangeMailClient';
 import { isSenderAllowed, loadAllowedSenders, resolveImporter } from './senderAllowlist';
+import { notifyIngestionFailure } from '../notifications/ingestionAlerts';
 
 const FOLDER_PROCESSED = 'QTIP Processed';
 const FOLDER_FAILED = 'QTIP Failed';
@@ -170,7 +171,18 @@ export async function runOnce(): Promise<TickSummary> {
       if (failure) {
         summary.rejected++;
         logger.warn(`[MAILBOX] rejected "${message.subject}" from ${message.from}: ${failure}`);
-        if (!dryRun) await client.moveToFolder(message.id, FOLDER_FAILED);
+        if (!dryRun) {
+          await client.moveToFolder(message.id, FOLDER_FAILED);
+          // A dry run is a rehearsal, not a real miss — only alert on live rejections.
+          await notifyIngestionFailure({
+            channel: 'email',
+            name: message.subject || '(no subject)',
+            code: message.from || 'unknown-sender',
+            reason: failure,
+            source: message.from,
+            occurredAt: message.receivedAt,
+          });
+        }
       } else {
         summary.imported++;
         if (!dryRun) await client.moveToFolder(message.id, FOLDER_PROCESSED);

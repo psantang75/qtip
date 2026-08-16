@@ -51,8 +51,13 @@ vi.mock('../senderAllowlist', async (importOriginal) => {
   };
 });
 
+vi.mock('../../notifications/ingestionAlerts', () => ({
+  notifyIngestionFailure: vi.fn(async () => {}),
+}));
+
 import { ExchangeMailClient } from '../ExchangeMailClient';
 import { runImport } from '../../imports/runImport';
+import { notifyIngestionFailure } from '../../notifications/ingestionAlerts';
 import { authVerdict, runOnce } from '../MailboxImportScheduler';
 
 // A workbook the real detector will call punch_data.
@@ -196,6 +201,23 @@ describe('runOnce', () => {
     const summary = await runOnce();
     expect(summary).toMatchObject({ examined: 0, imported: 0, rejected: 0 });
     expect(runImport).not.toHaveBeenCalled();
+  });
+
+  it('alerts admins when it rejects a live message', async () => {
+    fakeClient({ from: 'attacker@example.com' });
+    await runOnce();
+
+    expect(notifyIngestionFailure).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notifyIngestionFailure).mock.calls[0][0]).toMatchObject({
+      channel: 'email',
+      source: 'attacker@example.com',
+    });
+  });
+
+  it('does not alert when a message imports cleanly', async () => {
+    fakeClient();
+    await runOnce();
+    expect(notifyIngestionFailure).not.toHaveBeenCalled();
   });
 });
 

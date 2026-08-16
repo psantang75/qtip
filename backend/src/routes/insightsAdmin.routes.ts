@@ -8,6 +8,9 @@ import {
   listOverrides, createOverride, deleteOverride,
 } from '../controllers/insightsAdminPage.controller';
 import { getIngestionLog } from '../controllers/insightsAdminIngestion.controller';
+import {
+  listEmailFeeds, createEmailFeed, updateEmailFeed, deleteEmailFeed,
+} from '../controllers/insightsAdminEmailFeed.controller';
 import { getCalendar, updateCalendarDay, saveCalendarMonth } from '../controllers/insightsAdminCalendar.controller';
 import {
   listSourceReportsAdmin, updateSourceReport, runSourceReportNow,
@@ -36,6 +39,10 @@ router.post('/pages/:id/overrides', authenticate as unknown as RequestHandler, a
 router.delete('/pages/:id/overrides/:overrideId', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, deleteOverride as unknown as RequestHandler);
 
 router.get('/ingestion-log', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, getIngestionLog as unknown as RequestHandler);
+router.get('/email-feeds', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, listEmailFeeds as unknown as RequestHandler);
+router.post('/email-feeds', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, createEmailFeed as unknown as RequestHandler);
+router.put('/email-feeds/:id', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, updateEmailFeed as unknown as RequestHandler);
+router.delete('/email-feeds/:id', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, deleteEmailFeed as unknown as RequestHandler);
 
 router.get('/source-reports', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, listSourceReportsAdmin as unknown as RequestHandler);
 router.put('/source-reports/:id', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, updateSourceReport as unknown as RequestHandler);

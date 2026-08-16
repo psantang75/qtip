@@ -164,6 +164,50 @@ never appears, that folder is where to look.
 
 ---
 
+## Email feeds, schedules and the unified ingestion log
+
+The Admin > Insights section presents mailbox imports next to the SQL
+source-report pipeline so operators watch one place:
+
+- **Report Schedules** (`/app/admin/insights/source-reports`) shows the SQL
+  source reports (Edit / Run now) and, below them, an **Email Feeds** table.
+  Each email feed is one expected mailbox file. Admins add / edit / remove feeds
+  right on this card; the per-feed action is **Manual upload** (a drawer over
+  the shared `ManualUploadPanel`) rather than Run now, because a feed's data
+  arrives by email, not by a scheduled SQL run.
+- **Ingestion Log** (`/app/admin/insights/ingestion`) is a single list across
+  three channels — `sql` (`ie_ingestion_log`), `email` and `manual` (both
+  `import_logs`, split on the `error_details.source` stamp) — filterable by
+  channel and status.
+
+### The feed registry (`mailbox_import_feed` table)
+
+Feeds live in the `mailbox_import_feed` table — a first-class sibling of
+`ie_source_report`, added by migration `20260813120000_create_mailbox_import_feed`.
+Each row is `data_type` (unique; the key that ties the feed to its import
+handler and `import_logs` history), `display_name`, an optional free-text
+`cadence_label`, `is_active` and `sort_order`. Management is CRUD via
+`/api/insights/admin/email-feeds` from the Email Feeds card — no List Management
+entry. A row whose data_type is no longer a known import type is skipped on read
+rather than shown broken. `last_*` status on the schedule row is derived from the
+most recent `import_logs` row for that data_type — there is no per-feed run
+cadence, because one poller drains every feed on the same tick (so `cadence_label`
+is a display-only expectation note).
+
+### Failure alerts
+
+Any ingestion failure emails the **Alert Recipients** list (List Management >
+Notifications; admins are toggleable on the template) via the locked
+`system.ingestion_failed` template. `notifyIngestionFailure()` is the single
+entry point, called from four sites: a live mailbox rejection, an Excel import
+failure (`runImport`, covering both email and manual), a manual "Run now"
+report failure, and the source-report dispatcher. Repeated failures of the same
+feed on the same day dedupe to one mail (`entityId = channel:code:YYYY-MM-DD`),
+with the NotificationService rate-limit and circuit-breaker as the second line.
+A dry-run mailbox rejection does **not** alert — it is a rehearsal, not a miss.
+
+---
+
 ## Code map
 
 | Concern | File |
@@ -175,7 +219,13 @@ never appears, that folder is where to look.
 | Shared import path + punch rescore | `backend/src/services/imports/runImport.ts` |
 | Config | `mailboxImportConfig` in `backend/src/config/environment.ts` |
 | Startup wiring | `backend/src/index.ts` (boot IIFE, after the email block) |
-| Allowlist UI | `frontend/src/pages/admin/ListManagementPage.tsx` (Data Imports section) |
+| Sender allowlist UI | `frontend/src/pages/admin/ListManagementPage.tsx` (Data Imports section) |
+| Email feed table | migration `20260813120000_create_mailbox_import_feed` |
+| Email feed registry | `backend/src/services/mailbox/feedRegistry.ts` (`mailbox_import_feed`) |
+| Email feed API (CRUD) | `backend/src/controllers/insightsAdminEmailFeed.controller.ts` |
+| Unified ingestion log | `backend/src/controllers/insightsAdminIngestion.controller.ts` + `services/imports/importLogView.ts` |
+| Failure alert | `backend/src/services/notifications/ingestionAlerts.ts` + `email/templates/system.ingestion_failed*.hbs` |
+| Report Schedules + feeds UI | `frontend/src/components/insights/EmailFeedsCard.tsx`, `EmailFeedFormDialog.tsx`, `ManualUploadPanel.tsx` |
 | Tests | `backend/src/services/mailbox/__tests__/`, `backend/src/services/__tests__/detectDataType.test.ts` |
 
 `runImport.ts` is shared with `controllers/importController.ts` on purpose: an

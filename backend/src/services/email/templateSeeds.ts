@@ -410,6 +410,32 @@ const SEEDS: SeedSpec[] = [
     default_recipient_roles: ['admins'],
     digest_eligible: false,
     deep_link_target: 'Admin email templates page (/app/admin/email-templates).' },
+
+  { template_key: 'system.ingestion_failed', category: 'System', name: 'Data ingestion failed',
+    description: 'Sent when a data ingestion fails — a SQL source-report run, an email pickup, or a manual upload.',
+    cadence: 'IMMEDIATE', is_locked: true,
+    recipient_summary: 'Alert Recipients (admins optional)',
+    allowed_variables: [
+      'channel', 'channelLabel', 'name', 'code', 'reason', 'source',
+      'occurredAt', 'recipient', 'deepLinkPath',
+    ],
+    available_roles: ['designated', 'admins'],
+    default_recipient_roles: ['designated'],
+    digest_eligible: false,
+    deep_link_target: 'Admin ingestion log (/app/admin/insights/ingestion).' },
+
+  { template_key: 'system.note_drift', category: 'System', name: 'Touched note-pattern drift',
+    description: 'Weekly: high-frequency CRM note prefixes the system-note classifier did not match, so a person can add new machine patterns to the Touched metric.',
+    cadence: 'IMMEDIATE', is_locked: true,
+    recipient_summary: 'Alert Recipients (admins optional)',
+    allowed_variables: [
+      'generatedAt', 'lookbackDays', 'candidateCount', 'aiEnabled',
+      'candidates', 'recipient', 'deepLinkPath',
+    ],
+    available_roles: ['designated', 'admins'],
+    default_recipient_roles: ['designated'],
+    digest_eligible: false,
+    deep_link_target: 'Admin email templates (/app/admin/email-templates).' },
 ];
 
 export async function seedEmailTemplates(): Promise<{ inserted: number; updated: number; skipped: number }> {

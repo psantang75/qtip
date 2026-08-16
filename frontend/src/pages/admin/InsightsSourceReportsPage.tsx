@@ -20,6 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { EmailFeedsCard } from '@/components/insights/EmailFeedsCard'
 
 const STATUS_STYLES: Record<string, string> = {
   SUCCESS: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -286,6 +287,8 @@ export default function InsightsSourceReportsPage() {
           </TableBody>
         </Table>
       </div>
+
+      <EmailFeedsCard />
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="sm:max-w-md">

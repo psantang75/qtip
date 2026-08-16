@@ -3,6 +3,7 @@ import pool from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import logger from '../config/logger';
 import { SourceReportSyncWorker, SourceReportConfig } from '../workers/SourceReportSyncWorker';
+import { notifyIngestionFailure } from '../services/notifications/ingestionAlerts';
 
 /**
  * Insights Admin Source Report controller — manages the scheduling fields of
@@ -189,6 +190,12 @@ export const runSourceReportNow = async (req: Request, res: Response): Promise<v
       } catch (err) {
         logger.error('runSourceReportNow background run failed', { report: cfg.report_code, error: (err as Error)?.message });
         await reschedule(id, 'FAILED').catch(() => {});
+        await notifyIngestionFailure({
+          channel: 'sql',
+          name: cfg.report_name,
+          code: cfg.report_code,
+          reason: (err as Error)?.message ?? 'Report run failed',
+        });
       }
     })();
   } catch (error) {

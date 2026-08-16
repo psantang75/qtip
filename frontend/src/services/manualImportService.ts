@@ -19,6 +19,42 @@ export const MANUAL_UPLOAD_TYPES: ManualUploadType[] = [
     description: 'Time-clock punches exported from Paychex Flex (employee-time-cards). Matched to users by Alert Email; deduped by Post ID.',
     requiredColumns: ['Post ID', 'Alert Email', 'Actual Date/Time In', 'Regular Duration'],
   },
+  {
+    code: 'call_activity',
+    label: 'Call Activity',
+    description: 'Per-agent daily call-handling stats. Rows are matched to users by the Email column.',
+    requiredColumns: ['Email', 'ReportDate', 'CallsOffered', 'CallsHandled', 'HoldMinutes', 'LineMinutes'],
+  },
+  {
+    code: 'sales_margin',
+    label: 'Sales Margin',
+    description: 'Per-agent daily order revenue and gross margin. Matched to users by Email.',
+    requiredColumns: ['Email', 'ReportDate', 'OrderCount', 'Revenue', 'COGS', 'GrossMargin'],
+  },
+  {
+    code: 'lead_sales_margin',
+    label: 'Lead Sales Margin',
+    description: 'Per-agent lead pipeline revenue and margin. Matched to users by Email.',
+    requiredColumns: ['Email', 'ReportDate', 'LeadsAssigned', 'LeadsContacted', 'Orders', 'LeadRevenue', 'LeadMargin'],
+  },
+  {
+    code: 'lead_source',
+    label: 'Lead Source',
+    description: 'Per-agent lead volume and conversion by source. Matched to users by Email.',
+    requiredColumns: ['Email', 'ReportDate', 'SourceName', 'LeadsReceived', 'Converted'],
+  },
+  {
+    code: 'ticket_task',
+    label: 'Tickets & Tasks',
+    description: 'Per-agent ticket/task activity and status. Matched to users by Email.',
+    requiredColumns: ['Email', 'ReportDate', 'Status'],
+  },
+  {
+    code: 'email_stats',
+    label: 'Email Stats',
+    description: 'Per-agent email handling volume. The Email column is the mailbox address and the identity key.',
+    requiredColumns: ['Email', 'ReportDate', 'EmailsSent', 'EmailsReceived'],
+  },
 ]
 
 // ── Types ─────────────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import logger from '../config/logger';
 import { SourceReportSyncWorker, SourceReportConfig } from './SourceReportSyncWorker';
+import { notifyIngestionFailure } from '../services/notifications/ingestionAlerts';
 
 const SERVICE = 'SourceReportDispatcher';
 
@@ -37,6 +38,12 @@ export class SourceReportDispatcher {
         status = 'FAILED';
         logger.error('Source report run failed', {
           service: SERVICE, report: cfg.report_code, error: err?.message,
+        });
+        await notifyIngestionFailure({
+          channel: 'sql',
+          name: cfg.report_name,
+          code: cfg.report_code,
+          reason: err?.message ?? 'Report run failed',
         });
       }
       await this.reschedule(cfg.id, status);

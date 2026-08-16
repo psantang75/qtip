@@ -31,6 +31,7 @@ import { getPunchWatermark } from '../attendance/punchProvider';
 import { queueThresholdCrossings } from '../attendance/attendance.notify';
 import { addDays } from '../scheduling/schedule.dates';
 import { deriveTimeOffExceptions } from '../scheduling/timeOff.derive.service';
+import { notifyIngestionFailure } from '../notifications/ingestionAlerts';
 
 // One rolling window. Anything older than this has already rolled out of every
 // live point total, so rescoring it would cost time and change nothing visible.
@@ -147,7 +148,22 @@ export async function runImport(
   importedBy: number,
   source?: ImportSource,
 ): Promise<RunImportResult> {
-  const result = await HANDLERS[dataType](buffer, fileName, importedBy);
+  let result: ImportResult;
+  try {
+    result = await HANDLERS[dataType](buffer, fileName, importedBy);
+  } catch (err) {
+    // The row is already marked FAILED by the handler (failImportLog); alert
+    // admins here where we still know the file, type, and origin. Whether it
+    // came by mail or a person's upload decides the channel.
+    await notifyIngestionFailure({
+      channel: source ? 'email' : 'manual',
+      name: fileName,
+      code: dataType,
+      reason: err instanceof Error ? err.message : String(err),
+      source: source?.from,
+    });
+    throw err;
+  }
 
   if (source) await stampSource(result.import_log_id, source, result.warnings);
 
