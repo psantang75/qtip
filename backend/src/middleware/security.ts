@@ -18,7 +18,11 @@ export const securityHeaders = helmet({
       connectSrc: ["'self'"],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
+      // Call recordings are streamed through the authenticated
+      // /api/phone-system/audio proxy, fetched as a Blob and played via a
+      // `blob:` object URL in <audio>. Without `blob:` here the fetch still
+      // succeeds (connect-src) but the media element is blocked and renders blank.
+      mediaSrc: ["'self'", "blob:"],
       frameSrc: ["'none'"]
     }
   },

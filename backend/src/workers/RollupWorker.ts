@@ -2,6 +2,7 @@ import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import { BaseInsightsWorker, WorkerResult } from './BaseInsightsWorker';
 import { captureDailyTicketTotals, captureDailyTicketProductivity } from '../services/insightsAgentActivity.service';
+import { runSystemNoteDriftScan } from '../services/insights/systemNoteDrift';
 import logger from '../config/logger';
 
 const SERVICE = 'RollupWorker';
@@ -27,7 +28,14 @@ export class RollupWorker extends BaseInsightsWorker {
     if (prod.captured) {
       logger.info('Captured Tickets & Tasks daily productivity', { service: SERVICE, rows: prod.rows });
     }
-    const captureTag = `ticketDaily:${capture.captured ? capture.rows : capture.reason};ticketProd:${prod.captured ? prod.rows : prod.reason}`;
+    // Weekly-gated, read-only: surface new CRM note templates that would
+    // otherwise re-inflate Touched. Self-gates + never throws, so it's cheap to
+    // call every cycle.
+    const drift = await runSystemNoteDriftScan();
+    if (drift.ran && drift.candidates > 0) {
+      logger.info('System-note drift candidates emailed', { service: SERVICE, candidates: drift.candidates });
+    }
+    const captureTag = `ticketDaily:${capture.captured ? capture.rows : capture.reason};ticketProd:${prod.captured ? prod.rows : prod.reason};drift:${drift.ran ? drift.candidates : drift.reason}`;
 
     const [kpiRows] = await pool.execute<RowDataPacket[]>(
       `SELECT source_table, COUNT(*) as kpi_count

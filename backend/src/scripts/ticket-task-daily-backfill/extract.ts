@@ -19,8 +19,14 @@
  *     never timezone-shifted by the UTC-pinned primary pool.
  */
 import mysql from 'mysql2/promise';
+import { RowDataPacket } from 'mysql2';
 import pool from '../../config/database';
 import { crmDatabaseConfig } from '../../config/environment';
+import {
+  buildSystemNoteExclusionSql,
+  systemExclusionEnabled,
+  TOUCHED_EXCLUDE_SYSTEM_FLAG,
+} from '../../services/insights/systemNoteClassifier';
 
 /** Task-side population rules, mirroring task_open.extract.sql. */
 const TASK_DEPTS = [1, 2];
@@ -427,14 +433,17 @@ async function extractCurrentTasks(crm: CrmClient): Promise<void> {
  * because managers aren't conformed CSR agents) and system rows with no actor
  * are skipped. Resumes from the bf_tt_progress marker after an interrupt.
  */
-async function extractTaskActions(crm: CrmClient, cutoff: string): Promise<void> {
+async function extractTaskActions(crm: CrmClient, cutoff: string, excludeSystem: boolean): Promise<void> {
   const [[range]] = await crm.query<mysql.RowDataPacket[]>(`SELECT MIN(ActionID) mn, MAX(ActionID) mx FROM tblAction`);
   const mn = Number(range.mn ?? 0);
   const mx = Number(range.mx ?? 0);
   const resumeAt = await getMarker('actions');
   if (resumeAt == null) await pool.query(`TRUNCATE TABLE bf_tt_task_action`);
   const startId = resumeAt != null ? resumeAt : await findStartIdBy(crm, 'tblAction', 'ActionID', 'CompletedOn', cutoff, mn, mx);
-  console.log(`  task action scan window: ids ${startId}..${mx} (CompletedOn >= ${cutoff})`);
+  // Drop machine-written notes at staging time (same classifier the live capture
+  // and drill-down use) so TOUCHED_ITEMS is already clean. No bind params.
+  const keepHuman = excludeSystem ? ` AND ${buildSystemNoteExclusionSql('a.Note')}` : '';
+  console.log(`  task action scan window: ids ${startId}..${mx} (CompletedOn >= ${cutoff})${excludeSystem ? ' [system notes excluded]' : ''}`);
   let total = 0;
   for (let lo = startId; lo <= mx; lo += HIST_CHUNK) {
     const [rows] = await crm.query<mysql.RowDataPacket[]>(
@@ -443,7 +452,7 @@ async function extractTaskActions(crm: CrmClient, cutoff: string): Promise<void>
        JOIN tblTask t     ON t.TaskID = a.TaskID
        JOIN tblTaskType tt ON tt.TaskTypeID = t.TaskTypeID AND tt.DeptID IN (${TASK_DEPTS.join(',')})
        WHERE a.ActionID >= ? AND a.ActionID < ? AND a.CompletedOn >= ?
-         AND a.Note <> '' AND a.CompletedBy IS NOT NULL AND t.TaskTypeID <> ${EXCLUDED_TASK_TYPE}`,
+         AND a.Note <> '' AND a.CompletedBy IS NOT NULL AND t.TaskTypeID <> ${EXCLUDED_TASK_TYPE}${keepHuman}`,
       [lo, lo + HIST_CHUNK, cutoff],
     );
     await batchInsert(
@@ -458,20 +467,22 @@ async function extractTaskActions(crm: CrmClient, cutoff: string): Promise<void>
 
 /** Ticket touches by actor: one deduped (ticket_id, calendar day, actor) row per
  *  tblTicketNote within the window. Actor = tblTicketNote.CreatedBy. */
-async function extractTicketNotes(crm: CrmClient, cutoff: string): Promise<void> {
+async function extractTicketNotes(crm: CrmClient, cutoff: string, excludeSystem: boolean): Promise<void> {
   const [[range]] = await crm.query<mysql.RowDataPacket[]>(`SELECT MIN(TicketNoteID) mn, MAX(TicketNoteID) mx FROM tblTicketNote`);
   const mn = Number(range.mn ?? 0);
   const mx = Number(range.mx ?? 0);
   const resumeAt = await getMarker('notes');
   if (resumeAt == null) await pool.query(`TRUNCATE TABLE bf_tt_ticket_note`);
   const startId = resumeAt != null ? resumeAt : await findStartIdBy(crm, 'tblTicketNote', 'TicketNoteID', 'CreatedOn', cutoff, mn, mx);
-  console.log(`  ticket note scan window: ids ${startId}..${mx} (CreatedOn >= ${cutoff})`);
+  // Same system-note exclusion as the task side so ticket touches match capture.
+  const keepHuman = excludeSystem ? ` AND ${buildSystemNoteExclusionSql('tn.Note')}` : '';
+  console.log(`  ticket note scan window: ids ${startId}..${mx} (CreatedOn >= ${cutoff})${excludeSystem ? ' [system notes excluded]' : ''}`);
   let total = 0;
   for (let lo = startId; lo <= mx; lo += SMALL_CHUNK) {
     const [rows] = await crm.query<mysql.RowDataPacket[]>(
       `SELECT tn.TicketID, DATE(tn.CreatedOn) AS d, tn.CreatedBy AS user_id
        FROM tblTicketNote tn
-       WHERE tn.TicketNoteID >= ? AND tn.TicketNoteID < ? AND tn.CreatedOn >= ? AND tn.CreatedBy IS NOT NULL`,
+       WHERE tn.TicketNoteID >= ? AND tn.TicketNoteID < ? AND tn.CreatedOn >= ? AND tn.CreatedBy IS NOT NULL${keepHuman}`,
       [lo, lo + SMALL_CHUNK, cutoff],
     );
     await batchInsert(
@@ -500,6 +511,12 @@ export async function runExtraction(histFrom: string): Promise<void> {
   // so history older than the window's first day is never used. Cut off at
   // midnight of histFrom (a few hours before the earliest 8am moment).
   const cutoff = `${histFrom} 00:00:00`;
+  // Touched cleanup toggle (default ON): exclude machine-written notes so the
+  // reconstructed Touched matches the live capture. Mirrors captureDailyTicketProductivity.
+  const [exclCfg] = await pool.query<RowDataPacket[]>(
+    `SELECT config_value FROM ie_config WHERE config_key = ?`, [TOUCHED_EXCLUDE_SYSTEM_FLAG],
+  );
+  const excludeSystem = systemExclusionEnabled(exclCfg[0]?.config_value as string | undefined);
   const crm = new CrmClient();
   try {
     await phase('lookups', 'Extracting CRM lookups', () => extractLookups(crm));
@@ -511,8 +528,8 @@ export async function runExtraction(histFrom: string): Promise<void> {
     });
     await phase('linked', 'Extracting task history (ticket-linked tasks)', () => extractTaskHistoryForTickets(crm, cutoff));
     await phase('current', 'Extracting current task rows', () => extractCurrentTasks(crm));
-    await phase('actions', 'Extracting task actions (touched-by-actor)', () => extractTaskActions(crm, cutoff));
-    await phase('notes', 'Extracting ticket notes (touched-by-actor)', () => extractTicketNotes(crm, cutoff));
+    await phase('actions', 'Extracting task actions (touched-by-actor)', () => extractTaskActions(crm, cutoff, excludeSystem));
+    await phase('notes', 'Extracting ticket notes (touched-by-actor)', () => extractTicketNotes(crm, cutoff, excludeSystem));
   } finally {
     await crm.end();
   }

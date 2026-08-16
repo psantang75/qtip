@@ -6,7 +6,7 @@ import {
   getDataFreshness,
   getKpiConfig,
 } from '../controllers/insights.controller';
-import { getAgentActivityStatus, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDailyHistory, getTicketsProductivity, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
+import { getAgentActivityStatus, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
 import qcRouter from './insightsQC.routes';
 import csrRouter from './insightsCsr.routes';
 
@@ -67,6 +67,13 @@ router.get('/agent-activity/tickets/daily-history',
 router.get('/agent-activity/tickets/productivity',
   authenticate as unknown as RequestHandler,
   getTicketsProductivity as unknown as RequestHandler
+);
+
+// On-demand touch-detail drill-down (validates the Workload `touched` count for
+// one agent on one day). `area` query param selects the Sales/CSR page grant.
+router.get('/agent-activity/tickets/touch-detail',
+  authenticate as unknown as RequestHandler,
+  getTicketTouchDetail as unknown as RequestHandler
 );
 
 router.get('/agent-activity/leads',

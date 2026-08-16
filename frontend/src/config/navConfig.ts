@@ -93,12 +93,15 @@ export const NAV_CONFIG: SectionConfig[] = [
       { label: 'Leads',           path: '/app/insights/aa-leads',   icon: 'Target',     roles: [], pageKey: 'aa_sales_leads',   group: 'Agent Activity' },
       { label: 'Margin',          path: '/app/insights/aa-margin',  icon: 'DollarSign', roles: [], pageKey: 'aa_sales_margin',  group: 'Agent Activity' },
       { label: 'Tickets & Tasks', path: '/app/insights/aa-tickets', icon: 'Ticket',     roles: [], pageKey: 'aa_sales_tickets', group: 'Agent Activity' },
-      { label: 'Ticket and Task Workload', path: '/app/insights/aa-workload', icon: 'ClipboardList', roles: [], pageKey: 'aa_sales_productivity', group: 'Agent Activity' },
+      { label: 'Ticket and Task Workload', path: '/app/insights/aa-workload', icon: 'ClipboardList', roles: [], pageKey: 'aa_sales_workload', group: 'Agent Activity' },
+      { label: 'Productivity',    path: '/app/insights/aa-productivity', icon: 'Gauge', roles: [], pageKey: 'aa_sales_productivity_report', group: 'Agent Activity' },
+      { label: 'Workload Validation', path: '/app/insights/workload-validation', icon: 'ListChecks', roles: [], pageKey: 'aa_sales_workload', group: 'Agent Activity' },
       { label: 'Email Activity',  path: '/app/insights/aa-email',   icon: 'Mail',       roles: [], pageKey: 'aa_sales_email',   group: 'Agent Activity' },
       // ── CSR Agent Activity ──
       { label: 'Attendance',      path: '/app/insights/csr-attendance', icon: 'CalendarCheck', roles: [], pageKey: 'csr_attendance', group: 'CSR Agent Activity' },
       { label: 'Tickets & Tasks', path: '/app/insights/csr-tickets',    icon: 'Ticket',        roles: [], pageKey: 'csr_tickets',    group: 'CSR Agent Activity' },
-      { label: 'Ticket and Task Workload', path: '/app/insights/csr-workload', icon: 'ClipboardList', roles: [], pageKey: 'csr_productivity', group: 'CSR Agent Activity' },
+      { label: 'Ticket and Task Workload', path: '/app/insights/csr-workload', icon: 'ClipboardList', roles: [], pageKey: 'csr_workload', group: 'CSR Agent Activity' },
+      { label: 'Productivity', path: '/app/insights/csr-productivity', icon: 'Gauge', roles: [], pageKey: 'csr_productivity_report', group: 'CSR Agent Activity' },
       // ── Reports ──
       // Only On Demand Reports is exposed via the sidebar today; the underlying
       // routes for Report Builder / Saved Reports / Data Explorer / Raw Export /

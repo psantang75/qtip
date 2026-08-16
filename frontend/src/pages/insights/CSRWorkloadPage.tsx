@@ -48,7 +48,7 @@ export default function CSRWorkloadPage() {
         ) : isError ? (
           <p className="text-sm text-danger text-center py-6">Couldn't load workload. Refresh to try again.</p>
         ) : (
-          <TicketProductivityTable rows={rows ?? []} agentLabel="Agent" />
+          <TicketProductivityTable rows={rows ?? []} agentLabel="Agent" area="csr" />
         )}
       </InsightsSection>
     </ActivityReportShell>

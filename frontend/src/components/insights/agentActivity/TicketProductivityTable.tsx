@@ -3,9 +3,11 @@ import {
   useReactTable, getCoreRowModel, getSortedRowModel, flexRender,
   createColumnHelper, type SortingState,
 } from '@tanstack/react-table'
-import { ChevronRight, ChevronDown, RotateCcw } from 'lucide-react'
+import { ChevronRight, ChevronDown, RotateCcw, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import SortHeaderIcon from './SortHeaderIcon'
+import TouchDetailDialog from './TouchDetailDialog'
 import { fmtNum } from './format'
 import { formatMetadataDate } from '@/utils/dateFormat'
 import type { TicketProductivityRow } from '@/services/insightsService'
@@ -27,6 +29,8 @@ interface TicketProductivityTableProps {
   rows: TicketProductivityRow[]
   /** "Salesperson" (Sales) or "Agent" (CSR). */
   agentLabel: string
+  /** Which section's page grant the per-day touch drill-down reads under. */
+  area: 'sales' | 'csr'
 }
 
 const BY_AGENT: SortingState = [{ id: 'agent', desc: false }]
@@ -87,6 +91,41 @@ function groupByDept(agents: AgentSummary[]): DeptGroup[] {
     }))
 }
 
+/**
+ * Column-header tooltip for the productivity grid. The label itself is the hover
+ * trigger (no info-icon), and the card mirrors the KpiInfoCard layout used
+ * elsewhere (PaceHeader): bold title, a description paragraph, then a labelled
+ * "Basis" row stating whether the column is an effort or inventory measure. The
+ * label sits inside the clickable <th>, so a click still bubbles to sort.
+ */
+function ColHeader({ label, description, basis }: { label: string; description: string; basis: string }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>{label}</span>
+        </TooltipTrigger>
+        <TooltipContent
+          side="bottom"
+          sideOffset={6}
+          className="w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-lg"
+        >
+          <div className="space-y-3 text-left">
+            <p className="text-[13px] font-semibold text-slate-900 leading-tight">{label}</p>
+            <p className="text-[12.5px] text-slate-600 leading-relaxed">{description}</p>
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex items-baseline gap-3">
+                <span className="text-[10px] uppercase tracking-wide text-slate-400 w-[52px] shrink-0">Basis</span>
+                <span className="text-[11.5px] text-slate-600">{basis}</span>
+              </div>
+            </div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 const ch = createColumnHelper<AgentSummary>()
 
 /**
@@ -94,18 +133,36 @@ const ch = createColumnHelper<AgentSummary>()
  * and the QTIP 3-state sort affordance, but each agent row expands to reveal a
  * per-day breakdown (Beginning / New Assigned / Touched / Closed by date).
  */
-export default function TicketProductivityTable({ rows, agentLabel }: TicketProductivityTableProps) {
+export default function TicketProductivityTable({ rows, agentLabel, area }: TicketProductivityTableProps) {
   const [sorting, setSorting] = useState<SortingState>(BY_AGENT)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  // The day whose Touched breakdown is open in the drill-down modal.
+  const [drill, setDrill] = useState<{ employeeKey: number; date: string; agent: string } | null>(null)
 
   const data = useMemo(() => buildSummaries(rows), [rows])
 
   const columns = useMemo(() => [
     ch.accessor('agent', { header: agentLabel, cell: i => i.getValue(), meta: { width: 'w-[34%]' } }),
-    ch.accessor('beginning',   { header: 'Beginning',    cell: i => fmtNum(i.getValue()), meta: { width: 'w-[16%]' } }),
-    ch.accessor('newAssigned', { header: 'New Assigned', cell: i => fmtNum(i.getValue()), meta: { width: 'w-[16%]' } }),
-    ch.accessor('touched',     { header: 'Touched',      cell: i => fmtNum(i.getValue()), meta: { width: 'w-[16%]' } }),
-    ch.accessor('closed',      { header: 'Closed',       cell: i => fmtNum(i.getValue()), meta: { width: 'w-[16%]' } }),
+    ch.accessor('beginning', {
+      header: () => <ColHeader label="Beginning" basis="Inventory — keyed by assignee"
+        description="Open tickets & tasks on this agent's queue at the start of the range. A workload/inventory measure — it counts items regardless of whether anyone worked them, so don't read it as effort." />,
+      cell: i => fmtNum(i.getValue()), meta: { width: 'w-[16%]' },
+    }),
+    ch.accessor('newAssigned', {
+      header: () => <ColHeader label="New Assigned" basis="Inventory — keyed by assignee"
+        description="Tickets & tasks newly assigned to this agent during the range. Inventory entering the queue — includes system-spawned task types (Contact Manager, Order Flow, Activation, AR), so it isn't a pure effort number." />,
+      cell: i => fmtNum(i.getValue()), meta: { width: 'w-[16%]' },
+    }),
+    ch.accessor('touched', {
+      header: () => <ColHeader label="Touched" basis="Effort — keyed by the actor"
+        description="Distinct tickets & tasks this agent did real human work on that day (a genuine noted action or ticket note). System-generated events are excluded, so this is the trustworthy effort metric." />,
+      cell: i => fmtNum(i.getValue()), meta: { width: 'w-[16%]' },
+    }),
+    ch.accessor('closed', {
+      header: () => <ColHeader label="Closed" basis="Inventory — keyed by assignee"
+        description="Tickets & tasks that left this agent's queue during the range. Inventory leaving the queue — includes system/auto closes (e.g. 'CLOSED BY IT', opened-and-closed-immediately), so it isn't a pure effort number." />,
+      cell: i => fmtNum(i.getValue()), meta: { width: 'w-[16%]' },
+    }),
   ], [agentLabel])
 
   const table = useReactTable({
@@ -203,11 +260,12 @@ export default function TicketProductivityTable({ rows, agentLabel }: TicketProd
                               <table className="w-full text-[13px] table-fixed">
                                 <thead>
                                   <tr className="text-[11px] text-slate-400 border-b border-slate-200">
-                                    <th className="text-left font-medium py-1.5 pl-3 w-[34%]">By Day</th>
-                                    <th className="text-left font-medium py-1.5 pr-3 w-[16%]">Beginning</th>
-                                    <th className="text-left font-medium py-1.5 pr-3 w-[16%]">New Assigned</th>
-                                    <th className="text-left font-medium py-1.5 pr-3 w-[16%]">Touched</th>
-                                    <th className="text-left font-medium py-1.5 pr-3 w-[16%]">Closed</th>
+                                    <th className="text-left font-medium py-1.5 pl-3 w-[28%]">By Day</th>
+                                    <th className="text-left font-medium py-1.5 pr-3 w-[15%]">Beginning</th>
+                                    <th className="text-left font-medium py-1.5 pr-3 w-[15%]">New Assigned</th>
+                                    <th className="text-left font-medium py-1.5 pr-3 w-[15%]">Touched</th>
+                                    <th className="text-left font-medium py-1.5 pr-3 w-[15%]">Closed</th>
+                                    <th className="w-[12%]" aria-hidden />
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -218,6 +276,18 @@ export default function TicketProductivityTable({ rows, agentLabel }: TicketProd
                                       <td className="py-1.5 pr-3 text-slate-600">{fmtNum(day.newAssigned)}</td>
                                       <td className="py-1.5 pr-3 text-slate-600">{fmtNum(day.touched)}</td>
                                       <td className="py-1.5 pr-3 text-slate-600">{fmtNum(day.closed)}</td>
+                                      <td className="py-1.5 pr-3 text-right">
+                                        <button
+                                          type="button"
+                                          onClick={() => setDrill({ employeeKey: day.employeeKey, date: day.date, agent: agent.agent })}
+                                          className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-primary transition-colors"
+                                          title="View the task & ticket notes behind Touched"
+                                          aria-label={`View touched detail for ${agent.agent} on ${day.date}`}
+                                        >
+                                          <Search className="h-3.5 w-3.5" />
+                                          View
+                                        </button>
+                                      </td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -255,6 +325,13 @@ export default function TicketProductivityTable({ rows, agentLabel }: TicketProd
           </tbody>
         </table>
       </div>
+
+      <TouchDetailDialog
+        open={!!drill}
+        onOpenChange={(o) => { if (!o) setDrill(null) }}
+        params={drill ? { area, employeeKey: drill.employeeKey, date: drill.date } : null}
+        agentName={drill?.agent}
+      />
     </div>
   )
 }

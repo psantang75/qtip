@@ -54,10 +54,10 @@ export default function AAWorkloadPage() {
       ) : (
         <>
           <InsightsSection title="Contact Manager">
-            <TicketProductivityTable rows={cmRows} agentLabel="Salesperson" />
+            <TicketProductivityTable rows={cmRows} agentLabel="Salesperson" area="sales" />
           </InsightsSection>
           <InsightsSection title="All Other Tickets & Tasks">
-            <TicketProductivityTable rows={otherRows} agentLabel="Salesperson" />
+            <TicketProductivityTable rows={otherRows} agentLabel="Salesperson" area="sales" />
           </InsightsSection>
         </>
       )}

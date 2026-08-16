@@ -26,6 +26,8 @@ interface SortableTableProps<T> {
    */
   totalRow?: Record<string, React.ReactNode>
   minWidth?: string
+  /** Optional per-row <tr> classes, e.g. to grey out de-emphasized rows. */
+  rowClassName?: (row: T) => string
 }
 
 /**
@@ -35,7 +37,7 @@ interface SortableTableProps<T> {
  * from the table's default.
  */
 export default function SortableTable<T>({
-  columns, data, initialSorting, totalRow, minWidth = 'min-w-[720px]',
+  columns, data, initialSorting, totalRow, minWidth = 'min-w-[720px]', rowClassName,
 }: SortableTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
 
@@ -94,7 +96,7 @@ export default function SortableTable<T>({
           </thead>
           <tbody>
             {table.getRowModel().rows.map(row => (
-              <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
+              <tr key={row.id} className={`border-b border-slate-100 hover:bg-slate-50 ${rowClassName?.(row.original) ?? ''}`}>
                 {row.getVisibleCells().map(cell => {
                   const meta = metaOf(cell.column)
                   return (

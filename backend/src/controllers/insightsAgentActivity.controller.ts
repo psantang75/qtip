@@ -13,6 +13,7 @@ import {
   getLeads as svcGetLeads,
   getMargin as svcGetMargin,
 } from '../services/insightsAgentActivity.service';
+import { getTicketTouchDetail as svcGetTicketTouchDetail } from '../services/insightsTouchDetail.service';
 
 const permissionService = new InsightsPermissionService();
 
@@ -254,8 +255,42 @@ function productivityHandler(pageKey: string, area: 'sales' | 'csr') {
  * GET /api/insights/csr/tickets/productivity
  * Per-agent-per-day Beginning / New Assigned / Touched / Closed over the range.
  */
-export const getTicketsProductivity = productivityHandler('aa_sales_productivity', 'sales');
-export const getCsrTicketsProductivity = productivityHandler('csr_productivity', 'csr');
+export const getTicketsProductivity = productivityHandler('aa_sales_workload', 'sales');
+export const getCsrTicketsProductivity = productivityHandler('csr_workload', 'csr');
+
+/**
+ * GET /api/insights/agent-activity/tickets/touch-detail?area=&employeeKey=&date=
+ * On-demand drill-down behind the Workload `touched` count: the individual CRM
+ * task actions / ticket notes for one agent on one day. Guarded by the Workload
+ * page grant for the requested area; a SELF-scoped viewer is pinned to their own
+ * employee key so they can never inspect another agent. Read live from the CRM,
+ * so it only runs when the report is explicitly requested.
+ */
+export const getTicketTouchDetail = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { area: areaRaw, employeeKey: empRaw, date } = req.query as Record<string, string | undefined>;
+    const area = areaRaw === 'csr' ? 'csr' : 'sales';
+    const pageKey = area === 'csr' ? 'csr_workload' : 'aa_sales_workload';
+    const scope = await resolveAaScope(req, res, pageKey);
+    if (!scope) return;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: 'date (YYYY-MM-DD) is required' });
+      return;
+    }
+    // SELF scope pins to the viewer's own employee; ALL scope must name an agent.
+    const requested = empRaw ? Number(empRaw) : NaN;
+    const employeeKey = scope.selfEmployeeKey ?? requested;
+    if (!Number.isFinite(employeeKey) || employeeKey <= 0) {
+      res.status(400).json({ error: 'employeeKey is required' });
+      return;
+    }
+    const result = await svcGetTicketTouchDetail({ area, employeeKey, date });
+    res.json(result);
+  } catch (error) {
+    logger.error('getTicketTouchDetail error:', error);
+    res.status(500).json({ error: 'Failed to load touch detail' });
+  }
+};
 
 /**
  * GET /api/insights/agent-activity/leads

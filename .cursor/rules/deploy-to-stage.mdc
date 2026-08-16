@@ -1,0 +1,39 @@
+---
+description: How to promote and DEPLOY commits to the stage environment (do not just push git)
+alwaysApply: true
+---
+
+# Getting commits onto STAGE (full process — I keep forgetting the deploy step)
+
+"Push to stage" = **promote the branch AND rebuild the container on the box.**
+A `git push origin stage` alone changes nothing that's live. Two steps, always.
+
+## 1. Promote `main` → `stage` (fast-forward only, PowerShell: use `;` never `&&`)
+
+```powershell
+git checkout stage; git merge --ff-only main; git push origin stage; git checkout main
+```
+
+- Commit + push work to `main` first. Never commit straight onto `stage`.
+- If `--ff-only` is rejected, `stage` has commits `main` lacks — reconcile on
+  `main`, never force-push an environment branch.
+
+## 2. Deploy on the stage box (I HAVE SSH ACCESS — always run this)
+
+Stage is containerized Docker Compose at `10.90.15.6`; `/code` is a checkout of
+the `stage` branch. Pull the release into it and rebuild the image:
+
+```powershell
+ssh dmadmin@10.90.15.6 'git -C /home/dmadmin/docker-staging/qtip-app/code pull --ff-only; cd /home/dmadmin/docker-staging/qtip-app; docker compose up -d --build'
+```
+
+- **`.env`-only change** (no code): `docker compose up -d` (no `--build`).
+- **DB migration** in the release: apply it before the rebuild (runbook §3.3).
+
+## 3. Verify
+
+Load `https://qtip-stage.dm.local` (self-signed cert prompt is expected). Confirm
+the box HEAD matches origin: `ssh dmadmin@10.90.15.6 'git -C /home/dmadmin/docker-staging/qtip-app/code rev-parse HEAD'`.
+
+Full reference: `docs/deployment_runbook.md` §0a/§0b. Prod (`10.90.15.5`) is a
+separate promote+deploy and is NEVER done automatically — verify stage first.

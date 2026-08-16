@@ -16,6 +16,11 @@ import pool from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { resolvePeriod, type DateRange } from '../utils/periodUtils';
 import { crmDatabaseConfig } from '../config/environment';
+import {
+  buildSystemNoteExclusionSql,
+  systemExclusionEnabled,
+  TOUCHED_EXCLUDE_SYSTEM_FLAG,
+} from './insights/systemNoteClassifier';
 
 /** Direction that counts as a "sent" email on the Email Activity report. */
 const SENT_DIRECTION = 'Outbound';
@@ -1262,6 +1267,14 @@ export async function captureDailyTicketProductivity(now: Date = new Date()): Pr
   );
   const captureHour = parseInt((cfgRows[0]?.config_value as string) ?? '8', 10) || 8;
 
+  // Touched cleanup toggle (default ON). When on, machine-written notes are
+  // excluded from the effort metric via the shared classifier so a status stamp
+  // or auto-close never counts as human work.
+  const [exclCfg] = await pool.execute<RowDataPacket[]>(
+    `SELECT config_value FROM ie_config WHERE config_key = ?`, [TOUCHED_EXCLUDE_SYSTEM_FLAG],
+  );
+  const excludeSystem = systemExclusionEnabled(exclCfg[0]?.config_value as string | undefined);
+
   const { date: etDate, hour: etHour } = businessNow(now);
   if (etHour < captureHour) return { captured: false, rows: 0, reason: 'before-capture-hour' };
 
@@ -1336,16 +1349,22 @@ export async function captureDailyTicketProductivity(now: Date = new Date()): Pr
   // manager reassignments are excluded, and the email conform below drops any
   // actor who isn't a reporting CSR agent. DISTINCT (item, actor) so a single
   // item worked multiple times in a day counts once for that agent.
+  // System-generated notes (auto-closes, status stamps, ticket transitions) are
+  // excluded from the actor-keyed effort metric via the shared classifier, gated
+  // by the ie_config toggle so it can be turned off without a redeploy. The
+  // predicate carries no bind params, so the [day, day] binding is unchanged.
+  const keepHumanTask = excludeSystem ? ` AND ${buildSystemNoteExclusionSql('a.Note')}` : '';
+  const keepHumanTicket = excludeSystem ? ` AND ${buildSystemNoteExclusionSql('tn.Note')}` : '';
   const touchedSql = `
     SELECT DISTINCT CONCAT('T', a.TaskID) AS item, a.CompletedBy AS user_id, ${SEG} AS segment
     FROM tblAction a
       JOIN tblTask t      ON t.TaskID = a.TaskID
       JOIN tblTaskType tt ON tt.TaskTypeID = t.TaskTypeID AND tt.DeptID IN (1,2)
-    WHERE t.TaskTypeID <> 19 AND a.Note <> '' AND a.CompletedBy IS NOT NULL AND DATE(a.CompletedOn) = ?
+    WHERE t.TaskTypeID <> 19 AND a.Note <> '' AND a.CompletedBy IS NOT NULL AND DATE(a.CompletedOn) = ?${keepHumanTask}
     UNION ALL
     SELECT DISTINCT CONCAT('K', tn.TicketID) AS item, tn.CreatedBy AS user_id, 'other' AS segment
     FROM tblTicketNote tn
-    WHERE tn.CreatedBy IS NOT NULL AND DATE(tn.CreatedOn) = ?`;
+    WHERE tn.CreatedBy IS NOT NULL AND DATE(tn.CreatedOn) = ?${keepHumanTicket}`;
   // Contact Manager beginning inventory (CURRENT open CM tasks with a due date,
   // per assignee) — the segment slice of the bucket total. The bucket carries no
   // task-type detail, so we read CM live from the CRM and derive

@@ -442,6 +442,44 @@ export const getTicketProductivity = async (p: AAParams): Promise<TicketProducti
   return response.data
 }
 
+// ── Agent Activity — Touch detail (on-demand Workload validation) ─────────────
+// One CRM event (a noted task action or a ticket note) behind the Workload
+// `touched` count, for one agent on one day. Read live from CRM only on request.
+
+export interface TouchDetailRow {
+  itemType:   'task' | 'ticket'
+  itemId:     number
+  subject:    string | null
+  segment:    'contact_manager' | 'other'
+  actor:      string | null
+  crmUserId:  number
+  note:       string
+  occurredAt: string
+  crmUrl:     string | null
+  /** True when the note is a machine-written stamp (excluded from Touched). */
+  isSystem:   boolean
+}
+
+export interface TouchDetailResult {
+  date:              string
+  area:              'sales' | 'csr'
+  employeeKey:       number
+  email:             string | null
+  crmUserIds:        number[]
+  rows:              TouchDetailRow[]
+  rawEventCount:     number   // individual events (an item can be touched many times)
+  distinctItemCount: number   // reconciles to the stored `touched`
+  storedTouched:     number | null
+  reason:            string
+}
+
+export interface TouchDetailParams { area: 'sales' | 'csr'; employeeKey: number; date: string }
+
+export const getTicketTouchDetail = async (p: TouchDetailParams): Promise<TouchDetailResult> => {
+  const response = await api.get('/insights/agent-activity/tickets/touch-detail', { params: p })
+  return response.data
+}
+
 // ── Agent Activity — Leads (Phase 4 live data) ────────────────────────────────
 
 export interface LeadCatSourceRow {
@@ -553,4 +591,54 @@ export const updateSourceReport = async (id: number, data: SourceReportUpdate): 
 export const runSourceReportNow = async (id: number): Promise<{ started: boolean }> => {
   const response = await api.post(`/insights/admin/source-reports/${id}/run-now`)
   return response.data
+}
+
+// ── Admin: Email Feeds (mailbox pickup) ───────────────────────────────────────
+
+export interface EmailFeed {
+  id:             number
+  data_type:      string
+  name:           string
+  cadence_label:  string | null
+  is_active:      boolean
+  poll_minutes:   number
+  last_pickup_at: string | null
+  last_source:    'email' | 'manual' | null
+  last_status:    string | null
+  last_file:      string | null
+  rows_imported:  number | null
+  rows_skipped:   number | null
+  rows_errored:   number | null
+}
+
+export interface EmailFeedCreate {
+  data_type:      string
+  name:           string
+  cadence_label?: string | null
+  is_active?:     boolean
+}
+
+export interface EmailFeedUpdate {
+  name?:          string
+  cadence_label?: string | null
+  is_active?:     boolean
+}
+
+export const getEmailFeeds = async (): Promise<EmailFeed[]> => {
+  const response = await api.get('/insights/admin/email-feeds')
+  return response.data
+}
+
+export const createEmailFeed = async (data: EmailFeedCreate): Promise<EmailFeed> => {
+  const response = await api.post('/insights/admin/email-feeds', data)
+  return response.data
+}
+
+export const updateEmailFeed = async (id: number, data: EmailFeedUpdate): Promise<EmailFeed> => {
+  const response = await api.put(`/insights/admin/email-feeds/${id}`, data)
+  return response.data
+}
+
+export const deleteEmailFeed = async (id: number): Promise<void> => {
+  await api.delete(`/insights/admin/email-feeds/${id}`)
 }

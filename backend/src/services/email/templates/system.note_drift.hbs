@@ -1,0 +1,21 @@
+<h2 style="margin:0 0 12px 0;font-size:18px;font-weight:600;color:#00aeef;">Touched metric — note-pattern drift</h2>
+<p style="margin:0 0 16px 0;">Over the last {{lookbackDays}} days, these high-frequency CRM note prefixes were <strong>not</strong> matched by the system-note classifier, so they currently count toward the Touched effort metric. Repeating machine-written prefixes are likely new automated stamps that should be added to the classifier; genuine human notes can be ignored.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 16px 0;border-collapse:collapse;">
+  <tr style="border-bottom:1px solid #e2e8f0;">
+    <td style="padding:6px 8px;font-size:12px;color:#64748b;">Source</td>
+    <td style="padding:6px 8px;font-size:12px;color:#64748b;">Note prefix</td>
+    <td style="padding:6px 8px;font-size:12px;color:#64748b;text-align:right;">Count</td>
+    {{#if aiEnabled}}<td style="padding:6px 8px;font-size:12px;color:#64748b;">AI guess</td><td style="padding:6px 8px;font-size:12px;color:#64748b;">Suggested pattern</td>{{/if}}
+  </tr>
+  {{#each candidates}}
+  <tr style="border-bottom:1px solid #f1f5f9;">
+    <td style="padding:6px 8px;font-size:13px;">{{this.source}}</td>
+    <td style="padding:6px 8px;font-size:13px;"><code>{{this.prefix}}</code></td>
+    <td style="padding:6px 8px;font-size:13px;text-align:right;font-weight:600;">{{this.count}}</td>
+    {{#if ../aiEnabled}}<td style="padding:6px 8px;font-size:13px;">{{this.aiLabel}}</td><td style="padding:6px 8px;font-size:12px;color:#334155;">{{#if this.aiSuggestion}}<code>{{this.aiSuggestion}}</code>{{else}}—{{/if}}</td>{{/if}}
+  </tr>
+  {{/each}}
+</table>
+<p style="margin:0 0 16px 0;font-size:13px;color:#334155;">To act on a confirmed machine pattern, add it to <code>SYSTEM_NOTE_LIKE_PATTERNS</code> in <code>backend/src/services/insights/systemNoteClassifier.ts</code> (with a unit-test case) and re-run the productivity backfill. The AI guess is advisory only and never edits the metric.</p>
+{{> button url=(appUrl deepLinkPath) label="Open Admin" }}
+<p style="margin:16px 0 0 0;font-size:12px;color:#94a3b8;">Generated {{formatDateTime generatedAt}}. This monitor runs weekly and only lists prefixes seen many times, so a short or empty list is normal.</p>
