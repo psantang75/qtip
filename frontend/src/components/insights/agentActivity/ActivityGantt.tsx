@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { BLOCK_MIN, WINDOW_END, WINDOW_START, fmtClock, fmtHM, type AxisTick, type DayModel, type TickTier } from './productivityModel'
@@ -284,19 +284,24 @@ export default function ActivityGantt({ model }: { model: DayModel }) {
             </TimelineRow>
           </div>
 
-          {/* One legend for the whole chart, grouped the way it is read:
-              phone-status tones first, then the two call/ticket streams. */}
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 pt-1">
-            {CHART_LEGEND_GROUPS.map(group => (
-              <div key={group.group} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{group.group}</span>
-                {group.items.map(item => (
-                  <span key={item.label} className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                    <span className={cn('h-2.5 w-2.5', item.cls)} />
-                    {item.label}
-                  </span>
-                ))}
-              </div>
+          {/* One legend for the whole chart, grouped the way it is read: phone
+              status, then calls, then tickets. The three groups are centred and
+              split by dividers so it is unmistakable they are three separate
+              streams, not one long list of colours. */}
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+            {CHART_LEGEND_GROUPS.map((group, gi) => (
+              <Fragment key={group.group}>
+                {gi > 0 && <span aria-hidden className="hidden h-5 w-px bg-slate-200 sm:block" />}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{group.group}</span>
+                  {group.items.map(item => (
+                    <span key={item.label} className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                      <span className={cn('h-2.5 w-2.5', item.cls)} />
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
+              </Fragment>
             ))}
           </div>
           <div className="text-[11px] text-slate-400">Hover any bar for the exact times and detail.</div>

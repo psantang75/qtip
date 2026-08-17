@@ -42,6 +42,13 @@ interface InsightsFilterBarProps {
   onPeriodChange: (v: string) => void
   /** Hide the Period/Date-Range selector entirely (e.g. snapshot reports). */
   hidePeriod?: boolean
+  /** Override the Period dropdown choices (e.g. single-day reports). Defaults to PERIOD_OPTIONS. */
+  periodOptions?: readonly string[]
+  /**
+   * Render "Custom" as a single date picker (bound to customStart) instead of a
+   * start–end range. For day-scoped reports that pick one day, not a period.
+   */
+  singleDayCustom?: boolean
   customStart?: string
   customEnd?: string
   onCustomStartChange?: (v: string) => void
@@ -76,6 +83,8 @@ export default function InsightsFilterBar({
   period,
   onPeriodChange,
   hidePeriod = false,
+  periodOptions,
+  singleDayCustom = false,
   customStart,
   customEnd,
   onCustomStartChange,
@@ -192,7 +201,7 @@ export default function InsightsFilterBar({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PERIOD_OPTIONS.map(p => (
+                {(periodOptions ?? PERIOD_OPTIONS).map(p => (
                   <SelectItem key={p} value={p}>{p}</SelectItem>
                 ))}
               </SelectContent>
@@ -201,21 +210,30 @@ export default function InsightsFilterBar({
         )}
 
         {!hidePeriod && isCustom && (
-          <div className="flex items-center gap-1.5">
+          singleDayCustom ? (
             <Input
               type="date"
               value={customStart ?? ''}
               onChange={(e) => onCustomStartChange?.(e.target.value)}
               className="h-8 text-xs w-[150px] bg-white"
             />
-            <span className="text-xs text-slate-400">to</span>
-            <Input
-              type="date"
-              value={customEnd ?? ''}
-              onChange={(e) => onCustomEndChange?.(e.target.value)}
-              className="h-8 text-xs w-[150px] bg-white"
-            />
-          </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="date"
+                value={customStart ?? ''}
+                onChange={(e) => onCustomStartChange?.(e.target.value)}
+                className="h-8 text-xs w-[150px] bg-white"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <Input
+                type="date"
+                value={customEnd ?? ''}
+                onChange={(e) => onCustomEndChange?.(e.target.value)}
+                className="h-8 text-xs w-[150px] bg-white"
+              />
+            </div>
+          )
         )}
 
         <StickyFilterBar.RightCluster className="gap-2">

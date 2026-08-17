@@ -39,7 +39,7 @@ const DELTA_TEXT: Record<PeerState, string> = {
   info:   'text-slate-400',
 }
 
-const ROW = 'grid grid-cols-[minmax(0,1fr)_42px_minmax(48px,0.9fr)_38px] items-center gap-2'
+const ROW = 'grid grid-cols-[minmax(0,1fr)_auto_minmax(48px,0.9fr)_44px] items-center gap-2'
 
 function fmtDelta(d: number | null): string {
   if (d === null) return '—'
@@ -83,7 +83,7 @@ function MetricRow({ m, department }: { m: PeerMetric; department: string }) {
     >
       <div className={cn(ROW, 'cursor-help')}>
         <span className="truncate text-[12.5px] text-slate-600">{m.label}</span>
-        <span className={cn('text-right text-[12.5px] font-semibold tabular-nums', VALUE_TEXT[m.state])}>{m.value}</span>
+        <span className={cn('whitespace-nowrap text-right text-[12.5px] font-semibold tabular-nums', VALUE_TEXT[m.state])}>{m.value}</span>
         <Strip m={m} />
         <span className={cn('text-right text-[11px] font-medium tabular-nums', DELTA_TEXT[m.state])}>{fmtDelta(m.delta)}</span>
       </div>
@@ -93,14 +93,15 @@ function MetricRow({ m, department }: { m: PeerMetric; department: string }) {
 
 export default function PeerCompareColumn({ cmp }: { cmp: PeerComparison }) {
   return (
-    <div>
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Versus the department</div>
+    <div className="flex h-full flex-col">
+      <div className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Department Comparison</div>
       <div className="space-y-2">
         {cmp.metrics.map(m => <MetricRow key={m.key} m={m} department={cmp.department} />)}
       </div>
-      <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400">
-        <span className="flex items-center gap-1"><span className="h-1.5 w-4 rounded-full bg-slate-200" /> middle half of the department</span>
-        <span className="flex items-center gap-1"><span className="h-2.5 w-px bg-slate-400" /> median</span>
+      <div className="mt-auto flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-4 text-[11px] text-slate-500">
+        <span className="flex items-center gap-1.5"><span className="h-2 w-4 rounded-full bg-slate-200" /> Middle Half of the Department</span>
+        <span className="flex items-center gap-1.5"><span className="h-3 w-px bg-slate-400" /> Median</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-white" /> This Agent</span>
       </div>
     </div>
   )

@@ -60,6 +60,10 @@ export interface TouchDetailParams {
   area: 'sales' | 'csr';
   employeeKey: number;
   date: string;
+  /** Sales only: scope the drill-down to one section. 'contact_manager' lists
+   *  only Contact Manager task touches; 'other' lists all other tasks + tickets.
+   *  Omitted (or for CSR) means the full, un-split list. */
+  segment?: 'contact_manager' | 'other';
 }
 
 // Task touches: a noted action on a sales/ops task (depts 1/2, type <> 19),
@@ -112,7 +116,7 @@ const ticketSql = (userPlaceholders: string) => `
   LIMIT 5000`;
 
 export async function getTicketTouchDetail(params: TouchDetailParams): Promise<TouchDetailResult> {
-  const { area, employeeKey, date } = params;
+  const { area, employeeKey, date, segment } = params;
   const empty = (reason: string, email: string | null = null, crmUserIds: number[] = []): TouchDetailResult => ({
     date, area, employeeKey, email, crmUserIds,
     rows: [], rawEventCount: 0, distinctItemCount: 0, storedTouched: null, reason,
@@ -130,11 +134,14 @@ export async function getTicketTouchDetail(params: TouchDetailParams): Promise<T
   const email = empRows.length ? String(empRows[0].email) : null;
   if (!email) return empty('no-email');
 
-  // Stored touched (summed across segments) for the reconciliation banner.
+  // Stored touched for the reconciliation banner. When a segment is requested
+  // (Sales CM vs other), scope to that slice so the drill-down reconciles to the
+  // number shown in that section; otherwise sum across segments.
+  const segmentFilter = segment ? ' AND segment = ?' : '';
   const [stRows] = await pool.query<RowDataPacket[]>(
     `SELECT SUM(touched) AS t FROM ie_ticket_task_productivity_daily
-     WHERE employee_key = ? AND snapshot_date = ? AND area = ?`,
-    [employeeKey, date, area],
+     WHERE employee_key = ? AND snapshot_date = ? AND area = ?${segmentFilter}`,
+    segment ? [employeeKey, date, area, segment] : [employeeKey, date, area],
   );
   const storedTouched = stRows.length && stRows[0].t != null ? Number(stRows[0].t) : null;
 
@@ -198,15 +205,20 @@ export async function getTicketTouchDetail(params: TouchDetailParams): Promise<T
     }
     rows.sort((a, b) => (a.occurredAt < b.occurredAt ? -1 : a.occurredAt > b.occurredAt ? 1 : 0));
 
+    // Scope to the requested section so the "All Other" drill-down never lists
+    // Contact Manager touches (and vice-versa). Ticket rows are always 'other',
+    // so the CM slice is tasks-only and the other slice keeps every ticket.
+    const scopedRows = segment ? rows.filter((r) => r.segment === segment) : rows;
+
     // touched = distinct items with a HUMAN noted event that day, keyed
     // T<taskId>/K<ticketId>. System rows are kept in the list (so the panel can
     // badge them) but excluded from the count that reconciles to stored Touched.
     const distinct = new Set(
-      rows.filter((r) => !r.isSystem).map((r) => `${r.itemType === 'task' ? 'T' : 'K'}${r.itemId}`),
+      scopedRows.filter((r) => !r.isSystem).map((r) => `${r.itemType === 'task' ? 'T' : 'K'}${r.itemId}`),
     );
     return {
-      date, area, employeeKey, email, crmUserIds, rows,
-      rawEventCount: rows.length, distinctItemCount: distinct.size, storedTouched, reason: 'ok',
+      date, area, employeeKey, email, crmUserIds, rows: scopedRows,
+      rawEventCount: scopedRows.length, distinctItemCount: distinct.size, storedTouched, reason: 'ok',
     };
   } catch (err) {
     await crm.end().catch(() => { /* socket already gone */ });

@@ -108,8 +108,13 @@ export default function TouchDetailPanel({ params }: { params: TouchDetailParams
   }
 
   const matched = detail.storedTouched != null && detail.storedTouched === detail.distinctItemCount
-  const systemCount = detail.rows.filter((r) => r.isSystem).length
-  const visibleRows = showSystem ? detail.rows : detail.rows.filter((r) => !r.isSystem)
+  // Blank ticket notes (the CRM writes empty companion rows alongside a real
+  // note) carry nothing to read — hide them from the list. This is display-only:
+  // the item is still counted once via its real note, so the counts/reconciliation
+  // (computed server-side over every event) are unaffected.
+  const nonBlank = detail.rows.filter((r) => r.note.trim() !== '')
+  const systemCount = nonBlank.filter((r) => r.isSystem).length
+  const visibleRows = showSystem ? nonBlank : nonBlank.filter((r) => !r.isSystem)
 
   return (
     <>

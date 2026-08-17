@@ -94,8 +94,8 @@ export const NAV_CONFIG: SectionConfig[] = [
       { label: 'Margin',          path: '/app/insights/aa-margin',  icon: 'DollarSign', roles: [], pageKey: 'aa_sales_margin',  group: 'Agent Activity' },
       { label: 'Tickets & Tasks', path: '/app/insights/aa-tickets', icon: 'Ticket',     roles: [], pageKey: 'aa_sales_tickets', group: 'Agent Activity' },
       { label: 'Ticket and Task Workload', path: '/app/insights/aa-workload', icon: 'ClipboardList', roles: [], pageKey: 'aa_sales_workload', group: 'Agent Activity' },
-      { label: 'Productivity',    path: '/app/insights/aa-productivity', icon: 'Gauge', roles: [], pageKey: 'aa_sales_productivity_report', group: 'Agent Activity' },
       { label: 'Workload Validation', path: '/app/insights/workload-validation', icon: 'ListChecks', roles: [], pageKey: 'aa_sales_workload', group: 'Agent Activity' },
+      { label: 'Productivity',    path: '/app/insights/aa-productivity', icon: 'Gauge', roles: [], pageKey: 'aa_sales_productivity_report', group: 'Agent Activity' },
       { label: 'Email Activity',  path: '/app/insights/aa-email',   icon: 'Mail',       roles: [], pageKey: 'aa_sales_email',   group: 'Agent Activity' },
       // ── CSR Agent Activity ──
       { label: 'Attendance',      path: '/app/insights/csr-attendance', icon: 'CalendarCheck', roles: [], pageKey: 'csr_attendance', group: 'CSR Agent Activity' },

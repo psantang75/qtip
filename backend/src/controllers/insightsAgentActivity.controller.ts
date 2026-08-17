@@ -268,8 +268,10 @@ export const getCsrTicketsProductivity = productivityHandler('csr_workload', 'cs
  */
 export const getTicketTouchDetail = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { area: areaRaw, employeeKey: empRaw, date } = req.query as Record<string, string | undefined>;
+    const { area: areaRaw, employeeKey: empRaw, date, segment: segRaw } = req.query as Record<string, string | undefined>;
     const area = areaRaw === 'csr' ? 'csr' : 'sales';
+    // Sales-only section scope; ignored for CSR (which has no CM split).
+    const segment = area === 'sales' && (segRaw === 'contact_manager' || segRaw === 'other') ? segRaw : undefined;
     const pageKey = area === 'csr' ? 'csr_workload' : 'aa_sales_workload';
     const scope = await resolveAaScope(req, res, pageKey);
     if (!scope) return;
@@ -284,7 +286,7 @@ export const getTicketTouchDetail = async (req: Request, res: Response): Promise
       res.status(400).json({ error: 'employeeKey is required' });
       return;
     }
-    const result = await svcGetTicketTouchDetail({ area, employeeKey, date });
+    const result = await svcGetTicketTouchDetail({ area, employeeKey, date, segment });
     res.json(result);
   } catch (error) {
     logger.error('getTicketTouchDetail error:', error);

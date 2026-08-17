@@ -1,15 +1,10 @@
-import { useMemo, useState } from 'react'
-import { cn } from '@/lib/utils'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useMemo } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import ActivityGantt from './ActivityGantt'
 import HeaderMetrics from './HeaderMetrics'
-import MetricTooltip from './MetricTooltip'
 import TimeSpentPanel from './TimeSpentPanel'
-import { buildDayModel, fmtHM } from './productivityModel'
-import { buildHeaderTiles } from './productivityHeader'
-import { getAgentDay, SAMPLE_DATES, SAMPLE_DATE_LABELS } from './productivitySampleData'
-import { METRIC_TEXT, OCCUPANCY_TARGET, stateFor } from './productivityStatus'
+import { buildDayModel } from './productivityModel'
+import { getAgentDay } from './productivitySampleData'
 
 /**
  * Per-agent, per-day drill-down shown inline when a roster row is expanded.
@@ -26,68 +21,28 @@ import { METRIC_TEXT, OCCUPANCY_TARGET, stateFor } from './productivityStatus'
  *
  * Sample data only until the Phase 2 data layer + DeskTime API land.
  */
-export default function ProductivityDayTimeline({ agent }: { agent: string }) {
-  const [date, setDate] = useState<string>(SAMPLE_DATES[SAMPLE_DATES.length - 1])
+export default function ProductivityDayTimeline({ agent, date }: { agent: string; date: string }) {
   const model = useMemo(() => buildDayModel(getAgentDay(agent, date)), [agent, date])
-  const tiles = useMemo(() => (model.hasData ? buildHeaderTiles(agent, date, model) : []), [agent, date, model])
+  // The prior calendar day feeds each KPI tile's "vs prior" delta.
+  const priorModel = useMemo(() => {
+    const [y, m, d] = date.split('-').map(Number)
+    const prev = new Date(y, m - 1, d - 1)
+    const iso = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-${String(prev.getDate()).padStart(2, '0')}`
+    const pm = buildDayModel(getAgentDay(agent, iso))
+    return pm.hasData ? pm : null
+  }, [agent, date])
 
   return (
     <TooltipProvider delayDuration={150}>
       <div className="space-y-3">
-        {/* The day being read, and the shape of it in one line. Occupancy lives
-            here rather than in a tile: it describes how busy the queue was, so it
-            is context for the tiles, not a judgement on the agent. */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-            {model.hasData && (
-              <>
-                <span>
-                  Clocked <span className="font-medium tabular-nums text-slate-700">{fmtHM(model.clockedMin)}</span>
-                </span>
-                <span>·</span>
-                <span>
-                  On queue <span className="font-medium tabular-nums text-slate-700">{fmtHM(model.onQueueMin)}</span>
-                </span>
-                <span>·</span>
-                <MetricTooltip
-                  title="Occupancy"
-                  description="Share of in-queue time actually spent on calls. Low occupancy means the queue was quiet, not that the agent was."
-                  rows={[
-                    { label: 'On a call', value: fmtHM(model.onCallMin) },
-                    { label: 'Of on-queue time', value: fmtHM(model.onQueueMin) },
-                    { label: 'Target', value: `${OCCUPANCY_TARGET.good}%` },
-                  ]}
-                >
-                  <span className="cursor-help">
-                    Occupancy{' '}
-                    <span className={cn('font-semibold tabular-nums', METRIC_TEXT[stateFor(model.occupancyPct, OCCUPANCY_TARGET)])}>
-                      {model.occupancyPct}%
-                    </span>
-                  </span>
-                </MetricTooltip>
-                <span>·</span>
-                <span className="tabular-nums">{model.windowLabel}</span>
-              </>
-            )}
-          </div>
-          <Select value={date} onValueChange={setDate}>
-            <SelectTrigger className="h-8 w-[150px] bg-white text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {SAMPLE_DATES.map(d => (
-                <SelectItem key={d} value={d}>{SAMPLE_DATE_LABELS[d]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {!model.hasData ? (
-          <p className="py-10 text-center text-sm text-slate-400">No shift data for {agent} on {SAMPLE_DATE_LABELS[date]}.</p>
+          <p className="py-10 text-center text-sm text-slate-400">No shift data for {agent} on this day.</p>
         ) : (
           <>
-            <HeaderMetrics tiles={tiles} />
+            <HeaderMetrics model={model} priorModel={priorModel} />
 
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="mb-3 text-[13px] font-semibold text-slate-800">Activity Timeline · {SAMPLE_DATE_LABELS[date]}</div>
+              <div className="mb-3 text-[13px] font-semibold text-slate-800">Activity Timeline</div>
               <ActivityGantt model={model} />
             </div>
 

@@ -16,7 +16,7 @@
 import { SAMPLE_AGENTS } from './placeholderData'
 import { buildDayModel, fmtHM, type DayModel } from './productivityModel'
 import {
-  SAMPLE_DATES, getAgentDay, departmentOf, peersIn,
+  getAgentDay, departmentOf, peersIn,
   type Department, type ProductivityRosterRow,
 } from './productivitySampleData'
 
@@ -67,60 +67,58 @@ interface MetricDef {
   basis: (m: DayModel) => string
 }
 
-const hours = (m: DayModel) => Math.max(0.01, m.clockedMin / 60)
-const pct = (v: number) => `${Math.round(v)}%`
-const rate = (v: number) => v.toFixed(1)
+const count = (v: number) => String(Math.round(v))
 
 /**
- * Rates over clocked time that the header tiles do not already carry. The header
- * owns the five headline KPIs (utilization, AHT, calls per hour, after-call work,
- * missed); repeating any of them here would put the same number on screen twice.
+ * Day totals for this agent, each placed inside the spread of the people doing
+ * the same job. These are absolute figures (hours, or a count for tickets) rather
+ * than rates, so the strip compares "how much" directly across the department.
  */
 const DEFS: MetricDef[] = [
   {
     key: 'phone',
-    label: 'Phone time',
+    label: 'Total Phone Time',
     higherIsBetter: true,
-    value: m => (m.callSummary.handleMins / Math.max(1, m.clockedMin)) * 100,
-    format: pct,
-    description: 'Share of clocked-in time spent handling calls, including hold and after-call work. The direct answer to "they were here, but were they on the phone?"',
-    basis: m => `${fmtHM(m.callSummary.handleMins)} of ${fmtHM(m.clockedMin)} clocked`,
+    value: m => m.callSummary.handleMins,
+    format: fmtHM,
+    description: 'Total time handling calls for the day, including talk, hold, and after-call work.',
+    basis: m => `${fmtHM(m.callSummary.handleMins)} of ${fmtHM(m.clockedMin)} paid`,
+  },
+  {
+    key: 'queue',
+    label: 'Total Time in Queue',
+    higherIsBetter: null,
+    value: m => m.onQueueMin,
+    format: fmtHM,
+    description: 'Total time signed in and available to the call queue for the day.',
+    basis: m => `${fmtHM(m.onQueueMin)} of ${fmtHM(m.clockedMin)} paid`,
   },
   {
     key: 'tickets',
-    label: 'Tickets per hour',
+    label: 'Tickets Touched',
     higherIsBetter: true,
-    value: m => m.ticketTotals.total / hours(m),
-    format: rate,
-    description: 'Ticket and task touches for every hour on the clock. Catches the agent working half the queue of everyone beside them.',
-    basis: m => `${m.ticketTotals.total} touches over ${fmtHM(m.clockedMin)}`,
+    value: m => m.ticketTotals.total,
+    format: count,
+    description: 'Tickets and tasks the agent updated or closed during the day.',
+    basis: m => `${m.ticketTotals.total} touched · ${m.ticketTotals.completed} closed`,
   },
   {
-    key: 'transfers',
-    label: 'Transfer rate',
-    higherIsBetter: false,
-    value: m => (m.callSummary.transferred / Math.max(1, m.callSummary.answered)) * 100,
-    format: pct,
-    description: 'Answered calls passed to another agent or queue instead of being resolved. A rate well above the group usually means a knowledge gap, not a busy day.',
-    basis: m => `${m.callSummary.transferred} transferred of ${m.callSummary.answered} answered`,
+    key: 'productive',
+    label: 'Total Productive Time',
+    higherIsBetter: true,
+    value: m => m.onCallMin + m.deskWorkOffQueueMin,
+    format: fmtHM,
+    description: 'Time on calls plus active desk work done off the queue — the productive share of paid time.',
+    basis: m => `${fmtHM(m.onCallMin + m.deskWorkOffQueueMin)} of ${fmtHM(m.clockedMin)} paid`,
   },
   {
     key: 'idle',
-    label: 'Idle at desk',
+    label: 'Total Idle Time',
     higherIsBetter: false,
-    value: m => (m.deskIdleMin / Math.max(1, m.clockedMin)) * 100,
-    format: pct,
-    description: 'Share of clocked-in time with no computer activity, breaks included. Lower is better, and a figure well above the group is where the missing hours went.',
-    basis: m => `${fmtHM(m.deskIdleMin)} of ${fmtHM(m.clockedMin)} clocked`,
-  },
-  {
-    key: 'outbound',
-    label: 'Outbound share',
-    higherIsBetter: null,
-    value: m => (m.callSummary.outbound / Math.max(1, m.callSummary.answered)) * 100,
-    format: pct,
-    description: 'Outbound share of answered calls. Reported, never scored: collections work should run high here and tech support should not, so the number is only meaningful next to the group.',
-    basis: m => `${m.callSummary.outbound} outbound of ${m.callSummary.answered} answered`,
+    value: m => m.deskIdleMin,
+    format: fmtHM,
+    description: 'Total paid time with no computer activity. Lower is better; a figure well above the group is where the missing hours went.',
+    basis: m => `${fmtHM(m.deskIdleMin)} of ${fmtHM(m.clockedMin)} paid`,
   },
 ]
 
@@ -192,39 +190,39 @@ export function buildPeerComparison(agent: string, date: string, self: DayModel)
     department,
     peerCount: peers.length,
     comparable,
-    metrics: [...metrics].sort((a, b) =>
-      SEVERITY[a.state] - SEVERITY[b.state] || Math.abs(b.delta ?? 0) - Math.abs(a.delta ?? 0)),
-    // A solo agent has no one to be out of line with.
-    flagged: comparable ? metrics.filter(m => m.state === 'off' || m.state === 'watch') : [],
+    // Rendered in the fixed list order so the rows never reshuffle between agents.
+    metrics,
+    // The banner still surfaces the worst gaps first — that ranking is only used
+    // there, not in the row list.
+    flagged: comparable
+      ? metrics
+          .filter(m => m.state === 'off' || m.state === 'watch')
+          .sort((a, b) => SEVERITY[a.state] - SEVERITY[b.state] || Math.abs(b.delta ?? 0) - Math.abs(a.delta ?? 0))
+      : [],
   }
 }
 
-// ── Period roster ────────────────────────────────────────────────────────────
+// ── Single-day roster ────────────────────────────────────────────────────────
 
 /**
- * One row per agent, summed over the sample days rather than hand-written, so a
- * roster row can never disagree with the drill-down that opens beneath it.
+ * One row per agent for a single day, built from the same `buildDayModel` the
+ * drill-down uses, so a collapsed roster row can never disagree with the tiles
+ * that open beneath it — both describe the same day.
  *
- * Occupancy and Utilization are computed from the summed minutes rather than by
- * averaging each day's percentage — a short day would otherwise carry the same
- * weight as a full one.
+ * The report is day-scoped (driven by the filter bar's single-day Period
+ * selector), which is why this takes a date rather than summing a period: the
+ * old period roll-up put a different number in the row than in the drill-down.
  */
-export const productivityRoster: ProductivityRosterRow[] = SAMPLE_AGENTS.map(agent => {
-  const days = SAMPLE_DATES.map(d => buildDayModel(getAgentDay(agent, d)))
-  const total = (f: (m: DayModel) => number) => days.reduce((a, m) => a + f(m), 0)
-
-  const clockedMin = total(m => m.clockedMin)
-  const onCallMin = total(m => m.onCallMin)
-  const deskWorkMin = total(m => m.deskWorkOffQueueMin)
-  const answered = total(m => m.callSummary.answered)
-  const handleMin = total(m => m.callSummary.handleMins)
-
-  return {
-    agent,
-    clockedMin,
-    utilizationPct: clockedMin > 0 ? Math.round(((onCallMin + deskWorkMin) / clockedMin) * 100) : 0,
-    callsPerHour: clockedMin > 0 ? answered / (clockedMin / 60) : 0,
-    ahtMins: answered > 0 ? handleMin / answered : 0,
-    missedCalls: total(m => m.callSummary.missed),
-  }
-})
+export function rosterForDate(date: string): ProductivityRosterRow[] {
+  return SAMPLE_AGENTS.map(agent => {
+    const m: DayModel = buildDayModel(getAgentDay(agent, date))
+    return {
+      agent,
+      clockedMin: m.clockedMin,
+      utilizationPct: m.utilizationPct,
+      callsPerHour: m.clockedMin > 0 ? m.callSummary.answered / (m.clockedMin / 60) : 0,
+      ahtMins: m.callSummary.ahtMins,
+      missedCalls: m.callSummary.missed,
+    }
+  })
+}

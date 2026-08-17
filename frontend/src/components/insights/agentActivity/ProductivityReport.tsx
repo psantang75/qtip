@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import ProductivityDayTimeline from './ProductivityDayTimeline'
 import { fmtNum } from './format'
 import { fmtHM, fmtMS } from './productivityModel'
-import { productivityRoster } from './productivityBenchmark'
+import { rosterForDate } from './productivityBenchmark'
 import { type ProductivityRosterRow } from './productivitySampleData'
 import { METRIC_TEXT, UTILIZATION_TARGET, stateFor } from './productivityStatus'
 
@@ -15,9 +15,9 @@ import { METRIC_TEXT, UTILIZATION_TARGET, stateFor } from './productivityStatus'
  * ("Salesperson" vs "Agent") to match the section.
  *
  * The columns mirror the drill-down's header tiles, so the collapsed and expanded
- * views never disagree: Utilization (the headline), Calls per hour and Handle
- * time (the two rate metrics a manager triages on), and Missed (the one exception
- * signal). Occupancy and raw call counts are deliberately absent — occupancy
+ * views never disagree: Utilization (the headline), Calls per hour and Avg handle
+ * time (the two rate metrics a manager triages on), and Missed calls (the one
+ * exception signal). Occupancy and raw call counts are deliberately absent — occupancy
  * describes how busy the queue was rather than the agent, and volume belongs to
  * Call Activity; punch-vs-schedule scoring belongs to Attendance. Clocked stays
  * only as the denominator the rest are read against.
@@ -28,14 +28,14 @@ import { METRIC_TEXT, UTILIZATION_TARGET, stateFor } from './productivityStatus'
 // for the ExpandableRow caret via pl-6 in the header.
 const GRID = 'grid grid-cols-[minmax(160px,1.6fr)_repeat(5,1fr)] gap-x-3 items-center'
 
-export default function ProductivityReport({ agentLabel }: { agentLabel: string }) {
+export default function ProductivityReport({ agentLabel, date }: { agentLabel: string; date: string }) {
   const [expanded, setExpanded] = useState<string | null>(null)
 
   // Highest utilization first: the manager's question is how well the clocked
   // time is being used, so that ranking surfaces at the top.
   const rows = useMemo<ProductivityRosterRow[]>(
-    () => [...productivityRoster].sort((a, b) => b.utilizationPct - a.utilizationPct),
-    [],
+    () => [...rosterForDate(date)].sort((a, b) => b.utilizationPct - a.utilizationPct),
+    [date],
   )
 
   return (
@@ -44,11 +44,11 @@ export default function ProductivityReport({ agentLabel }: { agentLabel: string 
         <div className="min-w-[820px]">
           <div className={`${GRID} border-b border-slate-200 px-3 pb-2 text-xs text-slate-400`}>
             <span className="pl-6">{agentLabel}</span>
-            <span className="text-right">Clocked</span>
+            <span className="text-right">Paid time</span>
             <span className="text-right">Utilization</span>
-            <span className="text-right">Calls / hr</span>
-            <span className="text-right">Handle time</span>
-            <span className="text-right">Missed</span>
+            <span className="text-right">Calls per hour</span>
+            <span className="text-right">Avg handle time</span>
+            <span className="text-right">Missed calls</span>
           </div>
 
           <div className="pt-2">
@@ -71,7 +71,7 @@ export default function ProductivityReport({ agentLabel }: { agentLabel: string 
                     </span>
                   </span>
                 }
-                detail={expanded === r.agent ? <ProductivityDayTimeline agent={r.agent} /> : null}
+                detail={expanded === r.agent ? <ProductivityDayTimeline agent={r.agent} date={date} /> : null}
               />
             ))}
           </div>

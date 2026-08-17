@@ -54,6 +54,12 @@ interface ActivityReportShellProps {
   hideBusinessDays?: boolean
   /** Hide the Period/Date-Range selector (snapshot reports have no period). */
   hidePeriod?: boolean
+  /** Override the Period dropdown choices (e.g. single-day reports). */
+  periodOptions?: readonly string[]
+  /** Render "Custom" as a single date picker instead of a start–end range. */
+  singleDayCustom?: boolean
+  /** Suppress the "Date Range" info row (single-day reports state the day in the Period selector). */
+  hideDateRange?: boolean
   children: React.ReactNode
 }
 
@@ -71,6 +77,9 @@ export default function ActivityReportShell({
   live = false,
   hideBusinessDays = false,
   hidePeriod = false,
+  periodOptions,
+  singleDayCustom = false,
+  hideDateRange = false,
   children,
 }: ActivityReportShellProps) {
   const internal = useActivityFilters()
@@ -92,6 +101,8 @@ export default function ActivityReportShell({
         period={period}
         onPeriodChange={setPeriod}
         hidePeriod={hidePeriod}
+        periodOptions={periodOptions}
+        singleDayCustom={singleDayCustom}
         customStart={customStart}
         customEnd={customEnd}
         onCustomStartChange={setCustomStart}
@@ -100,7 +111,7 @@ export default function ActivityReportShell({
         businessDaysTotal={hideBusinessDays ? undefined : businessDaysTotal}
         dataThroughDate={hideBusinessDays ? undefined : dataThroughDate}
         priorBusinessDays={hideBusinessDays ? undefined : priorBusinessDays}
-        currentDateRange={currentDateRange}
+        currentDateRange={hideDateRange ? undefined : currentDateRange}
         priorDateRange={hideBusinessDays ? undefined : priorDateRange}
         onReset={resetFilters}
       />

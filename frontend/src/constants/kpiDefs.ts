@@ -527,6 +527,51 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     description: 'Total emails sent by the agent in the period.',
     formulaPlain: 'SUM(email_count) WHERE email_direction = Outbound', source: 'email stats (source mail system)',
   },
+  // ── Agent Activity · Productivity ───────────────────────────────────────────
+  // Day-scoped headline KPIs for the Productivity drill-down. Utilization is the
+  // only one with a target (the rest stay neutral and lean on the vs-prior delta),
+  // matching how the report reads. Decimal places default to the format (0 for
+  // NUMBER, 1 for PERCENT) until tuned per-KPI in the KPI registry admin page.
+  aa_prod_utilization: {
+    code: 'aa_prod_utilization', name: 'Utilization',
+    format: 'PERCENT', direction: 'UP_IS_GOOD', goal: 70, warn: 64, crit: 63,
+    scope: 'department',
+    description: 'Share of clocked-in time spent working — on a call, or active at the desk while off queue. Answers whether the paid hours produced work.',
+    formulaPlain: '(on-call minutes + desk work off queue) / clocked minutes × 100',
+    source: 'phone routing/presence, DeskTime activity, time clock',
+  },
+  aa_prod_handle_time: {
+    code: 'aa_prod_handle_time', name: 'Avg Handle Time',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD',
+    scope: 'department',
+    description: 'Average minutes per answered call — talk, hold and after-call work divided by calls answered.',
+    formulaPlain: '(talk + hold + after-call work) / calls answered',
+    source: 'call activity (source phone system)',
+  },
+  aa_prod_calls_per_hour: {
+    code: 'aa_prod_calls_per_hour', name: 'Calls per Hour',
+    format: 'NUMBER', direction: 'UP_IS_GOOD',
+    scope: 'department',
+    description: 'Calls answered for every hour on the clock. A rate rather than a count, so a short day is compared fairly.',
+    formulaPlain: 'calls answered / clocked hours',
+    source: 'call activity (source phone system), time clock',
+  },
+  aa_prod_tickets_per_hour: {
+    code: 'aa_prod_tickets_per_hour', name: 'Tickets per Hour',
+    format: 'NUMBER', direction: 'UP_IS_GOOD',
+    scope: 'department',
+    description: 'Ticket and task touches for every hour on the clock — the ticket half of the workload beside calls per hour. Touches count updates and closes; a completion can be system-driven (an online payment auto-closes a ticket).',
+    formulaPlain: 'ticket + task touches / clocked hours',
+    source: 'ticket/task touch history (source CRM), time clock',
+  },
+  aa_prod_missed_calls: {
+    code: 'aa_prod_missed_calls', name: 'Missed Calls',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD',
+    scope: 'department',
+    description: 'Queued calls that alerted this agent and were never answered, leaving the routing status as Not Responding.',
+    formulaPlain: 'COUNT(calls offered WHERE never answered)',
+    source: 'call activity (source phone system)',
+  },
 }
 
 /** Resolves thresholds for a KPI tile — falls back to the static defaults from kpiDefs */

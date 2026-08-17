@@ -87,37 +87,28 @@ export default function TimeSpentPanel({ agent, date, model }: { agent: string; 
   const share = (n: number, of: number) => (of > 0 ? ` · ${Math.round((n / of) * 100)}%` : '')
 
   const callRows: ListRow[] = [
-    { label: 'Answered', value: c.answered },
-    { label: 'Inbound / outbound', value: `${c.inbound} / ${c.outbound}` },
-    { label: 'Talk time', value: fmtHM(c.talkMins) },
-    { label: 'Hold', value: `${fmtHM(c.holdMins)} · ${c.heldCount} calls` },
-    { label: 'After-call work', value: fmtHM(c.wrapMins) },
-    { label: 'Longest call', value: fmtHM(c.longestMins) },
-    { label: 'Ticket touches', value: `${t.total} · ${t.completed} closed` },
+    { label: 'Inbound / Outbound', value: `${c.inbound} / ${c.outbound}` },
+    { label: 'Total Talk Time', value: fmtHM(c.talkMins) },
+    { label: 'Total Hold Time', value: `${fmtHM(c.holdMins)} · ${c.heldCount} calls` },
+    { label: 'After-Call Work', value: fmtHM(c.wrapMins) },
+    { label: 'Longest Call', value: fmtHM(c.longestMins) },
+    { label: 'Ticket Touches', value: `${t.total} · ${t.completed} closed` },
   ]
 
   // Shown whenever the agent dialled out, which is the whole day's work on a
   // collections desk and a handful of follow-ups on a support desk.
   if (c.dials > 0) {
+    const answered = c.underOneMin + c.overOneMin
     callRows.push(
-      { label: 'Dialling', value: '', head: true },
+      { label: 'Dialing', value: '', head: true },
       { label: 'Dials placed', value: c.dials },
-      { label: 'Connected', value: `${c.connected}${share(c.connected, c.dials)}` },
-      { label: 'Voicemail', value: `${c.voicemail}${share(c.voicemail, c.dials)}` },
+      { label: 'Calls Less Than One Minute', value: `${c.underOneMin}${share(c.underOneMin, answered)}` },
+      { label: 'Calls Greater Than One Minute', value: `${c.overOneMin}${share(c.overOneMin, answered)}` },
     )
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="text-[13px] font-semibold text-slate-800">How the time was spent</div>
-        <div className="text-[11px] text-slate-400">
-          {cmp.comparable
-            ? <>Rates over clocked time · compared across the {cmp.peerCount} agents in {cmp.department}</>
-            : <>{cmp.department} · the only agent, so there is no department to compare against</>}
-        </div>
-      </div>
-
       {cmp.flagged.length > 0 && (
         <div
           className={cn(
@@ -147,17 +138,17 @@ export default function TimeSpentPanel({ agent, date, model }: { agent: string; 
         )}
 
         <div className={CARD}>
-          <ValueList title="Call handling and tickets" rows={callRows} />
+          <ValueList title="Call Handling and Tickets" rows={callRows} />
         </div>
 
         <div className={CARD}>
-          <div className={COL_HEAD}>Time accounting</div>
+          <div className={COL_HEAD}>Phone Status</div>
           <div className="space-y-2">
             {model.timeAccounting.map(b => (
               <AccountingRow key={b.key} bucket={b} reasons={model.offQueueSummary} />
             ))}
             <div className={cn(ACCOUNT_ROW, 'border-t border-slate-200 pt-2')}>
-              <span className="truncate text-[12.5px] font-medium text-slate-700">Clocked</span>
+              <span className="truncate text-[12.5px] font-medium text-slate-700">Paid time</span>
               <span className="text-right text-[12.5px] font-semibold tabular-nums text-slate-900">{fmtHM(model.clockedMin)}</span>
               <span className="text-right text-[11px] tabular-nums text-slate-400">100%</span>
             </div>

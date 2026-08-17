@@ -473,7 +473,14 @@ export interface TouchDetailResult {
   reason:            string
 }
 
-export interface TouchDetailParams { area: 'sales' | 'csr'; employeeKey: number; date: string }
+export interface TouchDetailParams {
+  area: 'sales' | 'csr'
+  employeeKey: number
+  date: string
+  // Sales only: scope the drill-down to one Workload section (Contact Manager
+  // vs all other tickets/tasks). Omitted for CSR / the full-list validation view.
+  segment?: 'contact_manager' | 'other'
+}
 
 export const getTicketTouchDetail = async (p: TouchDetailParams): Promise<TouchDetailResult> => {
   const response = await api.get('/insights/agent-activity/tickets/touch-detail', { params: p })

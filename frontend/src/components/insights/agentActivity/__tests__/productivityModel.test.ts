@@ -10,10 +10,11 @@
 
 import { describe, it, expect } from 'vitest'
 import { buildDayModel } from '../productivityModel'
-import { buildHeaderTiles } from '../productivityHeader'
-import { buildPeerComparison, productivityRoster } from '../productivityBenchmark'
+import { PRODUCTIVITY_KPIS } from '../productivityHeader'
+import { buildPeerComparison, rosterForDate } from '../productivityBenchmark'
 import { SAMPLE_AGENTS } from '../placeholderData'
 import { SAMPLE_DATES, getAgentDay, departmentOf, peersIn } from '../productivitySampleData'
+import { getKpiDef } from '../../../../constants/kpiDefs'
 
 const everyDay = SAMPLE_AGENTS.flatMap(agent =>
   SAMPLE_DATES.map(date => ({ agent, date, model: buildDayModel(getAgentDay(agent, date)) })),
@@ -69,40 +70,28 @@ describe('call handling figures', () => {
   })
 })
 
-describe('header tiles', () => {
-  it('always renders the same five slots', () => {
-    const keys = ['utilization', 'aht', 'cph', 'acw', 'missed']
-    everyDay.forEach(({ agent, date, model }) => {
-      expect(buildHeaderTiles(agent, date, model).map(t => t.key)).toEqual(keys)
-    })
+describe('header KPIs', () => {
+  it('exposes the five headline KPI codes in order', () => {
+    expect(PRODUCTIVITY_KPIS.map(k => k.code)).toEqual([
+      'aa_prod_utilization',
+      'aa_prod_handle_time',
+      'aa_prod_calls_per_hour',
+      'aa_prod_tickets_per_hour',
+      'aa_prod_missed_calls',
+    ])
   })
 
-  it('draws the same period series whichever day is selected', () => {
-    const [first, , third] = SAMPLE_DATES
-    SAMPLE_AGENTS.forEach(agent => {
-      const a = buildHeaderTiles(agent, first, buildDayModel(getAgentDay(agent, first)))
-      const b = buildHeaderTiles(agent, third, buildDayModel(getAgentDay(agent, third)))
-      a.forEach((tile, i) => {
-        expect(tile.series).toHaveLength(SAMPLE_DATES.length)
-        expect(tile.series, `${agent} ${tile.key}`).toEqual(b[i].series)
+  it('registers every headline KPI in kpiDefs so KpiTile can render it', () => {
+    // KpiTile reads name/format/thresholds/info from the shared registry; an
+    // unregistered code would render as a bare code with no formatting.
+    PRODUCTIVITY_KPIS.forEach(k => expect(getKpiDef(k.code), k.code).toBeDefined())
+  })
+
+  it('computes a finite value for every agent-day', () => {
+    everyDay.forEach(({ model }) => {
+      PRODUCTIVITY_KPIS.forEach(k => {
+        expect(Number.isFinite(k.value(model)), k.code).toBe(true)
       })
-    })
-  })
-
-  it('drops the benchmark on a solo department but keeps utilization on target', () => {
-    // Installs is a department of one in the sample data.
-    const solo = SAMPLE_AGENTS.find(a => peersIn(departmentOf(a)).length === 1)!
-    const date = SAMPLE_DATES[0]
-    const tiles = buildHeaderTiles(solo, date, buildDayModel(getAgentDay(solo, date)))
-    tiles.forEach(t => {
-      if (t.key === 'utilization') {
-        expect(t.hasBenchmark).toBe(true)
-        expect(t.benchmarkLabel).toMatch(/^target/)
-      } else {
-        expect(t.hasBenchmark, t.key).toBe(false)
-        expect(t.benchmarkLabel).toBe('')
-        expect(t.deltaLabel).toBe('')
-      }
     })
   })
 })
@@ -126,13 +115,17 @@ describe('peer comparison', () => {
     expect(cmp.flagged).toHaveLength(0)
   })
 
-  it('orders rows worst gap first', () => {
+  it('renders rows in a fixed order and only ranks the banner worst-gap first', () => {
     const rank = { off: 0, watch: 1, inline: 2, info: 3 }
     const date = SAMPLE_DATES[0]
+    // The row list is stable across agents (e.g. Time in Queue always above Idle);
+    // the worst-first ranking is used only for the out-of-line banner.
+    const ORDER = ['phone', 'queue', 'tickets', 'productive', 'idle']
     SAMPLE_AGENTS.forEach(agent => {
-      const states = buildPeerComparison(agent, date, buildDayModel(getAgentDay(agent, date)))
-        .metrics.map(m => rank[m.state])
-      expect([...states].sort((a, b) => a - b)).toEqual(states)
+      const cmp = buildPeerComparison(agent, date, buildDayModel(getAgentDay(agent, date)))
+      expect(cmp.metrics.map(m => m.key), agent).toEqual(ORDER)
+      const flaggedStates = cmp.flagged.map(m => rank[m.state])
+      expect([...flaggedStates].sort((a, b) => a - b)).toEqual(flaggedStates)
     })
   })
 
@@ -149,20 +142,29 @@ describe('peer comparison', () => {
 })
 
 describe('roster', () => {
-  it('agrees with the days it is summed from', () => {
-    productivityRoster.forEach(row => {
-      const days = SAMPLE_DATES.map(d => buildDayModel(getAgentDay(row.agent, d)))
-      const clocked = days.reduce((a, m) => a + m.clockedMin, 0)
-      const answered = days.reduce((a, m) => a + m.callSummary.answered, 0)
-      expect(row.clockedMin).toBe(clocked)
-      expect(row.missedCalls).toBe(days.reduce((a, m) => a + m.callSummary.missed, 0))
-      expect(row.callsPerHour).toBeCloseTo(answered / (clocked / 60), 5)
+  const day = SAMPLE_DATES[SAMPLE_DATES.length - 1]
+
+  it('agrees with the day it is built from', () => {
+    rosterForDate(day).forEach(row => {
+      const m = buildDayModel(getAgentDay(row.agent, day))
+      expect(row.clockedMin).toBe(m.clockedMin)
+      expect(row.utilizationPct).toBe(m.utilizationPct)
+      expect(row.missedCalls).toBe(m.callSummary.missed)
+      expect(row.callsPerHour).toBeCloseTo(
+        m.clockedMin > 0 ? m.callSummary.answered / (m.clockedMin / 60) : 0, 5,
+      )
     })
   })
 
   it('has a laggard in each multi-person department, so the exception path is exercised', () => {
-    const utilization = (agent: string) => productivityRoster.find(r => r.agent === agent)!.utilizationPct
-    expect(utilization('Megan Foti')).toBeLessThan(utilization('Jamie Waldie'))
-    expect(utilization('Nick Robinson')).toBeLessThan(utilization('Mitchell Stempowski'))
+    // Averaged over the sample days: the per-agent pace is a deliberate bias, but
+    // a single noisy day can put two agents within a point, so the laggard is a
+    // property of the period, not of one day.
+    const meanUtil = (agent: string) => {
+      const vals = SAMPLE_DATES.map(d => rosterForDate(d).find(r => r.agent === agent)!.utilizationPct)
+      return vals.reduce((a, b) => a + b, 0) / vals.length
+    }
+    expect(meanUtil('Megan Foti')).toBeLessThan(meanUtil('Jamie Waldie'))
+    expect(meanUtil('Nick Robinson')).toBeLessThan(meanUtil('Mitchell Stempowski'))
   })
 })

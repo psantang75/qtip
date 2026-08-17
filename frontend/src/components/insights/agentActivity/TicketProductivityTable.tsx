@@ -31,6 +31,9 @@ interface TicketProductivityTableProps {
   agentLabel: string
   /** Which section's page grant the per-day touch drill-down reads under. */
   area: 'sales' | 'csr'
+  /** Sales only: scopes the Touched drill-down to this section so "All Other"
+   *  never lists Contact Manager touches. Omitted for CSR (single combined table). */
+  segment?: 'contact_manager' | 'other'
 }
 
 const BY_AGENT: SortingState = [{ id: 'agent', desc: false }]
@@ -133,7 +136,7 @@ const ch = createColumnHelper<AgentSummary>()
  * and the QTIP 3-state sort affordance, but each agent row expands to reveal a
  * per-day breakdown (Beginning / New Assigned / Touched / Closed by date).
  */
-export default function TicketProductivityTable({ rows, agentLabel, area }: TicketProductivityTableProps) {
+export default function TicketProductivityTable({ rows, agentLabel, area, segment }: TicketProductivityTableProps) {
   const [sorting, setSorting] = useState<SortingState>(BY_AGENT)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   // The day whose Touched breakdown is open in the drill-down modal.
@@ -329,7 +332,7 @@ export default function TicketProductivityTable({ rows, agentLabel, area }: Tick
       <TouchDetailDialog
         open={!!drill}
         onOpenChange={(o) => { if (!o) setDrill(null) }}
-        params={drill ? { area, employeeKey: drill.employeeKey, date: drill.date } : null}
+        params={drill ? { area, employeeKey: drill.employeeKey, date: drill.date, segment } : null}
         agentName={drill?.agent}
       />
     </div>

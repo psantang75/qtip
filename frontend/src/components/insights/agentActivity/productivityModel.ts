@@ -180,11 +180,16 @@ export interface DayModel {
     transferred: number
     heldCount: number
     longestMins: number
+    /** Answered calls that lasted under one minute. */
+    underOneMin: number
+    /** Answered calls that lasted one minute or more. */
+    overOneMin: number
     /** Outbound dialling effort, including attempts that reached nobody. */
     dials: number; connected: number; voicemail: number; noAnswer: number
   }
   ticketTotals: { total: number; updated: number; completed: number }
-  /** Punched-in minutes (everything except Offline). */
+  /** Paid minutes: worked time plus paid breaks, excluding the unpaid meal. The
+   *  productivity denominator (shown to the user as "Paid time"). */
   clockedMin: number
   onQueueMin: number
   offQueueMin: number
@@ -428,7 +433,11 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   // ── Time totals ───────────────────────────────────────────────────────────
   const sumMins = (segs: { mins: number }[]) => segs.reduce((a, s) => a + s.mins, 0)
 
-  const clockedMin = sumMins(clockSegments.filter(s => s.status !== 'Offline'))
+  // Paid time = time the employer is paying for: worked time plus paid rest
+  // breaks, but NOT the unpaid meal/lunch. This is the productivity denominator,
+  // matching the contact-center convention where utilization is measured against
+  // paid hours rather than raw punched-in ("clocked") time.
+  const clockedMin = sumMins(clockSegments.filter(s => s.status === 'Working' || s.status === 'Break'))
   const onQueueSegs = statusSegments.filter(s => isOnQueue(s.status))
   const offQueueSegs = statusSegments.filter(s => !isOnQueue(s.status))
   const onQueueMin = sumMins(onQueueSegs)
@@ -439,12 +448,12 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   const deskActiveMin = sumMins(deskActiveSegs)
   const deskIdleMin = sumMins(desktimeSegments.filter(s => s.status === 'Idle'))
 
-  // ── Clocked-time waterfall ────────────────────────────────────────────────
-  // Paid breaks win over whatever the phone was reporting at the time, so the
-  // buckets below partition the clock rather than double-counting a meal that
-  // overlaps a routing status nobody set back to off queue.
+  // ── Paid-time waterfall ───────────────────────────────────────────────────
+  // The buckets below partition paid time (worked time + paid breaks). Paid
+  // breaks win over whatever the phone was reporting at the time; the unpaid meal
+  // is not paid time, so it never appears here at all.
   const workBounds = clockSegments.filter(s => s.status === 'Working')
-  const breakMin = sumMins(clockSegments.filter(s => s.status === 'Break' || s.status === 'Meal'))
+  const breakMin = sumMins(clockSegments.filter(s => s.status === 'Break'))
   const routingIn = (pick: (s: StatusSegment) => boolean) =>
     overlapMins(statusSegments.filter(pick), workBounds)
 
@@ -463,7 +472,7 @@ export function buildDayModel(day: AgentDay | null): DayModel {
     ['available', 'Available in queue',   availableMin],
     ['offwork',   'Off queue — working',  deskWorkOffQueueMin],
     ['offidle',   'Off queue — idle',     offQueueIdleMin],
-    ['break',     'Break or meal',        breakMin],
+    ['break',     'Paid break',           breakMin],
     ['noanswer',  'Not responding',       notRespondingMin],
     ['other',     'Unaccounted',          Math.max(0, clockedMin - accounted)],
   ] as [string, string, number][])
@@ -490,6 +499,8 @@ export function buildDayModel(day: AgentDay | null): DayModel {
     transferred: answered.filter(c => c.transferred).length,
     heldCount: calls.filter(c => c.holdMins > 0).length,
     longestMins: callMarks.filter(c => c.label !== 'Missed').reduce((a, c) => Math.max(a, c.mins), 0),
+    underOneMin: callMarks.filter(c => c.label !== 'Missed' && c.mins < 1).length,
+    overOneMin: callMarks.filter(c => c.label !== 'Missed' && c.mins >= 1).length,
     dials: out.dials, connected: out.connected, voicemail: out.voicemail, noAnswer: out.noAnswer,
   }
 
