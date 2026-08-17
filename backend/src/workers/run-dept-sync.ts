@@ -5,7 +5,10 @@ import path from 'path';
 //   prod: /opt/qtip/backend/dist/workers/run-*.js -> /opt/qtip/backend/.env
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+import { exitIfAutomationDisabled } from './automationGuard';
 import { DepartmentSyncWorker } from './DepartmentSyncWorker';
+
+exitIfAutomationDisabled('ie-dept-sync');
 
 const worker = new DepartmentSyncWorker();
 worker.run()

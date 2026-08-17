@@ -5,7 +5,10 @@ import path from 'path';
 //   prod: /opt/qtip/backend/dist/workers/run-*.js -> /opt/qtip/backend/.env
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+import { exitIfAutomationDisabled } from './automationGuard';
 import { PartitionManagerWorker } from './PartitionManagerWorker';
+
+exitIfAutomationDisabled('ie-partition-manager');
 
 const worker = new PartitionManagerWorker();
 worker.run()

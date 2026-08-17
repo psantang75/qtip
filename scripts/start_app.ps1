@@ -48,6 +48,11 @@ JWT_EXPIRES_IN=8h
 # Server Configuration
 PORT=3000
 NODE_ENV=development
+
+# Insights Engine scheduled automation kill-switch.
+# 'false' makes the PM2 cron workers no-op (manual "Run now" still works).
+# Dev stays off so it never pulls from the shared production sources.
+INSIGHTS_AUTOMATION_ENABLED=false
 "@ | Out-File -FilePath .env -Encoding utf8
     Write-Host ".env file created."
 }
