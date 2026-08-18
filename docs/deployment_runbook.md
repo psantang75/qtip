@@ -16,16 +16,33 @@ This is the #1 cause of "I fixed it but production still shows the bug": the fix
 was pushed but never built on the host.
 
 Hosts (each environment has a checkout that tracks its **own branch** — see
-§0b for the promotion model):
+§0b for the promotion model). **Both stage and prod are now containerized
+Docker Compose** — same SSH user (`dmadmin`), same `…/code` checkout layout,
+same `docker compose up -d --build` rebuild. There is no PM2 *host* anymore
+(PM2 still runs *inside* the container — see §0a).
 
-| Env   | Host          | SSH user     | Checkout path                                | Tracks branch |
-| ----- | ------------- | ------------ | -------------------------------------------- | ------------- |
-| stage | `10.90.15.6`  | `dmadmin`    | `/home/dmadmin/docker-staging/qtip-app/code` | `stage`       |
-| prod  | `10.90.15.5`  | `qtip-admin` | `/opt/qtip`                                  | `production`  |
+| Env   | Host          | SSH user  | Compose project dir                         | `/code` checkout → tracks branch |
+| ----- | ------------- | --------- | ------------------------------------------- | -------------------------------- |
+| stage | `10.90.15.6`  | `dmadmin` | `/home/dmadmin/docker-staging/qtip-app`     | `…/code` → `stage`               |
+| prod  | `10.90.15.5`  | `dmadmin` | `/home/dmadmin/docker-production/qtip-app`  | `…/code` → `production`          |
 
-> **Stage is containerized** (see §0a); prod stays on the PM2 flow below until
-> it is migrated too. The git-as-source-of-truth model is unchanged — only the
-> path, SSH user, and rebuild command differ on stage.
+> **Access — read this, it is the #1 thing people get wrong:**
+> You SSH to **both** boxes as **`dmadmin`**. That is the only account that owns
+> the Docker socket and the `/home/dmadmin/docker-{staging,production}` trees.
+> Everything you deploy lives under `…/qtip-app/` (the compose project) whose
+> `code/` subdir is the git checkout you `pull` into.
+>
+> The old prod account **`qtip-admin` at `/opt/qtip` (PM2) is RETIRED** — its
+> processes are stopped and it cannot reach Docker. Do **not** SSH there to
+> deploy. If a command in an old note says `qtip-admin`, `/opt/qtip`, or
+> `deploy_application.sh`, it is stale.
+>
+> Quick copy-paste identity check for each box:
+>
+> ```bash
+> ssh dmadmin@10.90.15.6 'whoami; docker ps --format "{{.Names}}"'   # stage
+> ssh dmadmin@10.90.15.5 'whoami; docker ps --format "{{.Names}}"'   # prod
+> ```
 
 ## 0b. Branch & promotion model
 
@@ -53,46 +70,63 @@ ssh dmadmin@10.90.15.6 'git -C /home/dmadmin/docker-staging/qtip-app/code pull -
 
 # 3. Verify on https://qtip-stage.dm.local
 
-# 4. Promote stage -> production, then deploy on the prod host:
+# 4. Promote stage -> production, then deploy on the prod box (same container loop):
 git checkout production; git merge --ff-only stage; git push origin production
-ssh qtip-admin@10.90.15.5 'cd /opt/qtip; git pull --ff-only; ./scripts/deploy_application.sh -e production'
+ssh dmadmin@10.90.15.5 'git -C /home/dmadmin/docker-production/qtip-app/code pull --ff-only; cd /home/dmadmin/docker-production/qtip-app; docker compose up -d --build'
+
+# 5. Verify on https://qtip-prod.dm-us.com
 ```
 
 If a `git merge --ff-only` is rejected, the target has commits the source
 doesn't — reconcile on `main` first. **Never force-push an environment
 branch**, and never commit straight onto `stage`/`production`.
 
-## 0a. Containerized stage (10.90.15.6) — the current stage loop
+## 0a. Containerized environments (stage + prod) — the deploy loop
 
-Stage moved to Docker Compose. **The repo is still the source of truth** — do
-NOT hand-edit files on the box as the primary workflow. The staging `/code`
-directory is a checkout of the **`stage`** branch (see §0b); you deploy by
-pulling and rebuilding the image, exactly like the PM2 flow just with different
-mechanics.
+**Both stage and prod run Docker Compose.** The repo is still the source of
+truth — do NOT hand-edit files on the box as the primary workflow. Each env's
+`code/` directory is a checkout of that env's branch (stage→`stage`,
+prod→`production`, see §0b); you deploy by pulling and rebuilding the image.
 
-| What                | Old (PM2)                     | New (container stage)                                  |
-| ------------------- | ----------------------------- | ------------------------------------------------------ |
-| SSH user            | `qtip-admin`                  | `dmadmin`                                              |
-| Code path           | `/opt/qtip`                   | `/home/dmadmin/docker-staging/qtip-app/code`           |
-| Rebuild command     | `deploy_application.sh`/PM2   | `docker compose up -d --build`                         |
-| URL                 | host:port                     | `https://qtip-stage.dm.local` (shared Nginx proxy)     |
-| DB                  | host MySQL                    | container MySQL 8.4, published `10.90.15.6:3306`       |
+> **PM2 didn't go away — it moved inside the container.** The image's entrypoint
+> is `pm2-runtime start ecosystem.config.cjs` (see `deploy/Dockerfile`), so the
+> API and the nightly workers run under PM2 *inside* `qtip-app`. That means the
+> old **host** PM2 commands (`pm2 reload qtip-backend`, `pm2 stop ie-*`) are no
+> longer run on the box — a `docker compose up -d --build` recreates the
+> container and PM2 starts everything fresh. To touch PM2 now you `docker exec`
+> into the container (see §3).
 
-Deploy loop (run on stage; prod first-verify-then-promote discipline is
-unchanged):
+Per-env reference — pick the correct row; the two are identical except host,
+path, branch, container name, and URL:
+
+| What            | stage                                     | prod                                          |
+| --------------- | ----------------------------------------- | --------------------------------------------- |
+| Host            | `10.90.15.6`                              | `10.90.15.5`                                   |
+| SSH user        | `dmadmin`                                 | `dmadmin`                                      |
+| Project dir     | `/home/dmadmin/docker-staging/qtip-app`   | `/home/dmadmin/docker-production/qtip-app`     |
+| `code/` branch  | `stage`                                   | `production`                                   |
+| Rebuild command | `docker compose up -d --build`            | `docker compose up -d --build`                 |
+| App container   | `qtip-app-stage`                          | `qtip-app`                                     |
+| URL             | `https://qtip-stage.dm.local`             | `https://qtip-prod.dm-us.com`                  |
+| DB container    | `qtip-db` MySQL 8.4 (`10.90.15.6:3306`)   | `qtip-db` MySQL 8.4.5 (`10.90.15.5:3306`)      |
+
+Deploy loop (identical for both — pick the row above; prod keeps the
+verify-stage-first discipline):
 
 ```bash
-ssh dmadmin@10.90.15.6
-# pull the release into the checkout that IS /code
-git -C /home/dmadmin/docker-staging/qtip-app/code pull --ff-only
-# rebuild + recreate the container from that code
-cd /home/dmadmin/docker-staging/qtip-app
-docker compose up -d --build
+# STAGE
+ssh dmadmin@10.90.15.6 'git -C /home/dmadmin/docker-staging/qtip-app/code pull --ff-only; cd /home/dmadmin/docker-staging/qtip-app; docker compose up -d --build'
+
+# PROD (only after stage is verified)
+ssh dmadmin@10.90.15.5 'git -C /home/dmadmin/docker-production/qtip-app/code pull --ff-only; cd /home/dmadmin/docker-production/qtip-app; docker compose up -d --build'
 ```
 
 - **`.env`-only change** (no code): `docker compose up -d` (recreates the
-  container without rebuilding the image).
-- **Proxy change**: `cd /home/dmadmin/docker-staging/proxy && docker compose exec proxy nginx -t && docker compose exec proxy nginx -s reload`
+  container without rebuilding the image). The app `.env` lives at
+  `…/qtip-app/code/backend/.env`; the DB `.env` at `…/docker-<env>/db/.env`.
+- **Proxy change**: edit under `…/docker-<env>/proxy/` then
+  `cd …/docker-<env>/proxy && docker compose exec proxy nginx -t && docker compose exec proxy nginx -s reload`
+  (stage = `docker-staging`, prod = `docker-production`).
 - Direct Remote-SSH editing on the box is for **live debugging only** — commit
   anything that works back to `main` and promote it (§0b) so it survives the
   next rebuild and reaches prod. Never let the box diverge from its branch.
@@ -110,80 +144,72 @@ docker compose up -d --build
 
 ### Known container-stage caveats (from IT)
 
-- **Equipment uploads are non-persistent** on stage — they are written inside
-  the container filesystem and lost on `docker compose up` recreate. A bind
-  mount is a pending IT change.
+- **Equipment uploads are non-persistent on stage** — they are written inside
+  the container filesystem and lost on `docker compose up` recreate (bind mount
+  pending). **Prod is fine here:** its compose bind-mounts
+  `…/docker-production/qtip-app/uploads:/app/uploads`, so prod attachment
+  uploads survive rebuilds.
 - **CIFS mounts**: the app depends on host mounts `/mnt/qtip-audio` and
   `/mnt/dmcms`. If the host loses those network mounts, audio features fail
   gracefully while the rest of the app stays up.
 
 ### Frontend-only change (most common — no API restart, no DB)
 
-Run on **stage first**, verify in the browser, then repeat for prod. On the
-containerized stage box use the §0a loop (`git pull` + `docker compose up -d
---build`). The PM2 in-place rebuild below now applies to **prod**
-(`10.90.15.5`) — nginx serves `frontend/dist` directly there, so a rebuild in
-place is the whole deploy, no copy/swap step:
+There is no special path for frontend-only changes anymore: **both envs rebuild
+the same way** via the §0a loop. The image build compiles `frontend/dist` and
+the container serves it, so `docker compose up -d --build` is the whole deploy —
+no copy/swap step. Run stage first, verify in the browser, then promote (§0b)
+and repeat for prod.
+
+### Verify the LIVE container actually contains your change
+
+Don't trust "it built" — confirm the running container is on the new code. The
+`code/` checkout must match the env branch, and the app container must have been
+**recreated** by the rebuild (uptime in seconds, not days):
 
 ```bash
-ssh qtip-admin@10.90.15.5            # prod  (stage 10.90.15.6 → see §0a)
-cd /opt/qtip
-git fetch origin && git checkout main && git merge --ff-only origin/main
-npm run build --prefix frontend
-```
-
-### Verify the LIVE bundle actually contains your change
-
-Don't trust "it built" — confirm the served file changed. The commit must match
-origin, and the minified bundle must contain a fingerprint of your edit
-(property names survive minification):
-
-```bash
-git rev-parse HEAD                                   # must equal origin/main
-ls -la frontend/dist/assets/AuditFormPage-*.js       # timestamp = just now
-# example fingerprint for the call-selector dedupe fix (commit 4658981):
-grep -o 'call_id===[a-zA-Z]*\.call_id' frontend/dist/assets/AuditFormPage-*.js
+# on the box as dmadmin — prod shown; swap paths/host for stage (§0a table):
+git -C /home/dmadmin/docker-production/qtip-app/code rev-parse HEAD    # == origin/production
+docker ps --format '{{.Names}} :: {{.Status}}' | grep qtip-app         # "Up <seconds>" right after rebuild
+# app answers through the proxy:
+curl -sko /dev/null -w '%{http_code}\n' https://qtip-prod.dm-us.com/login   # 200
 ```
 
 ### Backend / full change (deps changed, API logic, or DB migration)
 
-On **stage** the container rebuild (§0a) already does install → build → restart
-in one step (the image build runs `npm ci` + `npm run build`); apply DB
-migrations with the §3.3 step before the rebuild if the release includes one.
-On **prod** use the full PM2 script — install → build → migrate → PM2 restart →
-health check (see §3 for the detailed order):
+**Both envs** use the same container rebuild (§0a): the image build runs
+`npm install` + build for backend and frontend, so a changed `package.json`/lock
+is picked up automatically — no extra command, no host `npm ci`. The container
+then boots the API and workers under `pm2-runtime`.
 
-```bash
-cd /opt/qtip && ./scripts/deploy_application.sh -e production
-```
-
-> If a dependency (`package.json`/lock) changed, add `npm ci` before the build.
-> A frontend-only edit does **not** need `npm ci` or a PM2 restart.
+If the release includes a **DB migration**, apply it with the §3.3 step against
+that env's `qtip-db` container **before** the rebuild.
 
 ---
 
-## 1. Platform choice — PM2 vs IIS
+## 1. Process model — PM2 inside the container
 
-QTIP ships with configuration for two host patterns. Pick **one** per
-environment.
-
-### PM2 (recommended for Linux hosts, Windows VMs on-site)
+**Both stage and prod run the same Docker image**, whose entrypoint is
+`pm2-runtime start ecosystem.config.cjs` (`deploy/Dockerfile`). PM2 is therefore
+an **implementation detail inside `qtip-app`**, not something you install or
+drive on the host.
 
 - `ecosystem.config.cjs` at the repo root defines the API process
-  (`qtip-backend`) and the five nightly workers.
-- Workers run as cron one-shots inside the 01:00–02:00 UTC window; see the
-  file-header comment for the timing rationale.
-- Process log rotation is handled by `pm2-logrotate`, file rotation by
-  Winston's DailyRotateFile transport (see
-  [`LOGGING_CONFIGURATION.md`](./LOGGING_CONFIGURATION.md)).
+  (`qtip-backend`) and the nightly workers (`ie-dept-sync`, `ie-emp-sync`,
+  `ie-calendar-sync`, `ie-partition-manager`, `ie-rollup`, `ie-source-dispatch`).
+- Workers run as cron one-shots inside the 01:00–02:00 window (container `TZ`
+  is `America/New_York`); see the file-header comment for the timing rationale.
+- To inspect or drive PM2, exec into the container, e.g.
+  `docker exec qtip-app pm2 ls` (prod) or `docker exec qtip-app-stage pm2 ls`
+  (stage). A `docker compose up -d --build` recreates the container and PM2
+  starts everything fresh — you do **not** run host-level `pm2 …` commands.
+- Log file rotation is Winston's DailyRotateFile transport (see
+  [`LOGGING_CONFIGURATION.md`](./LOGGING_CONFIGURATION.md)); container stdout is
+  captured by Docker.
 
-### IIS (legacy Windows hosts)
-
-- `deploy/web.config.example` drives iisnode.
-- Workers must still run via PM2 or Windows Scheduled Tasks — IIS does not
-  schedule the nightly jobs. Document which mechanism the host uses in the
-  ops runbook for that environment.
-- Do not mix PM2 and IIS on the same host — they will fight for the port.
+> **Retired:** the host-PM2 (`qtip-admin` @ `/opt/qtip`) and IIS
+> (`deploy/web.config.example`) patterns are no longer used for stage or prod.
+> They remain in the repo only for reference/DR; do not deploy with them.
 
 ---
 
@@ -201,37 +227,53 @@ environment.
 
 ## 3. Deploy order — step by step
 
-> Run every command from the repo root on the deploy host unless noted.
+> **The canonical deploy is the §0a container loop** (`git pull` +
+> `docker compose up -d --build`), which does install → build → (re)start under
+> `pm2-runtime` in one image build. The steps below are the *order of concerns*
+> around that rebuild — backup, migrate, verify — with the container-native
+> commands. All box commands run as **`dmadmin`**; examples show **prod**
+> (`10.90.15.5`, `qtip-app`) — swap the host/paths/container for stage (§0a).
 
 ### 3.1 Database backup (always)
 
-```powershell
-.\scripts\backup-before-migration.ps1
+Dump the `qtip-db` container to the box's backups dir. The DB name and root
+password already live in the container's env, so reference them in-place rather
+than hardcoding secrets:
+
+```bash
+ssh dmadmin@10.90.15.5 'docker exec qtip-db sh -c '\''mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'\'' | gzip > /home/dmadmin/docker-production/qtip-app/backups/pre-deploy-$(date +%Y%m%d_%H%M%S).sql.gz'
 ```
 
-Writes `scripts\backups\pre-migration-YYYYMMDD_HHmmss.sql` and prints the
-path. Keep the path handy — it's the rollback target.
+Keep the printed path — it's the rollback target (§4).
 
-### 3.2 Pull code + install
+### 3.2 Pull code + rebuild (install + build happen in the image)
 
-```powershell
-git fetch --all
-git checkout <release-tag-or-commit>
-npm ci --prefix .
-npm run build --prefix backend
-npm run build --prefix frontend
+No host `npm ci`/build — the image build does it. Just fast-forward `code/` to
+the release and rebuild:
+
+```bash
+ssh dmadmin@10.90.15.5 'git -C /home/dmadmin/docker-production/qtip-app/code pull --ff-only; cd /home/dmadmin/docker-production/qtip-app; docker compose up -d --build'
 ```
 
-### 3.3 Apply Prisma migrations
+> If a **DB migration** is in the release, run §3.3 **before** this rebuild.
 
-```powershell
-.\scripts\deploy_database.ps1 -Environment production
-# Equivalent to: prisma migrate deploy --schema backend/prisma/schema.prisma
+### 3.3 Apply Prisma migrations (only when the release includes one)
+
+Run `prisma migrate deploy` against the env's `qtip-db`, using the migrations in
+the freshly-pulled `code/` checkout via a throwaway node container on the compose
+network (so `DATABASE_URL` resolves the `qtip-db` hostname):
+
+```bash
+ssh dmadmin@10.90.15.5 'cd /home/dmadmin/docker-production/qtip-app; \
+  docker compose run --rm --no-deps \
+    -w /app/backend -v "$PWD/code/backend:/app/backend" \
+    qtip-app sh -c "npx prisma migrate deploy --schema prisma/schema.prisma"'
 ```
 
 Prisma applies migrations in lexicographic order of the folder name. See
 [`backend/prisma/migrations/README.md`](../backend/prisma/migrations/README.md)
-for the duplicate-timestamp tolerance rule.
+for the duplicate-timestamp tolerance rule. For not-null/column-drop migrations
+follow the staggered plan in §7.
 
 ### 3.4a AI Reviewer system user (once per env)
 
@@ -252,25 +294,26 @@ between dev / stage / prod and **must be re-resolved** any time you:
 - Restore the DB from a backup taken **before** the row was seeded.
 - Re-seed the env from scratch (e.g. wipe + reload data for a regression run).
 
-Run this on the target host (one-time, idempotent):
+Run this against the target env (one-time, idempotent) by exec'ing into the app
+container (prod `qtip-app`, stage `qtip-app-stage`):
 
 ```bash
-cd /opt/qtip/backend
-npx ts-node scripts/seed-ai-reviewer.ts
+ssh dmadmin@10.90.15.5 'docker exec qtip-app npx ts-node scripts/seed-ai-reviewer.ts'
 # Prints either "Created user: id=<N> ..." or "User already exists: id=<N> ..."
 # followed by a copy-pasteable line:
 #   AI_REVIEWER_USER_ID=<N>
 ```
 
-Then append (or update) that line in the host's `/opt/qtip/backend/.env`
-and reload the API so the new value is read:
+Then append (or update) that line in the env's app `.env` at
+`…/docker-production/qtip-app/code/backend/.env` and recreate the container so
+the new value is read (env is loaded via `env_file` at container start):
 
 ```bash
-pm2 restart qtip-backend --update-env
+ssh dmadmin@10.90.15.5 'cd /home/dmadmin/docker-production/qtip-app; docker compose up -d'
 ```
 
-Verification: `curl -sS -o /dev/null -w '%{http_code}\n'
-http://localhost:5000/api/ai-reviewer/inbox` should return `401`
+Verification (through the proxy): `curl -sk -o /dev/null -w '%{http_code}\n'
+https://qtip-prod.dm-us.com/api/ai-reviewer/inbox` should return `401`
 (authentication required) — **not** `503`. A 503 means `AI_REVIEWER_USER_ID`
 is still missing or pointing at a row that doesn't exist.
 
@@ -279,56 +322,56 @@ is still missing or pointing at a row that doesn't exist.
 > into prod's `.env` — re-run the seed against the prod DB and use the id
 > the script prints there.
 
-### 3.4 Stop workers (so they don't race the new schema)
+### 3.4 Workers, API restart, and the frontend bundle — all handled by the rebuild
 
-```powershell
-pm2 stop ie-dept-sync ie-emp-sync ie-calendar-sync ie-partition-manager ie-rollup
-```
+In the container model these old host-PM2 steps collapse into the single
+`docker compose up -d --build` from §3.2:
 
-### 3.5 Restart the API
+- **Workers** (`ie-*`) and the **API** (`qtip-backend`) are (re)started together
+  by `pm2-runtime` when the container is recreated — there is no separate
+  host-side stop/reload/resume. Because the rebuild replaces the whole container
+  atomically, workers can't race a half-applied schema: run §3.3 migrations
+  first, then rebuild.
+- **Frontend bundle** ships *inside* the image (`frontend/dist` baked at build
+  time and served by the container), so there is no separate bundle-swap step —
+  the new UI and new API go live together on recreate.
+- Need to nudge PM2 without a full rebuild (rare)? Exec in:
+  `docker exec qtip-app pm2 reload qtip-backend` (prod) /
+  `docker exec qtip-app-stage pm2 reload qtip-backend` (stage).
 
-```powershell
-pm2 reload qtip-backend
-```
-
-`reload` does zero-downtime rolling restart across cluster workers. Use
-`pm2 restart qtip-backend` only when the zero-downtime semantics don't
-apply (first boot, ecosystem.config.cjs changed).
-
-### 3.6 Smoke test (see §5 below)
-
-Only after §5 passes, resume workers:
-
-### 3.7 Resume workers
-
-```powershell
-pm2 start ie-dept-sync ie-emp-sync ie-calendar-sync ie-partition-manager ie-rollup
-pm2 save
-```
-
-### 3.8 Swap the frontend bundle
-
-The bundle lives in `frontend/dist`. The exact copy mechanism depends on
-the host (nginx served directly, rsync to IIS root, blob-storage push).
-Swap the bundle **last** so users never see a new UI calling a stale API.
+Proceed to the smoke test (§5) before declaring the release live.
 
 ---
 
 ## 4. Rollback procedure
 
-Trigger conditions: §3.5 or §5 fails, or observability (§
+Trigger conditions: §3.2 rebuild or §5 fails, or observability (§
 [`observability.md`](./observability.md)) fires an alert within 15 min
-of deploy.
+of deploy. All commands as `dmadmin` on the box (prod paths shown).
 
-1. `pm2 stop qtip-backend` (and workers from §3.4).
-2. `git checkout <previous-release-tag>`; rebuild backend per §3.2.
-3. `.\scripts\restore-backup.ps1 -BackupFile <path-from-§3.1>`
-   - If the migration in §3.3 was schema-only and safe to skip, you can
-     instead run `prisma migrate resolve --rolled-back <migration_name>`
-     and re-apply an older migration. The full restore is always safe.
-4. `pm2 reload qtip-backend`; resume workers from §3.7.
-5. Swap the frontend bundle back to the prior release.
-6. Post an incident note referencing the backup file, the commit deployed,
+1. **Roll the code back** to the previous commit and rebuild — recreating the
+   container atomically stops the bad workers/API and boots the old ones:
+
+   ```bash
+   ssh dmadmin@10.90.15.5 'cd /home/dmadmin/docker-production/qtip-app; \
+     git -C code reset --hard <previous-commit>; docker compose up -d --build'
+   ```
+
+   (`<previous-commit>` is the prior `production` tip — e.g. what `code/`
+   pointed at before the pull; find it with `git -C code reflog`.)
+2. **Restore the DB** only if the release migrated it — otherwise skip:
+
+   ```bash
+   ssh dmadmin@10.90.15.5 'gunzip -c <backup-path-from-§3.1> | docker exec -i qtip-db sh -c '\''mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'\'''
+   ```
+
+   - If the migration in §3.3 was schema-only and safe to skip, you can instead
+     run `prisma migrate resolve --rolled-back <migration_name>`. The full
+     restore is always safe.
+3. Also revert the `production` branch on the remote so the box and git agree:
+   reconcile on `main` and re-promote — **never force-push an environment
+   branch** (§0b).
+4. Post an incident note referencing the backup file, the commit deployed,
    and the failing signal.
 
 A partial restore — only the insights / KPI tables — is available via
@@ -339,13 +382,23 @@ drift is limited to insights rollups.
 
 ## 5. Post-deploy smoke test
 
-Run after every deploy, **before** declaring the release live.
+Run after every deploy, **before** declaring the release live. Target the env's
+public URL — stage `https://qtip-stage.dm.local`, prod
+`https://qtip-prod.dm-us.com`.
 
 ```powershell
 .\scripts\run_verification.ps1 -Environment production
 ```
 
-What the script exercises:
+Or hit the endpoints directly through the proxy (self-signed cert → `-k`):
+
+```bash
+for p in /health /ready /live /api/csrf-token '/api/insights/qc-quality?limit=1'; do
+  echo -n "$p -> "; curl -sk -o /dev/null -w '%{http_code}\n' "https://qtip-prod.dm-us.com$p"
+done
+```
+
+What to exercise:
 
 - `/health`, `/ready`, `/live` monitoring endpoints
 - `/api/auth/login` with a canary account (expects 200 + CSRF cookie)
@@ -356,6 +409,9 @@ What the script exercises:
 If any step returns non-2xx, treat it as a rollback trigger.
 
 ### Manual UI smoke (≤ 2 min)
+
+Load the env URL (prod `https://qtip-prod.dm-us.com`) — self-signed cert prompt
+is expected until public certs are issued.
 
 | Surface              | What to verify                                                               |
 | -------------------- | ---------------------------------------------------------------------------- |
@@ -399,21 +455,23 @@ Run twice — one value per secret. Do not reuse `JWT_SECRET` as
 ### 6.3 Apply on the production host
 
 1. Stage the new values in the deploy channel / password manager.
-2. Edit the production `.env` (or PM2 `ecosystem.config.cjs` env block, or
-   Windows service env — whichever the host uses) and replace:
+2. SSH as `dmadmin` and edit the prod app `.env` at
+   `/home/dmadmin/docker-production/qtip-app/code/backend/.env` and replace:
 
    ```
    JWT_SECRET=<new value 1>
    REFRESH_TOKEN_SECRET=<new value 2>
    ```
 
-3. Restart the API to pick up the new values:
+3. Recreate the container so it re-reads `env_file` (no image rebuild needed —
+   this is an `.env`-only change, §0a):
 
-   ```powershell
-   pm2 restart qtip-backend
+   ```bash
+   ssh dmadmin@10.90.15.5 'cd /home/dmadmin/docker-production/qtip-app; docker compose up -d'
    ```
 
-   Workers do not mint JWTs and do not need to restart.
+   Workers do not mint JWTs, but they share the container, so they restart with
+   it — that is harmless.
 
 ### 6.4 Expected user impact
 
@@ -426,8 +484,9 @@ in the ops channel if the maintenance window does not already cover it.
 
 After restart:
 
-- `pm2 logs qtip-backend --lines 50` should show no "invalid signature" loops
-  other than the expected one-time re-auth of active sessions.
+- `docker exec qtip-app pm2 logs qtip-backend --lines 50` should show no
+  "invalid signature" loops other than the expected one-time re-auth of active
+  sessions. (`docker logs qtip-app` shows the same stdout.)
 - `/api/auth/login` with a known-good canary must return 200 and set a
   new CSRF cookie (§5 smoke test covers this).
 - The old token (the one that prompted the rotation, if any) must now return
@@ -436,8 +495,10 @@ After restart:
 ### 6.6 Rollback
 
 If the new value was mistyped and no user can log in, restore the previous
-`.env` value and `pm2 restart qtip-backend`. Nothing is persisted server-side
-against the in-flight secret, so the rollback is instantaneous.
+`.env` value and recreate the container
+(`ssh dmadmin@10.90.15.5 'cd /home/dmadmin/docker-production/qtip-app; docker compose up -d'`).
+Nothing is persisted server-side against the in-flight secret, so the rollback
+is instantaneous.
 
 ---
 
