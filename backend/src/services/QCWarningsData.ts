@@ -2,27 +2,36 @@ import pool from '../config/database'
 import { RowDataPacket } from 'mysql2'
 import type { PeriodRanges } from '../utils/periodUtils'
 import { fmtDatetime as fmt } from '../utils/dateHelpers'
-import { deptClause } from './qcQueryHelpers'
+import { deptClause, userClause } from './qcQueryHelpers'
 
 // ── Warnings page ─────────────────────────────────────────────────────────────
+//
+// Every handler accepts an optional `forUserId`. When set (the caller's access
+// resolved to dataScope='SELF') the query is restricted to that single agent so
+// a self-scoped user — e.g. a CSR — sees only their own performance warnings,
+// matching the SELF scoping every other QC endpoint applies. When null the
+// full department-scoped (analyst) view is returned unchanged.
 
-export async function getWriteUpPipeline(deptFilter: number[], ranges: PeriodRanges) {
+export async function getWriteUpPipeline(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
-  const dp = dc.params
+  const uc = userClause(forUserId)
+  const p  = [...dc.params, ...uc.params]
 
   const [[statusRows], [typeRows], [statsRows]] = await Promise.all([
     pool.execute<RowDataPacket[]>(
       `SELECT wu.status, COUNT(*) AS count FROM write_ups wu
        JOIN users csr ON wu.csr_id = csr.id
-       WHERE wu.created_at BETWEEN ? AND ? ${dc.sql} GROUP BY wu.status`,
-      [s, e, ...dp],
+       WHERE wu.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql} GROUP BY wu.status`,
+      [s, e, ...p],
     ),
     pool.execute<RowDataPacket[]>(
       `SELECT wu.document_type AS type, COUNT(*) AS count FROM write_ups wu
        JOIN users csr ON wu.csr_id = csr.id
-       WHERE wu.created_at BETWEEN ? AND ? ${dc.sql} GROUP BY wu.document_type`,
-      [s, e, ...dp],
+       WHERE wu.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql} GROUP BY wu.document_type`,
+      [s, e, ...p],
     ),
     pool.execute<RowDataPacket[]>(
       `SELECT
@@ -31,8 +40,8 @@ export async function getWriteUpPipeline(deptFilter: number[], ranges: PeriodRan
          SUM(CASE WHEN wu.follow_up_required = 1 AND wu.follow_up_date < CURDATE()
                AND wu.status NOT IN ('CLOSED') THEN 1 ELSE 0 END) AS overdueFollowUps
        FROM write_ups wu JOIN users csr ON wu.csr_id = csr.id
-       WHERE wu.created_at BETWEEN ? AND ? ${dc.sql}`,
-      [s, e, ...dp],
+       WHERE wu.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}`,
+      [s, e, ...p],
     ),
   ])
 
@@ -52,9 +61,12 @@ export async function getWriteUpPipeline(deptFilter: number[], ranges: PeriodRan
   }
 }
 
-export async function getActiveWriteUps(deptFilter: number[], ranges: PeriodRanges) {
+export async function getActiveWriteUps(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
+  const uc = userClause(forUserId)
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT wu.id, u.id AS userId, u.username AS agent,
        COALESCE(d.department_name,'Unknown') AS dept,
@@ -71,10 +83,10 @@ export async function getActiveWriteUps(deptFilter: number[], ranges: PeriodRang
      LEFT JOIN write_up_incidents wi ON wi.write_up_id = wu.id
      LEFT JOIN write_up_violations wv ON wv.incident_id = wi.id
      WHERE wu.created_at BETWEEN ? AND ?
-       AND wu.status NOT IN ('CLOSED') ${dc.sql}
+       AND wu.status NOT IN ('CLOSED') ${dc.sql} ${uc.sql}
      GROUP BY wu.id, u.id, d.department_name, wu.document_type, wu.status, wu.created_at, wu.meeting_date, wu.follow_up_date
      ORDER BY wu.created_at DESC LIMIT 50`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...uc.params],
   )
   return rows.map(r => ({
     id:          r.id as number,
@@ -91,15 +103,18 @@ export async function getActiveWriteUps(deptFilter: number[], ranges: PeriodRang
   }))
 }
 
-export async function getEscalationData(deptFilter: number[], ranges: PeriodRanges) {
+export async function getEscalationData(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
+  const uc = userClause(forUserId)
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT wu.document_type AS type, COUNT(*) AS count
      FROM write_ups wu JOIN users csr ON wu.csr_id = csr.id
-     WHERE wu.created_at BETWEEN ? AND ? ${dc.sql}
+     WHERE wu.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY wu.document_type`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...uc.params],
   )
   const map: Record<string, number> = {}
   for (const r of rows) map[r.type] = parseInt(r.count, 10)
@@ -114,9 +129,12 @@ export async function getEscalationData(deptFilter: number[], ranges: PeriodRang
 // a lower tier the agent already held in the trailing 12 months. We count
 // distinct write-ups (not agents) so a single agent who escalated twice
 // (verbal -> written -> final) is reflected as two step-ups.
-async function countStepUps(deptFilter: number[], range: { start: Date; end: Date }) {
+async function countStepUps(
+  deptFilter: number[], range: { start: Date; end: Date }, forUserId: number | null = null,
+) {
   const s = fmt(range.start), e = fmt(range.end)
   const dc = deptClause(deptFilter)
+  const uc = userClause(forUserId)
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT
        SUM(CASE WHEN curr.document_type = 'WRITTEN_WARNING'
@@ -136,9 +154,9 @@ async function countStepUps(deptFilter: number[], range: { start: Date; end: Dat
             ORDER BY prev.created_at DESC LIMIT 1) AS prev_tier
        FROM write_ups wu
        JOIN users csr ON wu.csr_id = csr.id
-       WHERE wu.created_at BETWEEN ? AND ? ${dc.sql}
+       WHERE wu.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      ) curr`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...uc.params],
   )
   const r = rows[0] ?? {}
   return {
@@ -148,10 +166,12 @@ async function countStepUps(deptFilter: number[], range: { start: Date; end: Dat
   }
 }
 
-export async function getStepUpData(deptFilter: number[], ranges: PeriodRanges) {
+export async function getStepUpData(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const [current, prior] = await Promise.all([
-    countStepUps(deptFilter, ranges.current),
-    countStepUps(deptFilter, ranges.prior),
+    countStepUps(deptFilter, ranges.current, forUserId),
+    countStepUps(deptFilter, ranges.prior, forUserId),
   ])
   return { current, prior }
 }
@@ -165,9 +185,12 @@ export async function getStepUpData(deptFilter: number[], ranges: PeriodRanges) 
 // SUBSTRING_INDEX(GROUP_CONCAT(... ORDER BY created_at DESC), ',', 1) so they
 // reflect the chronologically-latest in-period write-up rather than the
 // alphabetically-largest enum value.
-export async function getRepeatWarningAgents(deptFilter: number[], ranges: PeriodRanges) {
+export async function getRepeatWarningAgents(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter, 'u')
+  const uc = userClause(forUserId, 'u', 'id')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT u.id AS userId, u.username AS agent,
        COALESCE(d.department_name,'Unknown') AS dept,
@@ -185,12 +208,12 @@ export async function getRepeatWarningAgents(deptFilter: number[], ranges: Perio
      FROM write_ups wu
      JOIN users u ON wu.csr_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
-     WHERE wu.created_at BETWEEN ? AND ? ${dc.sql}
+     WHERE wu.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY u.id, u.username, d.department_name
      HAVING COUNT(*) >= 2
      ORDER BY inPeriod DESC, prior12mo DESC, agent ASC
      LIMIT 100`,
-    [s, s, s, s, s, e, ...dc.params],
+    [s, s, s, s, s, e, ...dc.params, ...uc.params],
   )
   return rows.map(r => ({
     userId:     r.userId as number,
@@ -207,15 +230,18 @@ export async function getRepeatWarningAgents(deptFilter: number[], ranges: Perio
 // Distinct-agent count of agents currently sitting on a Final Warning issued
 // in the period. Used by the Escalation Path stat row so it reflects PEOPLE
 // rather than write-up rows.
-export async function getAgentsOnFinalWarning(deptFilter: number[], ranges: PeriodRanges) {
+export async function getAgentsOnFinalWarning(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
+  const uc = userClause(forUserId)
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT COUNT(DISTINCT wu.csr_id) AS value
      FROM write_ups wu JOIN users csr ON wu.csr_id = csr.id
      WHERE wu.document_type = 'FINAL_WARNING'
-       AND wu.created_at BETWEEN ? AND ? ${dc.sql}`,
-    [s, e, ...dc.params],
+       AND wu.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}`,
+    [s, e, ...dc.params, ...uc.params],
   )
   return parseInt(rows[0]?.value ?? '0', 10)
 }
@@ -232,9 +258,12 @@ export async function getAgentsOnFinalWarning(deptFilter: number[], ranges: Peri
 // equals the sum of `violations` across the listed agents. The latest
 // document_type / status for each (policy, agent) pair is taken from the
 // most-recent in-period write-up.
-export async function getPolicyViolations(deptFilter: number[], ranges: PeriodRanges) {
+export async function getPolicyViolations(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
+  const uc = userClause(forUserId)
 
   const [policyRows] = await pool.execute<RowDataPacket[]>(
     `SELECT wv.policy_violated AS policy,
@@ -244,11 +273,11 @@ export async function getPolicyViolations(deptFilter: number[], ranges: PeriodRa
      JOIN write_up_incidents wi ON wv.incident_id = wi.id
      JOIN write_ups wu ON wi.write_up_id = wu.id
      JOIN users u ON wu.csr_id = u.id
-     WHERE wu.created_at BETWEEN ? AND ? ${dc.sql}
+     WHERE wu.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY wv.policy_violated
      ORDER BY count DESC, agentCount DESC, policy ASC
      LIMIT 10`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...uc.params],
   )
   if (policyRows.length === 0) return []
 
@@ -265,10 +294,10 @@ export async function getPolicyViolations(deptFilter: number[], ranges: PeriodRa
      JOIN write_ups wu ON wi.write_up_id = wu.id
      JOIN users u ON wu.csr_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
-     WHERE wv.policy_violated IN (${ph}) AND wu.created_at BETWEEN ? AND ?
+     WHERE wv.policy_violated IN (${ph}) AND wu.created_at BETWEEN ? AND ? ${uc.sql}
      GROUP BY wv.policy_violated, u.id, u.username, d.department_name
      ORDER BY wv.policy_violated, violations DESC, u.username`,
-    [...policies, s, e],
+    [...policies, s, e, ...uc.params],
   )
 
   type AgentRow = { userId: number; name: string; dept: string; violations: number; type: string; status: string }
@@ -294,8 +323,11 @@ export async function getPolicyViolations(deptFilter: number[], ranges: PeriodRa
   }))
 }
 
-export async function getWarningsDeptComparison(ranges: PeriodRanges) {
+export async function getWarningsDeptComparison(
+  ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
+  const uc = userClause(forUserId, 'u', 'id')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT d.department_name AS dept,
        COUNT(wu.id) AS writeups,
@@ -303,9 +335,9 @@ export async function getWarningsDeptComparison(ranges: PeriodRanges) {
      FROM departments d
      JOIN users u ON u.department_id = d.id
      LEFT JOIN write_ups wu ON wu.csr_id = u.id AND wu.created_at BETWEEN ? AND ?
-     WHERE u.role_id = 3
+     WHERE u.role_id = 3 ${uc.sql}
      GROUP BY d.id, d.department_name ORDER BY writeups DESC`,
-    [s, e],
+    [s, e, ...uc.params],
   )
   return rows.map(r => ({
     dept: r.dept,

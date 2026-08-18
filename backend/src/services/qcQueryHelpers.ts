@@ -9,6 +9,21 @@ export function deptClause(deptFilter: number[], alias = 'csr'): SqlFragment {
   return { sql: `AND ${alias}.department_id IN (${ph})`, params: deptFilter }
 }
 
+// SELF-scope clause. When a `forUserId` is supplied (i.e. the caller's access
+// resolved to dataScope='SELF'), restricts a warnings query to that single
+// agent so a self-scoped user sees only their own performance warnings — the
+// same scoping every other QC endpoint already applies. `alias`/`col` default
+// to the `write_ups.csr_id` foreign key; pass `('u','id')` for queries that
+// filter on the joined users row instead.
+export function userClause(
+  forUserId: number | null | undefined,
+  alias = 'wu',
+  col = 'csr_id',
+): SqlFragment {
+  if (forUserId == null) return { sql: '', params: [] }
+  return { sql: `AND ${alias}.${col} = ?`, params: [forUserId] }
+}
+
 export function formClause(names: string[], alias = 'f'): SqlFragment {
   if (names.length === 0) return { sql: '', params: [] }
   return { sql: `AND ${alias}.form_name IN (${names.map(() => '?').join(',')})`, params: names }

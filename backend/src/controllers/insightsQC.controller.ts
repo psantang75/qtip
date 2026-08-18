@@ -321,36 +321,44 @@ export const getCoachingDeptComparison = qcHandler('qc_coaching', (_deptFilter, 
 )
 
 // ── Warnings ──────────────────────────────────────────────────────────────────
+//
+// Every warnings endpoint honours SELF scope the same way the KPI/agent
+// endpoints above do: a self-scoped grant (e.g. a CSR) is pinned to their own
+// user id so they see only their own performance warnings, never the org-wide
+// view. Non-SELF grants pass `null` and get the full department-scoped data.
+const selfUserId = (access: InsightsAccessResult, req: Request): number | null =>
+  access.dataScope === 'SELF' ? req.user?.user_id ?? null : null
 
-export const getWriteUpPipeline = qcHandler('qc_warnings', (deptFilter, ranges) =>
-  qcWarnings.getWriteUpPipeline(deptFilter, ranges),
+export const getWriteUpPipeline = qcHandler('qc_warnings', (deptFilter, ranges, req, access) =>
+  qcWarnings.getWriteUpPipeline(deptFilter, ranges, selfUserId(access, req)),
 )
 
-export const getActiveWriteUps = qcHandler('qc_warnings', (deptFilter, ranges) =>
-  qcWarnings.getActiveWriteUps(deptFilter, ranges),
+export const getActiveWriteUps = qcHandler('qc_warnings', (deptFilter, ranges, req, access) =>
+  qcWarnings.getActiveWriteUps(deptFilter, ranges, selfUserId(access, req)),
 )
 
 // Combined step-up + agents-on-final payload powering the Escalation Path
 // section. Step-Up Counts replaced the old tier-count boxes (which duplicated
 // the Type Distribution bars in WarningsPipelineSection).
-export const getEscalationData = qcHandler('qc_warnings', async (deptFilter, ranges) => {
+export const getEscalationData = qcHandler('qc_warnings', async (deptFilter, ranges, req, access) => {
+  const forUserId = selfUserId(access, req)
   const [stepUps, agentsOnFinal] = await Promise.all([
-    qcWarnings.getStepUpData(deptFilter, ranges),
-    qcWarnings.getAgentsOnFinalWarning(deptFilter, ranges),
+    qcWarnings.getStepUpData(deptFilter, ranges, forUserId),
+    qcWarnings.getAgentsOnFinalWarning(deptFilter, ranges, forUserId),
   ])
   return { stepUps, agentsOnFinal }
 })
 
-export const getRepeatWarningAgents = qcHandler('qc_warnings', (deptFilter, ranges) =>
-  qcWarnings.getRepeatWarningAgents(deptFilter, ranges),
+export const getRepeatWarningAgents = qcHandler('qc_warnings', (deptFilter, ranges, req, access) =>
+  qcWarnings.getRepeatWarningAgents(deptFilter, ranges, selfUserId(access, req)),
 )
 
-export const getPolicyViolations = qcHandler('qc_warnings', (deptFilter, ranges) =>
-  qcWarnings.getPolicyViolations(deptFilter, ranges),
+export const getPolicyViolations = qcHandler('qc_warnings', (deptFilter, ranges, req, access) =>
+  qcWarnings.getPolicyViolations(deptFilter, ranges, selfUserId(access, req)),
 )
 
-export const getWarningsDeptComparison = qcHandler('qc_warnings', (_deptFilter, ranges) =>
-  qcWarnings.getWarningsDeptComparison(ranges),
+export const getWarningsDeptComparison = qcHandler('qc_warnings', (_deptFilter, ranges, req, access) =>
+  qcWarnings.getWarningsDeptComparison(ranges, selfUserId(access, req)),
 )
 
 import logger from '../config/logger';
