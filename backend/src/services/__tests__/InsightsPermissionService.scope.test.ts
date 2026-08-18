@@ -23,8 +23,10 @@ const SVC = new InsightsPermissionService()
 
 // Pick a user that exists in `ie_dim_employee` with `is_current = 1` so the
 // SCD lookup in resolveScope() returns an employee_key + department_key.
-// User 16 ("PG CSR" in the dim table) is a CSR with department_key = 2.
-const TEST_USER = 16
+// User 32 (Sales Team - Inbound, department_key = 7) sits in a CHILD department
+// whose parent is "Sales Department - All" (key 6) — this lets the gate tests
+// exercise the ancestor cascade (a grant on the parent must reach the child).
+const TEST_USER = 32
 const ROLE_CSR  = 3
 const ROLE_ADMIN = 1
 const GRANTED_BY = 1
@@ -38,11 +40,12 @@ const PAGE_KEYS = {
   ovrDeny:   '__test_perm_ovr_deny',
   ovrAll:    '__test_perm_ovr_all',
   ovrExp:    '__test_perm_ovr_expired',
-  // department-grant fixtures (additive access by department)
-  deptOwn:    '__test_perm_dept_own',
-  deptParent: '__test_perm_dept_parent',
-  deptOther:  '__test_perm_dept_other',
-  deptUnion:  '__test_perm_dept_union',
+  // department-gate fixtures (funnel: dept gate -> role scope)
+  gateOwnRole:   '__test_perm_gate_own_role',    // gate own dept + role SELF   -> access SELF
+  gateOwnNoRole: '__test_perm_gate_own_norole',  // gate own dept + no role     -> deny
+  gateOutside:   '__test_perm_gate_outside',      // gate other dept + role SELF -> deny (gate closed)
+  gateParent:    '__test_perm_gate_parent',       // gate ancestor dept + role   -> access (cascade)
+  gateAdmin:     '__test_perm_gate_admin',        // gate other dept, Admin query -> access (bypass)
 }
 
 let pageIds: Record<string, number> = {}
@@ -128,10 +131,10 @@ beforeAll(async () => {
     departmentKey = (emp[0].department_key as number | null) ?? null
   }
 
-  // ── Department-grant fixtures ──────────────────────────────────────────────
+  // ── Department-gate fixtures (funnel semantics) ────────────────────────────
   // Resolve the user's ancestor-inclusive department set to pick:
-  //   parentDeptKey — an ancestor of the user's dept (grant here must cascade)
-  //   otherDeptKey  — a current dept NOT in the chain (grant here must NOT apply)
+  //   parentDeptKey — an ancestor of the user's dept (a gate here must cascade)
+  //   otherDeptKey  — a current dept NOT in the chain (a gate here must block)
   if (departmentKey != null) {
     const ancSet = new Set(await getAncestorDepartmentKeys(departmentKey))
     parentDeptKey = [...ancSet].find(k => k !== departmentKey) ?? null
@@ -143,35 +146,50 @@ beforeAll(async () => {
       .map(d => d.department_key as number)
       .find(k => !ancSet.has(k))) ?? null
 
-    // Grant on the user's OWN department, DEPARTMENT scope, no role grant.
+    // Gate on OWN dept + role SELF → passes the gate; scope comes from the role.
     await pool.query(
       `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'DEPARTMENT')`,
-      [pageIds.deptOwn, departmentKey]
+      [pageIds.gateOwnRole, departmentKey]
     )
-
-    // Union case: CSR role grant SELF + own-dept grant ALL → broadest = ALL.
     await pool.query(
       `INSERT INTO ie_page_role_access (page_id, role_id, can_access, data_scope) VALUES (?, ?, 1, 'SELF')`,
-      [pageIds.deptUnion, ROLE_CSR]
-    )
-    await pool.query(
-      `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'ALL')`,
-      [pageIds.deptUnion, departmentKey]
+      [pageIds.gateOwnRole, ROLE_CSR]
     )
 
-    // Grant on an ANCESTOR department, ALL scope — must cascade to the child.
+    // Gate on OWN dept + NO role grant → gate passes but the role layer denies.
+    await pool.query(
+      `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'DEPARTMENT')`,
+      [pageIds.gateOwnNoRole, departmentKey]
+    )
+
+    // Gate on an ANCESTOR dept + role SELF → the cascade passes the gate.
     if (parentDeptKey != null) {
       await pool.query(
-        `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'ALL')`,
-        [pageIds.deptParent, parentDeptKey]
+        `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'DEPARTMENT')`,
+        [pageIds.gateParent, parentDeptKey]
+      )
+      await pool.query(
+        `INSERT INTO ie_page_role_access (page_id, role_id, can_access, data_scope) VALUES (?, ?, 1, 'SELF')`,
+        [pageIds.gateParent, ROLE_CSR]
       )
     }
 
-    // Grant on an UNRELATED department — must NOT grant access to this user.
     if (otherDeptKey != null) {
+      // Gate on an UNRELATED dept + role SELF → gate closed; the role grant
+      // cannot rescue a user outside the allowed department.
       await pool.query(
-        `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'ALL')`,
-        [pageIds.deptOther, otherDeptKey]
+        `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'DEPARTMENT')`,
+        [pageIds.gateOutside, otherDeptKey]
+      )
+      await pool.query(
+        `INSERT INTO ie_page_role_access (page_id, role_id, can_access, data_scope) VALUES (?, ?, 1, 'SELF')`,
+        [pageIds.gateOutside, ROLE_CSR]
+      )
+
+      // Same closed gate, no role grant — Admin (role 1) bypasses it entirely.
+      await pool.query(
+        `INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, 1, 'DEPARTMENT')`,
+        [pageIds.gateAdmin, otherDeptKey]
       )
     }
   }
@@ -264,39 +282,46 @@ describeDb('InsightsPermissionService — resolveAccess', () => {
   })
 })
 
-describeDb('InsightsPermissionService — department grants (additive)', () => {
-  it('department grant on the user\'s own department allows access', async () => {
+describeDb('InsightsPermissionService — department gate (funnel)', () => {
+  it('gate on own dept + role grant: passes the gate, scope from the role', async () => {
     if (departmentKey == null) return
-    // No role grant exists for this page; access comes purely from the dept grant.
-    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.deptOwn)
+    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.gateOwnRole)
     expect(result.canAccess).toBe(true)
-    expect(result.dataScope).toBe('DEPARTMENT')
-    expect(result.departmentKeys).toEqual([departmentKey])
+    expect(result.dataScope).toBe('SELF')
+    expect(result.employeeKey).toBe(employeeKey)
   })
 
-  it('parent-department grant cascades down to a child department', async () => {
-    if (parentDeptKey == null) return
-    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.deptParent)
-    expect(result.canAccess).toBe(true)
-    expect(result.dataScope).toBe('ALL')
-  })
-
-  it('department grant outside the user\'s chain does NOT grant access', async () => {
-    if (otherDeptKey == null) return
-    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.deptOther)
+  it('gate on own dept but NO role grant: denied (passing the gate is not enough)', async () => {
+    if (departmentKey == null) return
+    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.gateOwnNoRole)
     expect(result.canAccess).toBe(false)
     expect(result.dataScope).toBeNull()
-    expect(result.pageId).toBe(pageIds.deptOther)
+    expect(result.pageId).toBe(pageIds.gateOwnNoRole)
   })
 
-  it('role + department grant resolves to the broadest scope (ALL > SELF)', async () => {
-    if (departmentKey == null) return
-    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.deptUnion)
+  it('gate on a parent department cascades down to the child + role scope', async () => {
+    if (parentDeptKey == null) return
+    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.gateParent)
+    expect(result.canAccess).toBe(true)
+    expect(result.dataScope).toBe('SELF')
+  })
+
+  it('gate on an outside department blocks a user even WITH a role grant', async () => {
+    if (otherDeptKey == null) return
+    const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.gateOutside)
+    expect(result.canAccess).toBe(false)
+    expect(result.dataScope).toBeNull()
+    expect(result.pageId).toBe(pageIds.gateOutside)
+  })
+
+  it('Admin bypasses a closed department gate (defaults to ALL with no admin role grant)', async () => {
+    if (otherDeptKey == null) return
+    const result = await SVC.resolveAccess(TEST_USER, ROLE_ADMIN, PAGE_KEYS.gateAdmin)
     expect(result.canAccess).toBe(true)
     expect(result.dataScope).toBe('ALL')
   })
 
-  it('no-regression: a page with no department grants behaves exactly as before', async () => {
+  it('no-regression: a page with no department grants stays role-only (gate open)', async () => {
     const result = await SVC.resolveAccess(TEST_USER, ROLE_CSR, PAGE_KEYS.roleSelf)
     expect(result.canAccess).toBe(true)
     expect(result.dataScope).toBe('SELF')
@@ -304,35 +329,43 @@ describeDb('InsightsPermissionService — department grants (additive)', () => {
   })
 })
 
-describeDb('InsightsPermissionService — resolveAccessForAllPages (batch, dept grants)', () => {
-  it('honors role+dept union, parent inheritance, and chain exclusion in one pass', async () => {
+describeDb('InsightsPermissionService — resolveAccessForAllPages (batch, funnel)', () => {
+  it('applies gate pass, gate-without-role, cascade, and outside-block in one pass', async () => {
     const all = await SVC.resolveAccessForAllPages(TEST_USER, ROLE_CSR)
 
     if (departmentKey != null) {
-      const own = all.get(PAGE_KEYS.deptOwn)!
-      expect(own.canAccess).toBe(true)
-      expect(own.dataScope).toBe('DEPARTMENT')
+      const ownRole = all.get(PAGE_KEYS.gateOwnRole)!
+      expect(ownRole.canAccess).toBe(true)
+      expect(ownRole.dataScope).toBe('SELF')
 
-      const union = all.get(PAGE_KEYS.deptUnion)!
-      expect(union.canAccess).toBe(true)
-      expect(union.dataScope).toBe('ALL')
+      const ownNoRole = all.get(PAGE_KEYS.gateOwnNoRole)!
+      expect(ownNoRole.canAccess).toBe(false)
+      expect(ownNoRole.dataScope).toBeNull()
     }
 
     if (parentDeptKey != null) {
-      const parent = all.get(PAGE_KEYS.deptParent)!
+      const parent = all.get(PAGE_KEYS.gateParent)!
       expect(parent.canAccess).toBe(true)
-      expect(parent.dataScope).toBe('ALL')
+      expect(parent.dataScope).toBe('SELF')
     }
 
     if (otherDeptKey != null) {
-      const other = all.get(PAGE_KEYS.deptOther)!
-      expect(other.canAccess).toBe(false)
-      expect(other.dataScope).toBeNull()
+      const outside = all.get(PAGE_KEYS.gateOutside)!
+      expect(outside.canAccess).toBe(false)
+      expect(outside.dataScope).toBeNull()
     }
 
     // No-regression: a plain role-SELF page still resolves identically.
     const roleSelf = all.get(PAGE_KEYS.roleSelf)!
     expect(roleSelf.canAccess).toBe(true)
     expect(roleSelf.dataScope).toBe('SELF')
+  })
+
+  it('Admin sees an outside-gated page via bypass in the batch path', async () => {
+    if (otherDeptKey == null) return
+    const all = await SVC.resolveAccessForAllPages(TEST_USER, ROLE_ADMIN)
+    const adminGate = all.get(PAGE_KEYS.gateAdmin)!
+    expect(adminGate.canAccess).toBe(true)
+    expect(adminGate.dataScope).toBe('ALL')
   })
 })

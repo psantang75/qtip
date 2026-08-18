@@ -170,6 +170,12 @@ export const updatePageDepartmentAccess = async (req: Request, res: Response): P
       conn.release();
     }
 
+    // Department grants are now the access gate (opt-in), so a change here can
+    // flip who reaches a page. Invalidate the QC HTTP response cache — same as
+    // updatePageAccess — so the new gate takes effect immediately instead of
+    // lingering behind a cached 200/403. See `middleware/qcCache.ts`.
+    qcCacheClear();
+
     res.json({ success: true });
   } catch (error) {
     logger.error('updatePageDepartmentAccess error:', error);

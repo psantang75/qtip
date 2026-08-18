@@ -12,6 +12,10 @@ export interface InsightsAccessResult {
 
 type Scope = 'ALL' | 'DIVISION' | 'DEPARTMENT' | 'SELF';
 
+// Admin (role 1) bypasses the department gate entirely and can reach every
+// active page. See the layered-funnel resolution in resolveAccess below.
+const ADMIN_ROLE_ID = 1;
+
 const NO_ACCESS: InsightsAccessResult = {
   canAccess: false,
   dataScope: null,
@@ -19,22 +23,6 @@ const NO_ACCESS: InsightsAccessResult = {
   employeeKey: null,
   pageId: null,
 };
-
-// Higher = broader. When a user qualifies for a page through more than one grant
-// (e.g. a role grant AND a department grant), they get the most permissive scope
-// — restricting below a scope they were explicitly granted would contradict it.
-const SCOPE_RANK: Record<Scope, number> = { ALL: 4, DIVISION: 3, DEPARTMENT: 2, SELF: 1 };
-
-function pickBroadestScope(scopes: (string | null | undefined)[]): Scope | null {
-  let best: Scope | null = null;
-  let bestRank = 0;
-  for (const s of scopes) {
-    if (!s) continue;
-    const rank = SCOPE_RANK[s as Scope] ?? 0;
-    if (rank > bestRank) { bestRank = rank; best = s as Scope; }
-  }
-  return best;
-}
 
 export class InsightsPermissionService {
   /**
@@ -64,9 +52,11 @@ export class InsightsPermissionService {
    * `resolveAccess` semantics so any divergence here is bug-for-bug
    * identical with the single-page path.
    *
-   * Access is additive: a page is accessible when the user's ROLE grant OR any
-   * matching DEPARTMENT grant (on their department or an ancestor) allows it.
-   * A non-expired user override still takes absolute precedence.
+   * Access is a layered funnel (see resolveAccess for the canonical order):
+   * a non-expired user override wins outright; Admin (role 1) bypasses the
+   * department gate; otherwise the DEPARTMENT gate (opt-in — only engages when
+   * the page has any department grant) must pass, and then the ROLE grant
+   * decides access and the data scope.
    */
   async resolveAccessForAllPages(
     userId: number,
@@ -124,9 +114,12 @@ export class InsightsPermissionService {
       });
     }
 
-    // The user's own department + ancestors is needed only when department
-    // grants exist at all. Resolve it once and reuse across every page.
-    const userDeptSet = deptRows.length > 0 ? await this.userDeptAncestorSet(userId) : new Set<number>();
+    // The user's own department + ancestors is needed only to evaluate the
+    // department gate — i.e. for non-Admin users when department grants exist
+    // at all. Admin bypasses the gate, so skip the lookup entirely for them.
+    const userDeptSet = (roleId !== ADMIN_ROLE_ID && deptRows.length > 0)
+      ? await this.userDeptAncestorSet(userId)
+      : new Set<number>();
 
     // Decide which pages are accessible BEFORE doing any per-scope work, and
     // collect the distinct scopes we need to materialize.
@@ -141,30 +134,26 @@ export class InsightsPermissionService {
       const role = roleGrants.get(pageId);
       const deptGrants = deptGrantsByPage.get(pageId) ?? [];
 
-      // Department grants that allow access AND apply to this user (the grant's
-      // department is the user's own or an ancestor of it).
-      const applicableDeptScopes = deptGrants
-        .filter(g => g.canAccess && userDeptSet.has(g.departmentKey))
-        .map(g => g.dataScope);
-
-      let canAccess: boolean;
       let dataScope: string | null;
 
       if (override) {
-        canAccess = override.canAccess;
-        if (!canAccess) { result.set(pageKey, { ...NO_ACCESS, pageId }); continue; }
-        // Override grants access; scope from the override, else the role grant,
-        // else the broadest applicable department grant.
-        dataScope = override.dataScope ?? role?.dataScope ?? pickBroadestScope(applicableDeptScopes);
+        // 1. Override — the final word, either way.
+        if (!override.canAccess) { result.set(pageKey, { ...NO_ACCESS, pageId }); continue; }
+        dataScope = override.dataScope ?? role?.dataScope ?? 'ALL';
+      } else if (roleId === ADMIN_ROLE_ID) {
+        // 2. Admin bypass — reaches every page; scope from its role grant if any.
+        dataScope = (role?.canAccess && role.dataScope) ? role.dataScope : 'ALL';
       } else {
-        const roleAllows = role ? role.canAccess : false;
-        const deptAllows = applicableDeptScopes.length > 0;
-        canAccess = roleAllows || deptAllows;
-        if (!canAccess) { result.set(pageKey, { ...NO_ACCESS, pageId }); continue; }
-        const scopes: (string | null)[] = [];
-        if (roleAllows) scopes.push(role!.dataScope);
-        scopes.push(...applicableDeptScopes);
-        dataScope = pickBroadestScope(scopes);
+        // 3. Department gate (opt-in): only engages when the page has department
+        //    grants. When it does, the user's dept (or an ancestor) must match.
+        const allowingDeptGrants = deptGrants.filter(g => g.canAccess);
+        if (allowingDeptGrants.length > 0) {
+          const inAllowedDept = allowingDeptGrants.some(g => userDeptSet.has(g.departmentKey));
+          if (!inAllowedDept) { result.set(pageKey, { ...NO_ACCESS, pageId }); continue; }
+        }
+        // 4. Role grant decides access + the data scope.
+        if (!role || !role.canAccess || !role.dataScope) { result.set(pageKey, { ...NO_ACCESS, pageId }); continue; }
+        dataScope = role.dataScope;
       }
 
       if (!dataScope) { result.set(pageKey, { ...NO_ACCESS, pageId }); continue; }
@@ -257,17 +246,6 @@ export class InsightsPermissionService {
       [pageId]
     );
 
-    // Department grants that allow access; narrowed to those applying to this
-    // user (their department or an ancestor) only if any allow at all.
-    let applicableDeptScopes: (string | null)[] = [];
-    const allowingDeptGrants = deptRows.filter(r => !!r.can_access);
-    if (allowingDeptGrants.length > 0) {
-      const userDeptSet = await this.userDeptAncestorSet(userId);
-      applicableDeptScopes = allowingDeptGrants
-        .filter(r => userDeptSet.has(r.department_key as number))
-        .map(r => (r.data_scope ?? null) as string | null);
-    }
-
     const override = overrideRows.length > 0
       ? { canAccess: !!overrideRows[0].can_access, dataScope: (overrideRows[0].data_scope ?? null) as string | null }
       : null;
@@ -275,22 +253,29 @@ export class InsightsPermissionService {
       ? { canAccess: !!roleRows[0].can_access, dataScope: (roleRows[0].data_scope ?? null) as string | null }
       : null;
 
-    let canAccess: boolean;
+    // Layered funnel — evaluated in strict precedence:
     let dataScope: string | null;
 
     if (override) {
-      canAccess = override.canAccess;
-      if (!canAccess) return { ...NO_ACCESS, pageId };
-      dataScope = override.dataScope ?? role?.dataScope ?? pickBroadestScope(applicableDeptScopes);
+      // 1. Override — the final word, grant or deny.
+      if (!override.canAccess) return { ...NO_ACCESS, pageId };
+      dataScope = override.dataScope ?? role?.dataScope ?? 'ALL';
+    } else if (roleId === ADMIN_ROLE_ID) {
+      // 2. Admin bypass — reaches every page; scope from its role grant if any.
+      dataScope = (role?.canAccess && role.dataScope) ? role.dataScope : 'ALL';
     } else {
-      const roleAllows = role ? role.canAccess : false;
-      const deptAllows = applicableDeptScopes.length > 0;
-      canAccess = roleAllows || deptAllows;
-      if (!canAccess) return { ...NO_ACCESS, pageId };
-      const scopes: (string | null)[] = [];
-      if (roleAllows) scopes.push(role!.dataScope);
-      scopes.push(...applicableDeptScopes);
-      dataScope = pickBroadestScope(scopes);
+      // 3. Department gate (opt-in): engages only when the page has department
+      //    grants. When it does, the user's department (or an ancestor of it)
+      //    must be in the allowed set, otherwise access is denied.
+      const allowingDeptGrants = deptRows.filter(r => !!r.can_access);
+      if (allowingDeptGrants.length > 0) {
+        const userDeptSet = await this.userDeptAncestorSet(userId);
+        const inAllowedDept = allowingDeptGrants.some(r => userDeptSet.has(r.department_key as number));
+        if (!inAllowedDept) return { ...NO_ACCESS, pageId };
+      }
+      // 4. Role grant decides access + the data scope.
+      if (!role || !role.canAccess || !role.dataScope) return { ...NO_ACCESS, pageId };
+      dataScope = role.dataScope;
     }
 
     if (!dataScope) return { ...NO_ACCESS, pageId };

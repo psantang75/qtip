@@ -127,9 +127,11 @@ function PageDetailSection({ page }: { page: IePage }) {
 
   return (
     <div className="space-y-6">
+      <DepartmentAccessSection page={page} />
+
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-slate-700">Role Access</h4>
+          <h4 className="text-sm font-semibold text-slate-700">Role Access <span className="font-normal text-slate-400">— what each role sees</span></h4>
           <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => accessMut.mutate()} disabled={accessMut.isPending}>
             {accessMut.isPending ? 'Saving...' : 'Save Access'}
           </Button>
@@ -164,8 +166,6 @@ function PageDetailSection({ page }: { page: IePage }) {
         </Table>
       </div>
 
-      <DepartmentAccessSection page={page} />
-
       <OverridesSection pageId={page.id} />
     </div>
   )
@@ -177,34 +177,25 @@ function DepartmentAccessSection({ page }: { page: IePage }) {
 
   const { data: departments = [] } = useQuery({ queryKey: ['ie-departments'], queryFn: listInsightsDepartments })
 
-  // Edit state keyed by department_key. Seeded from the page's existing grants;
-  // MySQL returns TINYINT(1) as 0/1, so coerce to a real boolean.
-  const [deptEdits, setDeptEdits] = useState<Record<number, { can_access: boolean; data_scope: DataScope }>>(() => {
-    const map: Record<number, { can_access: boolean; data_scope: DataScope }> = {}
-    for (const d of (page.department_access ?? []) as IePageDepartmentAccess[]) {
-      map[d.department_key] = { can_access: Boolean(d.can_access), data_scope: d.data_scope ?? 'DEPARTMENT' }
-    }
-    return map
-  })
-
-  const selectedIds = Object.keys(deptEdits).map(Number)
-
-  const handleSelectionChange = (ids: number[]) => {
-    setDeptEdits(prev => {
-      const next: Record<number, { can_access: boolean; data_scope: DataScope }> = {}
-      for (const id of ids) {
-        next[id] = prev[id] ?? { can_access: true, data_scope: 'DEPARTMENT' }
-      }
-      return next
-    })
-  }
+  // Department access is a pure membership GATE: the set of departments whose
+  // members may reach this page. What each role actually sees (the data scope)
+  // is decided by the Role Access section below, so department rows carry no
+  // scope here. Seeded from the page's existing grants; MySQL returns
+  // TINYINT(1) as 0/1, so coerce to a real boolean before filtering.
+  const [selectedIds, setSelectedIds] = useState<number[]>(() =>
+    ((page.department_access ?? []) as IePageDepartmentAccess[])
+      .filter(d => Boolean(d.can_access))
+      .map(d => d.department_key),
+  )
 
   const deptMut = useMutation({
     mutationFn: () => {
-      const payload = Object.entries(deptEdits).map(([key, v]) => ({
-        department_key: Number(key),
-        can_access: Boolean(v.can_access),
-        data_scope: v.data_scope,
+      // data_scope is unused by the gate but the API keeps the column; send the
+      // table default so the payload validates.
+      const payload = selectedIds.map(key => ({
+        department_key: key,
+        can_access: true,
+        data_scope: 'DEPARTMENT' as DataScope,
       }))
       return updatePageDepartmentAccess(page.id, payload)
     },
@@ -222,58 +213,35 @@ function DepartmentAccessSection({ page }: { page: IePage }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-slate-700">Department Access</h4>
+        <h4 className="text-sm font-semibold text-slate-700">Department Access <span className="font-normal text-slate-400">— who can reach this page</span></h4>
         <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => deptMut.mutate()} disabled={deptMut.isPending}>
           {deptMut.isPending ? 'Saving...' : 'Save Department Access'}
         </Button>
       </div>
       <p className="text-[12px] text-muted-foreground">
-        Additive to role access — a user can open this page if their role OR their department grants it.
-        Granting a parent department includes all departments beneath it.
+        The access gate for this page. Leave it empty for no department restriction — visibility is then decided by Role Access alone.
+        Add one or more departments to restrict the page to their members; a parent department includes every department beneath it.
+        Admins always have access regardless of department, and passing the gate still requires a Role Access grant below (which sets what each role sees).
       </p>
       <SearchableMultiSelect
         items={departments.map(d => ({ id: d.department_key, label: d.department_name }))}
         selectedIds={selectedIds}
-        onChange={handleSelectionChange}
+        onChange={setSelectedIds}
         placeholder="Add departments…"
         width="w-[280px]"
         emptyMessage="No departments found"
       />
       {selectedIds.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">No department grants.</p>
+        <p className="text-[13px] text-muted-foreground">No department restriction — role access applies across all departments.</p>
       ) : (
-        <Table>
-          <TableHeader><TableRow className="bg-white">
-            <TableHead className="py-2 text-[12px]">Department</TableHead>
-            <TableHead className="py-2 text-[12px]">Can Access</TableHead>
-            <TableHead className="py-2 text-[12px]">Data Scope</TableHead>
-            <TableHead className="py-2 w-8" />
-          </TableRow></TableHeader>
-          <TableBody>
-            {selectedIds.map(key => (
-              <TableRow key={key}>
-                <TableCell className="text-[13px] font-medium">{deptName(key)}</TableCell>
-                <TableCell>
-                  <button type="button"
-                    onClick={() => setDeptEdits(prev => ({ ...prev, [key]: { ...prev[key], can_access: !prev[key].can_access } }))}
-                    className={`w-9 h-5 rounded-full transition-colors relative ${deptEdits[key].can_access ? 'bg-primary' : 'bg-slate-300'}`}>
-                    <span className={`absolute top-1/2 left-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow transition-transform ${deptEdits[key].can_access ? 'translate-x-[18px]' : 'translate-x-[2px]'}`} />
-                  </button>
-                </TableCell>
-                <TableCell>
-                  <Select value={deptEdits[key].data_scope}
-                    onValueChange={v => setDeptEdits(prev => ({ ...prev, [key]: { ...prev[key], data_scope: v as DataScope } }))}>
-                    <SelectTrigger className="h-7 w-[140px] text-[12px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>{SCOPES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <button onClick={() => handleSelectionChange(selectedIds.filter(k => k !== key))} className="text-red-500 hover:text-red-700"><Trash2 size={14} /></button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="flex flex-wrap gap-2">
+          {selectedIds.map(key => (
+            <span key={key} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[13px]">
+              {deptName(key)}
+              <button onClick={() => setSelectedIds(selectedIds.filter(k => k !== key))} className="text-red-500 hover:text-red-700"><Trash2 size={13} /></button>
+            </span>
+          ))}
+        </div>
       )}
     </div>
   )
