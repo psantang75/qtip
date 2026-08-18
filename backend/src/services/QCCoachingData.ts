@@ -2,7 +2,7 @@ import pool from '../config/database'
 import { RowDataPacket } from 'mysql2'
 import type { PeriodRanges } from '../utils/periodUtils'
 import { fmtDatetime as fmt } from '../utils/dateHelpers'
-import { deptClause } from './qcQueryHelpers'
+import { deptClause, userClause } from './qcQueryHelpers'
 
 /**
  * QC coaching insight data layer — backs the `qc_coaching` insights page
@@ -33,10 +33,11 @@ import { deptClause } from './qcQueryHelpers'
 
 /** Agents coached on a specific topic in the period */
 export async function getCoachingTopicAgents(
-  topic: string, deptFilter: number[], ranges: PeriodRanges,
+  topic: string, deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
 ) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter, 'u')
+  const uc = userClause(forUserId, 'cs', 'csr_id')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT u.id AS userId, u.username AS name,
        COALESCE(d.department_name,'Unknown') AS dept,
@@ -48,10 +49,10 @@ export async function getCoachingTopicAgents(
      JOIN coaching_sessions cs ON cst.coaching_session_id = cs.id
      JOIN users u ON cs.csr_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
-     WHERE li_t.label = ? AND cs.created_at BETWEEN ? AND ? ${dc.sql}
+     WHERE li_t.label = ? AND cs.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY u.id ORDER BY sessions DESC
      LIMIT 500`,
-    [topic, s, e, ...dc.params],
+    [topic, s, e, ...dc.params, ...uc.params],
   )
   return rows.map(r => ({
     userId:      r.userId as number,
@@ -65,10 +66,11 @@ export async function getCoachingTopicAgents(
 
 /** Agents with 3+ sessions including per-agent topic breakdown */
 export async function getRepeatCoachingAgentsWithTopics(
-  deptFilter: number[], ranges: PeriodRanges,
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
 ) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter, 'u')
+  const uc = userClause(forUserId, 'cs', 'csr_id')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT u.id AS userId, u.username AS name,
        COALESCE(d.department_name,'Unknown') AS dept,
@@ -79,9 +81,9 @@ export async function getRepeatCoachingAgentsWithTopics(
      LEFT JOIN departments d ON u.department_id = d.id
      LEFT JOIN coaching_session_topics cst ON cst.coaching_session_id = cs.id
      LEFT JOIN list_items li_t ON cst.topic_id = li_t.id
-     WHERE cs.created_at BETWEEN ? AND ? ${dc.sql}
+     WHERE cs.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY u.id HAVING sessions >= 3 ORDER BY sessions DESC LIMIT 10`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...uc.params],
   )
   if (rows.length === 0) return []
 
@@ -120,9 +122,12 @@ export async function getRepeatCoachingAgentsWithTopics(
 }
 
 /** Coaching sessions grouped by status with agent details */
-export async function getSessionsByStatus(deptFilter: number[], ranges: PeriodRanges) {
+export async function getSessionsByStatus(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter, 'u')
+  const uc = userClause(forUserId, 'cs', 'csr_id')
 
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT cs.status,
@@ -136,11 +141,11 @@ export async function getSessionsByStatus(deptFilter: number[], ranges: PeriodRa
      LEFT JOIN departments d ON u.department_id = d.id
      LEFT JOIN list_items lp ON lp.id = cs.coaching_purpose
      LEFT JOIN list_items lf ON lf.id = cs.coaching_format
-     WHERE cs.session_date BETWEEN ? AND ? ${dc.sql}
+     WHERE cs.session_date BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY cs.status, u.id, cs.coaching_purpose, cs.coaching_format, lp.label, lf.label
      ORDER BY cs.status, sessions DESC
      LIMIT 1000`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...uc.params],
   )
 
   const [topicRows] = await pool.execute<RowDataPacket[]>(
@@ -149,9 +154,9 @@ export async function getSessionsByStatus(deptFilter: number[], ranges: PeriodRa
      JOIN coaching_session_topics cst ON cst.coaching_session_id = cs.id
      JOIN list_items li_t ON cst.topic_id = li_t.id
      JOIN users u ON cs.csr_id = u.id
-     WHERE cs.session_date BETWEEN ? AND ? ${dc.sql}
+     WHERE cs.session_date BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY cs.status, cs.csr_id, li_t.id`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...uc.params],
   )
 
   type AgentEntry = { userId: number; name: string; dept: string; purpose: string; format: string; sessions: number; topics: string[] }
@@ -190,9 +195,12 @@ export async function getSessionsByStatus(deptFilter: number[], ranges: PeriodRa
 }
 
 /** Quiz breakdown with per-agent results for the expandable detail view */
-export async function getQuizBreakdownWithAgents(deptFilter: number[], ranges: PeriodRanges) {
+export async function getQuizBreakdownWithAgents(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter, 'u')
+  const uc = userClause(forUserId, 'qa', 'user_id')
 
   const [quizRows] = await pool.execute<RowDataPacket[]>(
     `SELECT qz.id AS quizId, qz.quiz_title AS quiz, COUNT(qa.id) AS attempts,
@@ -200,10 +208,10 @@ export async function getQuizBreakdownWithAgents(deptFilter: number[], ranges: P
      FROM quiz_attempts qa
      JOIN quizzes qz ON qa.quiz_id = qz.id
      JOIN users u ON qa.user_id = u.id
-     WHERE qa.submitted_at BETWEEN ? AND ? ${dc.sql}
+     WHERE qa.submitted_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY qz.id, qz.quiz_title ORDER BY attempts DESC
      LIMIT 200`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...uc.params],
   )
 
   if (quizRows.length === 0) return []
@@ -226,10 +234,10 @@ export async function getQuizBreakdownWithAgents(deptFilter: number[], ranges: P
      FROM quiz_attempts qa
      JOIN users u ON qa.user_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
-     WHERE qa.quiz_id IN (${ph}) AND qa.submitted_at BETWEEN ? AND ? ${dc.sql}
+     WHERE qa.quiz_id IN (${ph}) AND qa.submitted_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY qa.quiz_id, u.id
      ORDER BY qa.quiz_id, currentPassed ASC, bestScore ASC`,
-    [s, e, ...quizIds, s, e, ...dc.params],
+    [s, e, ...quizIds, s, e, ...dc.params, ...uc.params],
   )
 
   const agentMap = new Map<number, Array<{ userId: number; name: string; dept: string; score: number; passed: boolean; failed: number; attempts: number }>>()
@@ -259,9 +267,12 @@ export async function getQuizBreakdownWithAgents(deptFilter: number[], ranges: P
 }
 
 /** Agents with the most failed quiz attempts in the period */
-export async function getAgentsFailedQuizzes(deptFilter: number[], ranges: PeriodRanges) {
+export async function getAgentsFailedQuizzes(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter, 'u')
+  const uc = userClause(forUserId, 'qa', 'user_id')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT u.id AS userId, u.username AS name,
        COALESCE(d.department_name,'Unknown') AS dept,
@@ -272,9 +283,9 @@ export async function getAgentsFailedQuizzes(deptFilter: number[], ranges: Perio
      JOIN quizzes qz ON qa.quiz_id = qz.id
      JOIN users u ON qa.user_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
-     WHERE qa.passed = 0 AND qa.submitted_at BETWEEN ? AND ? ${dc.sql}
+     WHERE qa.passed = 0 AND qa.submitted_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY u.id ORDER BY failed DESC LIMIT 10`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...uc.params],
   )
   return rows.map(r => ({
     userId:   r.userId as number,
@@ -288,9 +299,12 @@ export async function getAgentsFailedQuizzes(deptFilter: number[], ranges: Perio
 
 // ── Coaching insight summaries ────────────────────────────────────────────────
 
-export async function getCoachingTopics(deptFilter: number[], ranges: PeriodRanges) {
+export async function getCoachingTopics(
+  deptFilter: number[], ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
+  const uc = userClause(forUserId, 'cs', 'csr_id')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT li_t.label AS topic, COUNT(DISTINCT cs.id) AS sessions,
        COUNT(DISTINCT cs.csr_id) AS agents
@@ -298,15 +312,18 @@ export async function getCoachingTopics(deptFilter: number[], ranges: PeriodRang
      JOIN list_items li_t ON cst.topic_id = li_t.id
      JOIN coaching_sessions cs ON cst.coaching_session_id = cs.id
      JOIN users csr ON cs.csr_id = csr.id
-     WHERE cs.created_at BETWEEN ? AND ? ${dc.sql}
+     WHERE cs.created_at BETWEEN ? AND ? ${dc.sql} ${uc.sql}
      GROUP BY li_t.id, li_t.label ORDER BY sessions DESC LIMIT 10`,
-    [s, e, ...dc.params],
+    [s, e, ...dc.params, ...uc.params],
   )
   return rows.map(r => ({ topic: r.topic, sessions: parseInt(r.sessions, 10), agents: parseInt(r.agents, 10) }))
 }
 
-export async function getCoachingDeptComparison(ranges: PeriodRanges) {
+export async function getCoachingDeptComparison(
+  ranges: PeriodRanges, forUserId: number | null = null,
+) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
+  const uc = userClause(forUserId, 'u', 'id')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT d.department_name AS dept,
        COUNT(cs.id) AS sessions,
@@ -315,9 +332,9 @@ export async function getCoachingDeptComparison(ranges: PeriodRanges) {
      FROM departments d
      JOIN users u ON u.department_id = d.id
      LEFT JOIN coaching_sessions cs ON cs.csr_id = u.id AND cs.created_at BETWEEN ? AND ?
-     WHERE u.role_id = 3
+     WHERE u.role_id = 3 ${uc.sql}
      GROUP BY d.id, d.department_name ORDER BY completed DESC`,
-    [s, e],
+    [s, e, ...uc.params],
   )
   return rows.map(r => ({
     dept: r.dept,

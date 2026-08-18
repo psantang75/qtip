@@ -207,8 +207,16 @@ function parseFormNames(req: Request): string[] {
   return raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : []
 }
 
-export const getScoreDistribution = qcHandler('qc_quality', (deptFilter, ranges, req) =>
-  qcQuality.getScoreDistribution(deptFilter, parseFormNames(req), ranges),
+// Shared SELF-scope pin used by every QC handler whose data is agent-level.
+// A self-scoped grant (e.g. a CSR) is restricted to their own user id so they
+// see only their own rows; every other scope passes null and gets the full
+// department-scoped view. This mirrors the KPI/agent endpoints above and the
+// selfEmployeeKey folding in the Agent Activity + CSR Attendance controllers.
+const selfUserId = (access: InsightsAccessResult, req: Request): number | null =>
+  access.dataScope === 'SELF' ? req.user?.user_id ?? null : null
+
+export const getScoreDistribution = qcHandler('qc_quality', (deptFilter, ranges, req, access) =>
+  qcQuality.getScoreDistribution(deptFilter, parseFormNames(req), ranges, selfUserId(access, req)),
 )
 
 // Category & form scores and missed questions are also surfaced inside the
@@ -232,22 +240,22 @@ export const getMissedQuestions = qcHandler(['qc_quality', 'qc_agents'], (deptFi
   return qcQuality.getMissedQuestions(deptFilter, parseFormNames(req), ranges, userId)
 })
 
-export const getQualityDeptComparison = qcHandler('qc_quality', (deptFilter, ranges, req) =>
-  qcQuality.getQualityDeptComparison(deptFilter, ranges, parseFormNames(req)),
+export const getQualityDeptComparison = qcHandler('qc_quality', (deptFilter, ranges, req, access) =>
+  qcQuality.getQualityDeptComparison(deptFilter, ranges, parseFormNames(req), selfUserId(access, req)),
 )
 
 // QA Forms Completed — auditor x CSR x form rollup for the Quality page table
 // above Department Comparison. Same qc_quality gate + dept scope as the rest
-// of the page; honors the dept/form/period filters.
-export const getQAFormsCompleted = qcHandler('qc_quality', (deptFilter, ranges, req) =>
-  qcQuality.getQAFormsCompleted(deptFilter, parseFormNames(req), ranges),
+// of the page; honors the dept/form/period filters and SELF scope.
+export const getQAFormsCompleted = qcHandler('qc_quality', (deptFilter, ranges, req, access) =>
+  qcQuality.getQAFormsCompleted(deptFilter, parseFormNames(req), ranges, selfUserId(access, req)),
 )
 
 // QA Forms Below 90% — individual finalized audits scoring under 90, driving
 // the Quality page table directly beneath "Average Score by Form". Same
-// qc_quality gate + dept scope; honors the dept/form/period filters.
-export const getLowScoringAudits = qcHandler('qc_quality', (deptFilter, ranges, req) =>
-  qcQuality.getLowScoringAudits(deptFilter, parseFormNames(req), ranges),
+// qc_quality gate + dept scope; honors the dept/form/period filters and SELF scope.
+export const getLowScoringAudits = qcHandler('qc_quality', (deptFilter, ranges, req, access) =>
+  qcQuality.getLowScoringAudits(deptFilter, parseFormNames(req), ranges, selfUserId(access, req)),
 )
 
 // Form scores are also surfaced inside the Agent Profile drill-down on the
@@ -264,17 +272,17 @@ export const getFormScores = qcHandler(['qc_quality', 'qc_agents'], (deptFilter,
 // Lazy-loaded per-agent breakdown for a single form. Backs the Quality page's
 // "Average Score by Form" expandable rows. Honors current dept and period
 // filters via the shared qcHandler wrapper.
-export const getFormAgentBreakdown = qcHandler('qc_quality', (deptFilter, ranges, req) => {
+export const getFormAgentBreakdown = qcHandler('qc_quality', (deptFilter, ranges, req, access) => {
   const formId = parseInt(req.params.formId, 10)
   if (isNaN(formId)) throw new BadRequestError('Invalid formId')
-  return qcQuality.getFormAgentBreakdown(deptFilter, formId, ranges)
+  return qcQuality.getFormAgentBreakdown(deptFilter, formId, ranges, selfUserId(access, req))
 })
 
 // Lazy-loaded per-agent breakdown for a single (form, category). Backs the
 // Quality page's "Category Performance" expandable rows. Accepts either an
 // explicit categoryId (preferred — comes back on every category row) or a
 // fallback (formId + category name) for callers that only have those.
-export const getCategoryAgentBreakdown = qcHandler('qc_quality', async (deptFilter, ranges, req) => {
+export const getCategoryAgentBreakdown = qcHandler('qc_quality', async (deptFilter, ranges, req, access) => {
   const formId = parseInt(req.query.formId as string, 10)
   if (isNaN(formId)) throw new BadRequestError('Invalid formId')
   let categoryId = req.query.categoryId ? parseInt(req.query.categoryId as string, 10) : NaN
@@ -285,39 +293,42 @@ export const getCategoryAgentBreakdown = qcHandler('qc_quality', async (deptFilt
     if (found == null) return []
     categoryId = found
   }
-  return qcQuality.getCategoryAgentBreakdown(deptFilter, formId, categoryId, ranges)
+  return qcQuality.getCategoryAgentBreakdown(deptFilter, formId, categoryId, ranges, selfUserId(access, req))
 })
 
 // ── Coaching ──────────────────────────────────────────────────────────────────
-
-export const getCoachingTopics = qcHandler('qc_coaching', (deptFilter, ranges) =>
-  qcCoaching.getCoachingTopics(deptFilter, ranges),
+//
+// Same SELF scoping as every other QC page: a self-scoped grant (e.g. a CSR)
+// only ever sees their own coaching sessions, quiz results and topics; other
+// scopes pass null and get the department-scoped view unchanged.
+export const getCoachingTopics = qcHandler('qc_coaching', (deptFilter, ranges, req, access) =>
+  qcCoaching.getCoachingTopics(deptFilter, ranges, selfUserId(access, req)),
 )
 
-export const getRepeatOffenders = qcHandler('qc_coaching', (deptFilter, ranges) =>
-  qcCoaching.getRepeatCoachingAgentsWithTopics(deptFilter, ranges),
+export const getRepeatOffenders = qcHandler('qc_coaching', (deptFilter, ranges, req, access) =>
+  qcCoaching.getRepeatCoachingAgentsWithTopics(deptFilter, ranges, selfUserId(access, req)),
 )
 
-export const getCoachingTopicAgents = qcHandler('qc_coaching', (deptFilter, ranges, req) => {
+export const getCoachingTopicAgents = qcHandler('qc_coaching', (deptFilter, ranges, req, access) => {
   const topic = req.query.topic as string
   if (!topic) throw new BadRequestError('topic query parameter is required')
-  return qcCoaching.getCoachingTopicAgents(topic, deptFilter, ranges)
+  return qcCoaching.getCoachingTopicAgents(topic, deptFilter, ranges, selfUserId(access, req))
 })
 
-export const getAgentsFailedQuizzes = qcHandler('qc_coaching', (deptFilter, ranges) =>
-  qcCoaching.getAgentsFailedQuizzes(deptFilter, ranges),
+export const getAgentsFailedQuizzes = qcHandler('qc_coaching', (deptFilter, ranges, req, access) =>
+  qcCoaching.getAgentsFailedQuizzes(deptFilter, ranges, selfUserId(access, req)),
 )
 
-export const getQuizBreakdown = qcHandler('qc_coaching', (deptFilter, ranges) =>
-  qcCoaching.getQuizBreakdownWithAgents(deptFilter, ranges),
+export const getQuizBreakdown = qcHandler('qc_coaching', (deptFilter, ranges, req, access) =>
+  qcCoaching.getQuizBreakdownWithAgents(deptFilter, ranges, selfUserId(access, req)),
 )
 
-export const getSessionsByStatus = qcHandler('qc_coaching', (deptFilter, ranges) =>
-  qcCoaching.getSessionsByStatus(deptFilter, ranges),
+export const getSessionsByStatus = qcHandler('qc_coaching', (deptFilter, ranges, req, access) =>
+  qcCoaching.getSessionsByStatus(deptFilter, ranges, selfUserId(access, req)),
 )
 
-export const getCoachingDeptComparison = qcHandler('qc_coaching', (_deptFilter, ranges) =>
-  qcCoaching.getCoachingDeptComparison(ranges),
+export const getCoachingDeptComparison = qcHandler('qc_coaching', (_deptFilter, ranges, req, access) =>
+  qcCoaching.getCoachingDeptComparison(ranges, selfUserId(access, req)),
 )
 
 // ── Warnings ──────────────────────────────────────────────────────────────────
@@ -326,9 +337,6 @@ export const getCoachingDeptComparison = qcHandler('qc_coaching', (_deptFilter, 
 // endpoints above do: a self-scoped grant (e.g. a CSR) is pinned to their own
 // user id so they see only their own performance warnings, never the org-wide
 // view. Non-SELF grants pass `null` and get the full department-scoped data.
-const selfUserId = (access: InsightsAccessResult, req: Request): number | null =>
-  access.dataScope === 'SELF' ? req.user?.user_id ?? null : null
-
 export const getWriteUpPipeline = qcHandler('qc_warnings', (deptFilter, ranges, req, access) =>
   qcWarnings.getWriteUpPipeline(deptFilter, ranges, selfUserId(access, req)),
 )

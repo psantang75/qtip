@@ -46,10 +46,13 @@ export async function getFilterOptions(
 
 export async function getScoreDistribution(
   deptFilter: number[], formNames: string[], ranges: PeriodRanges,
+  userId: number | null = null,
 ) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
   const fc = formClause(formNames)
+  const userSql    = userId != null ? 'AND csr.id = ?' : ''
+  const userParams: (string | number)[] = userId != null ? [userId] : []
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT
        CASE
@@ -64,9 +67,9 @@ export async function getScoreDistribution(
      LEFT JOIN score_snapshots ss ON ss.submission_id = s.id
      JOIN forms f ON s.form_id = f.id
      ${CSR_JOIN}
-     WHERE s.status = 'FINALIZED' AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${fc.sql}
+     WHERE s.status = 'FINALIZED' AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${fc.sql} ${userSql}
      GROUP BY bucket ORDER BY bucket`,
-    [s, e, ...dc.params, ...fc.params],
+    [s, e, ...dc.params, ...fc.params, ...userParams],
   )
   return rows.map(r => ({ bucket: r.bucket, count: parseInt(r.count, 10) }))
 }
@@ -334,9 +337,12 @@ export async function getFormAgentBreakdown(
   deptFilter: number[],
   formId: number,
   ranges: PeriodRanges,
+  userId: number | null = null,
 ) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
+  const userSql    = userId != null ? 'AND csr.id = ?' : ''
+  const userParams: (string | number)[] = userId != null ? [userId] : []
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT csr.id AS userId, csr.username AS name,
        COALESCE(d.department_name, 'Unknown') AS dept,
@@ -349,10 +355,10 @@ export async function getFormAgentBreakdown(
      WHERE s.status = 'FINALIZED'
        AND s.submitted_at BETWEEN ? AND ?
        AND s.form_id = ?
-       ${dc.sql}
+       ${dc.sql} ${userSql}
      GROUP BY csr.id, csr.username, d.department_name
      ORDER BY avgScore ASC, csr.username`,
-    [s, e, formId, ...dc.params],
+    [s, e, formId, ...dc.params, ...userParams],
   )
   return rows.map(r => ({
     userId:   r.userId as number,
@@ -371,9 +377,12 @@ export async function getCategoryAgentBreakdown(
   formId: number,
   categoryId: number,
   ranges: PeriodRanges,
+  userId: number | null = null,
 ) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
+  const userSql    = userId != null ? 'AND csr.id = ?' : ''
+  const userParams: (string | number)[] = userId != null ? [userId] : []
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT csr.id AS userId, csr.username AS name,
        COALESCE(d.department_name, 'Unknown') AS dept,
@@ -390,11 +399,11 @@ export async function getCategoryAgentBreakdown(
        AND s.form_id = ?
        AND fq.category_id = ?
        AND fq.question_type IN ('YES_NO','SCALE','RADIO')
-       ${dc.sql}
+       ${dc.sql} ${userSql}
      GROUP BY csr.id, csr.username, d.department_name
      HAVING possible_points > 0
      ORDER BY (earned_points / possible_points) ASC, csr.username`,
-    [s, e, formId, categoryId, ...dc.params],
+    [s, e, formId, categoryId, ...dc.params, ...userParams],
   )
   return rows.map(r => {
     const earned   = parseFloat(r.earned_points)
@@ -426,10 +435,13 @@ export async function findCategoryId(
 
 export async function getQualityDeptComparison(
   deptFilter: number[], ranges: PeriodRanges, formNames: string[] = [],
+  userId: number | null = null,
 ) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
   const ff = formFilter(formNames, 's')
+  const userSql    = userId != null ? 'AND csr.id = ?' : ''
+  const userParams: (string | number)[] = userId != null ? [userId] : []
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT d.department_name AS dept,
        COUNT(DISTINCT s.id) AS audits,
@@ -442,9 +454,9 @@ export async function getQualityDeptComparison(
      JOIN departments d ON csr.department_id = d.id
      LEFT JOIN disputes disp ON disp.submission_id = s.id
      WHERE s.status = 'FINALIZED'
-       AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${ff.where}
+       AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${ff.where} ${userSql}
      GROUP BY d.id, d.department_name ORDER BY avgScore DESC`,
-    [s, e, ...dc.params, ...ff.params],
+    [s, e, ...dc.params, ...ff.params, ...userParams],
   )
   return rows.map(r => ({
     dept: r.dept,
@@ -462,10 +474,13 @@ export async function getQualityDeptComparison(
 // submission (review) date so the column always shows a meaningful date.
 export async function getLowScoringAudits(
   deptFilter: number[], formNames: string[], ranges: PeriodRanges,
+  userId: number | null = null,
 ) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
   const fc = formClause(formNames)
+  const userSql    = userId != null ? 'AND csr.id = ?' : ''
+  const userParams: (string | number)[] = userId != null ? [userId] : []
   // Resolve the effective score via a scalar subquery rather than a JOIN to
   // score_snapshots: a submission can have more than one snapshot row, and a
   // JOIN would emit a duplicate audit row per snapshot (inflating the list and
@@ -500,9 +515,9 @@ export async function getLowScoringAudits(
          SELECT ss.score FROM score_snapshots ss
          WHERE ss.submission_id = s.id ORDER BY ss.id DESC LIMIT 1
        )) < 90
-       ${dc.sql} ${fc.sql}
+       ${dc.sql} ${fc.sql} ${userSql}
      ORDER BY score ASC, s.submitted_at DESC`,
-    [s, e, ...dc.params, ...fc.params],
+    [s, e, ...dc.params, ...fc.params, ...userParams],
   )
   return rows.map(r => ({
     id:              r.id as number,
@@ -520,10 +535,13 @@ export async function getLowScoringAudits(
 // Quality page. Lists every QA auditor in the current scope (management view).
 export async function getQAFormsCompleted(
   deptFilter: number[], formNames: string[], ranges: PeriodRanges,
+  userId: number | null = null,
 ) {
   const s = fmt(ranges.current.start), e = fmt(ranges.current.end)
   const dc = deptClause(deptFilter)
   const fc = formClause(formNames)
+  const userSql    = userId != null ? 'AND csr.id = ?' : ''
+  const userParams: (string | number)[] = userId != null ? [userId] : []
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT auditor.id AS qa_user_id, auditor.username AS qa_name,
        csr.id AS csr_user_id, csr.username AS csr_name,
@@ -536,10 +554,10 @@ export async function getQAFormsCompleted(
      JOIN users auditor ON auditor.id = s.submitted_by
      ${CSR_JOIN}
      WHERE s.status = 'FINALIZED'
-       AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${fc.sql}
+       AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${fc.sql} ${userSql}
      GROUP BY auditor.id, auditor.username, csr.id, csr.username, f.form_name
      ORDER BY qa_name, f.form_name, csr_name`,
-    [s, e, ...dc.params, ...fc.params],
+    [s, e, ...dc.params, ...fc.params, ...userParams],
   )
   return rows.map(r => ({
     qaUserId:  r.qa_user_id as number,
