@@ -259,21 +259,64 @@ ssh dmadmin@10.90.15.5 'git -C /home/dmadmin/docker-production/qtip-app/code pul
 
 ### 3.3 Apply Prisma migrations (only when the release includes one)
 
-Run `prisma migrate deploy` against the env's `qtip-db`, using the migrations in
-the freshly-pulled `code/` checkout via a throwaway node container on the compose
-network (so `DATABASE_URL` resolves the `qtip-db` hostname):
+Run `prisma migrate deploy` from a throwaway container on the compose network
+(so the `qtip-db` hostname resolves and `env_file` supplies the DB creds). The
+runtime image does **not** bake the `prisma/` source, so you overlay it from the
+freshly-pulled `code/` checkout.
+
+Two hard-won rules are baked into the command below — read them, they are the
+issues we kept hitting:
+
+1. **Mount only `prisma/` + `prisma.config.ts`, never the whole `code/backend`.**
+   Bind-mounting `code/backend` over `/app/backend` shadows the image's
+   `node_modules` (where the Prisma CLI lives); `npx prisma` then hangs forever
+   on an interactive "Ok to install prisma?" prompt — you'll see the container
+   "Created" and nothing after. The narrow overlay keeps `node_modules` intact.
+2. **Migrations connect with the same `DB_*` vars the app uses** — no separate
+   `DATABASE_URL` to keep in sync. `prisma.config.ts` builds the datasource URL
+   from `DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` (the exact vars the runtime
+   adapter in `src/config/prisma.ts` uses). This kills the recurring
+   `P1000: Authentication failed` where a rotated password broke migrations while
+   the app stayed healthy.
 
 ```bash
+# STAGE
+ssh dmadmin@10.90.15.6 'cd /home/dmadmin/docker-staging/qtip-app; \
+  docker compose run --rm --no-deps -w /app/backend \
+    -v "$PWD/code/backend/prisma:/app/backend/prisma" \
+    -v "$PWD/code/backend/prisma.config.ts:/app/backend/prisma.config.ts" \
+    qtip-app sh -c "npx prisma migrate deploy --schema prisma/schema.prisma"'
+
+# PROD (only after stage is verified)
 ssh dmadmin@10.90.15.5 'cd /home/dmadmin/docker-production/qtip-app; \
-  docker compose run --rm --no-deps \
-    -w /app/backend -v "$PWD/code/backend:/app/backend" \
+  docker compose run --rm --no-deps -w /app/backend \
+    -v "$PWD/code/backend/prisma:/app/backend/prisma" \
+    -v "$PWD/code/backend/prisma.config.ts:/app/backend/prisma.config.ts" \
     qtip-app sh -c "npx prisma migrate deploy --schema prisma/schema.prisma"'
 ```
 
-Prisma applies migrations in lexicographic order of the folder name. See
+Sanity-check first with `... migrate status ...` (same flags) — it should print
+your migration as the only pending one, then `deploy` applies it. Prisma applies
+migrations in lexicographic order of the folder name. See
 [`backend/prisma/migrations/README.md`](../backend/prisma/migrations/README.md)
 for the duplicate-timestamp tolerance rule. For not-null/column-drop migrations
 follow the staggered plan in §7.
+
+**Fallback — CLI genuinely can't run (network, engine, etc.).** Only when the
+above is blocked, apply the migration SQL straight into the env's DB container
+(`qtip-db-stage` on stage, `qtip-db` on prod) and record it so Prisma history
+stays consistent. Pipe the file so the container expands its own root password:
+
+```bash
+ssh dmadmin@10.90.15.6 'cat /home/dmadmin/docker-staging/qtip-app/code/backend/prisma/migrations/<name>/migration.sql \
+  | docker exec -i qtip-db-stage sh -c '\''exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'\'''
+```
+
+Then insert one `_prisma_migrations` row so `migrate deploy` won't re-run it:
+`id = UUID()`, `checksum =` the file's **plain `sha256sum`** hex (Prisma uses
+exactly that), `migration_name = <folder name>`, `started_at`/`finished_at =
+NOW(3)`, `applied_steps_count = 1`. Idempotent-guard with
+`WHERE NOT EXISTS (SELECT 1 FROM _prisma_migrations WHERE migration_name = '<name>')`.
 
 ### 3.4a AI Reviewer system user (once per env)
 
@@ -397,6 +440,14 @@ for p in /health /ready /live /api/csrf-token '/api/insights/qc-quality?limit=1'
   echo -n "$p -> "; curl -sk -o /dev/null -w '%{http_code}\n' "https://qtip-prod.dm-us.com$p"
 done
 ```
+
+> **Run this from your workstation, not the box.** The `*.dm.local` /
+> `qtip-prod.dm-us.com` names resolve on your LAN, not from inside the box, so
+> curling them over SSH returns `000` (can't resolve host) — that's a DNS miss,
+> not an outage. To verify *on the box*, hit the app's published port on
+> localhost instead (find it with `docker ps` — e.g. stage maps `5001->5000`):
+> `ssh dmadmin@10.90.15.6 "curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5001/health"`.
+> (The `qtip-app` container has no `curl`; use the host's, via the published port.)
 
 What to exercise:
 
