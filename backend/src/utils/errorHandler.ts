@@ -342,11 +342,11 @@ export const notFoundHandler = (req: Request, res: Response): void => {
   });
 };
 
-// Async error wrapper
+// Async error wrapper. Returns the promise so callers/tests can await
+// completion; Express itself ignores the return value.
 export const asyncHandler = (fn: Function) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) =>
     Promise.resolve(fn(req, res, next)).catch(next);
-  };
 };
 
 // Database error handler

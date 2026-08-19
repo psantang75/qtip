@@ -15,11 +15,19 @@ import { CSS } from '@dnd-kit/utilities'
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
 import { Plus, Pencil, Eye, EyeOff, Check, X, GripVertical, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import listService, { type ListItem } from '@/services/listService'
 
 const inp = 'h-8 px-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-primary/40'
+
+// Radix <Select> forbids an empty-string item value, but this editor uses ''
+// for both "no category" and unset meta options (e.g. Paychex "Not linked").
+// Map '' ↔ these sentinels at the Select boundary only; the row state and the
+// persisted payload keep using '' exactly as before.
+const NO_CATEGORY = '__none__'
+const EMPTY_OPT = '__empty__'
 
 // A list row may carry extra domain fields (e.g. scheduling's is_excused). These
 // stay optional so every existing generic list keeps working unchanged.
@@ -106,10 +114,13 @@ function SortableListItem({ item, onSave, onToggle, onDelete, availableCategorie
       <div ref={setNodeRef} style={style} className="flex flex-wrap items-center gap-2 py-2 px-3 bg-primary/5 rounded-lg">
         <GripVertical className="h-4 w-4 text-slate-200 shrink-0" />
         {availableCategories.length > 0 ? (
-          <select value={category} onChange={e => setCategory(e.target.value)} className={cn(inp, 'w-2/5 bg-white')}>
-            <option value="">— No category —</option>
-            {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <Select value={category === '' ? NO_CATEGORY : category} onValueChange={v => setCategory(v === NO_CATEGORY ? '' : v)}>
+            <SelectTrigger className="h-8 w-2/5 bg-white text-[13px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_CATEGORY} className="text-[13px]">— No category —</SelectItem>
+              {availableCategories.map(c => <SelectItem key={c} value={c} className="text-[13px]">{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
         ) : (
           <input className={cn(inp, 'w-2/5 bg-white')} value={category} placeholder="Category (optional)"
             onChange={e => setCategory(e.target.value)}
@@ -125,10 +136,16 @@ function SortableListItem({ item, onSave, onToggle, onDelete, availableCategorie
             {f.label}
           </button>
         ) : (
-          <select key={f.key} value={String(metaDraft[f.key] ?? '')} onChange={e => setMetaDraft(d => ({ ...d, [f.key]: e.target.value }))}
-            className={cn(inp, 'bg-white')} title={f.label}>
-            {(f.options ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          <Select key={f.key}
+            value={String(metaDraft[f.key] ?? '') === '' ? EMPTY_OPT : String(metaDraft[f.key])}
+            onValueChange={v => setMetaDraft(d => ({ ...d, [f.key]: v === EMPTY_OPT ? '' : v }))}>
+            <SelectTrigger className="h-8 w-auto min-w-[9rem] bg-white text-[13px]" title={f.label}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(f.options ?? []).map(o => (
+                <SelectItem key={o.value} value={o.value === '' ? EMPTY_OPT : o.value} className="text-[13px]">{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         ))}
         <Button type="button" variant="ghost" size="sm" onClick={commit} className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700"><Check className="h-4 w-4" /></Button>
         <Button type="button" variant="ghost" size="sm" onClick={cancel} className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></Button>

@@ -1,6 +1,5 @@
 import submissionService from '../services/submissionService';
-import type { User } from '../services/authService';
-import axios from 'axios';
+import { api, type User } from '../services/authService';
 import { handleErrorIfAuthentication } from './errorHandling';
 
 // Define Answer interface locally since it's not available in types
@@ -300,15 +299,10 @@ export async function finalizeFormReview(
   onError?: (error: any) => void
 ): Promise<boolean> {
   try {
-    // Use the QA endpoint for manager/admin finalization
-    const api = axios.create({
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-    
-    const response = await api.put(`/api/qa/submissions/${submissionId}/finalize`, {
+    // Use the shared api instance (baseURL '/api', auth + CSRF + 401-refresh
+    // interceptors) rather than a bespoke axios instance, so this QA endpoint
+    // behaves like every other mutation in the app.
+    const response = await api.put(`/qa/submissions/${submissionId}/finalize`, {
       finalized_by: user.id,
       final_score: finalScore,
       comments,

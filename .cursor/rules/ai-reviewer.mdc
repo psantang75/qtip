@@ -1,0 +1,37 @@
+---
+description: AI Reviewer subsystem map (backend services + frontend settings pages)
+globs: backend/src/services/*[Aa]i[Rr]eviewer*.ts,backend/src/services/ai/**,frontend/src/pages/quality/ai-reviewer/**,frontend/src/pages/quality/AIReviewer*.tsx
+alwaysApply: false
+---
+
+# AI Reviewer Subsystem
+
+Automated QA scoring of submissions via LLMs, with calibration, golden sets,
+rule packs, and cost/budget guards.
+
+## Backend map (`backend/src/services/`)
+
+- `AIReviewerService.ts` — the orchestrator. LARGE (~4.7k lines) and a known
+  refactor target: when you touch it, extract cohesive units (prompt assembly,
+  reconciliation, self-consistency/voting, cost gating) into siblings rather
+  than growing it. Do not add large new blocks inline.
+- `aiReviewerPrompt.ts`, `aiReviewerTwoPassPrompts.ts`, `aiReviewerPromptAddenda.ts`
+  — prompt construction.
+- `aiReviewerTraceVoting.ts`, `aiReviewerPivotDetector.ts` — self-consistency / trace logic.
+- `AIReviewerCostGuard.ts` — token/cost budget enforcement.
+- `ai/` — model clients (`OpenAIClient.ts`, `AnthropicClient.ts`, `ChatModelClient.ts`, `AnswersToolSchema.ts`).
+- Extensive `services/__tests__/aiReviewer*` and `AIReviewerService.*` Vitest suites — keep them green; add tests when you split the orchestrator.
+
+Routes live in `backend/src/routes/ai-reviewer.routes.ts` (also oversized —
+handlers should move into controllers/services, not stay inline in the route file).
+
+## Frontend map (`frontend/src/pages/quality/ai-reviewer/`)
+
+Settings/detail is composed of small cards (`SamplingCard`, `BudgetCard`,
+`ModelProviderCard`, `GuidanceRulesCard`, `QuestionRubricsCard`, `GoldenSetCard`,
+`CalibrationMetricsPanel`, etc.). Follow this card pattern; mirror an existing
+card and obey the UI rules in [.cursor/rules/ui-design.mdc](mdc:.cursor/rules/ui-design.mdc).
+
+## Docs
+
+Calibration walkthrough: [docs/ai_reviewer_calibration_walkthrough.md](mdc:docs/ai_reviewer_calibration_walkthrough.md).

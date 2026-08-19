@@ -32,6 +32,8 @@ lives at the [top-level README](../README.md); deploy templates live in
 - [`multiple_database_connections.md`](./multiple_database_connections.md) — DB connection topology
 - [`database_schema.md`](./database_schema.md) — schema reference + ER diagram
 - [`database_schema_updates.md`](./database_schema_updates.md) — schema change process
+- [`database_review.md`](./database_review.md) — read-only efficiency/index review (observations, not applied)
+- [`maintenance_cadence.md`](./maintenance_cadence.md) — per-change/weekly/monthly/quarterly code-health cadence + cleanup backlog
 - [`openapi_coverage.md`](./openapi_coverage.md) — Swagger coverage + versioning policy
 - [`jsdoc_coverage_standard.md`](./jsdoc_coverage_standard.md) — doc-comment contract for new code
 

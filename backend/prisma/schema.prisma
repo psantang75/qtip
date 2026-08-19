@@ -406,6 +406,7 @@ model AuditAssignment {
   creator User  @relation("AuditAssignmentCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
   qa_user User? @relation("AuditAssignmentQA", fields: [qa_id], references: [id], onDelete: SetNull)
 
+  @@index([qa_id, is_active, start_date], map: "idx_audit_assignments_qa_active_start")
   @@map("audit_assignments")
 }
 
@@ -717,6 +718,7 @@ model Call {
   submission_calls SubmissionCall[]
 
   @@index([call_date])
+  @@index([csr_id, call_date], map: "idx_calls_csr_date")
   @@map("calls")
 }
 
@@ -865,6 +867,7 @@ model ScoreSnapshot {
   csr        User        @relation(fields: [csr_id], references: [id], onDelete: Cascade)
   submission Submission? @relation(fields: [submission_id], references: [id], onDelete: Cascade)
 
+  @@index([csr_id, snapshot_date], map: "idx_score_snapshots_csr_date")
   @@map("score_snapshots")
 }
 
@@ -923,6 +926,8 @@ model AuditLog {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
+  @@index([user_id, created_at], map: "idx_audit_logs_user_created")
+  @@index([target_type, target_id], map: "idx_audit_logs_target")
   @@map("audit_logs")
 }
 
@@ -1001,6 +1006,7 @@ model AuthLog {
   ip_address   String?  @db.VarChar(45)
   attempted_at DateTime @default(now()) @db.Timestamp(0)
 
+  @@index([email, attempted_at], map: "idx_auth_logs_email_time")
   @@map("auth_logs")
 }
 
@@ -1243,6 +1249,7 @@ model ImportLog {
   email_stats_raw   EmailStatsRaw[]
   punch_raw         PunchRaw[]
 
+  @@index([data_type, created_at], map: "idx_import_logs_type_created")
   @@map("import_logs")
 }
 
@@ -1576,6 +1583,39 @@ model IeConfig {
   @@map("ie_config")
 }
 
+// Registry of scheduled SQL ingestion reports driven by the
+// SourceReportDispatcher / SourceReportSyncWorker. Managed from
+// Admin > Insights > Source Reports; runs land in ie_ingestion_log.
+// Structural columns (SQL files, staging/target tables, load mode, window
+// sizing) are seed-managed; only the scheduling fields + is_active are edited
+// via the API. This model was added so insightsAdminSourceReport.controller.ts
+// can use Prisma like the rest of the admin controllers; the pre-existing table
+// is unchanged (no migration).
+model IeSourceReport {
+  id                 Int                 @id @default(autoincrement())
+  report_code        String              @unique(map: "uq_source_report_code") @db.VarChar(50)
+  report_name        String              @db.VarChar(100)
+  source_pool        IeSourcePool
+  extract_sql_file   String              @db.VarChar(200)
+  transform_sql_file String?             @db.VarChar(200)
+  staging_table      String              @db.VarChar(100)
+  target_fact_table  String              @db.VarChar(100)
+  load_mode          IeSourceLoadMode
+  window_months      Int                 @default(24) @db.SmallInt
+  incremental_days   Int                 @default(14) @db.SmallInt
+  frequency_minutes  Int                 @default(60)
+  run_only_hours     String?             @db.VarChar(20)
+  is_active          Boolean             @default(false)
+  last_run_at        DateTime?           @db.DateTime(0)
+  next_run_at        DateTime?           @db.DateTime(0)
+  last_status        IeSourceLastStatus?
+  created_at         DateTime            @default(now()) @db.DateTime(0)
+  updated_at         DateTime            @updatedAt @db.DateTime(0)
+
+  @@index([is_active, next_run_at], map: "idx_source_report_due")
+  @@map("ie_source_report")
+}
+
 // ── Enums ──────────────────────────────────────────────────────────────────
 
 enum FormInteractionType {
@@ -1741,6 +1781,26 @@ enum ImportStatus {
   PENDING
   PROCESSING
   COMPLETE
+  FAILED
+}
+
+// Native enums backing the ie_source_report registry (values mirror the
+// existing MySQL ENUM columns exactly).
+enum IeSourcePool {
+  crm
+  phone
+  primary
+}
+
+enum IeSourceLoadMode {
+  INCREMENTAL_WINDOW
+  FULL_RELOAD_WINDOW
+  SNAPSHOT
+}
+
+enum IeSourceLastStatus {
+  SUCCESS
+  PARTIAL
   FAILED
 }
 
@@ -2394,7 +2454,6 @@ model ScheduleShift {
 
   @@unique([user_id, shift_date], map: "uq_schedule_shift_user_date")
   @@index([shift_date], map: "idx_schedule_shift_date")
-  @@index([user_id, shift_date], map: "idx_schedule_shift_user_date")
   @@index([status, shift_date], map: "idx_schedule_shift_status_date")
   @@map("schedule_shift")
 }

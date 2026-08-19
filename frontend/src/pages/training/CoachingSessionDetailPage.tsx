@@ -10,6 +10,8 @@ import { ListPageHeader } from '@/components/common/ListPageHeader'
 import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { LegacyImportBanner } from '@/components/common/LegacyImportBanner'
 
@@ -44,11 +46,10 @@ function SectionEditBar({ onSave, onCancel, saving, showBatch, applyToBatch, onT
         <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>Cancel</Button>
         <div className="flex items-center gap-3">
           {showBatch && (
-            <label className="flex items-center gap-1.5 cursor-pointer text-[12px] text-slate-500">
-              <input type="checkbox" checked={applyToBatch} onChange={onToggleBatch}
-                className="accent-primary h-3.5 w-3.5" />
-              Apply to entire batch
-            </label>
+            <div className="flex items-center gap-1.5 text-[12px] text-slate-500">
+              <Checkbox id="apply-batch" checked={!!applyToBatch} onCheckedChange={() => onToggleBatch?.()} className="h-3.5 w-3.5" />
+              <label htmlFor="apply-batch" className="cursor-pointer">Apply to entire batch</label>
+            </div>
           )}
           <Button size="sm" className="bg-primary hover:bg-primary/90 text-white"
             onClick={onSave} disabled={saving}>
@@ -640,15 +641,16 @@ export default function CoachingSessionDetailPage() {
 
               <div className="border-t border-slate-100 pt-3 space-y-2">
                   <p className="text-[11px] text-slate-400 uppercase tracking-wide">Change to</p>
-                  <select
-                    className="w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-primary/40"
-                    value={pendingStatus}
-                    onChange={e => setPendingStatus(e.target.value)}
-                  >
-                    {(['DRAFT', 'SCHEDULED', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED', 'CANCELED'] as const).map(s => (
-                      <option key={s} value={s}>{STATUS_LABELS[s]}{s === 'CLOSED' || s === 'CANCELED' ? ' (Final)' : ''}</option>
-                    ))}
-                  </select>
+                  <Select value={pendingStatus} onValueChange={v => setPendingStatus(v)}>
+                    <SelectTrigger className="w-full h-9 text-[13px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(['DRAFT', 'SCHEDULED', 'AWAITING_CSR_ACTION', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED', 'CANCELED'] as const).map(s => (
+                        <SelectItem key={s} value={s} className="text-[13px]">{STATUS_LABELS[s]}{s === 'CLOSED' || s === 'CANCELED' ? ' (Final)' : ''}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
                     className={cn(
                       'w-full h-8 text-[12px]',

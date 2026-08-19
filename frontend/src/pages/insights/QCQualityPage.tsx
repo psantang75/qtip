@@ -1,7 +1,9 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import type { ColumnDef } from '@tanstack/react-table'
 import { Users, ExternalLink } from 'lucide-react'
+import SortableTable from '@/components/insights/agentActivity/SortableTable'
 import {
   InsightsFilterBar, InsightsSection, KpiTile, StatRow,
   TrendChart, ScoreHistogram, StatusBadge, StatusDot, ExpandableRow,
@@ -14,10 +16,9 @@ import {
   getMissedQuestions, getQualityDeptComparison, getQAFormsCompleted, getFormScores, getFilterOptions,
   getFormAgentBreakdown, getCategoryAgentBreakdown, getLowScoringAudits,
 } from '@/services/insightsQCService'
-import type { CategoryScore, FormScore, QCParams, QAFormCompletedRow, LowScoringAudit } from '@/services/insightsQCService'
+import type { CategoryScore, FormScore, QCParams, QAFormCompletedRow, LowScoringAudit, FormAgentRow, DeptQualityRow } from '@/services/insightsQCService'
 import { scoreColor, fmtN } from '@/components/insights/agentProfileHelpers'
 import { formatQualityDate } from '@/utils/dateFormat'
-import { ListPagination } from '@/components/common/ListPagination'
 import QCMissedQuestions from './QCMissedQuestions'
 
 function fmt(v: number | null | undefined, suffix = ''): string {
@@ -54,6 +55,19 @@ function FormScoresSection({ formScores, params, qaGoal, qaWarn }: {
     queryFn:  () => getFormAgentBreakdown(expanded as number, params),
     enabled:  expanded !== null,
   })
+
+  const agentColumns = useMemo<ColumnDef<FormAgentRow, any>[]>(() => [
+    { accessorKey: 'name', header: 'Agent', cell: ({ row }) => <span className="text-primary hover:underline">{row.original.name}</span> },
+    { accessorKey: 'dept', header: 'Department', cell: ({ row }) => <span className="text-slate-500">{row.original.dept}</span> },
+    { accessorKey: 'audits', header: 'Reviews', meta: { bold: true } },
+    {
+      accessorKey: 'avgScore',
+      header: 'Avg Score',
+      cell: ({ row }) => (
+        <span className={`font-semibold ${scoreColor(row.original.avgScore, qaGoal, qaWarn)}`}>{fmtN(row.original.avgScore, '%')}</span>
+      ),
+    },
+  ], [qaGoal, qaWarn])
 
   if (formScores.length === 0) {
     return (
@@ -100,30 +114,13 @@ function FormScoresSection({ formScores, params, qaGoal, qaWarn }: {
                     <Users size={12} className="text-slate-500" />
                     <span className="text-xs font-semibold text-slate-600">Agents reviewed on this form</span>
                   </div>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-slate-400 border-b border-slate-200">
-                        <th className="text-left  py-1 font-medium">Agent</th>
-                        <th className="text-left  py-1 font-medium">Department</th>
-                        <th className="text-right py-1 font-medium">Reviews</th>
-                        <th className="text-right py-1 font-medium">Avg Score</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {agentRows.map(a => (
-                        <tr
-                          key={a.userId}
-                          className="border-b border-slate-100 last:border-0 hover:bg-slate-100 cursor-pointer"
-                          onClick={() => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
-                        >
-                          <td className="py-1.5 text-primary hover:underline">{a.name}</td>
-                          <td className="py-1.5 text-slate-500">{a.dept}</td>
-                          <td className="py-1.5 text-right text-slate-600 font-medium">{a.audits}</td>
-                          <td className={`py-1.5 text-right font-semibold ${scoreColor(a.avgScore, qaGoal, qaWarn)}`}>{fmtN(a.avgScore, '%')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <SortableTable<FormAgentRow>
+                    columns={agentColumns}
+                    data={agentRows}
+                    initialSorting={[]}
+                    minWidth="min-w-0"
+                    onRowClick={(a) => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
+                  />
                 </div>
               )
             }
@@ -144,15 +141,38 @@ function LowScoresSection({ audits, qaThresh }: {
   qaThresh: ReturnType<typeof resolveThresholds>
 }) {
   const navigate = useNavigate()
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
 
-  // Reset to the first page whenever the data or page size changes so we never
-  // land on a now-empty page after a filter/period change.
-  useEffect(() => { setPage(1) }, [audits, pageSize])
-
-  const totalPages = Math.max(1, Math.ceil(audits.length / pageSize))
-  const visible = audits.slice((page - 1) * pageSize, page * pageSize)
+  const columns = useMemo<ColumnDef<LowScoringAudit, any>[]>(() => [
+    {
+      accessorKey: 'id',
+      header: 'Review ID',
+      cell: ({ row }) => (
+        <a
+          href={`/app/quality/submissions/${row.original.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+        >
+          #{row.original.id}
+          <ExternalLink size={12} />
+        </a>
+      ),
+    },
+    { accessorKey: 'agent', header: 'Agent', cell: ({ row }) => <span className="font-medium text-primary hover:underline">{row.original.agent}</span> },
+    { accessorKey: 'form', header: 'Form', cell: ({ row }) => <span className="text-slate-600">{row.original.form}</span> },
+    { accessorKey: 'interactionDate', header: 'Interaction Date', cell: ({ row }) => <span className="text-slate-500">{formatQualityDate(row.original.interactionDate)}</span> },
+    {
+      accessorKey: 'score',
+      header: 'Score',
+      cell: ({ row }) => (
+        <span className="flex items-center gap-1.5">
+          <StatusDot value={row.original.score ?? 0} thresholds={qaThresh} />
+          <span className="font-semibold">{fmtN(row.original.score, '%')}</span>
+        </span>
+      ),
+    },
+  ], [qaThresh])
 
   return (
     <InsightsSection
@@ -162,58 +182,14 @@ function LowScoresSection({ audits, qaThresh }: {
       {audits.length === 0
         ? <p className="text-sm text-slate-400 text-center py-4">No audits below 90% for the selected period.</p>
         : (
-          <>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-slate-400 border-b border-slate-200">
-                  {['Review ID','Agent','Form','Interaction Date','Score'].map(h => (
-                    <th key={h} className="text-left pb-2 font-medium pr-4 last:pr-0">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map(row => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer"
-                    onClick={() => navigate(`/app/insights/qc-agents?agent=${row.csrUserId}`)}
-                  >
-                    <td className="py-2.5 pr-4">
-                      <a
-                        href={`/app/quality/submissions/${row.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
-                      >
-                        #{row.id}
-                        <ExternalLink size={12} />
-                      </a>
-                    </td>
-                    <td className="py-2.5 pr-4 font-medium text-primary hover:underline">{row.agent}</td>
-                    <td className="py-2.5 pr-4 text-slate-600">{row.form}</td>
-                    <td className="py-2.5 pr-4 text-slate-500">{formatQualityDate(row.interactionDate)}</td>
-                    <td className="py-2.5">
-                      <span className="flex items-center gap-1.5">
-                        <StatusDot value={row.score ?? 0} thresholds={qaThresh} />
-                        <span className="font-semibold">{fmtN(row.score, '%')}</span>
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="mt-3">
-              <ListPagination
-                page={page}
-                totalPages={totalPages}
-                totalItems={audits.length}
-                pageSize={pageSize}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-              />
-            </div>
-          </>
+          <SortableTable<LowScoringAudit>
+            columns={columns}
+            data={audits}
+            initialSorting={[]}
+            minWidth="min-w-0"
+            paginated
+            onRowClick={(a) => navigate(`/app/insights/qc-agents?agent=${a.csrUserId}`)}
+          />
         )
       }
     </InsightsSection>
@@ -355,6 +331,65 @@ function CategoryPerformanceSection({ catData, params, qaGoal, qaWarn }: {
           {showAll ? 'Show bottom 5 only' : `Show all ${formsWithCats.length} forms`}
         </button>
       )}
+    </InsightsSection>
+  )
+}
+
+// Quality page Department Comparison — a flat, sortable roll-up of each
+// department's audit volume, average QA score, dispute count, and on-track
+// status. Clicking a row filters the whole page to that department.
+function DeptComparisonSection({ deptComp, qaThresh, auditGoal, auditWarn, onSelectDept }: {
+  deptComp:     DeptQualityRow[]
+  qaThresh:     ReturnType<typeof resolveThresholds>
+  auditGoal:    number
+  auditWarn:    number | null
+  onSelectDept: (dept: string) => void
+}) {
+  const columns = useMemo<ColumnDef<DeptQualityRow, any>[]>(() => [
+    { accessorKey: 'dept', header: 'Department', cell: ({ row }) => <span className="font-medium text-slate-800">{row.original.dept}</span> },
+    { accessorKey: 'audits', header: 'Audits', cell: ({ row }) => <span className="text-slate-500">{row.original.audits}</span> },
+    {
+      accessorKey: 'avgScore',
+      header: 'QA Score',
+      cell: ({ row }) => (
+        <span className="flex items-center gap-1.5">
+          <StatusDot value={row.original.avgScore ?? 0} thresholds={qaThresh} />
+          <span className="font-semibold">{fmt(row.original.avgScore, '%')}</span>
+        </span>
+      ),
+    },
+    { accessorKey: 'disputes', header: 'Disputes', cell: ({ row }) => <span className="text-slate-600">{row.original.disputes}</span> },
+    {
+      id: 'status',
+      header: 'Status',
+      // Derived from avgScore; sort by the QA Score column instead.
+      enableSorting: false,
+      cell: ({ row }) => {
+        const st = scoreStatus(row.original.avgScore, auditGoal, auditWarn)
+        return (
+          <StatusBadge
+            label={st === 'good' ? 'On Track' : st === 'warning' ? 'Near Goal' : 'Below Goal'}
+            variant={st === 'bad' ? 'bad' : st === 'warning' ? 'warning' : 'good'}
+          />
+        )
+      },
+    },
+  ], [qaThresh, auditGoal, auditWarn])
+
+  return (
+    <InsightsSection title="Department Comparison" infoKpiCodes={['dept_comparison']}>
+      {deptComp.length === 0
+        ? <p className="text-sm text-slate-400 text-center py-4">No data available.</p>
+        : (
+          <SortableTable<DeptQualityRow>
+            columns={columns}
+            data={deptComp}
+            initialSorting={[]}
+            minWidth="min-w-0"
+            onRowClick={(r) => onSelectDept(r.dept)}
+          />
+        )
+      }
     </InsightsSection>
   )
 }
@@ -581,52 +616,11 @@ export default function QCQualityPage() {
         </InsightsSection>
 
         {/* Department Comparison */}
-        <InsightsSection
-          title="Department Comparison"
-          infoKpiCodes={['dept_comparison']}
-        >
-          {deptComp.length === 0
-            ? <p className="text-sm text-slate-400 text-center py-4">No data available.</p>
-            : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-slate-400 border-b border-slate-200">
-                    {['Department','Audits','QA Score','Disputes','Status'].map(h => (
-                      <th key={h} className="text-left pb-2 font-medium pr-4 last:pr-0">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {deptComp.map(row => (
-                    <tr
-                      key={row.dept}
-                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer"
-                      onClick={() => { setDepartments([row.dept]) }}
-                    >
-                      <td className="py-2.5 pr-4 font-medium text-slate-800">{row.dept}</td>
-                      <td className="py-2.5 pr-4 text-slate-500">{row.audits}</td>
-                      <td className="py-2.5 pr-4">
-                        <span className="flex items-center gap-1.5">
-                          <StatusDot value={row.avgScore ?? 0} thresholds={qaThresh} />
-                          <span className="font-semibold">{fmt(row.avgScore, '%')}</span>
-                        </span>
-                      </td>
-                      <td className="py-2.5 pr-4 text-slate-600">{row.disputes}</td>
-                      <td className="py-2.5">
-                        {(() => { const st = scoreStatus(row.avgScore, auditGoal, auditWarn); return (
-                          <StatusBadge
-                            label={st === 'good' ? 'On Track' : st === 'warning' ? 'Near Goal' : 'Below Goal'}
-                            variant={st === 'bad' ? 'bad' : st === 'warning' ? 'warning' : 'good'}
-                          />
-                        )})()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )
-          }
-        </InsightsSection>
+        <DeptComparisonSection
+          deptComp={deptComp} qaThresh={qaThresh}
+          auditGoal={auditGoal} auditWarn={auditWarn}
+          onSelectDept={(d) => setDepartments([d])}
+        />
       </div>}
     </div>
   )

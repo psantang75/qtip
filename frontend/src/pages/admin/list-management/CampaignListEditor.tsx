@@ -23,6 +23,7 @@ import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ColorSwatchPicker } from '@/components/common/ColorSwatchPicker'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import campaignService, {
@@ -30,6 +31,10 @@ import campaignService, {
 } from '@/services/campaignService'
 
 const inp = 'h-8 px-2 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-primary/40'
+// Radix <Select> forbids an empty-string item value; the reference-campaign
+// picker uses '' for "no reference". Map '' ↔ this sentinel at the Select
+// boundary only — `ref` state and the persisted payload keep using ''.
+const REF_NONE = '__none__'
 const KEY = ['campaign-library']
 
 const ANCHORS: { value: CampaignAnchorType; label: string }[] = [
@@ -83,24 +88,33 @@ function ItemRow({ item, refLabel, allItems, categories, onSave, onToggle }: {
     return (
       <div ref={setNodeRef} style={style} className="flex flex-wrap items-center gap-2 rounded-lg bg-primary/5 px-3 py-2">
         <GripVertical className="h-4 w-4 shrink-0 text-slate-200" />
-        <select className={cn(inp, 'w-44')} value={catId} onChange={e => setCatId(Number(e.target.value))} title="Category">
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <Select value={String(catId)} onValueChange={v => setCatId(Number(v))}>
+          <SelectTrigger className="h-8 w-44 bg-white text-[13px]" title="Category"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {categories.map(c => <SelectItem key={c.id} value={String(c.id)} className="text-[13px]">{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <input className={cn(inp, 'min-w-[9rem] flex-1')} value={label} autoFocus placeholder="Campaign name"
           onChange={e => setLabel(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel() }} />
-        <select className={inp} value={anchor} onChange={e => setAnchor(e.target.value as CampaignAnchorType)} title="Timing rule">
-          {ANCHORS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-        </select>
+        <Select value={anchor} onValueChange={v => setAnchor(v as CampaignAnchorType)}>
+          <SelectTrigger className="h-8 w-auto min-w-[13rem] bg-white text-[13px]" title="Timing rule"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {ANCHORS.map(a => <SelectItem key={a.value} value={a.value} className="text-[13px]">{a.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <input className={cn(inp, 'w-16')} type="number" value={offset} title="Offset (business days)"
           onChange={e => setOffset(Number(e.target.value))} />
         {anchor === 'RELATIVE_TO_CAMPAIGN' && (
-          <select className={inp} value={ref} onChange={e => setRef(e.target.value === '' ? '' : Number(e.target.value))} title="Reference campaign">
-            <option value="">— reference —</option>
-            {/* Labels repeat across categories, so qualify each one to keep the pick unambiguous. */}
-            {allItems.filter(i => i.id !== item.id).map(i => (
-              <option key={i.id} value={i.id}>{catNameOf(i.category_id)} · {i.label}</option>
-            ))}
-          </select>
+          <Select value={ref === '' ? REF_NONE : String(ref)} onValueChange={v => setRef(v === REF_NONE ? '' : Number(v))}>
+            <SelectTrigger className="h-8 w-auto min-w-[12rem] bg-white text-[13px]" title="Reference campaign"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={REF_NONE} className="text-[13px]">— reference —</SelectItem>
+              {/* Labels repeat across categories, so qualify each one to keep the pick unambiguous. */}
+              {allItems.filter(i => i.id !== item.id).map(i => (
+                <SelectItem key={i.id} value={String(i.id)} className="text-[13px]">{catNameOf(i.category_id)} · {i.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
         <button type="button" onClick={() => setNotFri(v => !v)}
           className={cn('h-8 rounded-md border px-2.5 text-[12px] font-medium transition-colors',

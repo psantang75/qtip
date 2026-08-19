@@ -1,13 +1,19 @@
 import { PrismaClient } from '../generated/prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import { databaseConfig } from './environment';
 
+// Connection params come from the single source of truth (`databaseConfig` in
+// environment.ts) so Prisma and the legacy mysql2 pool (config/database.ts)
+// cannot drift — identical host/user/password/database/pool size and the same
+// production password guard. Port is not part of databaseConfig (the pool uses
+// the driver default), so it is read from the environment here.
 const adapter = new PrismaMariaDb({
-  host: process.env.DB_HOST ?? 'localhost',
+  host: databaseConfig.host,
   port: parseInt(process.env.DB_PORT ?? '3306', 10),
-  user: process.env.DB_USER ?? 'root',
-  password: process.env.DB_PASSWORD ?? '',
-  database: process.env.DB_NAME ?? 'qtip',
-  connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT ?? '10', 10),
+  user: databaseConfig.user,
+  password: databaseConfig.password,
+  database: databaseConfig.database,
+  connectionLimit: databaseConfig.connectionLimit,
   allowPublicKeyRetrieval: true,
 });
 

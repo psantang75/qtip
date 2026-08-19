@@ -1,0 +1,243 @@
+# Maintenance & code-health cadence
+
+The standing rhythm that keeps QTIP clean after the one-time visibility +
+cleanup program. The goal is the campsite rule — leave each file a little better
+than you found it — never a big-bang rewrite.
+
+## Per change (every PR)
+
+- Self-review the full diff before merging.
+- Green gate is a hard stop: `npm run lint`, the TypeScript build
+  (`npm run build` / `tsc`), and `npm test` must pass on `main`.
+- Obey the guardrails: Prisma for DB access, the `AppError` envelope for API
+  errors, shadcn/ui + `optionCls` for controls, TanStack Table for grids,
+  lucide for icons, brand tokens for color. See [`../AGENTS.md`](../AGENTS.md)
+  and the scoped rules in [`../.cursor/rules`](../.cursor/rules).
+- If you touch an oversized file (>300 lines), extract a cohesive piece rather
+  than adding to it.
+- Never add tables or change the schema without explicit approval
+  (see [`database_schema_updates.md`](./database_schema_updates.md)).
+
+## Weekly (~30–60 min)
+
+- Skim the week's diffs for "a second way to do the same thing" (a new helper
+  that duplicates an existing one, a hand-rolled control, a raw `fetch`/axios).
+- Fold duplicates back into the shared helper/component in the same pass.
+
+## Monthly (~half day)
+
+- Clean one theme end-to-end (e.g. finish migrating a controller family to
+  Prisma, or migrate one page's tables to `SortableTable`).
+- Spot-check rule adherence on the busiest subsystems (AI reviewer, insights
+  admin, forms/scoring, writeups).
+
+## Quarterly (1–2 days)
+
+- Structural review: file sizes, dead code, dependency bloat, DB index hygiene
+  (revisit [`database_review.md`](./database_review.md) and re-`EXPLAIN` the hot
+  queries).
+- Commit to at most 1–2 scoped reworks — do not open more than you can finish.
+
+## Carry-forward backlog (from the cleanup program)
+
+These were started as verified pilots; continue them under the cadence above:
+
+- Backend data access: the entire `insightsAdmin*` controller family is now on
+  Prisma + the `AppError` envelope — `insightsAdminKpi`, `insightsAdminPage`,
+  `insightsAdminSourceReport` (the `IeSourceReport` model was added for the
+  pre-existing `ie_source_report` table — model only, no migration), and
+  `insightsAdminIngestion` (its `ie_ingestion_log` read moved to
+  `prisma.ieIngestionLog`). No admin controller touches the `mysql2` pool now.
+  Remaining pool users are the Insights **data-warehouse** layer
+  (`services/QC*Data`, `QCKpiService`, `workers/`, rollups, `insightsQC` /
+  `insights` read controllers) — deliberately hand-written SQL, NOT conversion
+  targets. The `SourceReportDispatcher` / `SourceReportSyncWorker` also keep
+  their raw SQL; Prisma and those workers share the same `ie_source_report`
+  rows.
+- Backend mega-files:
+  - `ai-reviewer.routes.ts` — thinning it by moving inline handlers into
+    `controllers/aiReviewer/*.controller.ts` (routes stay wiring-only). Done so
+    far: the **base-prompts** domain (`basePrompts.controller.ts` +
+    `shared.ts#parsePositiveInt`), the **rule-packs** domain
+    (`rulePacks.controller.ts` — library CRUD + the two per-form
+    `/forms/:formId/rule-packs` assignment routes), and the **golden-set**
+    domain (`goldenSet.controller.ts` — list/mark-manual/status/archive/
+    restore, backed by `AIGoldenSetService`), and the **eval-run** domain
+    (`evalRuns.controller.ts` — manual `/eval/run` + `/eval/latest`, backed
+    by `AIGoldenEvalRunner`; `runGoldenEval` stays imported in the routes
+    file because other handlers fire it), the **calibration-map** domain
+    (`calibrationMap.controller.ts` — get/preview/fit/activate, backed by
+    `ConfidenceCalibratorFitter` + `ConfidenceCalibrator`), and the
+    **rubrics** domain (`rubrics.controller.ts` — list/upsert/delete per-
+    question rubrics), the **calibration** domain (`calibration.controller.ts`
+    — calibration-tab metrics/recent/settings + the learned-corrections
+    lifecycle: corrections-preview/absorbed/absorb/reset; the settings-only
+    `normalizeGuidance`, `runGoldenEval`, and `AI_REVIEW_GUIDANCE_MAX_CHARS`
+    moved with it), and the **forms read/diagnostics** group
+    (`formsDiagnostics.controller.ts` — `/forms` list + readiness, preview-
+    prompt, kb-coverage, cost-status, cost-rollup, drift; the diagnostic-only
+    `previewSystemPrompt`, `aggregateKbCoverage`, `getDriftStatusForForm`, and
+    `getCostStatusForForm` moved with it). The service-error domains
+    consolidated their duplicated `*Error → HTTP` mapping into one
+    `handle*Error` helper, mirroring `basePrompts.controller.ts`. Every slice
+    is verified behavior-preserving: after each move the full
+    `router.<verb>('<path>')` inventory is diffed against `git HEAD` and must
+    stay identical (53 routes, 15 `authorizeAdmin` guards, same methods/paths)
+    on top of lint + `tsc --noEmit` + the backend test suite. This brought the
+    route file from ~2,440 → ~1,140 lines. What deliberately STAYS inline: the
+    submission-flow handlers (`/run`, `/inbox`, `/ticket/:id`, `/draft`,
+    `/promote-draft`, `/calibration-overlay`) and the global `/health` +
+    `/_smoke` monitoring endpoints — these are not thin CRUD and share the
+    `SubmissionService` wiring, so they're a separate, higher-risk slice for
+    later (or leave as-is).
+  - `AIReviewerService.ts` — continue extracting cohesive units (adapters,
+    feedback composers) into siblings such as `aiReviewerParsing.ts`. Done so
+    far: the pure JSON→typed output parsers + post-parse normalization
+    (`parsePlaybookSteps`, `parseCoachingBlock`, `detectSelfConsistencyWarnings`,
+    `enforceEvidenceFloor`/`isPositiveVerdict`, `parseTimelineArray`,
+    `parseObservationsArray` + the `PLAYBOOK_STATUSES`/`OBSERVATION_*` sets) →
+    `aiReviewerOutputParsers.ts`. They depend only on submission/form TYPES (no
+    prisma, no LLM clients, no module state) and are re-imported so
+    `mapClaudeOutputToAnswers` and the `_internal` test exports are unchanged;
+    verified by `tsc --noEmit` + the full backend suite (673 passing, incl. the
+    `_internal` self-consistency/evidence-floor tests). Then two more
+    type-only/pure slices: the reviewer-facing feedback composition
+    (`buildKbLinkifier` + `composeCategoryFeedback` + `composeBottomFeedback`) →
+    `aiReviewerFeedback.ts`, and answer validation + NA-gate guards
+    (`validateAnswerForQuestion`, `applyNaGateGuards`) →
+    `aiReviewerAnswerValidation.ts`. Both re-imported so the class + `_internal`
+    exports are unchanged; `buildKbLinkifier` stays module-private (only the
+    composers use it) and the now-unused `CATEGORY_FEEDBACK_TEXT_PREFIX_RE`
+    import was dropped. Then the **KB grounding** group (`searchKb`,
+    `classifyCallTopic` + its in-process `callTopicCache`/`_clearCallTopicCache`,
+    `fetchPivotKbPool`, `mergeKbHitsByUrl`, `UNIVERSAL_KB_URLS`, the `KbHit`
+    type, and the `PivotKbCoverage` interface) → `aiReviewerKb.ts` (676 lines).
+    Safe because none of it touches `AIReviewerServiceError` or the class — it
+    depends only on the KB service layer (`BookStackService`, `KbIndexService`,
+    `kbProcedureParser`), Prisma (`kb_pages_meta`), the Anthropic client + call
+    logger, and plain types — so there's no back-dependency / import cycle. The
+    class re-imports the functions; `_clearCallTopicCache` and the
+    `PivotKbCoverage` type are re-exported from `AIReviewerService` so the
+    reviewCase test import and any external `PivotKbCoverage` importer are
+    unaffected; the now-unused `kbIndexService` + `parseKbApproaches` imports
+    were dropped (only `ParsedProcedure` stays, still used by the class).
+    Then the **types/errors hoist + case loading**: a neutral
+    `aiReviewerTypes.ts` (100 lines — `AIReviewerServiceError`, `Case`/
+    `CaseSourceRef`/`InteractionMaterial`/`SubmissionLinkPayload`, `formatCaseId`)
+    that both the engine and the source-system layer can depend on without a
+    cycle, and `aiReviewerCaseLoading.ts` (~560 lines — the `TicketAdapter`/
+    `TaskAdapter`/`ConversationAdapter` interaction adapters, `loadCase`,
+    header-flatteners, `pickAdapter`/`loadAdapterMaterial`, the call-window note
+    cutoff `filterPostAuditNotes`/`renderAuditScopeLine`/`resolvePostCallDocWindowMs`,
+    and `mergeSubmissionLinks`/`adapterLinkFor`). `aiReviewerCaseLoading` depends
+    only on the source services (`CRMService`, `PhoneSystemService`,
+    `CallTicketLinkerService`) + `aiReviewerTypes`, so there's no back-dependency
+    on the engine; the now-unused `crmService`/`phoneSystemService`/
+    `linkCallToTicket` imports were dropped from the engine. `AIReviewerServiceError`,
+    `loadCase`, `formatCaseId`, and the Case/material types are re-exported from
+    `AIReviewerService` so the routes, golden-eval runner, and reviewCase test
+    keep their existing import paths.
+    Cumulatively the engine file is down from ~4,990 → ~3,150 lines across six
+    sibling modules (`aiReviewerOutputParsers` 270, `aiReviewerFeedback` 188,
+    `aiReviewerAnswerValidation` 199, `aiReviewerKb` 676, `aiReviewerTypes` 100,
+    `aiReviewerCaseLoading` ~560), verified each time by `tsc --noEmit` + the
+    full backend suite (673 passing).
+    **DONE to a safe floor — stop here.** The remaining ~3,150 lines are the
+    orchestrator class itself (~1,195 lines, `AIReviewerService` at ~line 218–1412,
+    which is the core and should not be gutted) plus the cohesive LLM
+    reasoning tail below it (`callLlm`/`callAnthropic`/`callOpenAI`, the trace/
+    reasoning/answer-chunk/reconciliation passes, `runChunkedSynthesis`,
+    `callClaude`, `mapClaudeOutputToAnswers`, `parseDraftAnswers`,
+    `extractNarrative` — ~1,300 lines). That tail is deliberately LEFT INLINE: it
+    is one large, prompt-critical block where a silent transcription slip would
+    quietly degrade grading quality, and the AI Reviewer is not in active
+    production use yet, so the passes are not exercised end-to-end. A verbatim
+    move that large is disproportionately risky for a purely structural gain. If
+    it's ever split, do it while the reviewer is actively running (so the passes
+    get real end-to-end coverage), as one `aiReviewerReasoning.ts` module (all
+    intra-group calls stay internal; the class imports the ~8 entry points; verify
+    the moved lines are byte-identical via `git diff` on top of `tsc` + tests).
+- Backend tests: keep adding controller/HTTP-layer tests (mock `config/prisma`).
+  Done for the Insights-admin controllers migrated to Prisma — `insightsAdminKpi`
+  (pilot), plus `insightsAdminPage`, `insightsAdminSourceReport`, and
+  `insightsAdminIngestion` (`__tests__/*.controller.test.ts`, +21 cases). They
+  mock `config/prisma` (and, per file, `middleware/qcCache`, the
+  `SourceReportSyncWorker`, and `ingestionAlerts`) and assert the exact response
+  shape + the `AppError` envelope surfaced via `next()` (400 invalid id /
+  validation, 403 unauthenticated, 404 missing row incl. Prisma `P2025` → 404).
+  Suite now 694 passing. Next candidates: the other Prisma controllers as they're
+  touched.
+- Frontend tables: `SortableTable` now takes optional client-side pagination
+  (`paginated` + `initialPageSize`/`pageSizeOptions`) via TanStack's
+  `getPaginationRowModel` and the shared `ListPagination` footer — sorting spans
+  the full dataset, then the visible page is sliced. `QCQualityPage`'s
+  "QA Forms Below 90%" grid was migrated onto it (dropped its hand-rolled
+  `<table>` + local page/pageSize state + the reset `useEffect`).
+  "Department Comparison" on the same page was also migrated (flat table →
+  `SortableTable`, gains sortable columns; Status stays `enableSorting:false`
+  since it's derived from QA Score). LEFT hand-rolled on purpose:
+  "QA Forms Completed" — it renders per-(QA-person, form) groups each with a
+  bold subtotal row, which `SortableTable`'s single `totalRow` footer can't
+  model without adding grouping support (a bigger change than the payoff).
+  Revisit only if `SortableTable` grows real row-grouping.
+- Frontend controls: DONE for the native picker sweep — every raw `<select>`,
+  `<input type=checkbox>`, and `<input type=radio>` in `frontend/src` is now a
+  shadcn primitive (verified: `rg '<select|type="radio"|type="checkbox"'
+  frontend/src` returns only a doc comment in `ManualRunCard`). Converted:
+  `QaSearchModal` (pilot); `<select>` → shadcn `Select` in `LibraryResourcesPage`,
+  `CoachingSessionDetailPage`, and the shared list-management editors
+  `GenericListEditor` + `CampaignListEditor`; `<input type=checkbox>` → shadcn
+  `Checkbox` in `CoachingSessionDetailPage`, `MetadataStep`, `QuestionEditPanel`
+  (3), `MyCoachingDetailPage`, and `LearnedCorrectionsPanel`; `QuizBuilder`'s
+  correct-answer `<input type=radio>` → a lucide `CheckCircle2`/`Circle` toggle
+  button (no `radio-group` primitive exists and adding a `@radix-ui` dep needs
+  sign-off). Radix `Select` forbids an empty-string item value, so the
+  list-management category / reference / meta pickers map `''` ↔ a `__none__`/
+  `__empty__` sentinel at the Select boundary only (row state + persisted
+  payload still use `''`). NEEDS A BROWSER EYEBALL: the list-management editors
+  live under Admin → List Management (Scheduling → Call Campaigns, and the
+  scheduling/attendance list editors) — confirm the dropdowns still sit inline
+  in the edit row and the "No category"/"Not linked"/"reference" options
+  round-trip. Remaining (lower value): stray raw `<button>`s used for primary
+  actions could still move to shadcn `Button`, case-by-case when touched.
+- Frontend layout: `ListPageShell` adoption is effectively DONE — every real
+  list page already wraps in it (Submissions, Disputes, WriteUps/MyWriteUps,
+  ReviewForms, FormBuilderList, the Library pages, Coaching pages,
+  AIReviewer list/inbox, scheduling list pages, etc.). The only remaining
+  hand-rolled `p-6` roots (`rg 'className="p-6 space-y-[0-9]' frontend/src/pages`)
+  are NOT list pages and shouldn't adopt it: `FormsPage` (form-builder wizard),
+  `AuditFormPage` + `SubmissionDetailPage` (detail/form views on `space-y-4`),
+  and `QualityAnalyticsPage` — which was DEAD CODE (only self-referenced; not
+  imported in `AppRoutes`; the `analytics` route redirects to
+  `/app/insights/qc-quality`) and has been DELETED (tsc clean afterward,
+  confirming nothing referenced it).
+  Still open: unify bespoke filter bars / multi-selects onto the shared
+  `ListFilterBar`/`InsightsFilterBar` + `StagedMultiSelect`/`SearchableMultiSelect`.
+  This is a visual, prominent-UI change → do it deliberately with a browser
+  verification pass, not as a blind sweep.
+- DB: the HIGH-value indexes + the `ScheduleShift` redundant-index drop from
+  [`database_review.md`](./database_review.md) were approved and APPLIED as
+  migration `20260818190000_add_perf_indexes_drop_redundant_shift_index`
+  (hand-authored SQL via `prisma migrate deploy`; verified with `EXPLAIN`).
+  Still proposal-only (needs approval): the `*Raw` unique-grain + idempotent
+  import work, the `AiFormRulePackAssignment` FK/`onDelete`, and the enum/hygiene
+  items. NOTE: this repo's `schema.prisma` is a deliberate partial model — NEVER
+  run `prisma migrate dev`; use hand-authored `migration.sql` + `prisma migrate
+  deploy` (see [`database_schema_updates.md`](./database_schema_updates.md)).
+- Lint gate wiring (found during the pre-deploy green gate): root
+  `npm run lint` → `lint:backend` → `cd backend && npm run lint` fails with
+  `Missing script: "lint"` — `backend/package.json` has no `lint` script, so
+  ESLint has never actually run on the backend from the root gate (the frontend
+  side has also failed plugin resolution from root before). The `tsc` build is
+  the effective backend type-gate today. Fix as its own focused pass: add a
+  `"lint"` script to `backend/package.json`, confirm `frontend` lint resolves
+  its ESLint plugins from root, then triage whatever findings surface — do NOT
+  bundle it into an unrelated change.
+
+## Notes / corrections logged during the program
+
+- `config/timezone.ts` and `config/ai.ts` are **not** dead — the first pins the
+  process timezone (imported first in `index.ts`); the second exposes the
+  `AiProviderConfig` type and a stable import path. Do not remove them.
+- Tremor was removed (unused). The custom KPI/chart components in
+  `frontend/src/components/insights` are the dashboard standard.

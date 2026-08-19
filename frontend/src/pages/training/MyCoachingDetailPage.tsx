@@ -10,6 +10,7 @@ import { ListPageHeader } from '@/components/common/ListPageHeader'
 import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { LegacyImportBanner } from '@/components/common/LegacyImportBanner'
 import { useToast } from '@/hooks/use-toast'
@@ -247,16 +248,16 @@ export default function MyCoachingDetailPage() {
                     </span>
                   </div>
                 ) : (
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input type="checkbox"
+                  <div className="flex items-start gap-3">
+                    <Checkbox id="csr-ack"
                       checked={acknowledged}
                       disabled={isReadOnly}
-                      onChange={e => setAcknowledged(e.target.checked)}
-                      className="mt-0.5 rounded border-slate-300 text-primary" />
-                    <span className="text-[13px] text-slate-700">
+                      onCheckedChange={c => setAcknowledged(c === true)}
+                      className="mt-0.5" />
+                    <label htmlFor="csr-ack" className="text-[13px] text-slate-700 cursor-pointer">
                       I have reviewed this training session, understand the feedback, and commit to the actions outlined.
-                    </span>
-                  </label>
+                    </label>
+                  </div>
                 )
               ) : (
                 <p className="text-[13px] text-slate-400">Not required</p>

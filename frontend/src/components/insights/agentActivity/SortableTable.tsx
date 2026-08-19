@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import {
-  useReactTable, getCoreRowModel, getSortedRowModel, flexRender,
-  type SortingState, type ColumnDef,
+  useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel, flexRender,
+  type SortingState, type PaginationState, type ColumnDef,
 } from '@tanstack/react-table'
 import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ListPagination } from '@/components/common/ListPagination'
 import SortHeaderIcon from './SortHeaderIcon'
 
 /** Column meta understood by SortableTable. */
@@ -28,6 +29,19 @@ interface SortableTableProps<T> {
   minWidth?: string
   /** Optional per-row <tr> classes, e.g. to grey out de-emphasized rows. */
   rowClassName?: (row: T) => string
+  /** Optional row click handler; when set, rows get a pointer cursor. */
+  onRowClick?: (row: T) => void
+  /**
+   * Enable client-side pagination with the shared `ListPagination` footer.
+   * Sorting always applies across the full dataset first, then the visible
+   * page is sliced — so sorting a paginated table sorts everything, not just
+   * the current page. Off by default (all rows render).
+   */
+  paginated?: boolean
+  /** Initial rows per page (paginated only). Defaults to 20. */
+  initialPageSize?: number
+  /** Rows-per-page options for the footer select (paginated only). */
+  pageSizeOptions?: number[]
 }
 
 /**
@@ -37,14 +51,20 @@ interface SortableTableProps<T> {
  * from the table's default.
  */
 export default function SortableTable<T>({
-  columns, data, initialSorting, totalRow, minWidth = 'min-w-[720px]', rowClassName,
+  columns, data, initialSorting, totalRow, minWidth = 'min-w-[720px]', rowClassName, onRowClick,
+  paginated = false, initialPageSize = 20, pageSizeOptions,
 }: SortableTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: initialPageSize })
 
   const table = useReactTable({
     data, columns,
-    state: { sorting }, onSortingChange: setSorting,
+    state: { sorting, ...(paginated ? { pagination } : {}) },
+    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(),
+    ...(paginated
+      ? { onPaginationChange: setPagination, getPaginationRowModel: getPaginationRowModel() }
+      : {}),
   })
 
   const isDirty = !(
@@ -96,7 +116,11 @@ export default function SortableTable<T>({
           </thead>
           <tbody>
             {table.getRowModel().rows.map(row => (
-              <tr key={row.id} className={`border-b border-slate-100 hover:bg-slate-50 ${rowClassName?.(row.original) ?? ''}`}>
+              <tr
+                key={row.id}
+                className={`border-b border-slate-100 hover:bg-slate-50 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName?.(row.original) ?? ''}`}
+                onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+              >
                 {row.getVisibleCells().map(cell => {
                   const meta = metaOf(cell.column)
                   return (
@@ -120,6 +144,20 @@ export default function SortableTable<T>({
           </tbody>
         </table>
       </div>
+
+      {paginated && data.length > 0 && (
+        <div className="mt-3">
+          <ListPagination
+            page={table.getState().pagination.pageIndex + 1}
+            totalPages={table.getPageCount()}
+            totalItems={data.length}
+            pageSize={table.getState().pagination.pageSize}
+            onPageChange={p => table.setPageIndex(p - 1)}
+            onPageSizeChange={s => { table.setPageSize(s); table.setPageIndex(0) }}
+            {...(pageSizeOptions ? { pageSizeOptions } : {})}
+          />
+        </div>
+      )}
     </div>
   )
 }

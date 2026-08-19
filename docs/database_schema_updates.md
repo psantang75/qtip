@@ -1,5 +1,39 @@
 # Database Schema Updates
 
+## Migration workflow (how schema changes ship)
+
+`schema.prisma` models the OLTP core. The Insights **data warehouse is raw SQL**
+and is intentionally *not* fully modeled — two hard Prisma limits make this
+permanent (both verified, not assumed):
+
+- `ie_fact_*` / `ie_stg_*` are **partitioned** (`PARTITION BY RANGE`). Prisma
+  cannot express partitioning. See [.cursor/rules/insights-data-warehouse.mdc](../.cursor/rules/insights-data-warehouse.mdc).
+- `ie_stg_*` have **no primary key**. Prisma Client cannot model a table without
+  a unique id (introspection skips them outright).
+
+Because the model is partial, **never run `prisma migrate dev`**: it diffs the DB
+against the partial model and offers to **DROP those tables (100k+ rows)** and
+recast columns. `prisma db pull` is likewise a dead end — it rewrites the curated
+schema wholesale into a file that doesn't even parse. Both were tested; don't
+re-attempt them.
+
+**To change the schema:**
+
+1. Edit `schema.prisma` for the modeled tables you're touching (keeps the client honest).
+2. Hand-author `backend/prisma/migrations/<UTCyyyymmddHHMMSS>_<name>/migration.sql`
+   with the exact `CREATE/ALTER/DROP` SQL (mirror an existing migration; additive
+   only — never drop/alter existing data without approval).
+3. Apply with **`npx prisma migrate deploy`** — runs pending files in order, never
+   diffs the schema, so unmodeled tables are untouched. This is also how you catch
+   a lagging DB up to the committed history.
+4. `npx prisma generate`; `npx prisma migrate status` should say
+   "Database schema is up to date!".
+
+Runtime connection is centralized in [backend/src/config/prisma.ts](../backend/src/config/prisma.ts)
+(single source of truth via `databaseConfig`). Reference migration following this
+process: `20260818190000_add_perf_indexes_drop_redundant_shift_index` (see
+[database_review.md](database_review.md)).
+
 ## Audit Assignments Table Updates
 
 The `audit_assignments` table has been updated to include additional fields required for the Audit Assignment functionality. These changes provide better support for the assignment workflow, including assigning specific QA analysts, setting time periods for assignments, and managing active/inactive status.

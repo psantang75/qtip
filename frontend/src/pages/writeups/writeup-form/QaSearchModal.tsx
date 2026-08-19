@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { getErrorMessage } from '@/utils/errorHandling'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Search, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
+import { Search, ChevronDown, ChevronRight, ExternalLink, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { optionCls } from '@/utils/forms/formRendererComponents'
 import { formatQualityDate, priorNinetyDays } from '@/utils/dateFormat'
 import { useToast } from '@/hooks/use-toast'
 import writeupService, { type QaSearchResult } from '@/services/writeupService'
@@ -68,8 +69,7 @@ interface SubmissionRow {
 function AnswerPicker({ question, value, onChange }: { question: FormQuestion; value: string; onChange: (v: string) => void }) {
   const chip = (label: string, val: string) => (
     <button key={val} type="button" onClick={() => onChange(value === val ? '' : val)}
-      className={cn('px-3 py-1 rounded-md border text-[12px] font-medium transition-colors',
-        value === val ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:border-primary hover:text-primary')}>
+      className={cn('h-7 px-3 text-[12px] rounded border font-medium transition-all self-start text-left', optionCls(value === val))}>
       {label}
     </button>
   )
@@ -233,7 +233,7 @@ export function QaSearchModal({ csrId, onImport, onClose }: QaSearchModalProps) 
                                   <button type="button" className="w-full text-left" onClick={() => toggleQuestion(q.id)}>
                                     <div className="flex items-start gap-2">
                                       <span className={cn('mt-0.5 w-4 h-4 shrink-0 rounded border-2 flex items-center justify-center', isSelected ? 'border-primary bg-primary' : 'border-slate-300')}>
-                                        {isSelected && <span className="text-white text-[9px] font-bold">✓</span>}
+                                        {isSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
                                       </span>
                                       <span className={cn('text-[12px] flex-1', isSelected ? 'text-primary font-medium' : 'text-slate-700')}>{q.question_text}</span>
                                       <span className="text-[10px] text-slate-400 shrink-0 mt-0.5 uppercase tracking-wide">{q.question_type.replace('_', ' ')}</span>

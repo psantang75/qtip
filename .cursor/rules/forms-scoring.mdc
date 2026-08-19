@@ -1,0 +1,34 @@
+---
+description: Forms & scoring engine map (form builder, renderer, scoring/rollup)
+globs: frontend/src/utils/forms/**,frontend/src/pages/quality/form-builder/**,backend/src/controllers/form.controller.ts,backend/src/services/*[Ff]orm*.ts,backend/src/services/*[Ss]cor*.ts
+alwaysApply: false
+---
+
+# Forms & Scoring
+
+Audit forms are category → question → option trees; submissions are scored by a
+shared engine used in both preview and final scoring.
+
+## Frontend engine (`frontend/src/utils/forms/`)
+
+- `formBuilder.ts` — build/normalize form definitions.
+- `formRenderer.ts`, `formRenderPrep.ts`, `formRenderTypes.ts` — render pipeline.
+- `formRendererComponents.tsx` — canonical question widgets. `YesNoQuestion`,
+  `RadioQuestion`, `MultiSelectQuestion`, and the `optionCls` pill pattern live
+  here. REUSE `optionCls` for any "pick one of N" UI — do not hand-roll radios.
+- `completedFormRenderer.tsx`, `scoreRenderer.tsx` — read-only completed views.
+- `scoringEngine.ts`, `rollupEngine.ts` — the single source of truth for scores
+  and category/question rollups. Do not duplicate scoring math elsewhere; call these.
+- `formConditions.ts` — conditional-display rule evaluation.
+- `formValidation.ts` — form-level validation.
+
+## Backend
+
+Form definition CRUD is in `backend/src/controllers/form.controller.ts` +
+`FormService`; follow [.cursor/rules/backend-api-conventions.mdc](mdc:.cursor/rules/backend-api-conventions.mdc).
+
+## Docs
+
+Scoring logic: [docs/instructions/scoring_logic.md](mdc:docs/instructions/scoring_logic.md).
+Form builder: [docs/form_builder_instructions.md](mdc:docs/form_builder_instructions.md).
+Preview scoring panel: [docs/scoring_preview.md](mdc:docs/scoring_preview.md).

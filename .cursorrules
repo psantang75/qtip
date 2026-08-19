@@ -16,9 +16,10 @@ Express + Prisma + MySQL backend.
 - Tailwind CSS 3 for styling
 - shadcn/ui for ALL UI components 
   (buttons, inputs, dialogs, dropdowns, tables, forms)
-- Tremor for dashboard components 
-  (KPI cards, metric tiles, charts, progress bars)
-- Recharts for all chart rendering (via Tremor)
+- Custom KPI/chart components in 
+  frontend/src/components/insights (KPI cards, metric tiles) — 
+  the project standard; Tremor is NOT used (removed as an unused dep)
+- Recharts for all chart rendering
 - react-querybuilder for filter/query builder UI
 - React Hook Form for all forms
 - dnd-kit for drag and drop
@@ -41,8 +42,9 @@ Express + Prisma + MySQL backend.
 - ALWAYS use shadcn/ui components first. 
   Never create raw HTML buttons, inputs, or 
   form elements.
-- ALWAYS use Tremor for any dashboard metric 
-  cards, KPI tiles, or chart wrappers.
+- ALWAYS reuse the existing custom KPI/metric-card and 
+  chart-wrapper components (frontend/src/components/insights) 
+  for dashboards — never reintroduce Tremor.
 - ALWAYS use TanStack Table for any data table 
   or grid — never build custom table HTML.
 - ALWAYS use TanStack Query for API calls — 
@@ -108,6 +110,5 @@ Dark text:      #000000  (Tailwind: text-neutral-900)
 
 shadcn/ui components will automatically use 
 --primary (#00aeef) for their primary variant.
-Tremor components will use --tremor-brand (#00aeef).
 Always prefer semantic class names (bg-primary, 
 text-primary) over hardcoded hex values in components.

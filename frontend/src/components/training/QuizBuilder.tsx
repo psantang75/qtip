@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, HelpCircle } from 'lucide-react'
+import { Plus, Trash2, HelpCircle, CheckCircle2, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
@@ -161,9 +161,14 @@ export function QuizBuilder({ value, onChange, errors, topics }: QuizBuilderProp
                     {q.options.map((opt, oIdx) => (
                       <div key={oIdx} className={cn('flex items-center gap-2 p-2 rounded-lg border',
                         q.correct_option === oIdx ? 'border-primary/40 bg-blue-50/50' : 'border-transparent bg-slate-50')}>
-                        <input type="radio" name={`correct-${qIdx}`} checked={q.correct_option === oIdx}
-                          onChange={() => updateQuestion(qIdx, 'correct_option', oIdx)}
-                          className="h-4 w-4 text-primary shrink-0" />
+                        <button type="button" onClick={() => updateQuestion(qIdx, 'correct_option', oIdx)}
+                          className="shrink-0 text-slate-300 hover:text-primary transition-colors"
+                          title="Mark as correct answer"
+                          aria-label={`Mark option ${String.fromCharCode(65 + oIdx)} as the correct answer`}>
+                          {q.correct_option === oIdx
+                            ? <CheckCircle2 className="h-4 w-4 text-primary" />
+                            : <Circle className="h-4 w-4" />}
+                        </button>
                         <Input value={opt} onChange={e => updateOption(qIdx, oIdx, e.target.value)}
                           placeholder={`Option ${String.fromCharCode(65 + oIdx)}`}
                           className="flex-1 h-7 text-[12px] border-0 bg-transparent focus-visible:ring-0 px-1" />
@@ -182,7 +187,7 @@ export function QuizBuilder({ value, onChange, errors, topics }: QuizBuilderProp
                       </button>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-2">Select the radio button next to the correct answer</p>
+                  <p className="text-[11px] text-slate-400 mt-2">Click the circle next to the correct answer</p>
                   {qErr && <p className="text-[11px] text-red-600 mt-1">{qErr}</p>}
                 </div>
               )

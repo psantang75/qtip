@@ -1,0 +1,50 @@
+---
+description: Backend API conventions — data access (Prisma), error/response envelope, validation, thin controllers
+globs: backend/src/controllers/**,backend/src/routes/**,backend/src/services/**
+alwaysApply: false
+---
+
+# Backend API Conventions
+
+Layering: `routes/` (thin) → `controllers/` (parse + shape response) →
+`services/` (business logic) → Prisma → MySQL. See [docs/ARCHITECTURE.md](mdc:docs/ARCHITECTURE.md).
+
+## Data access — Prisma is the standard
+
+- Use Prisma (`@prisma/client`) for ALL DB operations. Do NOT add new `mysql2`
+  pool queries (`pool.execute` / `pool.query`).
+- A legacy raw-pool layer still exists (`config/database.ts` + some
+  `repositories/`). It is being migrated onto Prisma. When you touch one of
+  those files, prefer converting it rather than adding more raw SQL.
+- Admin CRUD controllers are all on Prisma + the `AppError` envelope now —
+  `insightsAdminKpi`, `insightsAdminPage`, `insightsAdminSourceReport`
+  (uses the `IeSourceReport` model), and `insightsAdminIngestion`. Mirror them.
+- Do NOT "convert" the Insights **data-warehouse** layer (`services/QC*Data.ts`,
+  `QCKpiService`, `workers/`, rollups, `insightsQC`/`insights` read controllers):
+  it is deliberately hand-written SQL for analytical performance — see
+  [.cursor/rules/insights-data-warehouse.mdc](mdc:.cursor/rules/insights-data-warehouse.mdc).
+
+## Error / response envelope (review items #23, #89)
+
+There is a canonical policy in [backend/src/utils/errorHandler.ts](mdc:backend/src/utils/errorHandler.ts). Only three shapes are allowed:
+
+- (A) Rich envelope — throw `AppError` (or `createValidationError` /
+  `createNotFoundError` / etc.) and let the global `errorHandler` render it.
+  Wrap async handlers in `asyncHandler`. Use this for ALL new controller errors.
+- (B) Flat auth envelope — `ApiErrors.*` from `utils/apiError.ts`, only in
+  auth/authorization middleware that short-circuits before a controller.
+- (C) Legacy `{ success, message, data }` — do NOT add to new handlers. Existing
+  (C) call sites migrate to (A) endpoint-by-endpoint.
+
+Do not invent a fourth shape. Throw, don't hand-roll `res.status().json({ error })`.
+
+## Validation & logging
+
+- Validate all request input with Zod schemas in `validation/`.
+- Log with Winston (`config/logger.ts`); never `console.log` in request paths.
+
+## Size & duplication
+
+- Refactor controllers/services at 200–300 lines; keep business logic in services.
+- Before adding a helper (pagination parsing, date formatting, response shaping),
+  search for an existing one — these are frequently duplicated.

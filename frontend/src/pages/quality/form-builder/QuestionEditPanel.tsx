@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ConditionEditor } from './ConditionEditor'
 import type { AllQuestionRef } from './questionCardTypes'
 
@@ -102,14 +103,14 @@ export function QuestionEditPanel({ qi, state, actions, categoryQuestions, gateI
 
       {(lType === 'YES_NO' || lType === 'SCALE') && (
         <div className="flex items-center gap-1.5">
-          <input type="checkbox" id={`na-${qi}`} checked={lNa} onChange={e => setLNa(e.target.checked)} className="h-3.5 w-3.5 rounded border-slate-300" />
+          <Checkbox id={`na-${qi}`} checked={lNa} onCheckedChange={c => setLNa(c === true)} className="h-3.5 w-3.5" />
           <label htmlFor={`na-${qi}`} className="text-xs text-slate-700 cursor-pointer">Allow N/A answer</label>
         </div>
       )}
 
       <div className="space-y-2">
         <div className="flex items-center gap-1.5">
-          <input type="checkbox" id={`cond-${qi}`} checked={lCond} onChange={e => setLCond(e.target.checked)} className="h-3.5 w-3.5 rounded border-slate-300" />
+          <Checkbox id={`cond-${qi}`} checked={lCond} onCheckedChange={c => setLCond(c === true)} className="h-3.5 w-3.5" />
           <label htmlFor={`cond-${qi}`} className="text-xs font-medium text-slate-700 cursor-pointer">
             Conditional Logic — only show this question when conditions are met
           </label>
@@ -357,15 +358,15 @@ function RollupSection({
                   )
                 }
                 return (
-                  <label key={q.id} className="flex items-start gap-2 px-2.5 py-1.5 hover:bg-slate-50 cursor-pointer">
-                    <input
-                      type="checkbox"
+                  <div key={q.id} className="flex items-start gap-2 px-2.5 py-1.5 hover:bg-slate-50">
+                    <Checkbox
+                      id={`member-${q.id}`}
                       checked={checked}
-                      onChange={() => toggleMember(q.id)}
-                      className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300"
+                      onCheckedChange={() => toggleMember(q.id)}
+                      className="mt-0.5 h-3.5 w-3.5"
                     />
-                    <span className="flex-1 min-w-0 text-xs text-slate-700">{q.text || '(untitled)'}</span>
-                  </label>
+                    <label htmlFor={`member-${q.id}`} className="flex-1 min-w-0 text-xs text-slate-700 cursor-pointer">{q.text || '(untitled)'}</label>
+                  </div>
                 )
               })}
             </div>

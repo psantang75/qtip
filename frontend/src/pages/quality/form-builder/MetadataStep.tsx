@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import listService from '@/services/listService'
 
@@ -84,10 +85,10 @@ function SortableMetadataField({ field, idx, onUpdate, onRemove }: {
           </Select>
         </div>
         <div className="col-span-3 flex items-center gap-1.5">
-          <input type="checkbox" checked={field.is_required} disabled={field.field_type === 'SPACER'}
-            onChange={e => onUpdate(idx, { is_required: e.target.checked })}
-            className="h-4 w-4 rounded border-slate-300" />
-          <span className="text-xs text-slate-600">Required</span>
+          <Checkbox id={`required-${idx}`} checked={field.is_required} disabled={field.field_type === 'SPACER'}
+            onCheckedChange={c => onUpdate(idx, { is_required: c === true })}
+            className="h-4 w-4" />
+          <label htmlFor={`required-${idx}`} className="text-xs text-slate-600 cursor-pointer">Required</label>
         </div>
         <div className="col-span-1 flex justify-center">
           <button onClick={() => onRemove(idx)} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Remove field">

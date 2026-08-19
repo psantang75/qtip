@@ -23,6 +23,7 @@ import aiReviewerService, {
   type CalibrationCorrection,
 } from '@/services/aiReviewerService'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/hooks/use-toast'
 
 interface Props {
@@ -94,15 +95,15 @@ export function LearnedCorrectionsPanel({ formId }: Props) {
               {activeItems.length} active
             </span>
           )}
-          <label className="flex items-center gap-1 cursor-pointer select-none">
-            <input
-              type="checkbox"
+          <div className="flex items-center gap-1 select-none">
+            <Checkbox
+              id="show-absorbed"
               checked={showAbsorbed}
-              onChange={(e) => setShowAbsorbed(e.target.checked)}
+              onCheckedChange={(c) => setShowAbsorbed(c === true)}
               className="h-3.5 w-3.5"
             />
-            Show absorbed
-          </label>
+            <label htmlFor="show-absorbed" className="cursor-pointer">Show absorbed</label>
+          </div>
         </div>
       </div>
 

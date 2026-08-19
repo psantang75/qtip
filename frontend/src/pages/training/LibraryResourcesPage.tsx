@@ -23,6 +23,7 @@ import { StatusActiveFilter } from '@/components/common/StatusActiveFilter'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
@@ -182,8 +183,6 @@ export default function LibraryResourcesPage() {
     saveMut.mutate(form)
   }
 
-  const sel = 'w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-primary/40'
-
   return (
     <ListPageShell>
       <ListPageHeader title="Resources"
@@ -298,10 +297,19 @@ export default function LibraryResourcesPage() {
 
             <div>
               <label className="text-[12px] font-medium text-slate-700 block mb-1">Resource Type</label>
-              <select className={sel} value={form.resource_type}
-                onChange={e => setForm(f => ({ ...f, resource_type: e.target.value as ResourceType, url: '', file: null }))}>
-                {RESOURCE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
+              <Select
+                value={form.resource_type}
+                onValueChange={v => setForm(f => ({ ...f, resource_type: v as ResourceType, url: '', file: null }))}
+              >
+                <SelectTrigger className="w-full h-9 text-[13px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RESOURCE_TYPES.map(t => (
+                    <SelectItem key={t.value} value={t.value} className="text-[13px]">{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {form.resource_type === 'URL' ? (

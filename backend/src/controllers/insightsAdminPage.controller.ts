@@ -1,9 +1,29 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import pool from '../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
-import logger from '../config/logger';
+import prisma from '../config/prisma';
+import {
+  asyncHandler,
+  createValidationError,
+  createNotFoundError,
+  createAuthorizationError,
+} from '../utils/errorHandler';
 import { qcCacheClear } from '../middleware/qcCache';
+
+/**
+ * Insights Admin Page-access controller — CRUD over the `ie_page` access model
+ * (`ie_page_role_access`, `ie_page_department_access`, `ie_page_user_override`)
+ * that gates the Insights dashboards (`/api/insights/admin/pages/*`).
+ *
+ * Data access: Prisma only. Migrated off the legacy `mysql2` pool as part of
+ * the "one data-access layer" cleanup, mirroring `insightsAdminKpi.controller.ts`.
+ * Response shapes are preserved exactly for the frontend `insightsService.ts`
+ * types (`IePage` with flattened `role_access[].role_name`,
+ * `department_access[].{department_name,hierarchy_path}`, and
+ * `IePageUserOverride.{user_name,granter_name}`). One intentional improvement:
+ * `can_access` is now a real boolean (Prisma) rather than the raw `0/1` the
+ * pool returned — this matches the declared TS type. Errors use the canonical
+ * `AppError` envelope rendered by the global handler (see `utils/errorHandler.ts`).
+ */
 
 const VALID_DATA_SCOPES = ['ALL', 'DIVISION', 'DEPARTMENT', 'SELF'] as const;
 
@@ -36,99 +56,77 @@ const updatePageDepartmentAccessBodySchema = z.object({
   departments: z.array(pageAccessDepartmentSchema),
 });
 
+function parseId(raw: string, label: string): number {
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) throw createValidationError(`Invalid ${label}`);
+  return id;
+}
+
 /**
  * GET /api/insights/admin/pages
  */
-export const listPages = async (_req: Request, res: Response): Promise<void> => {
-  try {
-    const [pages] = await pool.execute<RowDataPacket[]>(
-      'SELECT * FROM ie_page ORDER BY category, sort_order'
-    );
+export const listPages = asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+  const pages = await prisma.iePage.findMany({
+    orderBy: [{ category: 'asc' }, { sort_order: 'asc' }],
+    include: {
+      role_access: {
+        orderBy: { role_id: 'asc' },
+        include: { role: { select: { role_name: true } } },
+      },
+      department_access: {
+        include: { department: { select: { department_name: true, hierarchy_path: true } } },
+      },
+    },
+  });
 
-    const [access] = await pool.execute<RowDataPacket[]>(
-      `SELECT a.*, r.role_name FROM ie_page_role_access a JOIN roles r ON a.role_id = r.id ORDER BY a.page_id, r.id`
-    );
-
-    const [deptAccess] = await pool.execute<RowDataPacket[]>(
-      `SELECT da.*, d.department_name, d.hierarchy_path
-       FROM ie_page_department_access da
-       JOIN ie_dim_department d ON da.department_key = d.department_key
-       ORDER BY da.page_id, d.department_name`
-    );
-
-    const accessByPage = new Map<number, RowDataPacket[]>();
-    for (const row of access) {
-      if (!accessByPage.has(row.page_id)) accessByPage.set(row.page_id, []);
-      accessByPage.get(row.page_id)!.push(row);
-    }
-
-    const deptAccessByPage = new Map<number, RowDataPacket[]>();
-    for (const row of deptAccess) {
-      if (!deptAccessByPage.has(row.page_id)) deptAccessByPage.set(row.page_id, []);
-      deptAccessByPage.get(row.page_id)!.push(row);
-    }
-
-    const result = pages.map((p) => ({
-      ...p,
-      role_access: accessByPage.get(p.id) ?? [],
-      department_access: deptAccessByPage.get(p.id) ?? [],
-    }));
-
-    res.json(result);
-  } catch (error) {
-    logger.error('listPages error:', error);
-    res.status(500).json({ error: 'Failed to list pages' });
-  }
-};
+  res.json(
+    pages.map((p) => {
+      const { role_access, department_access, ...page } = p;
+      return {
+        ...page,
+        role_access: role_access.map(({ role, ...a }) => ({ ...a, role_name: role.role_name })),
+        department_access: department_access
+          .map(({ department, ...da }) => ({
+            ...da,
+            department_name: department.department_name,
+            hierarchy_path: department.hierarchy_path,
+          }))
+          // Match the legacy ORDER BY d.department_name.
+          .sort((x, y) => x.department_name.localeCompare(y.department_name)),
+      };
+    }),
+  );
+});
 
 /**
  * PUT /api/insights/admin/pages/:id/access
  * Body: { roles: [{ role_id, can_access, data_scope }] }
  */
-export const updatePageAccess = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const pageId = parseInt(req.params.id);
-    if (isNaN(pageId)) { res.status(400).json({ error: 'Invalid page id' }); return; }
+export const updatePageAccess = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const pageId = parseId(req.params.id, 'page id');
+  const { roles } = updatePageAccessBodySchema.parse(req.body);
 
-    const parsed = updatePageAccessBodySchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation error', details: parsed.error.errors.map(e => ({ path: e.path.join('.'), message: e.message })) });
-      return;
-    }
+  // Replace-set the page's role grants atomically.
+  await prisma.$transaction([
+    prisma.iePageRoleAccess.deleteMany({ where: { page_id: pageId } }),
+    prisma.iePageRoleAccess.createMany({
+      data: roles.map((r) => ({
+        page_id: pageId,
+        role_id: r.role_id,
+        can_access: r.can_access,
+        data_scope: r.data_scope,
+      })),
+    }),
+  ]);
 
-    const { roles } = parsed.data;
+  // Invalidate the QC HTTP response cache so the new grants take effect
+  // immediately — without this, a freshly added user with `qc_coaching`
+  // would keep getting 403s from `/api/insights/qc/kpis` until the cache
+  // entry expired. See `middleware/qcCache.ts`.
+  qcCacheClear();
 
-    const conn = await pool.getConnection();
-    try {
-      await conn.beginTransaction();
-      await conn.execute('DELETE FROM ie_page_role_access WHERE page_id = ?', [pageId]);
-
-      for (const r of roles) {
-        await conn.execute(
-          'INSERT INTO ie_page_role_access (page_id, role_id, can_access, data_scope) VALUES (?, ?, ?, ?)',
-          [pageId, r.role_id, r.can_access ? 1 : 0, r.data_scope]
-        );
-      }
-      await conn.commit();
-    } catch (err) {
-      await conn.rollback();
-      throw err;
-    } finally {
-      conn.release();
-    }
-
-    // Invalidate the QC HTTP response cache so the new grants take effect
-    // immediately — without this, a freshly added user with `qc_coaching`
-    // would keep getting 403s from `/api/insights/qc/kpis` until the cache
-    // entry expired. See `middleware/qcCache.ts`.
-    qcCacheClear();
-
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('updatePageAccess error:', error);
-    res.status(500).json({ error: 'Failed to update page access' });
-  }
-};
+  res.json({ success: true });
+});
 
 /**
  * PUT /api/insights/admin/pages/:id/department-access
@@ -138,140 +136,132 @@ export const updatePageAccess = async (req: Request, res: Response): Promise<voi
  * Additive to role access: a user can open the page if their role grant OR any
  * matching department grant (their dept or an ancestor) allows it.
  */
-export const updatePageDepartmentAccess = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const pageId = parseInt(req.params.id);
-    if (isNaN(pageId)) { res.status(400).json({ error: 'Invalid page id' }); return; }
+export const updatePageDepartmentAccess = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const pageId = parseId(req.params.id, 'page id');
+  const { departments } = updatePageDepartmentAccessBodySchema.parse(req.body);
 
-    const parsed = updatePageDepartmentAccessBodySchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation error', details: parsed.error.errors.map(e => ({ path: e.path.join('.'), message: e.message })) });
-      return;
-    }
+  // Replace-set atomically. An empty `departments` array clears all grants, so
+  // only issue the createMany when there is something to insert.
+  await prisma.$transaction([
+    prisma.iePageDepartmentAccess.deleteMany({ where: { page_id: pageId } }),
+    ...(departments.length
+      ? [
+          prisma.iePageDepartmentAccess.createMany({
+            data: departments.map((d) => ({
+              page_id: pageId,
+              department_key: d.department_key,
+              can_access: d.can_access,
+              data_scope: d.data_scope,
+            })),
+          }),
+        ]
+      : []),
+  ]);
 
-    const { departments } = parsed.data;
+  // Department grants are now the access gate (opt-in), so a change here can
+  // flip who reaches a page. Invalidate the QC HTTP response cache — same as
+  // updatePageAccess — so the new gate takes effect immediately instead of
+  // lingering behind a cached 200/403. See `middleware/qcCache.ts`.
+  qcCacheClear();
 
-    const conn = await pool.getConnection();
-    try {
-      await conn.beginTransaction();
-      await conn.execute('DELETE FROM ie_page_department_access WHERE page_id = ?', [pageId]);
-
-      for (const d of departments) {
-        await conn.execute(
-          'INSERT INTO ie_page_department_access (page_id, department_key, can_access, data_scope) VALUES (?, ?, ?, ?)',
-          [pageId, d.department_key, d.can_access ? 1 : 0, d.data_scope]
-        );
-      }
-      await conn.commit();
-    } catch (err) {
-      await conn.rollback();
-      throw err;
-    } finally {
-      conn.release();
-    }
-
-    // Department grants are now the access gate (opt-in), so a change here can
-    // flip who reaches a page. Invalidate the QC HTTP response cache — same as
-    // updatePageAccess — so the new gate takes effect immediately instead of
-    // lingering behind a cached 200/403. See `middleware/qcCache.ts`.
-    qcCacheClear();
-
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('updatePageDepartmentAccess error:', error);
-    res.status(500).json({ error: 'Failed to update page department access' });
-  }
-};
+  res.json({ success: true });
+});
 
 /**
  * GET /api/insights/admin/departments
  * Current (is_current) conformed departments for the access picker.
  */
-export const listDepartments = async (_req: Request, res: Response): Promise<void> => {
-  try {
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT department_key, department_id, department_name, parent_id, hierarchy_path
-       FROM ie_dim_department
-       WHERE is_current = 1
-       ORDER BY department_name`
-    );
-    res.json(rows);
-  } catch (error) {
-    logger.error('listDepartments error:', error);
-    res.status(500).json({ error: 'Failed to list departments' });
-  }
-};
+export const listDepartments = asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+  const rows = await prisma.ieDimDepartment.findMany({
+    where: { is_current: true },
+    orderBy: { department_name: 'asc' },
+    select: {
+      department_key: true,
+      department_id: true,
+      department_name: true,
+      parent_id: true,
+      hierarchy_path: true,
+    },
+  });
+  res.json(rows);
+});
 
 /**
  * GET /api/insights/admin/pages/:id/overrides
  */
-export const listOverrides = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const pageId = parseInt(req.params.id);
-    if (isNaN(pageId)) { res.status(400).json({ error: 'Invalid page id' }); return; }
+export const listOverrides = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const pageId = parseId(req.params.id, 'page id');
 
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT o.*, u.username as user_name, g.username as granter_name
-       FROM ie_page_user_override o
-       JOIN users u ON o.user_id = u.id
-       JOIN users g ON o.granted_by = g.id
-       WHERE o.page_id = ?
-       ORDER BY o.granted_at DESC`,
-      [pageId]
-    );
-    res.json(rows);
-  } catch (error) {
-    logger.error('listOverrides error:', error);
-    res.status(500).json({ error: 'Failed to list overrides' });
-  }
-};
+  const rows = await prisma.iePageUserOverride.findMany({
+    where: { page_id: pageId },
+    orderBy: { granted_at: 'desc' },
+    include: {
+      user: { select: { username: true } },
+      granter: { select: { username: true } },
+    },
+  });
+
+  res.json(
+    rows.map(({ user, granter, ...o }) => ({
+      ...o,
+      user_name: user.username,
+      granter_name: granter.username,
+    })),
+  );
+});
 
 /**
  * POST /api/insights/admin/pages/:id/overrides
  */
-export const createOverride = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const pageId = parseInt(req.params.id);
-    if (isNaN(pageId)) { res.status(400).json({ error: 'Invalid page id' }); return; }
+export const createOverride = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const pageId = parseId(req.params.id, 'page id');
+  const grantedBy = req.user?.user_id;
+  if (grantedBy == null) throw createAuthorizationError('Not authenticated');
 
-    const parsed = createOverrideSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation error', details: parsed.error.errors.map(e => ({ path: e.path.join('.'), message: e.message })) });
-      return;
-    }
+  const d = createOverrideSchema.parse(req.body);
+  const dataScope = d.data_scope ?? null;
+  const expiresAt = d.expires_at ? new Date(d.expires_at) : null;
+  const reason = d.reason ?? null;
 
-    const d = parsed.data;
-    const [result] = await pool.execute<ResultSetHeader>(
-      `INSERT INTO ie_page_user_override (page_id, user_id, can_access, data_scope, granted_by, expires_at, reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE can_access = VALUES(can_access), data_scope = VALUES(data_scope),
-         granted_by = VALUES(granted_by), granted_at = NOW(), expires_at = VALUES(expires_at), reason = VALUES(reason)`,
-      [pageId, d.user_id, d.can_access ? 1 : 0, d.data_scope ?? null, req.user?.user_id, d.expires_at ?? null, d.reason ?? null]
-    );
+  // Replicates INSERT ... ON DUPLICATE KEY UPDATE on the (page_id, user_id)
+  // unique key — an existing grant for the same user is refreshed in place.
+  const saved = await prisma.iePageUserOverride.upsert({
+    where: { uq_page_user: { page_id: pageId, user_id: d.user_id } },
+    create: {
+      page_id: pageId,
+      user_id: d.user_id,
+      can_access: d.can_access,
+      data_scope: dataScope,
+      granted_by: grantedBy,
+      expires_at: expiresAt,
+      reason,
+    },
+    update: {
+      can_access: d.can_access,
+      data_scope: dataScope,
+      granted_by: grantedBy,
+      granted_at: new Date(),
+      expires_at: expiresAt,
+      reason,
+    },
+  });
 
-    res.status(201).json({ id: result.insertId, page_id: pageId, user_id: d.user_id, can_access: d.can_access, data_scope: d.data_scope });
-  } catch (error) {
-    logger.error('createOverride error:', error);
-    res.status(500).json({ error: 'Failed to create override' });
-  }
-};
+  res.status(201).json({
+    id: saved.id,
+    page_id: pageId,
+    user_id: d.user_id,
+    can_access: d.can_access,
+    data_scope: d.data_scope,
+  });
+});
 
 /**
  * DELETE /api/insights/admin/pages/:id/overrides/:overrideId
  */
-export const deleteOverride = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const overrideId = parseInt(req.params.overrideId);
-    if (isNaN(overrideId)) { res.status(400).json({ error: 'Invalid override id' }); return; }
+export const deleteOverride = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const overrideId = parseId(req.params.overrideId, 'override id');
 
-    const [result] = await pool.execute<ResultSetHeader>(
-      'DELETE FROM ie_page_user_override WHERE id = ?', [overrideId]
-    );
-
-    if (result.affectedRows === 0) { res.status(404).json({ error: 'Override not found' }); return; }
-    res.json({ success: true });
-  } catch (error) {
-    logger.error('deleteOverride error:', error);
-    res.status(500).json({ error: 'Failed to delete override' });
-  }
-};
+  const result = await prisma.iePageUserOverride.deleteMany({ where: { id: overrideId } });
+  if (result.count === 0) throw createNotFoundError('Override not found');
+  res.json({ success: true });
+});

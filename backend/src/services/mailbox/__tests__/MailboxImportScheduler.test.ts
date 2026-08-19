@@ -18,6 +18,11 @@ vi.mock('../../../config/logger', () => ({
 
 vi.mock('../../../config/environment', () => ({
   config: { MAX_FILE_SIZE: 5_242_880 },
+  // prisma.ts (imported transitively) reads its connection params from here.
+  databaseConfig: {
+    host: 'localhost', user: 'test', password: 'test', database: 'qtip_test',
+    waitForConnections: true, connectionLimit: 10, queueLimit: 0, timezone: 'Z', charset: 'utf8mb4',
+  },
   mailboxImportConfig: {
     enabled: true,
     ewsUrl: 'https://mail.example.com/EWS/Exchange.asmx',
