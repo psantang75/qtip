@@ -1,3 +1,24 @@
+/**
+ * Auth controller — INTENTIONAL EXCEPTION to the Phase 2.2 `AppError` envelope
+ * migration. Do NOT wrap these handlers in `asyncHandler` / convert their
+ * non-2xx responses to thrown `AppError`. Every response shape here is a typed
+ * API CONTRACT that clients branch on, and the global error envelope would
+ * silently change those shapes:
+ *   - `login` re-emits AuthenticationService's `{ error, code }` with the
+ *     service's own `statusCode`. Routing a non-`AppError` through the global
+ *     handler collapses a bad-credentials 401 into a 500.
+ *   - `validateToken` / `refreshToken` / `logout` / `getSessionStatus` return
+ *     typed payloads (`valid` / `success` / `authenticated`) on BOTH success and
+ *     failure so the client (and the apiClient refresh-on-401 interceptor, which
+ *     reads `data.code` + the refresh `{ success, token }` shape) can branch.
+ *   - `forgotPassword` deliberately always returns 200 (anti-enumeration).
+ *   - `resetPassword` / `validateResetTokenEndpoint` return `{ ok }` /
+ *     `{ valid, reason }` that `frontend authService` reads field-by-field.
+ * The frontend's `getBackendMessage` explicitly supports the `{ error: '…' }`
+ * auth shape. These endpoints already use correct status codes, structured
+ * payloads, and generic 5xx messages — there is no hardening to gain by
+ * migrating, only sign-in/refresh/reset breakage to risk.
+ */
 import { Request, Response } from 'express';
 import { AuthenticationService } from '../services/AuthenticationService';
 import { AuthRepository } from '../repositories/AuthRepository';

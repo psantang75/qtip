@@ -272,8 +272,9 @@ These were started as verified pilots; continue them under the cadence above:
   `parsePositiveInt` handlers, and `insightsAdminIngestion` (`clampLimit`). Use
   `parsePagination` for any NEW list endpoint — do not re-introduce inline parsing.
 - Error-envelope migration (legacy `res.status(n).json({ message })` / shape C →
-  thrown `AppError` + `asyncHandler`, rendered as shape A) — Phase 2, part 2.2, IN
-  PROGRESS. Safe because the frontend's shared `utils/errorHandling.ts`
+  thrown `AppError` + `asyncHandler`, rendered as shape A) — Phase 2, part 2.2,
+  ✅ COMPLETE (all target controllers migrated; `auth` a documented exception).
+  Safe because the frontend's shared `utils/errorHandling.ts`
   (`getBackendMessage`/`getErrorMessage`) already normalizes shapes A/B/C and keys
   401/403/5xx off HTTP status — so flipping a controller's ERROR path is transparent
   **iff** the HTTP status and the SUCCESS payload are preserved verbatim.
@@ -330,11 +331,23 @@ These were started as verified pilots; continue them under the cadence above:
     `admin.controller.ts`; the 8 coaching handlers → `controllers/admin/adminCoaching.controller.ts`,
     mirroring the existing `admin/emailTemplates.controller.ts`) is a low-risk mechanical
     move + route rewire, not a re-churn of error logic.
-  - Order (risk-first): ✅ `dispute` → ✅ `coaching` →
+  - DECISION: `auth.controller.ts` is an **intentional exception** — NOT migrated.
+    Its non-2xx responses are typed API contracts the client branches on, not
+    generic errors: `login` re-emits AuthenticationService's `{error,code}`+
+    `statusCode` (routing a non-`AppError` through the global handler would turn a
+    bad-creds **401 into a 500**); `validateToken`/`refreshToken`/`logout`/
+    `getSessionStatus` return `{valid}`/`{success}`/`{authenticated}` payloads on
+    both success AND failure (the `apiClient` refresh-on-401 interceptor reads
+    `data.code` + the refresh `{success,token}` shape); `forgotPassword` always 200
+    (anti-enumeration); `resetPassword`/`validate` return `{ok}`/`{valid,reason}`
+    that `frontend authService` reads field-by-field. No hardening to gain (correct
+    statuses, structured payloads, generic 5xx messages already), only sign-in
+    breakage to risk. Guardrail comment added at the top of the file so no future
+    agent "fixes" it. **Phase 2.2 is now complete.**
+  - Order (risk-first, all done): ✅ `dispute` → ✅ `coaching` →
     ✅ `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` → ✅ `admin` →
-    `auth` LAST (sensitive; keep `{token,user}`/`{valid}`/`{ok}`
-    success shapes untouched). Add controller tests per slice, mirroring the
-    `insightsAdmin*` / dispute pattern.
+    ✅ `auth` (documented exception, no change). Controller tests added per slice,
+    mirroring the `insightsAdmin*` / dispute pattern.
 
 ## Notes / corrections logged during the program
 
