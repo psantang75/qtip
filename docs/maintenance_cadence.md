@@ -327,10 +327,22 @@ These were started as verified pilots; continue them under the cadence above:
     now-dead `serviceLogger` import (`logger` stays for `getRoleId` + attachment I/O).
     Covered by 22 new tests in `controllers/__tests__/admin.controller.test.ts`.
     tsc + full backend suite green (791 passed), lint 97/0.
-    Handlers are now clean/wrapped, so the Phase 3 file split (dashboard/forms stay in
-    `admin.controller.ts`; the 8 coaching handlers → `controllers/admin/adminCoaching.controller.ts`,
-    mirroring the existing `admin/emailTemplates.controller.ts`) is a low-risk mechanical
-    move + route rewire, not a re-churn of error logic.
+    **SUPERSEDED — `admin.controller.ts` was subsequently DELETED as dead code**
+    (see next bullet). The envelope migration above is preserved in git history only;
+    the previously-planned Phase 3 split of this file is therefore cancelled.
+  - DEAD-CODE REMOVAL (post-stage-verify audit): the stage smoke test exposed that
+    the admin dashboard/coaching/completed-forms screens no longer exist in the UI —
+    their only frontend caller, `services/adminService.ts`, was **orphaned** (nothing
+    imports it; the Training → Coaching area serves every role via `/api/trainer/*` =
+    `coaching.controller.ts`). Repo-wide audit confirmed zero live callers of
+    `/api/admin/{stats,csr-activity,coaching-sessions*,completed-forms*,csrs}` (frontend,
+    e2e, and backend all clean; `admin.controller` imported only by `admin.routes` + its
+    own test). Removed: `frontend/src/services/adminService.ts`,
+    `backend/src/controllers/admin.controller.ts` + its test, and the 14 route
+    registrations + multer setup in `admin.routes.ts` (which now hosts only the live
+    **email-templates** admin routes). Kept: `admin/emailTemplates.controller.ts`
+    (live — `AdminEmailTemplatesPage`). Net: backend + frontend tsc clean, 769 tests
+    pass, lint 85/0 (−12 warnings). ~70 KB of dead code gone.
   - DECISION: `auth.controller.ts` is an **intentional exception** — NOT migrated.
     Its non-2xx responses are typed API contracts the client branches on, not
     generic errors: `login` re-emits AuthenticationService's `{error,code}`+
@@ -345,9 +357,9 @@ These were started as verified pilots; continue them under the cadence above:
     breakage to risk. Guardrail comment added at the top of the file so no future
     agent "fixes" it. **Phase 2.2 is now complete.**
   - Order (risk-first, all done): ✅ `dispute` → ✅ `coaching` →
-    ✅ `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` → ✅ `admin` →
-    ✅ `auth` (documented exception, no change). Controller tests added per slice,
-    mirroring the `insightsAdmin*` / dispute pattern.
+    ✅ `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` → ✅ `admin` (migrated,
+    then DELETED as dead code) → ✅ `auth` (documented exception, no change). Controller
+    tests added per slice, mirroring the `insightsAdmin*` / dispute pattern.
 
 ## Notes / corrections logged during the program
 
