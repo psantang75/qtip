@@ -2,17 +2,30 @@ import { Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  CreateDisputeDTO,
   DisputeListItem,
-  DisputeStatus,
   PaginatedResponse
 } from '../types/dispute.types';
-import { getDisputeScoreHistory, recordDisputeScore } from '../utils/disputeScoreHistory';
+import { getDisputeScoreHistory } from '../utils/disputeScoreHistory';
 import prisma from '../config/prisma';
 import { Prisma, DisputeStatus as PrismaDisputeStatus, DisputeScoreHistoryType } from '../generated/prisma/client';
 import logger from '../config/logger';
 import cacheService from '../services/CacheService';
 import { parsePagination } from '../validation/common';
+import {
+  asyncHandler,
+  createValidationError,
+  createNotFoundError,
+  createAuthorizationError,
+  AppError,
+  ErrorType,
+} from '../utils/errorHandler';
+
+// These handlers throw `AppError` (rendered by the global error middleware as
+// the canonical envelope) instead of the legacy `res.status(n).json({ message })`
+// shape. Success payloads and status codes are unchanged, and the frontend's
+// shared `getBackendMessage`/`getErrorMessage` already reads the `AppError`
+// envelope, so the migration is transparent to callers.
+const unauthorized = () => new AppError('Unauthorized', ErrorType.AUTHORIZATION_ERROR, 401);
 
 // NOTE: getCSRAudits used to live here (mounted at GET /api/disputes/audits)
 // but it was a parallel implementation of the same product feature served by
@@ -24,14 +37,12 @@ import { parsePagination } from '../validation/common';
  * Get audit details for dispute submission
  * @route GET /api/disputes/audit/:submission_id
  */
-export const getAuditDetails = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getAuditDetails = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { submission_id } = req.params;
     const user_id = req.user?.user_id;
 
     if (!user_id) {
-      res.status(401).json({ message: 'Unauthorized' });
-      return;
+      throw unauthorized();
     }
 
     const submissionRows = await prisma.$queryRaw<any[]>`
@@ -44,8 +55,7 @@ export const getAuditDetails = async (req: Request, res: Response): Promise<void
     `;
 
     if (submissionRows.length === 0) {
-      res.status(404).json({ message: 'Audit not found or not accessible' });
-      return;
+      throw createNotFoundError('Audit not found or not accessible');
     }
 
     const callRows = await prisma.$queryRaw<{ transcript: string | null; audio_url: string | null }[]>`
@@ -65,8 +75,7 @@ export const getAuditDetails = async (req: Request, res: Response): Promise<void
     `;
 
     if (disputeRows.length > 0) {
-      res.status(400).json({ message: 'Audit already has an active dispute' });
-      return;
+      throw createValidationError('Audit already has an active dispute');
     }
 
     const answerRows = await prisma.$queryRaw<any[]>`
@@ -100,18 +109,13 @@ export const getAuditDetails = async (req: Request, res: Response): Promise<void
       audio_url: callData.audio_url,
       answers
     });
-  } catch (error) {
-    logger.error('Error fetching audit details:', error);
-    res.status(500).json({ message: 'Failed to retrieve audit details' });
-  }
-};
+});
 
 /**
  * Submit a dispute for an audit
  * @route POST /api/disputes
  */
-export const submitDispute = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const submitDispute = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const submission_id = parseInt(req.body.submission_id);
     const reason = req.body.reason;
     const attachment = req.file;
@@ -119,18 +123,15 @@ export const submitDispute = async (req: Request, res: Response): Promise<void> 
     const user_id = req.user?.user_id;
 
     if (!user_id) {
-      res.status(401).json({ message: 'Unauthorized' });
-      return;
+      throw unauthorized();
     }
 
     if (!submission_id || isNaN(submission_id)) {
-      res.status(400).json({ message: 'Valid submission_id is required' });
-      return;
+      throw createValidationError('Valid submission_id is required');
     }
 
     if (!reason || reason.trim() === '') {
-      res.status(400).json({ message: 'Reason is required' });
-      return;
+      throw createValidationError('Reason is required');
     }
 
     const submissionRows = await prisma.$queryRaw<{ id: number; status: string; total_score: any }[]>`
@@ -142,8 +143,7 @@ export const submitDispute = async (req: Request, res: Response): Promise<void> 
     `;
 
     if (submissionRows.length === 0) {
-      res.status(404).json({ message: 'Submission not found or not accessible' });
-      return;
+      throw createNotFoundError('Submission not found or not accessible');
     }
 
     const disputeRows = await prisma.$queryRaw<{ id: number }[]>`
@@ -151,13 +151,11 @@ export const submitDispute = async (req: Request, res: Response): Promise<void> 
     `;
 
     if (disputeRows.length > 0) {
-      res.status(400).json({ message: 'Audit already has an active dispute' });
-      return;
+      throw createValidationError('Audit already has an active dispute');
     }
 
     if (reason.length > 1000) {
-      res.status(400).json({ message: 'Dispute reason must be less than 1000 characters' });
-      return;
+      throw createValidationError('Dispute reason must be less than 1000 characters');
     }
 
     const attachmentUrl = attachment ? `/uploads/disputes/${attachment.filename}` : null;
@@ -238,19 +236,14 @@ export const submitDispute = async (req: Request, res: Response): Promise<void> 
       message: 'Dispute submitted successfully',
       dispute_id: dispute.id
     });
-  } catch (error) {
-    logger.error('Error submitting dispute:', error);
-    res.status(500).json({ message: 'Failed to submit dispute' });
-  }
-};
+});
 
 /**
  * Get dispute history for the current CSR
  * @route GET /api/disputes/history
  * @route GET /api/csr/disputes/history
  */
-export const getDisputeHistory = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getDisputeHistory = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const user_id = req.user?.user_id;
     // `parsePagination` reads the `perPage`/`limit` aliases and applies the
     // shared `MAX_PAGE_SIZE` cap (pre-production review item #40).
@@ -331,18 +324,13 @@ export const getDisputeHistory = async (req: Request, res: Response): Promise<vo
 
     const response: PaginatedResponse<DisputeListItem> = { data: disputes, total, page, perPage, totalPages };
     res.status(200).json(response);
-  } catch (error) {
-    logger.error('Error fetching dispute history:', error);
-    res.status(500).json({ message: 'Failed to retrieve dispute history' });
-  }
-};
+});
 
 /**
  * Get dispute details by ID
  * @route GET /api/disputes/:disputeId
  */
-export const getDisputeDetails = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getDisputeDetails = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { disputeId } = req.params;
     const user_id = req.user?.user_id;
 
@@ -365,8 +353,7 @@ export const getDisputeDetails = async (req: Request, res: Response): Promise<vo
     `;
 
     if (rows.length === 0) {
-      res.status(404).json({ message: 'Dispute not found or not accessible' });
-      return;
+      throw createNotFoundError('Dispute not found or not accessible');
     }
 
     const dispute = rows[0];
@@ -395,17 +382,13 @@ export const getDisputeDetails = async (req: Request, res: Response): Promise<vo
       attachment_url: dispute.attachment_url,
       score_history: scoreHistory
     });
-  } catch (error) {
-    logger.error('Error fetching dispute details:', error);
-    res.status(500).json({ message: 'Failed to retrieve dispute details' });
-  }
-};
+});
 
 /**
  * Update a dispute (reason and/or attachment)
  * @route PUT /api/disputes/:disputeId
  */
-export const updateDispute = async (req: Request, res: Response): Promise<void> => {
+export const updateDispute = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   let newAttachmentPath: string | null = null;
   let oldAttachmentPath: string | null = null;
 
@@ -430,21 +413,15 @@ export const updateDispute = async (req: Request, res: Response): Promise<void> 
     }
 
     if (!user_id) {
-      cleanupNewFile();
-      res.status(401).json({ message: 'Unauthorized' });
-      return;
+      throw unauthorized();
     }
 
     if (!disputeId || isNaN(Number(disputeId))) {
-      cleanupNewFile();
-      res.status(400).json({ message: 'Valid dispute ID is required' });
-      return;
+      throw createValidationError('Valid dispute ID is required');
     }
 
     if (reason && reason.length > 1000) {
-      cleanupNewFile();
-      res.status(400).json({ message: 'Dispute reason must be less than 1000 characters' });
-      return;
+      throw createValidationError('Dispute reason must be less than 1000 characters');
     }
 
     const disputeRows = await prisma.dispute.findFirst({
@@ -458,20 +435,14 @@ export const updateDispute = async (req: Request, res: Response): Promise<void> 
     });
 
     if (!disputeRows) {
-      cleanupNewFile();
-      res.status(404).json({ message: 'Dispute not found, not accessible, or cannot be edited' });
-      return;
+      throw createNotFoundError('Dispute not found, not accessible, or cannot be edited');
     }
 
     const hasReasonUpdate = reason !== undefined;
     const hasAttachmentUpdate = !!attachment;
 
     if (!hasReasonUpdate && !hasAttachmentUpdate) {
-      cleanupNewFile();
-      res.status(400).json({
-        message: 'At least one field (reason or attachment) must be provided for update'
-      });
-      return;
+      throw createValidationError('At least one field (reason or attachment) must be provided for update');
     }
 
     let reasonUpdated = false;
@@ -479,9 +450,7 @@ export const updateDispute = async (req: Request, res: Response): Promise<void> 
 
     if (hasReasonUpdate) {
       if (!reason || reason.trim() === '') {
-        cleanupNewFile();
-        res.status(400).json({ message: 'Reason cannot be empty' });
-        return;
+        throw createValidationError('Reason cannot be empty');
       }
     }
 
@@ -532,88 +501,78 @@ export const updateDispute = async (req: Request, res: Response): Promise<void> 
 
     res.status(200).json({ message: 'Dispute updated successfully' });
   } catch (error) {
+    // Preserve the file-cleanup guarantee for every failure path (validation
+    // throws included), then let the global handler render the envelope.
     cleanupNewFile();
-    logger.error('Error updating dispute:', error);
-    res.status(500).json({ message: 'Failed to update dispute' });
+    throw error;
   }
-};
+});
 
 /**
  * Download dispute attachment
  * @route GET /api/disputes/:disputeId/attachment
  */
-export const downloadDisputeAttachment = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const disputeId = parseInt(req.params.disputeId);
-    const user_id = req.user?.user_id;
+export const downloadDisputeAttachment = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const disputeId = parseInt(req.params.disputeId);
+  const user_id = req.user?.user_id;
 
-    if (!user_id) {
-      res.status(401).json({ message: 'Unauthorized' });
-      return;
-    }
-
-    if (!disputeId || isNaN(disputeId)) {
-      res.status(400).json({ message: 'Invalid dispute ID' });
-      return;
-    }
-
-    const disputes = await prisma.$queryRaw<{ attachment_url: string | null; disputed_by: number; submitted_by: number }[]>`
-      SELECT d.attachment_url, d.disputed_by, s.submitted_by
-      FROM disputes d
-      JOIN submissions s ON d.submission_id = s.id
-      WHERE d.id = ${disputeId}
-    `;
-
-    if (disputes.length === 0) {
-      res.status(404).json({ message: 'Dispute not found' });
-      return;
-    }
-
-    const dispute = disputes[0];
-
-    const userRole = req.user?.role;
-    const isCSR = dispute.disputed_by === user_id;
-    const isQAReviewer = dispute.submitted_by === user_id;
-    const isManager = userRole === 'Manager';
-    const isAdmin = userRole === 'Admin';
-    const isTrainer = userRole === 'Trainer';
-
-    if (!isCSR && !isQAReviewer && !isManager && !isAdmin && !isTrainer) {
-      res.status(403).json({ message: 'Access denied' });
-      return;
-    }
-
-    if (!dispute.attachment_url) {
-      res.status(404).json({ message: 'No attachment found for this dispute' });
-      return;
-    }
-
-    const filePath = dispute.attachment_url.startsWith('/')
-      ? path.join(process.cwd(), dispute.attachment_url.substring(1))
-      : path.join(process.cwd(), dispute.attachment_url);
-
-    if (!fs.existsSync(filePath)) {
-      res.status(404).json({ message: 'Attachment file not found on server' });
-      return;
-    }
-
-    const fileName = path.basename(filePath);
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Content-Type', 'application/octet-stream');
-
-    const fileStream = fs.createReadStream(filePath);
-
-    fileStream.on('error', () => {
-      if (!res.headersSent) {
-        res.status(500).json({ message: 'Error reading attachment file' });
-      }
-    });
-
-    fileStream.pipe(res);
-  } catch (error) {
-    logger.error('Error downloading dispute attachment:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ message: 'Failed to download attachment' });
-    }
+  if (!user_id) {
+    throw unauthorized();
   }
-};
+
+  if (!disputeId || isNaN(disputeId)) {
+    throw createValidationError('Invalid dispute ID');
+  }
+
+  const disputes = await prisma.$queryRaw<{ attachment_url: string | null; disputed_by: number; submitted_by: number }[]>`
+    SELECT d.attachment_url, d.disputed_by, s.submitted_by
+    FROM disputes d
+    JOIN submissions s ON d.submission_id = s.id
+    WHERE d.id = ${disputeId}
+  `;
+
+  if (disputes.length === 0) {
+    throw createNotFoundError('Dispute not found');
+  }
+
+  const dispute = disputes[0];
+
+  const userRole = req.user?.role;
+  const isCSR = dispute.disputed_by === user_id;
+  const isQAReviewer = dispute.submitted_by === user_id;
+  const isManager = userRole === 'Manager';
+  const isAdmin = userRole === 'Admin';
+  const isTrainer = userRole === 'Trainer';
+
+  if (!isCSR && !isQAReviewer && !isManager && !isAdmin && !isTrainer) {
+    throw createAuthorizationError('Access denied');
+  }
+
+  if (!dispute.attachment_url) {
+    throw createNotFoundError('No attachment found for this dispute');
+  }
+
+  const filePath = dispute.attachment_url.startsWith('/')
+    ? path.join(process.cwd(), dispute.attachment_url.substring(1))
+    : path.join(process.cwd(), dispute.attachment_url);
+
+  if (!fs.existsSync(filePath)) {
+    throw createNotFoundError('Attachment file not found on server');
+  }
+
+  const fileName = path.basename(filePath);
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.setHeader('Content-Type', 'application/octet-stream');
+
+  const fileStream = fs.createReadStream(filePath);
+
+  // Stream errors happen mid-response (headers likely already flushed), so the
+  // global envelope can't help here — keep the direct terminal 500.
+  fileStream.on('error', () => {
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Error reading attachment file' });
+    }
+  });
+
+  fileStream.pipe(res);
+});

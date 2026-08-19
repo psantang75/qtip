@@ -271,16 +271,23 @@ These were started as verified pilots; continue them under the cadence above:
   `admin/emailTemplates` (200/500), `quizLibrary` (its own const), the AI-reviewer
   `parsePositiveInt` handlers, and `insightsAdminIngestion` (`clampLimit`). Use
   `parsePagination` for any NEW list endpoint — do not re-introduce inline parsing.
-- Error-envelope migration (legacy `{success:false}` shape C → thrown `AppError`
-  / `asyncHandler`, shape A) — Phase 2, part 2.2, NOT yet started. Safe because the
-  frontend's shared `utils/errorHandling.ts` (`getBackendMessage`/`getErrorMessage`)
-  already normalizes shapes A/B/C and keys 401/403/5xx off HTTP status — so flipping
-  a controller's ERROR path is transparent **iff** the HTTP status and the SUCCESS
-  payload are preserved verbatim. Order (risk-first): `dispute` (already `{message}`)
-  → `coaching` (49) → `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` →
-  `admin` (61, coordinate w/ its decomposition) → `auth` LAST (sensitive; keep
-  `{token,user}`/`{valid}`/`{ok}` success shapes untouched). Add controller tests
-  per slice, mirroring the `insightsAdmin*` pattern.
+- Error-envelope migration (legacy `res.status(n).json({ message })` / shape C →
+  thrown `AppError` + `asyncHandler`, rendered as shape A) — Phase 2, part 2.2, IN
+  PROGRESS. Safe because the frontend's shared `utils/errorHandling.ts`
+  (`getBackendMessage`/`getErrorMessage`) already normalizes shapes A/B/C and keys
+  401/403/5xx off HTTP status — so flipping a controller's ERROR path is transparent
+  **iff** the HTTP status and the SUCCESS payload are preserved verbatim.
+  - DONE: `dispute.controller.ts` (all 6 handlers → `asyncHandler` + `AppError`;
+    status codes + success payloads unchanged; `updateDispute` keeps its
+    file-cleanup guarantee by cleaning up then re-throwing in the catch;
+    `downloadDisputeAttachment` keeps its mid-stream `on('error')` terminal 500).
+    Covered by `controllers/__tests__/dispute.controller.test.ts` (13 tests over the
+    401/400/404/403 branches). Also burned 3 lint warnings (unused imports) → 98.
+  - Order (risk-first): ✅ `dispute` → `coaching` (49) →
+    `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` → `admin` (61, coordinate
+    w/ its decomposition) → `auth` LAST (sensitive; keep `{token,user}`/`{valid}`/`{ok}`
+    success shapes untouched). Add controller tests per slice, mirroring the
+    `insightsAdmin*` / dispute pattern.
 
 ## Notes / corrections logged during the program
 
