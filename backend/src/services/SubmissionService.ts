@@ -36,23 +36,6 @@ export class SubmissionServiceError extends Error {
 }
 
 /**
- * Interface for audit assignment
- */
-export interface AuditAssignment {
-  assignment_id: number;
-  call_id: number;
-  call_external_id: string;
-  form_id: number;
-  form_name: string;
-  call_date: string;
-  call_duration: number;
-  csr_name: string;
-  department_name: string;
-  submission_id: number;
-  status: string;
-}
-
-/**
  * Interface for call with form data
  */
 export interface CallWithForm {
@@ -65,15 +48,6 @@ export interface CallWithForm {
  * Interface for submission service operations
  */
 export interface ISubmissionService {
-  getAssignedAudits(qa_id: number, page?: number, limit?: number): Promise<{
-    audits: AuditAssignment[];
-    pagination: {
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
-    };
-  }>;
   getCallWithForm(call_id: number, form_id: number): Promise<CallWithForm>;
   submitAudit(submissionData: CreateSubmissionDTO, qa_id: number): Promise<{ submission_id: number; total_score: number; message: string }>;
   saveDraft(submissionData: CreateSubmissionDTO, qa_id: number): Promise<{ submission_id: number; message: string }>;
@@ -221,53 +195,6 @@ export class SubmissionService implements ISubmissionService {
       });
     }
     return Array.from(byId.values());
-  }
-
-  /**
-   * Get assigned audits for QA Analyst
-   */
-  async getAssignedAudits(qa_id: number, page: number = 1, limit: number = 10): Promise<{
-    audits: AuditAssignment[];
-    pagination: {
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
-    };
-  }> {
-    try {
-      if (!qa_id || qa_id <= 0) {
-        throw new SubmissionServiceError(
-          'Invalid QA ID provided',
-          'INVALID_QA_ID',
-          400
-        );
-      }
-
-      const offset = (page - 1) * limit;
-      const result = await this.submissionRepository.getAssignedAudits(qa_id, limit, offset);
-
-      const totalPages = Math.ceil(result.total / limit);
-
-      return {
-        audits: result.audits,
-        pagination: {
-          total: result.total,
-          page,
-          limit,
-          totalPages
-        }
-      };
-    } catch (error) {
-      if (error instanceof SubmissionServiceError) {
-        throw error;
-      }
-      throw new SubmissionServiceError(
-        'Failed to retrieve assigned audits: ' + (error as Error).message,
-        'AUDIT_RETRIEVAL_ERROR',
-        500
-      );
-    }
   }
 
   /**

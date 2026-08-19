@@ -387,6 +387,31 @@ These were started as verified pilots; continue them under the cadence above:
   rejects, lenient keys ignored). tsc clean, lint 0/85, full suite 793 passing.
   Follow-up (deferred, not blocking): the unverified enums above could be tightened
   later once each filter's "no-filter" sentinel is confirmed against its UI sender.
+- DEAD-CODE REMOVAL — **Audit Assignments feature (full chain).** Surfaced while
+  answering a UI question: the whole "assign QAs to audit certain CSRs/departments,
+  then show a QA their assigned queue" feature was **UI-orphaned end-to-end** — the
+  write-side frontend service (`services/auditAssignmentService.ts`) was imported
+  nowhere, and the read-side `submissionService.getAssignedAudits` was defined but
+  called by no page/hook. Unlike the admin cleanup, the read half lived inside core
+  submission code, so removal spanned both layers. Removed: FE
+  `auditAssignmentService.ts` + `submissionService.getAssignedAudits` (+ its
+  `AssignedAudit`/`PaginatedResponse` types); BE write API
+  (`controllers/auditAssignment.controller.ts`, `routes/auditAssignment.routes.ts`,
+  `models/AuditAssignment.ts` + its `models/index.ts` re-export, the
+  `/api/audit-assignments` mount in `index.ts`, and the Phase-2.3
+  `AuditAssignmentListQuerySchema` + its test); BE read path
+  (`SubmissionService.getAssignedAudits` + its `AuditAssignment` interface +
+  `ISubmissionService` member, `MySQLSubmissionRepository.getAssignedAudits` + its
+  `AssignedAudit` interface, and the `GET /api/submissions/assigned` route/handler +
+  the now-unused `parsePagination` import in `submission.routes.ts`). Also removed
+  `utils/httpError.ts` — that `HttpError` class was extracted from the audit-assignment
+  controller and, once it was deleted, had zero remaining importers. **Kept** (table
+  stays — we never drop tables): the `audit_assignments` MySQL table, its
+  `auditAssignment` Prisma model, and the `'audit_assignments'` entries in the
+  data-migration scripts (`migrate-production-data.ts`, `export-legacy-qtip.ts`),
+  which reference the table by name only. tsc (BE+FE) clean, full suite green,
+  route inventory diff = only `/api/audit-assignments/*` and
+  `/api/submissions/assigned` dropped.
 
 ## Notes / corrections logged during the program
 

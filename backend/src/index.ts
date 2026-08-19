@@ -29,7 +29,6 @@ import monitoringRoutes, { metricsMiddleware } from './routes/monitoring.routes'
 import { config } from './config/environment';
 import authRoutes from './routes/auth.routes';
 import formRoutes from './routes/form.routes';
-import auditAssignmentRoutes from './routes/auditAssignment.routes';
 import submissionRoutes from './routes/submission.routes';
 import disputeRoutes from './routes/dispute.routes';
 import trainerRoutes from './routes/trainer.routes';
@@ -216,7 +215,6 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api', apiLimiter);
 
 app.use('/api/forms', formRoutes);
-app.use('/api/audit-assignments', auditAssignmentRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/disputes', disputeRoutes);
 app.use('/api/trainer', trainerRoutes);

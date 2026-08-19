@@ -38,13 +38,6 @@ export const DirectorDepartmentListQuerySchema = z.object({
   department_id: optionalPositiveInt(),
 })
 
-/** GET /api/audit-assignments — `auditAssignment.controller.getAuditAssignments` */
-export const AuditAssignmentListQuerySchema = z.object({
-  form_id: optionalPositiveInt(),
-  target_id: optionalPositiveInt(),
-  target_type: z.preprocess(emptyToUndef, z.enum(['USER', 'DEPARTMENT']).optional()),
-})
-
 /** GET /api/manager/team-audits — `manager/audits.controller.teamAuditsListHandler` */
 export const TeamAuditsListQuerySchema = z.object({
   csr_id: optionalPositiveInt(),

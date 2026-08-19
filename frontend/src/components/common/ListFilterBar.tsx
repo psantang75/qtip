@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { CLIENT_FETCH_LIMIT } from '@/constants/labels'
 
 export interface SelectFilterConfig {
   id: string
@@ -27,7 +28,12 @@ interface ListFilterBarProps {
    * or just { total } for server-side pages ("48 results").
    */
   resultCount?: { filtered?: number; total: number }
-  /** When true, shows a warning that results may be incomplete */
+  /**
+   * When true, shows a banner explaining the list is capped at
+   * `CLIENT_FETCH_LIMIT` rows. Pages set this when the server returned the full
+   * cap (`items.length >= CLIENT_FETCH_LIMIT`), i.e. the date range likely holds
+   * more rows than were fetched.
+   */
   truncated?: boolean
   /** Slot for extra controls (date pickers, etc.) inserted after the selects */
   children?: React.ReactNode
@@ -56,7 +62,7 @@ export function ListFilterBar({
     {truncated && (
       <div className="flex items-center gap-2 rounded-t-xl border border-b-0 border-amber-200 bg-amber-50 px-4 py-2 text-[13px] text-amber-800">
         <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
-        Results may be incomplete. Narrow your date range to ensure all records are shown.
+        Showing the first {CLIENT_FETCH_LIMIT.toLocaleString()} records — narrow your date range to see the rest.
       </div>
     )}
     <div className={`bg-white ${truncated ? 'rounded-b-xl border-t-0' : 'rounded-xl'} border border-slate-200 p-4 flex flex-wrap items-center gap-3`}>

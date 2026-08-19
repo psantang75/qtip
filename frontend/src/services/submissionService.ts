@@ -82,31 +82,6 @@ export interface ScoreSnapshotPayload {
   notes?: string | null;
 }
 
-// Types for submissions and audits
-export interface AssignedAudit {
-  assignment_id: number;
-  call_id: number;
-  call_external_id: string;
-  form_id: number;
-  form_name: string;
-  call_date: string;
-  call_duration: number;
-  csr_name: string;
-  department_name: string | null;
-  submission_id: number;
-  status: string;
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
-}
-
 export interface AuditDetailsResponse {
   call: {
     id: number;
@@ -200,21 +175,6 @@ const getAuthorizedAxios = () => {
 };
 
 const submissionService = {
-  // Get assigned audits for QA Analyst with pagination
-  getAssignedAudits: async (
-    page: number = 1,
-    limit: number = 10
-  ): Promise<PaginatedResponse<AssignedAudit>> => {
-    try {
-      const api = getAuthorizedAxios();
-      const response = await api.get(`/submissions/assigned?page=${page}&limit=${limit}`);
-      return response.data;
-    } catch (error) {
-      logError('submissionService', 'Error fetching assigned audits:', error);
-      throw error;
-    }
-  },
-
   // Get call details with form for QA review
   getCallWithForm: async (callId: number, formId: number): Promise<AuditDetailsResponse> => {
     try {

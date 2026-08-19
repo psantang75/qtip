@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   DepartmentListQuerySchema,
   DirectorDepartmentListQuerySchema,
-  AuditAssignmentListQuerySchema,
   TeamAuditsListQuerySchema,
   ManagerDisputesListQuerySchema,
   DisputeHistoryQuerySchema,
@@ -48,28 +47,6 @@ describe('DirectorDepartmentListQuerySchema', () => {
   });
   it('rejects a non-numeric department_id', () => {
     expect(DirectorDepartmentListQuerySchema.safeParse({ department_id: 'nope' }).success).toBe(false);
-  });
-});
-
-describe('AuditAssignmentListQuerySchema', () => {
-  it('accepts the bounded target_type values', () => {
-    expect(AuditAssignmentListQuerySchema.safeParse({ target_type: 'USER' }).success).toBe(true);
-    expect(AuditAssignmentListQuerySchema.safeParse({ target_type: 'DEPARTMENT' }).success).toBe(true);
-  });
-  it('treats empty target_type as absent (UI omits when cleared)', () => {
-    expect(AuditAssignmentListQuerySchema.safeParse({ target_type: '' }).success).toBe(true);
-  });
-  it('rejects an out-of-enum target_type', () => {
-    expect(AuditAssignmentListQuerySchema.safeParse({ target_type: 'TEAM' }).success).toBe(false);
-  });
-  it('rejects a non-numeric form_id / target_id', () => {
-    expect(AuditAssignmentListQuerySchema.safeParse({ form_id: 'x' }).success).toBe(false);
-    expect(AuditAssignmentListQuerySchema.safeParse({ target_id: '1.5' }).success).toBe(false);
-  });
-  it('accepts a fully-populated valid filter set', () => {
-    expect(
-      AuditAssignmentListQuerySchema.safeParse({ form_id: '4', target_id: '12', target_type: 'USER' }).success,
-    ).toBe(true);
   });
 });
 

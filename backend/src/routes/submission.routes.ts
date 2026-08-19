@@ -6,38 +6,12 @@ import { serviceLogger } from '../config/logger';
 import prisma from '../config/prisma';
 import { findOpenUnlock, closeUnlock } from '../services/unlock/unlock.service';
 import { isManagerOfSubmissionAgent } from '../services/manager/manager.access';
-import { parsePagination } from '../validation/common';
 
 const router = express.Router();
 
 // Initialize submission service
 const submissionRepository = new MySQLSubmissionRepository();
 const submissionService = new SubmissionService(submissionRepository);
-
-/**
- * Get all assigned audits for the current QA Analyst
- */
-const getAssignedAudits = async (req: Request, res: Response) => {
-  try {
-    const qa_id = req.user?.user_id;
-    if (!qa_id) {
-      res.status(401).json({ message: 'Unauthorized access' });
-      return;
-    }
-
-    const { page, limit } = parsePagination(req.query, { defaultLimit: 10 });
-
-    const result = await submissionService.getAssignedAudits(qa_id, page, limit);
-    res.status(200).json(result);
-  } catch (error: any) {
-    if (error instanceof SubmissionServiceError) {
-      res.status(error.statusCode).json({ message: error.message, code: error.code });
-    } else {
-      serviceLogger.error('SUBMISSION', 'getAssignedAudits', error as Error);
-      res.status(500).json({ message: 'Failed to fetch assigned audits' });
-    }
-  }
-};
 
 /**
  * Get call details with form for QA review
@@ -284,13 +258,6 @@ const submitDraft = async (req: Request, res: Response) => {
     }
   }
 };
-
-/**
- * @route GET /api/submissions/assigned
- * @desc Get all assigned audits for the current QA Analyst
- * @access Private (QA Analyst)
- */
-router.get('/assigned', authenticate as unknown as RequestHandler, getAssignedAudits);
 
 /**
  * @route GET /api/submissions/review/:call_id

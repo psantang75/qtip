@@ -14,20 +14,6 @@ import {
 } from '../models';
 import logger from '../config/logger';
 
-export interface AssignedAudit {
-  assignment_id: number;
-  call_id: number;
-  call_external_id: string;
-  form_id: number;
-  form_name: string;
-  call_date: string;
-  call_duration: number;
-  csr_name: string;
-  department_name: string;
-  submission_id: number;
-  status: string;
-}
-
 export interface CallWithForm {
   call: any;
   form: any;
@@ -82,53 +68,6 @@ export class MySQLSubmissionRepository {
 
   getConnection(): any {
     return prisma;
-  }
-
-  async getAssignedAudits(qa_id: number, limit: number, offset: number): Promise<{ audits: AssignedAudit[]; total: number }> {
-    try {
-      const total = await prisma.auditAssignment.count({
-        where: { qa_id: qa_id, is_active: true },
-      });
-
-      const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
-        SELECT 
-          aa.id as assignment_id,
-          aa.target_id as call_id,
-          CONCAT('CALL-', COALESCE(aa.target_id, 0)) as call_external_id,
-          aa.form_id,
-          f.form_name,
-          DATE(NOW()) as call_date,
-          0 as call_duration,
-          'N/A' as csr_name,
-          'N/A' as department_name,
-          0 as submission_id,
-          'NOT_STARTED' as status
-        FROM audit_assignments aa
-        JOIN forms f ON aa.form_id = f.id
-        WHERE aa.qa_id = ${qa_id} AND aa.is_active = 1
-        ORDER BY aa.start_date ASC
-        LIMIT ${limit} OFFSET ${offset}
-      `);
-
-      const audits = rows.map((row) => ({
-        assignment_id: row.assignment_id,
-        call_id: row.call_id || 0,
-        call_external_id: row.call_external_id,
-        form_id: row.form_id,
-        form_name: row.form_name,
-        call_date: row.call_date,
-        call_duration: row.call_duration || 0,
-        csr_name: row.csr_name,
-        department_name: row.department_name,
-        submission_id: row.submission_id,
-        status: row.status,
-      })) as AssignedAudit[];
-
-      return { audits, total };
-    } catch (error) {
-      logger.error('Error fetching assigned audits:', error);
-      throw new Error('Failed to fetch assigned audits');
-    }
   }
 
   async getCallWithForm(call_id: number, form_id: number): Promise<CallWithForm> {
