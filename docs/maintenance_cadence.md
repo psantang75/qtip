@@ -283,7 +283,17 @@ These were started as verified pilots; continue them under the cadence above:
     `downloadDisputeAttachment` keeps its mid-stream `on('error')` terminal 500).
     Covered by `controllers/__tests__/dispute.controller.test.ts` (13 tests over the
     401/400/404/403 branches). Also burned 3 lint warnings (unused imports) → 98.
-  - Order (risk-first): ✅ `dispute` → `coaching` (49) →
+  - DONE: `coaching.controller.ts` (all 12 handlers → `asyncHandler` + `AppError`;
+    status codes + `{success:true,…}` success payloads unchanged, incl. the
+    `setSessionStatus` early `Status unchanged` 200 and `downloadAttachment`'s
+    mid-stream `on('error')` terminal 500). The six legacy `403 { code:'LEGACY_LOCKED' }`
+    lock responses become `createAuthorizationError(lock.message ?? LEGACY_LOCKED_MESSAGE)`
+    — verified the frontend never reads `data.code === 'LEGACY_LOCKED'` (it only mirrors
+    the lock rule client-side to pre-disable buttons), so dropping the `code` field is
+    safe; the 403 + message contract is preserved. Removed the now-unused `logger`
+    import (global handler logs). Covered by
+    `controllers/__tests__/coaching.controller.test.ts` (19 tests). Lint 98 → 97.
+  - Order (risk-first): ✅ `dispute` → ✅ `coaching` →
     `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` → `admin` (61, coordinate
     w/ its decomposition) → `auth` LAST (sensitive; keep `{token,user}`/`{valid}`/`{ok}`
     success shapes untouched). Add controller tests per slice, mirroring the

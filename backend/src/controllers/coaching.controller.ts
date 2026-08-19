@@ -5,10 +5,15 @@ import { Prisma } from '../generated/prisma/client';
 import { hasCsrRequirements, applyAutoAdvance } from '../utils/coachingAutoAdvance';
 import { buildCoachingSessionScope } from '../services/coachingSessionsReport';
 import { notifyCoachingStatus } from '../services/coaching/coaching.notify';
-import { checkLegacyLock } from '../services/legacyLock';
+import { checkLegacyLock, LEGACY_LOCKED_MESSAGE } from '../services/legacyLock';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
 import { parsePagination } from '../validation/common';
-import logger from '../config/logger';
+import {
+  asyncHandler,
+  createValidationError,
+  createNotFoundError,
+  createAuthorizationError,
+} from '../utils/errorHandler';
 const fs = require('fs').promises;
 const path = require('path');
 const { createReadStream } = require('fs');
@@ -87,8 +92,7 @@ async function isValidCoachingListId(id: number, listType: string): Promise<bool
   return rows.length > 0;
 }
 
-export const getCoachingSessions = async (req: AuthReq, res: Response) => {
-  try {
+export const getCoachingSessions = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const role = req.user!.role;
     const { page, limit, skip: offset } = parsePagination(req.query, { defaultLimit: 20 });
@@ -169,18 +173,13 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
     }));
 
     res.json({ success: true, data: { sessions: data, totalCount: Number(countRows[0]?.total ?? 0), page, limit } });
-  } catch (error) {
-    logger.error('[COACHING] getCoachingSessions error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
-  try {
+export const getCoachingSessionDetail = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const role = req.user!.role;
     const sessionId = parseInt(req.params.id);
-    if (!sessionId || isNaN(sessionId)) return res.status(400).json({ success: false, message: 'Invalid session ID' });
+    if (!sessionId || isNaN(sessionId)) throw createValidationError('Invalid session ID');
 
     const conditions: Prisma.Sql[] = [Prisma.sql`cs.id = ${sessionId}`, Prisma.sql`u.is_active = 1`, roleCondition(role, userId)];
     const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
@@ -206,7 +205,7 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
       `
     );
 
-    if (!rows?.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
+    if (!rows?.length) throw createNotFoundError('Session not found or access denied');
 
     const session = {
       ...rows[0],
@@ -314,14 +313,9 @@ export const getCoachingSessionDetail = async (req: AuthReq, res: Response) => {
         support_needed_ids: supportNeededRows.map((r: BehaviorFlagRow) => r.id),
       },
     });
-  } catch (error) {
-    logger.error('[COACHING] getCoachingSessionDetail error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const createCoachingSession = async (req: AuthReq, res: Response) => {
-  try {
+export const createCoachingSession = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const attachment = req.file;
     let { csr_id, csr_ids, session_date, coaching_purpose, coaching_format, source_type, notes, topic_ids,
@@ -358,35 +352,35 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
       ? quiz_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean) : [];
 
     if (!csrIdList.length || !session_date || !coaching_purpose || !coaching_format || !source_type) {
-      return res.status(400).json({ success: false, message: 'Required: csr_ids, session_date, coaching_purpose, coaching_format, source_type' });
+      throw createValidationError('Required: csr_ids, session_date, coaching_purpose, coaching_format, source_type');
     }
-    if (!topic_ids.length) return res.status(400).json({ success: false, message: 'At least one topic is required' });
+    if (!topic_ids.length) throw createValidationError('At least one topic is required');
 
     // coaching_purpose / coaching_format / source_type are list_items.id references
     // (List Management). Validate each id belongs to the right active list.
     const purposeId = parseInt(coaching_purpose);
     const formatId  = parseInt(coaching_format);
     const sourceId  = parseInt(source_type);
-    if (!(await isValidCoachingListId(purposeId, 'coaching_purpose'))) return res.status(400).json({ success: false, message: 'Invalid coaching purpose' });
-    if (!(await isValidCoachingListId(formatId,  'coaching_format')))  return res.status(400).json({ success: false, message: 'Invalid coaching format' });
-    if (!(await isValidCoachingListId(sourceId,  'coaching_source')))  return res.status(400).json({ success: false, message: 'Invalid coaching source' });
+    if (!(await isValidCoachingListId(purposeId, 'coaching_purpose'))) throw createValidationError('Invalid coaching purpose');
+    if (!(await isValidCoachingListId(formatId,  'coaching_format')))  throw createValidationError('Invalid coaching format');
+    if (!(await isValidCoachingListId(sourceId,  'coaching_source')))  throw createValidationError('Invalid coaching source');
 
     const resolvedCoachId = coach_id ? parseInt(coach_id) : userId;
     if (coach_id && parseInt(coach_id) !== userId) {
       const coachCheck = await prisma.$queryRaw<any[]>(
         Prisma.sql`SELECT id FROM users WHERE id = ${resolvedCoachId} AND role_id IN (1, 4, 5) AND is_active = 1`
       );
-      if (!coachCheck.length) return res.status(400).json({ success: false, message: 'Invalid or ineligible coach' });
+      if (!coachCheck.length) throw createValidationError('Invalid or ineligible coach');
     }
 
     // Validate all CSRs
     for (const csrId of csrIdList) {
       const csrCheck = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM users WHERE id = ${csrId} AND role_id = 3 AND is_active = 1`);
-      if (!csrCheck.length) return res.status(403).json({ success: false, message: `CSR ${csrId} not found or inactive` });
+      if (!csrCheck.length) throw createAuthorizationError(`CSR ${csrId} not found or inactive`);
     }
 
     const topicCheck = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM list_items WHERE id IN (${Prisma.join(topic_ids)}) AND is_active = 1 AND list_type = 'training_topic'`);
-    if (topicCheck.length !== topic_ids.length) return res.status(400).json({ success: false, message: 'One or more topics are invalid or inactive' });
+    if (topicCheck.length !== topic_ids.length) throw createValidationError('One or more topics are invalid or inactive');
 
     let attFilename = null, attPath = null, attSize = null, attMime = null;
     if (attachment) {
@@ -451,14 +445,9 @@ export const createCoachingSession = async (req: AuthReq, res: Response) => {
     } else {
       res.status(201).json({ success: true, data: { ids: createdIds, batch_id: batchId, count: createdIds.length }, message: `${createdIds.length} coaching sessions created` });
     }
-  } catch (error) {
-    logger.error('[COACHING] createCoachingSession error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const updateCoachingSession = async (req: AuthReq, res: Response) => {
-  try {
+export const updateCoachingSession = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const role = req.user!.role;
     const sessionId = parseInt(req.params.id);
@@ -494,27 +483,27 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
     const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
 
     const existing = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.id, cs.status FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
-    if (!existing.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
-    if (['CLOSED', 'CANCELED'].includes(existing[0].status)) return res.status(400).json({ success: false, message: 'Cannot edit a closed or canceled session' });
+    if (!existing.length) throw createNotFoundError('Session not found or access denied');
+    if (['CLOSED', 'CANCELED'].includes(existing[0].status)) throw createValidationError('Cannot edit a closed or canceled session');
 
     const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
-    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
+    if (!lock.allowed) throw createAuthorizationError(lock.message ?? LEGACY_LOCKED_MESSAGE);
 
     const parts: Prisma.Sql[] = [];
     if (session_date     !== undefined) parts.push(Prisma.sql`session_date = ${session_date}`);
     if (coaching_purpose !== undefined) {
       const purposeId = parseInt(coaching_purpose);
-      if (!(await isValidCoachingListId(purposeId, 'coaching_purpose'))) return res.status(400).json({ success: false, message: 'Invalid coaching purpose' });
+      if (!(await isValidCoachingListId(purposeId, 'coaching_purpose'))) throw createValidationError('Invalid coaching purpose');
       parts.push(Prisma.sql`coaching_purpose = ${purposeId}`);
     }
     if (coaching_format !== undefined) {
       const formatId = parseInt(coaching_format);
-      if (!(await isValidCoachingListId(formatId, 'coaching_format'))) return res.status(400).json({ success: false, message: 'Invalid coaching format' });
+      if (!(await isValidCoachingListId(formatId, 'coaching_format'))) throw createValidationError('Invalid coaching format');
       parts.push(Prisma.sql`coaching_format = ${formatId}`);
     }
     if (source_type !== undefined) {
       const sourceId = parseInt(source_type);
-      if (!(await isValidCoachingListId(sourceId, 'coaching_source'))) return res.status(400).json({ success: false, message: 'Invalid coaching source' });
+      if (!(await isValidCoachingListId(sourceId, 'coaching_source'))) throw createValidationError('Invalid coaching source');
       parts.push(Prisma.sql`source_type = ${sourceId}`);
     }
     if (notes !== undefined) parts.push(Prisma.sql`notes = ${notes || null}`);
@@ -557,12 +546,12 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
       const coachCheck = await prisma.$queryRaw<any[]>(
         Prisma.sql`SELECT id FROM users WHERE id = ${newCoachId} AND role_id IN (1, 4, 5) AND is_active = 1`
       );
-      if (!coachCheck.length) return res.status(400).json({ success: false, message: 'Invalid or ineligible coach' });
+      if (!coachCheck.length) throw createValidationError('Invalid or ineligible coach');
       parts.push(Prisma.sql`created_by = ${newCoachId}`);
     }
 
     if (!parts.length && !topic_ids && updateResourceIds === undefined && updateQuizIds === undefined && !coach_id) {
-      return res.status(400).json({ success: false, message: 'No fields to update' });
+      throw createValidationError('No fields to update');
     }
 
     // Optional: apply same content changes to all sessions in the same batch
@@ -634,14 +623,9 @@ export const updateCoachingSession = async (req: AuthReq, res: Response) => {
     }
 
     res.json({ success: true, message: 'Session updated successfully' });
-  } catch (error) {
-    logger.error('[COACHING] updateCoachingSession error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const deliverCoachingSession = async (req: AuthReq, res: Response) => {
-  try {
+export const deliverCoachingSession = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const role = req.user!.role;
     const sessionId = parseInt(req.params.id);
@@ -650,11 +634,11 @@ export const deliverCoachingSession = async (req: AuthReq, res: Response) => {
     const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.id, cs.status FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
 
-    if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
-    if (rows[0].status !== 'DRAFT') return res.status(400).json({ success: false, message: 'Can only schedule a DRAFT session' });
+    if (!rows.length) throw createNotFoundError('Session not found or access denied');
+    if (rows[0].status !== 'DRAFT') throw createValidationError('Can only schedule a DRAFT session');
 
     const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
-    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
+    if (!lock.allowed) throw createAuthorizationError(lock.message ?? LEGACY_LOCKED_MESSAGE);
 
     const needsCSR = await hasCsrRequirements(sessionId);
     const deliveredStatus = needsCSR ? 'AWAITING_CSR_ACTION' : 'SCHEDULED';
@@ -663,14 +647,9 @@ export const deliverCoachingSession = async (req: AuthReq, res: Response) => {
     await prisma.auditLog.create({ data: { user_id: userId, action: 'DELIVERED', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ status: deliveredStatus }) } });
     await notifyCoachingStatus(sessionId, deliveredStatus);
     res.json({ success: true, message: `Session scheduled — status: ${deliveredStatus}` });
-  } catch (error) {
-    logger.error('[COACHING] deliverCoachingSession error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const completeCoachingSession = async (req: AuthReq, res: Response) => {
-  try {
+export const completeCoachingSession = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const role = req.user!.role;
     const sessionId = parseInt(req.params.id);
@@ -679,24 +658,19 @@ export const completeCoachingSession = async (req: AuthReq, res: Response) => {
     const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.id, cs.status FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
 
-    if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
-    if (['COMPLETED', 'CLOSED', 'CANCELED'].includes(rows[0].status)) return res.status(400).json({ success: false, message: 'Session is already completed or closed' });
+    if (!rows.length) throw createNotFoundError('Session not found or access denied');
+    if (['COMPLETED', 'CLOSED', 'CANCELED'].includes(rows[0].status)) throw createValidationError('Session is already completed or closed');
 
     const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
-    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
+    if (!lock.allowed) throw createAuthorizationError(lock.message ?? LEGACY_LOCKED_MESSAGE);
 
     await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'COMPLETED', completed_at = NOW() WHERE id = ${sessionId}`);
     await prisma.auditLog.create({ data: { user_id: userId, action: 'COMPLETE', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
     await notifyCoachingStatus(sessionId, 'COMPLETED');
     res.json({ success: true, message: 'Session marked as completed' });
-  } catch (error) {
-    logger.error('[COACHING] completeCoachingSession error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const flagFollowUp = async (req: AuthReq, res: Response) => {
-  try {
+export const flagFollowUp = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const role = req.user!.role;
     const sessionId = parseInt(req.params.id);
@@ -706,24 +680,19 @@ export const flagFollowUp = async (req: AuthReq, res: Response) => {
     const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.id FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
 
-    if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
+    if (!rows.length) throw createNotFoundError('Session not found or access denied');
 
     const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
-    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
+    if (!lock.allowed) throw createAuthorizationError(lock.message ?? LEGACY_LOCKED_MESSAGE);
 
     await prisma.$executeRaw(
       Prisma.sql`UPDATE coaching_sessions SET follow_up_required = 1, status = 'FOLLOW_UP_REQUIRED', follow_up_date = ${follow_up_date || null} WHERE id = ${sessionId}`
     );
     await prisma.auditLog.create({ data: { user_id: userId, action: 'FLAG_FOLLOWUP', target_id: sessionId, target_type: 'coaching_session', details: JSON.stringify({ follow_up_date }) } });
     res.json({ success: true, message: 'Follow-up flagged' });
-  } catch (error) {
-    logger.error('[COACHING] flagFollowUp error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const closeCoachingSession = async (req: AuthReq, res: Response) => {
-  try {
+export const closeCoachingSession = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const role = req.user!.role;
     const sessionId = parseInt(req.params.id);
@@ -732,23 +701,18 @@ export const closeCoachingSession = async (req: AuthReq, res: Response) => {
     const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.id, cs.status FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
 
-    if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
-    if (['CLOSED', 'CANCELED'].includes(rows[0].status)) return res.status(400).json({ success: false, message: 'Session is already closed' });
+    if (!rows.length) throw createNotFoundError('Session not found or access denied');
+    if (['CLOSED', 'CANCELED'].includes(rows[0].status)) throw createValidationError('Session is already closed');
 
     const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
-    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
+    if (!lock.allowed) throw createAuthorizationError(lock.message ?? LEGACY_LOCKED_MESSAGE);
 
     await prisma.$executeRaw(Prisma.sql`UPDATE coaching_sessions SET status = 'CLOSED', closed_at = NOW() WHERE id = ${sessionId}`);
     await prisma.auditLog.create({ data: { user_id: userId, action: 'CLOSE', target_id: sessionId, target_type: 'coaching_session', details: '{}' } });
     res.json({ success: true, message: 'Session closed' });
-  } catch (error) {
-    logger.error('[COACHING] closeCoachingSession error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const downloadAttachment = async (req: AuthReq, res: Response) => {
-  try {
+export const downloadAttachment = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const role = req.user!.role;
     const sessionId = parseInt(req.params.id);
@@ -757,29 +721,26 @@ export const downloadAttachment = async (req: AuthReq, res: Response) => {
     const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT cs.attachment_filename, cs.attachment_path, cs.attachment_mime_type FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id ${whereClause}`);
 
-    if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found, no attachment, or access denied' });
+    if (!rows.length) throw createNotFoundError('Session not found, no attachment, or access denied');
 
     const { attachment_filename, attachment_path, attachment_mime_type } = rows[0];
     const filePath = path.join(process.cwd(), attachment_path);
 
-    try { await fs.access(filePath); } catch { return res.status(404).json({ success: false, message: 'Attachment file not found on server' }); }
+    try { await fs.access(filePath); } catch { throw createNotFoundError('Attachment file not found on server'); }
 
     const stats = await fs.stat(filePath);
     res.setHeader('Content-Type', attachment_mime_type || 'application/octet-stream');
     res.setHeader('Content-Length', stats.size);
     res.setHeader('Content-Disposition', `attachment; ${escapeFilename(attachment_filename)}`);
 
+    // Stream errors happen mid-response (headers likely already flushed), so the
+    // global envelope can't help here — keep the direct terminal 500.
     const stream = createReadStream(filePath);
-    stream.on('error', (err: Error) => { if (!res.headersSent) res.status(500).json({ success: false, message: 'Error reading file' }); else res.destroy(); });
+    stream.on('error', () => { if (!res.headersSent) res.status(500).json({ success: false, message: 'Error reading file' }); else res.destroy(); });
     stream.pipe(res);
-  } catch (error) {
-    logger.error('[COACHING] downloadAttachment error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const setSessionStatus = async (req: AuthReq, res: Response) => {
-  try {
+export const setSessionStatus = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId    = req.user!.user_id;
     const role      = req.user!.role;
     const sessionId = parseInt(req.params.id);
@@ -792,7 +753,7 @@ export const setSessionStatus = async (req: AuthReq, res: Response) => {
       'QUIZ_PENDING', 'COMPLETED', 'FOLLOW_UP_REQUIRED', 'CLOSED', 'CANCELED',
     ];
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ success: false, message: 'Invalid status' });
+      throw createValidationError('Invalid status');
     }
 
     const conditions: Prisma.Sql[] = [Prisma.sql`cs.id = ${sessionId}`, Prisma.sql`u.is_active = 1`, roleCondition(role, userId)];
@@ -800,18 +761,18 @@ export const setSessionStatus = async (req: AuthReq, res: Response) => {
       Prisma.sql`SELECT cs.id, cs.status FROM coaching_sessions cs JOIN users u ON cs.csr_id = u.id WHERE ${Prisma.join(conditions, ' AND ')}`
     );
 
-    if (!rows.length) return res.status(404).json({ success: false, message: 'Session not found or access denied' });
+    if (!rows.length) throw createNotFoundError('Session not found or access denied');
 
     const current = rows[0].status;
     if (['CLOSED', 'CANCELED'].includes(current)) {
-      return res.status(400).json({ success: false, message: 'Closed or canceled sessions cannot be reopened' });
+      throw createValidationError('Closed or canceled sessions cannot be reopened');
     }
     if (status === current) {
       return res.json({ success: true, message: 'Status unchanged' });
     }
 
     const lock = await checkLegacyLock('coaching_session', sessionId, userId, role);
-    if (!lock.allowed) return res.status(403).json({ success: false, message: lock.message, code: 'LEGACY_LOCKED' });
+    if (!lock.allowed) throw createAuthorizationError(lock.message ?? LEGACY_LOCKED_MESSAGE);
 
     const parts: Prisma.Sql[] = [Prisma.sql`status = ${status}`];
     if (status === 'SCHEDULED') parts.push(Prisma.sql`delivered_at = COALESCE(delivered_at, NOW())`);
@@ -828,32 +789,22 @@ export const setSessionStatus = async (req: AuthReq, res: Response) => {
     await notifyCoachingStatus(sessionId, status);
 
     res.json({ success: true, message: `Status changed to ${status}` });
-  } catch (error) {
-    logger.error('[COACHING] setSessionStatus error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const getEligibleCoaches = async (_req: AuthReq, res: Response) => {
-  try {
+export const getEligibleCoaches = asyncHandler(async (_req: AuthReq, res: Response) => {
     // role_id 1=Admin, 4=Trainer, 5=Manager are eligible to conduct coaching sessions
     const coaches = await prisma.$queryRaw<{ id: number; name: string }[]>(
       Prisma.sql`SELECT id, username as name FROM users WHERE role_id IN (1, 4, 5) AND is_active = 1 ORDER BY username ASC`
     );
     res.json({ success: true, data: coaches });
-  } catch (error) {
-    logger.error('[COACHING] getEligibleCoaches error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const getCSRCoachingHistory = async (req: AuthReq, res: Response) => {
-  try {
+export const getCSRCoachingHistory = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const role = req.user!.role;
     const csrId = parseInt(req.params.csrId);
 
-    if (!csrId || isNaN(csrId)) return res.status(400).json({ success: false, message: 'Invalid CSR ID' });
+    if (!csrId || isNaN(csrId)) throw createValidationError('Invalid CSR ID');
 
     const oneYearAgo = new Date(); oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     const oneYearStr = `${oneYearAgo.getFullYear()}-${String(oneYearAgo.getMonth() + 1).padStart(2, '0')}-${String(oneYearAgo.getDate()).padStart(2, '0')}`;
@@ -904,8 +855,4 @@ export const getCSRCoachingHistory = async (req: AuthReq, res: Response) => {
     const repeatTopics = recentTopicRows.map((r: { label: string }) => r.label);
 
     res.json({ success: true, data: { sessions: recentSessions, prior_year_sessions: allWithTopics, repeat_topics: repeatTopics } });
-  } catch (error) {
-    logger.error('[COACHING] getCSRCoachingHistory error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
