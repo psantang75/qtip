@@ -62,7 +62,7 @@ export async function insertIncidents(
             violation_id:     violation.id,
             example_date:     ex.example_date ? new Date(ex.example_date) : null,
             description:      ex.description,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             source:           (ex.source as any) ?? 'MANUAL',
             qa_submission_id: ex.qa_submission_id ?? null,
             qa_question_id:   ex.qa_question_id ?? null,
@@ -95,7 +95,7 @@ export async function replaceWriteUpListItems(
  * Used by both the detail endpoint (single write-up) and the standalone
  * prior-discipline lookup so they emit the same envelope.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function shapePriorDiscipline(rows: any[]) {
   return rows.map(pd => ({
     reference_type: pd.reference_type,

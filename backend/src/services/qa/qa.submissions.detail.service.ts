@@ -18,7 +18,7 @@ import { QAServiceError } from './qa.types'
 import { attachPhoneSystemRecordings } from '../callRecordingEnrichment'
 import { getLastReopenForSubmission, type LastReopen } from '../unlock/unlock.query.service'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 export interface SubmissionDetail {
   id: number

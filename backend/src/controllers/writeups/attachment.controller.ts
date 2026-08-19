@@ -51,7 +51,7 @@ export const uploadAttachment = async (req: AuthReq, res: Response) => {
 
     if (!(await passesLegacyLock(req, res, writeUpId))) return
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const file = (req as any).file
     if (!file) return res.status(400).json({ success: false, message: 'No file uploaded' })
 

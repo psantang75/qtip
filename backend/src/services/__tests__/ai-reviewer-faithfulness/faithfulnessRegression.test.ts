@@ -81,7 +81,7 @@ describe('AI Reviewer faithfulness regression set', () => {
     expect(typeof buildTracePrompt).toBe('function');
 
     let total = 0;
-    let caught = 0;
+    const caught = 0;
     for (const entry of entries) {
       // TODO(D-final-wire): replay each entry through the two-pass
       // orchestrator once it's exposed on AIReviewerService. For now,

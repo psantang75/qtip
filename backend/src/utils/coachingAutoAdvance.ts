@@ -30,8 +30,8 @@ export async function hasCsrRequirements(sessionId: number): Promise<boolean> {
   );
   if (!rows.length) return false;
   const s = rows[0];
-  if (Boolean(Number(s.require_action_plan)))    return true;
-  if (Boolean(Number(s.require_acknowledgment))) return true;
+  if (Number(s.require_action_plan))    return true;
+  if (Number(s.require_acknowledgment)) return true;
 
   const qRows = await prisma.$queryRaw<{ cnt: bigint }[]>(
     Prisma.sql`SELECT COUNT(*) as cnt FROM coaching_session_quizzes WHERE coaching_session_id = ${sessionId}`

@@ -259,7 +259,7 @@ function bucketize(samples: Sample[]): Bucket[] {
 function poolAdjacentViolators(buckets: Bucket[]): Monotone[] {
   if (buckets.length === 0) return [];
   const out: Monotone[] = buckets.map((b) => ({ index: b.index, rate: b.agree / b.total, n: b.total }));
-  let merged: Array<{ rate: number; n: number; agree: number; indices: number[] }> = out.map((b, i) => ({
+  const merged: Array<{ rate: number; n: number; agree: number; indices: number[] }> = out.map((b, i) => ({
     rate: b.rate,
     n: b.n,
     agree: buckets[i].agree,

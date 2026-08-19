@@ -34,7 +34,7 @@ async function uniqueTypeKey(label: string): Promise<string> {
   const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 45) || 'type';
   let candidate = base;
   let n = 2;
-  // eslint-disable-next-line no-await-in-loop
+   
   while (await prisma.scheduleExceptionType.findUnique({ where: { type_key: candidate } })) {
     candidate = `${base}_${n++}`.slice(0, 50);
   }

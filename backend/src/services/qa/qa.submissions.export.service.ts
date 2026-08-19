@@ -60,7 +60,7 @@ export async function buildSubmissionExportCsv(
     )
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
     SELECT
       s.id AS submission_id,

@@ -18,7 +18,7 @@ import { qaCacheService } from '../QACacheService'
 import { qaFeatureFlags } from '../../config/qa.config'
 import type { QAStatsResult, QACSRActivityRow } from './qa.types'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 /** Returns true when the cached value was used (skipping the db round-trip). */
 export interface CachedStats {

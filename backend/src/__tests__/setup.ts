@@ -35,7 +35,7 @@ export const DB_TESTS_ENABLED = process.env.ENABLE_DB_TESTS === '1'
 beforeAll(() => {
   if (!DB_TESTS_ENABLED) {
     // One-line, machine-friendly notice so devs see why nothing ran.
-    // eslint-disable-next-line no-console
+     
     console.warn(
       '[vitest] DB-backed tests skipped — set ENABLE_DB_TESTS=1 (and point .env at the golden-slice DB) to run them.',
     )

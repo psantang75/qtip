@@ -21,7 +21,7 @@ import { trainerLogger } from '../TrainerLogger'
 import { TrainerServiceError } from './trainer.types'
 import { attachPhoneSystemRecordings } from '../callRecordingEnrichment'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 export interface TrainerSubmissionDetailOptions {
   includeScores:         boolean

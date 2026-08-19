@@ -37,7 +37,7 @@ describeAi('AI Reviewer golden eval', () => {
 
   it('OpenAI agreement meets threshold (when configured)', async () => {
     if (!process.env.OPENAI_API_KEY) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[ai-eval] OPENAI_API_KEY not set; skipping OpenAI side of the eval.');
       return;
     }

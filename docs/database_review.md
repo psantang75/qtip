@@ -65,19 +65,61 @@ needed — `submitted_by` is FK-indexed and the composite paths already exist.
 served by the `submission_id` FK index prefix; treat an explicit composite as
 LOW value, not HIGH.
 
-## Data-integrity — raw ingestion tables
+## Data-integrity — raw ingestion tables (PROPOSAL — NOT APPLIED; needs approval)
 
-The `*Raw` import tables (`CallActivityRaw`, `SalesMarginRaw`,
-`LeadSalesMarginRaw`, `LeadSourceRaw`, `TicketTaskRaw`, `EmailStatsRaw`,
-`EntityRaw`) accept bulk `createMany` loads. Except `PunchRaw`, they lack a
-**unique grain**, so a re-run of the same import can duplicate rows.
+The `*Raw` import tables accept bulk `createMany` loads in
+[`backend/src/services/importService.ts`](../backend/src/services/importService.ts)
+(the `import*` handlers; `runImport.ts` only orchestrates them). Except
+`PunchRaw` — which `upsert`s on its `@unique post_id` — none has a **unique
+grain**, so re-importing the same workbook (a common operator action, and the
+mailbox poller can re-deliver) **duplicates rows and double-counts every report
+built on them**. This is the highest data-integrity risk in the system.
 
-- Proposed (per table, subject to confirming each table's true grain):
-  a `@@unique` on the natural key, typically `(user_id, report_date)` or
-  `(import_id, dimension_value, report_date)`, combined with idempotent
-  upsert-on-conflict in the importer ([`backend/src/services/imports/runImport.ts`](../backend/src/services/imports/runImport.ts)).
+### Proposed unique grain per table
+
+Derived from each handler's row shape in `importService.ts`. Grains marked
+"CONFIRM" need a product decision because the source can legitimately emit
+multiple rows per user/day and/or the key column is nullable (MySQL allows
+multiple NULLs in a UNIQUE index, which silently defeats it).
+
+| Table | Proposed `@@unique` | Notes |
+| --- | --- | --- |
+| `call_activity_raw` | `(user_id, report_date)` | One row per user/day. Clean. |
+| `email_stats_raw` | `(user_id, report_date)` | One row per user/day. Clean. |
+| `lead_sales_margin_raw` | `(user_id, report_date)` | One row per user/day. Clean. |
+| `lead_source_raw` | `(user_id, report_date, source_name)` | `source_name` is `NOT NULL` (defaults `'Unknown'`) — safe composite. |
+| `sales_margin_raw` | `(user_id, report_date, product_category)` **CONFIRM** | `product_category` is **nullable** → NULL rows won't dedupe. If the source is one row/user/day, use `(user_id, report_date)` instead. |
+| `ticket_task_raw` | **CONFIRM** — likely `(user_id, report_date, ticket_id)` | `ticket_id` is **nullable**; many rows can share user/day/status. Needs the real identity of a "ticket" row before we can pick a safe key. |
+
+### Mandatory pre-step: existing rows are probably already duplicated
+
+Because these tables have run without a unique key, they likely already hold
+duplicate rows. **Adding a UNIQUE constraint will fail on duplicate data**, so
+the migration must dedupe first (keep the newest `id` per grain, delete the
+rest) — a **data-mutating** change that must be backed up and approved. Size the
+problem first with this read-only probe (example for `call_activity_raw`; repeat
+per table with its proposed grain):
+
+```sql
+SELECT user_id, report_date, COUNT(*) AS n
+FROM call_activity_raw
+GROUP BY user_id, report_date
+HAVING n > 1
+ORDER BY n DESC
+LIMIT 50;
+```
+
+### Code change (lands atomically with the migration)
+
+Switch the six `createMany` calls in `importService.ts` to the proven `PunchRaw`
+pattern: chunked `$transaction` of `upsert`s keyed on the new compound
+`@@unique`. Upsert (not `createMany({ skipDuplicates })`) so a re-import **heals
+corrected values** in place instead of silently skipping them — matching how
+punch data already behaves. `import_id` updates to the latest run on conflict.
+
 - Prefer reusing these existing tables and enforcing grain over adding new
   staging tables.
+- `EntityRaw` (if present) follows the same treatment once its grain is confirmed.
 
 ## Schema drift / correctness
 
@@ -115,6 +157,9 @@ The `*Raw` import tables (`CallActivityRaw`, `SalesMarginRaw`,
 2. Approve the `AiFormRulePackAssignment` relation + `ScheduleShift` redundant
    index drop (correctness, low risk) in the same or a follow-up migration.
 3. Address `*Raw` unique grain + idempotent import together (schema + code) so
-   the constraint and the upsert land atomically.
+   the constraint and the upsert land atomically. **Pre-req:** confirm the two
+   CONFIRM grains, run the duplicate probes, then back up and dedupe existing
+   rows in the same migration *before* adding each `@@unique` (a UNIQUE add fails
+   on pre-existing duplicates).
 
 Nothing above changes behavior until you explicitly approve the specific item.

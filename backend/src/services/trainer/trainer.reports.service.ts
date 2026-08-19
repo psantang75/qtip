@@ -23,7 +23,7 @@ import type {
   TrainerReportPayload,
 } from './trainer.types'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 export async function getFilterOptions(): Promise<FilterOptions> {
   const [courses, csrs, departments] = await Promise.all([

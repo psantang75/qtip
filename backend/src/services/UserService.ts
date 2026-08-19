@@ -230,7 +230,7 @@ export class UserService {
       }
 
       // Hash password if provided
-      let updateData = { ...userData };
+      const updateData = { ...userData };
       if (userData.password) {
         updateData.password = await this.hashPassword(userData.password);
       }

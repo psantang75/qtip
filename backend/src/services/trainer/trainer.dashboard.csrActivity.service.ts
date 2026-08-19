@@ -22,7 +22,7 @@ import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
 import type { TrainerCSRActivityRow } from './trainer.types'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 export async function getTrainerCSRActivity(): Promise<TrainerCSRActivityRow[]> {
   const rows = await prisma.$queryRaw<any[]>(Prisma.sql`

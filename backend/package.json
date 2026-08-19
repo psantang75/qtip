@@ -13,6 +13,9 @@
     "prod": "npm run build && npm start",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:seed": "ts-node prisma/seed.ts",
@@ -72,6 +75,7 @@
     "zod": "^3.25.51"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.9",
     "@types/csurf": "^1.11.5",
@@ -83,9 +87,12 @@
     "@types/nodemailer": "^8.0.0",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
+    "eslint": "^9.39.5",
+    "globals": "^17.11.0",
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2",
+    "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.4"
   }
 }

@@ -224,15 +224,20 @@ These were started as verified pilots; continue them under the cadence above:
   items. NOTE: this repo's `schema.prisma` is a deliberate partial model — NEVER
   run `prisma migrate dev`; use hand-authored `migration.sql` + `prisma migrate
   deploy` (see [`database_schema_updates.md`](./database_schema_updates.md)).
-- Lint gate wiring (found during the pre-deploy green gate): root
-  `npm run lint` → `lint:backend` → `cd backend && npm run lint` fails with
-  `Missing script: "lint"` — `backend/package.json` has no `lint` script, so
-  ESLint has never actually run on the backend from the root gate (the frontend
-  side has also failed plugin resolution from root before). The `tsc` build is
-  the effective backend type-gate today. Fix as its own focused pass: add a
-  `"lint"` script to `backend/package.json`, confirm `frontend` lint resolves
-  its ESLint plugins from root, then triage whatever findings surface — do NOT
-  bundle it into an unrelated change.
+- Lint gate wiring — RESOLVED (Phase 1). `backend/package.json` now has
+  `lint`/`lint:fix`/`typecheck`, and `backend/eslint.config.mjs` (flat config,
+  typescript-eslint) mirrors the frontend. Root `npm run lint:backend` is green.
+  Adoption used the industry-standard ratchet: rules that fire on intentional
+  patterns are `off` (see the config header), and pre-existing style debt is
+  `warn` (currently **101 warnings, 0 errors**) so the gate stays green without
+  churning ~25 unrelated files. **Burn-down:** clear warnings as you touch files
+  (biggest buckets: `prefer-const` ~50, `@typescript-eslint/no-unused-vars` ~42);
+  when a rule reaches zero, promote it from `warn` to `error`. `no-unused-vars`
+  is the first promotion target (the maintainer explicitly cares about
+  "declared but never read").
+- Build type-gate — RESOLVED (Phase 1). `deploy/Dockerfile` no longer appends
+  `|| true` to the `tsc` step, so a real backend type error now fails the image
+  build instead of shipping silently. Verified safe: `tsc --noEmit` is clean.
 
 ## Notes / corrections logged during the program
 

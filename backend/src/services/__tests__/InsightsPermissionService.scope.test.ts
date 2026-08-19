@@ -48,7 +48,7 @@ const PAGE_KEYS = {
   gateAdmin:     '__test_perm_gate_admin',        // gate other dept, Admin query -> access (bypass)
 }
 
-let pageIds: Record<string, number> = {}
+const pageIds: Record<string, number> = {}
 let employeeKey: number | null = null
 let departmentKey: number | null = null
 let parentDeptKey: number | null = null

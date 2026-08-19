@@ -77,7 +77,7 @@ export async function transitionStatus(
 
   await prisma.writeUp.update({
     where: { id: writeUpId },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     data:  updateData as any,
   })
 
@@ -153,7 +153,7 @@ export async function setFollowUp(writeUpId: number, input: SetFollowUpInput): P
 
 // ── internal helpers ─────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function assertTransitionGuards(existing: any, input: TransitionStatusInput, viewerRole: string, newStatus: string): void {
   const isManagerLike = viewerRole === 'Manager' || viewerRole === 'Admin'
 
@@ -207,7 +207,7 @@ function assertTransitionGuards(existing: any, input: TransitionStatusInput, vie
  * each with non-empty descriptive text. Mirrored on the frontend in
  * `WriteUpFormPage.validateSchedule`.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 async function assertScheduleReadiness(writeUpId: number, _existing: any): Promise<void> {
   const incidents = await prisma.writeUpIncident.findMany({
     where: { write_up_id: writeUpId },
@@ -248,7 +248,7 @@ async function assertScheduleReadiness(writeUpId: number, _existing: any): Promi
 }
 
 function buildTransitionUpdate(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   existing: any,
   input: TransitionStatusInput,
   newStatus: string,

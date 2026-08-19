@@ -19,7 +19,10 @@ COPY backend/ ./
 # older schema; regenerating here guarantees the client matches schema.prisma before
 # tsc compiles it. Without this, new models are missing from the shipped client.
 RUN npx prisma generate
-RUN npx tsc --skipLibCheck || true
+# Type errors MUST fail the image build — do not append `|| true`. `--skipLibCheck`
+# skips type-checking of .d.ts deps for speed, but our own code is still fully
+# checked, so a real type error breaks the build instead of shipping silently.
+RUN npx tsc --skipLibCheck
 RUN npm run copy:assets
 
 # Stage 3: Production Runtime

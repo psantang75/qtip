@@ -112,7 +112,7 @@ function breakAllowanceMinutes(day: ScheduledDay): number {
   let mins = 0;
   for (const seg of day.segments) {
     if (!seg.isPaid) continue;
-    let s = minutesOfHm(seg.start);
+    const s = minutesOfHm(seg.start);
     let e = minutesOfHm(seg.end);
     if (e < s) e += 24 * 60; // segment crosses midnight
     mins += Math.max(0, e - s);
@@ -167,7 +167,7 @@ function excusedSeconds(
     if (!ex.isExcused || ex.isFullDay || !ex.start || !ex.end) continue;
     const applies = edge === 'arrival' ? ex.affectsArrival : ex.affectsDeparture;
     if (!applies) continue;
-    let start = combineLocal(dateStr, ex.start).getTime();
+    const start = combineLocal(dateStr, ex.start).getTime();
     let end = combineLocal(dateStr, ex.end).getTime();
     if (end <= start) end = combineLocal(addDays(dateStr, 1), ex.end).getTime();
     seconds += Math.round(overlapMs(deviationStart, deviationEnd, start, end) / 1000);

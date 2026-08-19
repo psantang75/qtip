@@ -27,7 +27,7 @@ interface AuthenticatedRequest extends Request {
 }
 
 // Cache for role IDs to avoid repeated database queries
-let roleCache: { [key: string]: number } = {};
+const roleCache: { [key: string]: number } = {};
 
 // Helper function to get role ID by role name
 const getRoleId = async (role_name: string): Promise<number | null> => {

@@ -15,7 +15,7 @@
 import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 export interface TrainerCompletedSubmissionsParams {
   page:       number

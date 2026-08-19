@@ -318,8 +318,8 @@ export const streamRecording = async (req: Request, res: Response): Promise<void
       }
       const startStr = m[1];
       const endStr = m[2];
-      let start = startStr ? parseInt(startStr, 10) : 0;
-      let end = endStr ? parseInt(endStr, 10) : fileSize - 1;
+      const start = startStr ? parseInt(startStr, 10) : 0;
+      const end = endStr ? parseInt(endStr, 10) : fileSize - 1;
       if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= fileSize) {
         res.status(416).set('Content-Range', `bytes */${fileSize}`).end();
         return;

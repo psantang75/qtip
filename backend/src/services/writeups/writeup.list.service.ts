@@ -47,7 +47,7 @@ export interface ListWriteUpsParams {
 }
 
 export interface ListWriteUpsResult {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   items: any[]
   total: number
   page: number
@@ -100,7 +100,7 @@ export async function listWriteUps(params: ListWriteUpsParams): Promise<ListWrit
     prisma.$queryRaw<{ total: bigint }[]>(
       Prisma.sql`SELECT COUNT(*) as total ${baseJoin} ${whereClause}`,
     ),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     prisma.$queryRaw<any[]>(
       Prisma.sql`
         SELECT wu.id, wu.document_type, wu.status, wu.meeting_date, wu.created_at,
@@ -129,9 +129,9 @@ export async function listWriteUps(params: ListWriteUpsParams): Promise<ListWrit
  * list-item categories. CSR viewers receive a 404 when the row is not
  * theirs or is still DRAFT.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export async function getWriteUpDetail(writeUpId: number, viewerId: number, viewerRole: string, canViewAll: boolean, scopedDepartmentIds: number[] | null): Promise<any> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
     SELECT wu.*,
       csr.department_id  as csr_department_id,
@@ -169,17 +169,17 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
     throw new WriteUpServiceError('Write-up not found', 404, 'WRITEUP_NOT_FOUND')
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const incidents = await prisma.$queryRaw<any[]>(
     Prisma.sql`SELECT * FROM write_up_incidents WHERE write_up_id = ${writeUpId} ORDER BY sort_order ASC`,
   )
   for (const incident of incidents) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const violations = await prisma.$queryRaw<any[]>(
       Prisma.sql`SELECT * FROM write_up_violations WHERE incident_id = ${incident.id} ORDER BY sort_order ASC`,
     )
     for (const violation of violations) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       violation.examples = await prisma.$queryRaw<any[]>(
         Prisma.sql`SELECT * FROM write_up_examples WHERE violation_id = ${violation.id} ORDER BY sort_order ASC`,
       )
@@ -188,7 +188,7 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
   }
 
   const linkedCoachingRaw = writeUp.linked_coaching_id
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     ? await prisma.$queryRaw<any[]>(Prisma.sql`
         SELECT cs.id, lp.label as coaching_purpose, cs.status, cs.session_date,
           SUBSTRING(cs.notes, 1, 500) as notes,
@@ -212,7 +212,7 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
   } : null
 
   const [priorDisciplineRaw, attachments, behaviorFlagItems, rootCauseItems, supportNeededItems] = await Promise.all([
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT pd.reference_type, pd.reference_id,
         wu.document_type, wu.status as wu_status, wu.meeting_date,
@@ -233,9 +233,9 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
       GROUP BY pd.reference_type, pd.reference_id
       ORDER BY MIN(pd.id) ASC
     `),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     prisma.$queryRaw<any[]>(Prisma.sql`SELECT * FROM write_up_attachments WHERE write_up_id = ${writeUpId} ORDER BY created_at ASC`),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT li.id, li.category, li.label, li.sort_order
       FROM write_up_list_items wuli
@@ -243,7 +243,7 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
       WHERE wuli.write_up_id = ${writeUpId} AND li.list_type = 'behavior_flag'
       ORDER BY li.sort_order ASC
     `),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT li.id, li.category, li.label, li.sort_order
       FROM write_up_list_items wuli
@@ -251,7 +251,7 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
       WHERE wuli.write_up_id = ${writeUpId} AND li.list_type = 'root_cause'
       ORDER BY li.sort_order ASC
     `),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT li.id, li.category, li.label, li.sort_order
       FROM write_up_list_items wuli
@@ -290,13 +290,13 @@ export async function getWriteUpDetail(writeUpId: number, viewerId: number, view
  * write-ups (status != DRAFT) and every coaching session.
  */
 export async function getPriorDiscipline(csrId: number): Promise<{
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   write_ups: any[]
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   coaching_sessions: any[]
 }> {
   const [writeUpsRaw, coachingRaw] = await Promise.all([
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT wu.id, wu.document_type, wu.status, wu.meeting_date, wu.created_at,
         GROUP_CONCAT(DISTINCT wuv.policy_violated ORDER BY wuv.policy_violated SEPARATOR '~|~') as policies_violated,
@@ -308,7 +308,7 @@ export async function getPriorDiscipline(csrId: number): Promise<{
       GROUP BY wu.id
       ORDER BY wu.created_at DESC
     `),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT cs.id, cs.session_date, lp.label as coaching_purpose, cs.status,
         SUBSTRING(cs.notes, 1, 500) as notes,

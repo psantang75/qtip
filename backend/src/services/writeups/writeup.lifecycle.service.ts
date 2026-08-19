@@ -59,7 +59,7 @@ import { insertIncidents, replaceWriteUpListItems, toIntArray } from './writeup.
 import { WriteUpServiceError } from './writeup.types'
 import type { IncidentInput, PriorDisciplineRef } from './writeup.types'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const orNull = <T>(v: T | undefined): T | null => (v as any) ?? null
 
 // Body shapes accepted by the lifecycle endpoints. Kept loose because they
@@ -123,7 +123,7 @@ export async function createWriteUp(input: CreateWriteUpInput, createdBy: number
     const writeUp = await tx.writeUp.create({
       data: {
         csr_id:              parseInt(String(input.csr_id)),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         document_type:       input.document_type as any,
         status:              'DRAFT',
         meeting_date:        input.meeting_date  ? new Date(input.meeting_date)  : null,

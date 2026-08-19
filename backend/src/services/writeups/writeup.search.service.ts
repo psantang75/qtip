@@ -35,7 +35,7 @@ export interface SearchCoachingSessionsParams {
  * question is selected and `failedOnly` is true, the query restricts to
  * common failing answer tokens (`No`, `FAIL`, `0`, `false`, etc).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export async function searchQaRecords(params: SearchQaRecordsParams): Promise<any[]> {
   if (!params.csrId) {
     throw new WriteUpServiceError('csr_id is required', 400, 'WRITEUP_VALIDATION')
@@ -69,7 +69,7 @@ export async function searchQaRecords(params: SearchQaRecordsParams): Promise<an
 
   const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   return prisma.$queryRaw<any[]>(Prisma.sql`
     SELECT DISTINCT
       s.id as submission_id,
@@ -105,7 +105,7 @@ export async function searchQaRecords(params: SearchQaRecordsParams): Promise<an
  * Search coaching sessions for a CSR. Topic filters are OR-joined so the
  * picker can match on any of the selected topic names.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export async function searchCoachingSessions(params: SearchCoachingSessionsParams): Promise<any[]> {
   if (!params.csrId) {
     throw new WriteUpServiceError('csr_id is required', 400, 'WRITEUP_VALIDATION')
@@ -126,7 +126,7 @@ export async function searchCoachingSessions(params: SearchCoachingSessionsParam
 
   const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
     SELECT cs.id as session_id, cs.session_date, lp.label as coaching_purpose, cs.status, cs.notes,
       GROUP_CONCAT(DISTINCT li_t.label ORDER BY li_t.label SEPARATOR ', ') as topic_names
