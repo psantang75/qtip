@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import { serviceLogger } from '../config/logger';
 import { resolvePeriod } from '../utils/periodUtils';
 import {
   getOnDemandReport,
@@ -10,6 +9,14 @@ import {
 } from '../services/onDemandReportsRegistry';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
 import { withQueryTimeout } from '../utils/queryTimeout';
+import {
+  asyncHandler,
+  createValidationError,
+  createNotFoundError,
+  createAuthorizationError,
+  AppError,
+  ErrorType,
+} from '../utils/errorHandler';
 // Local `escapeFilename` removed during pre-production review (item #26).
 // `utils/contentDisposition.formatFilename` is the canonical implementation.
 
@@ -26,6 +33,24 @@ function resolveUser(req: Request): OnDemandReportUser | null {
   if (!req.user) return null;
   const role_id = ROLE_NAME_TO_ID[req.user.role] ?? 0;
   return { user_id: req.user.user_id, role: req.user.role, role_id };
+}
+
+type OnDemandReport = NonNullable<ReturnType<typeof getOnDemandReport>>;
+
+/** 401 if no authenticated user, else the resolved report user. Shared by every
+ *  handler so the auth gate is identical across the endpoints. */
+function requireUser(req: Request): OnDemandReportUser {
+  const user = resolveUser(req);
+  if (!user) throw new AppError('Unauthorized', ErrorType.AUTHORIZATION_ERROR, 401);
+  return user;
+}
+
+/** 404 if the report id is unknown, 403 if the user's role can't run it. */
+function requireReportForUser(req: Request, user: OnDemandReportUser): OnDemandReport {
+  const report = getOnDemandReport(req.params.id);
+  if (!report) throw createNotFoundError('Report not found');
+  if (!report.roles.includes(user.role_id)) throw createAuthorizationError('Access denied for this report');
+  return report;
 }
 
 function toIso(d: Date): string {
@@ -113,59 +138,31 @@ function reportToSummary(r: ReturnType<typeof getOnDemandReport>) {
  * GET /api/on-demand-reports
  * List the reports the current user is allowed to run.
  */
-export const listReports = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const user = resolveUser(req);
-    if (!user) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
-
+export const listReports = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const user = requireUser(req);
     const reports = listOnDemandReportsForRole(user.role_id).map(r => reportToSummary(r));
     res.json({ success: true, data: reports });
-  } catch (error) {
-    serviceLogger.error('on-demand-reports', 'listReports', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Failed to list reports' });
-  }
-};
+});
 
 /**
  * GET /api/on-demand-reports/:id
  */
-export const getReport = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const user = resolveUser(req);
-    if (!user) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
-
-    const report = getOnDemandReport(req.params.id);
-    if (!report) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
-    if (!report.roles.includes(user.role_id)) {
-      res.status(403).json({ success: false, message: 'Access denied for this report' });
-      return;
-    }
-
+export const getReport = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const user = requireUser(req);
+    const report = requireReportForUser(req, user);
     res.json({ success: true, data: reportToSummary(report) });
-  } catch (error) {
-    serviceLogger.error('on-demand-reports', 'getReport', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Failed to fetch report metadata' });
-  }
-};
+});
 
 /**
  * POST /api/on-demand-reports/:id/data
  * Body: { period, customStart?, customEnd?, departments?, forms?, agents?, submissionId?, page?, pageSize? }
  */
-export const getReportData = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const user = resolveUser(req);
-    if (!user) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
-
-    const report = getOnDemandReport(req.params.id);
-    if (!report) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
-    if (!report.roles.includes(user.role_id)) {
-      res.status(403).json({ success: false, message: 'Access denied for this report' });
-      return;
-    }
+export const getReportData = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const user = requireUser(req);
+    const report = requireReportForUser(req, user);
 
     const resolved = resolveFilters(req.body);
-    if (!resolved.ok) { res.status(400).json({ success: false, message: resolved.message }); return; }
+    if (!resolved.ok) throw createValidationError(resolved.message);
 
     const page = Math.max(1, parseInt(req.body?.page) || 1);
     const pageSizeRaw = parseInt(req.body?.pageSize) || 50;
@@ -187,30 +184,18 @@ export const getReportData = async (req: Request, res: Response): Promise<void> 
         appliedRange: { start_date: resolved.filters.start_date, end_date: resolved.filters.end_date },
       },
     });
-  } catch (error) {
-    serviceLogger.error('on-demand-reports', 'getReportData', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Failed to run report' });
-  }
-};
+});
 
 /**
  * POST /api/on-demand-reports/:id/download
  * Same body shape as `/data`.
  */
-export const downloadReport = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const user = resolveUser(req);
-    if (!user) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
-
-    const report = getOnDemandReport(req.params.id);
-    if (!report) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
-    if (!report.roles.includes(user.role_id)) {
-      res.status(403).json({ success: false, message: 'Access denied for this report' });
-      return;
-    }
+export const downloadReport = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const user = requireUser(req);
+    const report = requireReportForUser(req, user);
 
     const resolved = resolveFilters(req.body);
-    if (!resolved.ok) { res.status(400).json({ success: false, message: resolved.message }); return; }
+    if (!resolved.ok) throw createValidationError(resolved.message);
 
     const { buffer, filename } = await withQueryTimeout(
       report.getXlsx(resolved.filters, user),
@@ -223,11 +208,7 @@ export const downloadReport = async (req: Request, res: Response): Promise<void>
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; ${escapeFilename(filename)}`);
     res.send(buffer);
-  } catch (error) {
-    serviceLogger.error('on-demand-reports', 'downloadReport', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Failed to download report' });
-  }
-};
+});
 
 /**
  * POST /api/on-demand-reports/:id/filter-options
@@ -236,20 +217,12 @@ export const downloadReport = async (req: Request, res: Response): Promise<void>
  * Returns the values available for the dept / form / agent dropdowns inside
  * the requested period, cross-filtered by other current selections.
  */
-export const getFilterOptions = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const user = resolveUser(req);
-    if (!user) { res.status(401).json({ success: false, message: 'Unauthorized' }); return; }
-
-    const report = getOnDemandReport(req.params.id);
-    if (!report) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
-    if (!report.roles.includes(user.role_id)) {
-      res.status(403).json({ success: false, message: 'Access denied for this report' });
-      return;
-    }
+export const getFilterOptions = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const user = requireUser(req);
+    const report = requireReportForUser(req, user);
 
     const resolved = resolveFilters(req.body);
-    if (!resolved.ok) { res.status(400).json({ success: false, message: resolved.message }); return; }
+    if (!resolved.ok) throw createValidationError(resolved.message);
 
     const options = await getOnDemandFilterOptions(
       report.id,
@@ -263,8 +236,4 @@ export const getFilterOptions = async (req: Request, res: Response): Promise<voi
     );
 
     res.json({ success: true, data: options });
-  } catch (error) {
-    serviceLogger.error('on-demand-reports', 'getFilterOptions', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Failed to load filter options' });
-  }
-};
+});

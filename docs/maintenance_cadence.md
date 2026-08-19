@@ -293,8 +293,23 @@ These were started as verified pilots; continue them under the cadence above:
     safe; the 403 + message contract is preserved. Removed the now-unused `logger`
     import (global handler logs). Covered by
     `controllers/__tests__/coaching.controller.test.ts` (19 tests). Lint 98 → 97.
+  - DONE: `quizLibrary` / `resource` / `onDemandReports` / `phoneSystem` controllers
+    (one slice). All handlers → `asyncHandler` + `AppError`; success payloads unchanged.
+    Notable preserved semantics: quizLibrary's **409** conflict (built as
+    `new AppError(msg, VALIDATION_ERROR, 409)` since there's no 409 factory); resource's
+    signed-view-token **401s** (via a local `unauthorized()` helper — the factory default
+    is 403) and its two streaming handlers' mid-stream `on('error')` 500s; onDemandReports'
+    repeated auth/lookup/role preamble refactored into shared `requireUser` +
+    `requireReportForUser` guards (kills 4× duplication) that throw 401/404/403; phoneSystem's
+    health **200/503** payload left verbatim (client reads `status`), its streaming
+    416/range + `on('error')` paths kept, pre-stream 400/404/**502** guards → throws, and the
+    `error:<message>` detail field dropped from 500s (the global handler no longer leaks it).
+    Removed now-dead `logger`/`serviceLogger` imports where every catch went away (phoneSystem
+    keeps `logger` for its `logger.info` diagnostics). Covered by 35 new tests across
+    `controllers/__tests__/{quizLibrary,resource,onDemandReports,phoneSystem}.controller.test.ts`.
+    tsc + full backend suite green (769 passed), lint 97/0.
   - Order (risk-first): ✅ `dispute` → ✅ `coaching` →
-    `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` → `admin` (61, coordinate
+    ✅ `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` → `admin` (61, coordinate
     w/ its decomposition) → `auth` LAST (sensitive; keep `{token,user}`/`{valid}`/`{ok}`
     success shapes untouched). Add controller tests per slice, mirroring the
     `insightsAdmin*` / dispute pattern.

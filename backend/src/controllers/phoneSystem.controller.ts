@@ -4,6 +4,13 @@ import path from 'path';
 import phoneSystemService from '../services/PhoneSystemService';
 import logger from '../config/logger';
 import { config } from '../config/environment';
+import {
+  asyncHandler,
+  createValidationError,
+  createNotFoundError,
+  AppError,
+  ErrorType,
+} from '../utils/errorHandler';
 
 /**
  * Resolve a `RecordingPath` value from `tblConversationRecording` into
@@ -27,100 +34,65 @@ function resolveRecordingPath(rawPath: string): string {
  * Get audio URL by conversation ID
  * @route GET /api/phone-system/recording/:conversationId
  */
-export const getAudioUrlByConversationId = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getAudioUrlByConversationId = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { conversationId } = req.params;
-    
+
     if (!conversationId) {
-      res.status(400).json({ 
-        success: false, 
-        message: 'Conversation ID is required' 
-      });
-      return;
+      throw createValidationError('Conversation ID is required');
     }
-    
+
     logger.info(`[PHONE SYSTEM CONTROLLER] Getting audio URL for conversation ID: ${conversationId}`);
-    
+
     const recording = await phoneSystemService.getAudioUrlByConversationId(conversationId);
-    
+
     if (!recording) {
-      res.status(404).json({ 
-        success: false, 
-        message: `No recording found for conversation ID: ${conversationId}` 
-      });
-      return;
+      throw createNotFoundError(`No recording found for conversation ID: ${conversationId}`);
     }
-    
+
     res.status(200).json({
       success: true,
       data: recording
     });
-  } catch (error) {
-    logger.error('[PHONE SYSTEM CONTROLLER] Error getting audio URL:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to retrieve audio URL',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-};
+});
 
 /**
  * Get multiple audio URLs by conversation IDs
  * @route POST /api/phone-system/recordings/batch
  */
-export const getAudioUrlsByConversationIds = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getAudioUrlsByConversationIds = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { conversationIds } = req.body;
-    
+
     if (!conversationIds || !Array.isArray(conversationIds) || conversationIds.length === 0) {
-      res.status(400).json({ 
-        success: false, 
-        message: 'Conversation IDs array is required' 
-      });
-      return;
+      throw createValidationError('Conversation IDs array is required');
     }
-    
+
     logger.info(`[PHONE SYSTEM CONTROLLER] Getting audio URLs for ${conversationIds.length} conversation IDs`);
-    
+
     const recordings = await phoneSystemService.getAudioUrlsByConversationIds(conversationIds);
-    
+
     res.status(200).json({
       success: true,
       data: recordings,
       count: recordings.length
     });
-  } catch (error) {
-    logger.error('[PHONE SYSTEM CONTROLLER] Error getting audio URLs:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to retrieve audio URLs',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-};
+});
 
 /**
  * Get all recordings (since date filtering is not available)
  * @route GET /api/phone-system/recordings
  */
-export const getAllRecordings = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getAllRecordings = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { limit = 100 } = req.query;
-    
+
     const limitNum = parseInt(limit as string, 10);
     if (isNaN(limitNum) || limitNum < 1 || limitNum > 1000) {
-      res.status(400).json({ 
-        success: false, 
-        message: 'Limit must be a number between 1 and 1000' 
-      });
-      return;
+      throw createValidationError('Limit must be a number between 1 and 1000');
     }
-    
+
     logger.info(`[PHONE SYSTEM CONTROLLER] Getting all recordings (limit: ${limitNum})`);
-    
+
     const recordings = await phoneSystemService.getAllRecordings(limitNum);
-    
+
     res.status(200).json({
       success: true,
       data: recordings,
@@ -129,26 +101,19 @@ export const getAllRecordings = async (req: Request, res: Response): Promise<voi
         limit: limitNum
       }
     });
-  } catch (error) {
-    logger.error('[PHONE SYSTEM CONTROLLER] Error getting recordings:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to get recordings',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-};
+});
 
 /**
  * Test PhoneSystem database connection
  * @route GET /api/phone-system/health
  */
-export const testPhoneSystemConnection = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const testPhoneSystemConnection = asyncHandler(async (_req: Request, res: Response): Promise<void> => {
     logger.info('[PHONE SYSTEM CONTROLLER] Testing PhoneSystem database connection');
-    
+
     const isConnected = await phoneSystemService.testConnection();
-    
+
+    // Health endpoint: the 200/503 pair is a deliberate status payload (the
+    // client reads `status`), not an error envelope — left verbatim.
     if (isConnected) {
       res.status(200).json({
         success: true,
@@ -162,107 +127,63 @@ export const testPhoneSystemConnection = async (req: Request, res: Response): Pr
         status: 'disconnected'
       });
     }
-  } catch (error) {
-    logger.error('[PHONE SYSTEM CONTROLLER] Error testing connection:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to test PhoneSystem database connection',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-};
+});
 
 /**
  * Get PhoneSystem database statistics
  * @route GET /api/phone-system/stats
  */
-export const getPhoneSystemStats = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPhoneSystemStats = asyncHandler(async (_req: Request, res: Response): Promise<void> => {
     logger.info('[PHONE SYSTEM CONTROLLER] Getting PhoneSystem database statistics');
-    
+
     const stats = await phoneSystemService.getDatabaseStats();
-    
+
     res.status(200).json({
       success: true,
       data: stats
     });
-  } catch (error) {
-    logger.error('[PHONE SYSTEM CONTROLLER] Error getting statistics:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to get PhoneSystem database statistics',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-}; 
+}); 
 
 /**
  * Get transcript by conversation ID
  * @route GET /api/phone-system/transcript/:conversationId
  */
-export const getTranscriptByConversationId = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getTranscriptByConversationId = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { conversationId } = req.params;
-    
+
     if (!conversationId) {
-      res.status(400).json({ 
-        success: false, 
-        message: 'Conversation ID is required' 
-      });
-      return;
+      throw createValidationError('Conversation ID is required');
     }
-    
+
     logger.info(`[PHONE SYSTEM CONTROLLER] Getting transcript for conversation ID: ${conversationId}`);
-    
+
     const transcript = await phoneSystemService.getTranscriptByConversationId(conversationId);
-    
+
     if (!transcript) {
-      res.status(404).json({ 
-        success: false, 
-        message: `No transcript found for conversation ID: ${conversationId}` 
-      });
-      return;
+      throw createNotFoundError(`No transcript found for conversation ID: ${conversationId}`);
     }
-    
+
     res.status(200).json({
       success: true,
       data: transcript
     });
-  } catch (error) {
-    logger.error('[PHONE SYSTEM CONTROLLER] Error getting transcript:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to retrieve transcript',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-};
+});
 
 /**
  * List every recording for a conversation (one per communication leg).
  * @route GET /api/phone-system/recordings/conversation/:conversationId
  */
-export const getRecordingsForConversation = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getRecordingsForConversation = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { conversationId } = req.params;
 
     if (!conversationId) {
-      res.status(400).json({ success: false, message: 'Conversation ID is required' });
-      return;
+      throw createValidationError('Conversation ID is required');
     }
 
     const recordings = await phoneSystemService.getRecordingsForConversation(conversationId);
 
     res.status(200).json({ success: true, data: recordings, count: recordings.length });
-  } catch (error) {
-    logger.error('[PHONE SYSTEM CONTROLLER] Error listing recordings for conversation:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to list recordings for conversation',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-};
+});
 
 /**
  * Stream a recording's MP3 file from the PhoneSystem file share with
@@ -273,18 +194,15 @@ export const getRecordingsForConversation = async (req: Request, res: Response):
  *
  * @route GET /api/phone-system/audio/:recordingId
  */
-export const streamRecording = async (req: Request, res: Response): Promise<void> => {
-  const { recordingId } = req.params;
-  try {
+export const streamRecording = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { recordingId } = req.params;
     if (!recordingId) {
-      res.status(400).json({ success: false, message: 'Recording ID is required' });
-      return;
+      throw createValidationError('Recording ID is required');
     }
 
     const record = await phoneSystemService.getRecordingPathById(recordingId);
     if (!record) {
-      res.status(404).json({ success: false, message: `No recording found for ID: ${recordingId}` });
-      return;
+      throw createNotFoundError(`No recording found for ID: ${recordingId}`);
     }
 
     const filePath = resolveRecordingPath(record.path);
@@ -294,11 +212,11 @@ export const streamRecording = async (req: Request, res: Response): Promise<void
       stat = await fs.promises.stat(filePath);
     } catch (err) {
       logger.error(`[PHONE SYSTEM CONTROLLER] Recording file unreachable on disk: ${filePath}`, err);
-      res.status(502).json({
-        success: false,
-        message: 'Recording file is unreachable on the PhoneSystem share',
-      });
-      return;
+      throw new AppError(
+        'Recording file is unreachable on the PhoneSystem share',
+        ErrorType.EXTERNAL_SERVICE_ERROR,
+        502,
+      );
     }
 
     const ext = (record.originalFilename || filePath).toLowerCase();
@@ -357,40 +275,23 @@ export const streamRecording = async (req: Request, res: Response): Promise<void
         else res.end();
       })
       .pipe(res);
-  } catch (error) {
-    logger.error('[PHONE SYSTEM CONTROLLER] Error streaming recording:', error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        success: false,
-        message: 'Failed to stream recording',
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    } else {
-      res.end();
-    }
-  }
-};
+});
 
 /**
  * Get both audio URL and transcript by conversation ID
  * @route GET /api/phone-system/audio-transcript/:conversationId
  */
-export const getAudioAndTranscriptByConversationId = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getAudioAndTranscriptByConversationId = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { conversationId } = req.params;
-    
+
     if (!conversationId) {
-      res.status(400).json({ 
-        success: false, 
-        message: 'Conversation ID is required' 
-      });
-      return;
+      throw createValidationError('Conversation ID is required');
     }
-    
+
     logger.info(`[PHONE SYSTEM CONTROLLER] Getting audio and transcript for conversation ID: ${conversationId}`);
-    
+
     const result = await phoneSystemService.getAudioAndTranscriptByConversationId(conversationId);
-    
+
     // Return success even if one or both are null, as this is expected behavior
     res.status(200).json({
       success: true,
@@ -400,12 +301,4 @@ export const getAudioAndTranscriptByConversationId = async (req: Request, res: R
         transcript: result.transcript ? result.transcript.length > 0 : false
       }
     });
-  } catch (error) {
-    logger.error('[PHONE SYSTEM CONTROLLER] Error getting audio and transcript:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to retrieve audio and transcript',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-}; 
+}); 

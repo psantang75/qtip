@@ -4,7 +4,17 @@ import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { getJwtSecret } from '../config/environment';
 import { parsePagination } from '../validation/common';
-import logger from '../config/logger';
+import {
+  asyncHandler,
+  createValidationError,
+  createNotFoundError,
+  AppError,
+  ErrorType,
+} from '../utils/errorHandler';
+
+/** 401 helper — `createAuthorizationError` is 403, but the token endpoints below
+ *  return 401 for a missing/invalid view token. */
+const unauthorized = (message: string) => new AppError(message, ErrorType.AUTHORIZATION_ERROR, 401);
 const fs     = require('fs').promises;
 const path   = require('path');
 const { createReadStream } = require('fs');
@@ -95,8 +105,7 @@ function parseTopicIds(raw: any): number[] {
 
 // ── List ──────────────────────────────────────────────────────────────────────
 
-export const getResources = async (req: AuthReq, res: Response) => {
-  try {
+export const getResources = asyncHandler(async (req: AuthReq, res: Response) => {
     const { page, limit, skip: offset } = parsePagination(req.query, { defaultLimit: 20 });
     const { is_active, search } = req.query;
 
@@ -137,25 +146,20 @@ export const getResources = async (req: AuthReq, res: Response) => {
     }));
 
     res.json({ success: true, data: { resources, totalCount: Number(countRows[0]?.total ?? 0), page, limit } });
-  } catch (error) {
-    logger.error('[RESOURCE] getResources error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 // ── Create ────────────────────────────────────────────────────────────────────
 
-export const createResource = async (req: AuthReq, res: Response) => {
-  try {
+export const createResource = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const { title, resource_type, url, description, topic_ids: rawTopicIds, is_active } = req.body;
     const file = req.file;
-    if (!title) return res.status(400).json({ success: false, message: 'title is required' });
+    if (!title) throw createValidationError('title is required');
 
     const type = resource_type ?? (file ? detectResourceType(file.mimetype) : 'URL');
 
     if (type === 'URL' && !url) {
-      return res.status(400).json({ success: false, message: 'url is required for URL resources' });
+      throw createValidationError('url is required for URL resources');
     }
 
     let filePath: string | null = null, fileName: string | null = null,
@@ -188,22 +192,17 @@ export const createResource = async (req: AuthReq, res: Response) => {
     });
 
     res.status(201).json({ success: true, data: { id: newId }, message: 'Resource created' });
-  } catch (error) {
-    logger.error('[RESOURCE] createResource error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 // ── Update ────────────────────────────────────────────────────────────────────
 
-export const updateResource = async (req: AuthReq, res: Response) => {
-  try {
+export const updateResource = asyncHandler(async (req: AuthReq, res: Response) => {
     const resourceId = parseInt(req.params.id);
     const { title, resource_type, url, description, is_active, topic_ids: rawTopicIds } = req.body;
     const file = req.file;
 
     const existing = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM training_resources WHERE id = ${resourceId}`);
-    if (!existing.length) return res.status(404).json({ success: false, message: 'Resource not found' });
+    if (!existing.length) throw createNotFoundError('Resource not found');
 
     const parts: Prisma.Sql[] = [];
     if (title !== undefined)         parts.push(Prisma.sql`title = ${title}`);
@@ -239,38 +238,28 @@ export const updateResource = async (req: AuthReq, res: Response) => {
     });
 
     res.json({ success: true, message: 'Resource updated' });
-  } catch (error) {
-    logger.error('[RESOURCE] updateResource error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 // ── Toggle status ─────────────────────────────────────────────────────────────
 
-export const toggleResourceStatus = async (req: AuthReq, res: Response) => {
-  try {
+export const toggleResourceStatus = asyncHandler(async (req: AuthReq, res: Response) => {
     const resourceId = parseInt(req.params.id);
     const { is_active } = req.body;
-    if (is_active === undefined) return res.status(400).json({ success: false, message: 'is_active is required' });
+    if (is_active === undefined) throw createValidationError('is_active is required');
     const existing = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM training_resources WHERE id = ${resourceId}`);
-    if (!existing.length) return res.status(404).json({ success: false, message: 'Resource not found' });
+    if (!existing.length) throw createNotFoundError('Resource not found');
     await prisma.$executeRaw(Prisma.sql`UPDATE training_resources SET is_active = ${is_active === true || is_active === 'true' ? 1 : 0}, updated_at = NOW() WHERE id = ${resourceId}`);
     res.json({ success: true, message: 'Resource status updated' });
-  } catch (error) {
-    logger.error('[RESOURCE] toggleResourceStatus error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 // ── Generate signed view URL (for Office Online) ─────────────────────────────
 
-export const generateViewToken = async (req: AuthReq, res: Response) => {
-  try {
+export const generateViewToken = asyncHandler(async (req: AuthReq, res: Response) => {
     const resourceId = parseInt(req.params.id);
     const rows = await prisma.$queryRaw<any[]>(
       Prisma.sql`SELECT id, file_path FROM training_resources WHERE id = ${resourceId} AND file_path IS NOT NULL`
     );
-    if (!rows.length) return res.status(404).json({ success: false, message: 'File not found' });
+    if (!rows.length) throw createNotFoundError('File not found');
 
     const token = jwt.sign(
       { rid: resourceId, aud: VIEW_TOKEN_AUDIENCE } satisfies ViewTokenPayload,
@@ -283,40 +272,37 @@ export const generateViewToken = async (req: AuthReq, res: Response) => {
     const viewUrl  = `${protocol}://${host}/api/trainer/resources/${resourceId}/view?token=${token}`;
 
     res.json({ success: true, data: { viewUrl } });
-  } catch (error) {
-    logger.error('[RESOURCE] generateViewToken error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 // ── Serve file via signed token (no auth middleware — token IS the auth) ───────
 
-export const serveFileWithToken = async (req: Request, res: Response) => {
-  try {
+export const serveFileWithToken = asyncHandler(async (req: Request, res: Response) => {
     const resourceId = parseInt(req.params.id);
     const { token }  = req.query as { token?: string };
 
-    if (!token) return res.status(401).json({ success: false, message: 'Token required' });
+    if (!token) throw unauthorized('Token required');
 
+    // jwt.verify throws on a bad/expired signature — narrow that to the 401 the
+    // client expects. The audience/rid check throws *outside* this try so its
+    // distinct "Invalid token" message isn't collapsed into the expiry message.
     let payload: ViewTokenPayload;
     try {
-      const decoded = jwt.verify(token, getJwtSecret()) as ViewTokenPayload & { exp?: number };
-      if (decoded.aud !== VIEW_TOKEN_AUDIENCE || typeof decoded.rid !== 'number' || decoded.rid !== resourceId) {
-        return res.status(401).json({ success: false, message: 'Invalid token' });
-      }
-      payload = decoded;
+      payload = jwt.verify(token, getJwtSecret()) as ViewTokenPayload & { exp?: number };
     } catch {
-      return res.status(401).json({ success: false, message: 'Invalid or expired token' });
+      throw unauthorized('Invalid or expired token');
+    }
+    if (payload.aud !== VIEW_TOKEN_AUDIENCE || typeof payload.rid !== 'number' || payload.rid !== resourceId) {
+      throw unauthorized('Invalid token');
     }
 
     const rows = await prisma.$queryRaw<any[]>(
       Prisma.sql`SELECT file_path, file_name, file_mime_type FROM training_resources WHERE id = ${payload.rid} AND file_path IS NOT NULL`
     );
-    if (!rows.length) return res.status(404).json({ success: false, message: 'File not found' });
+    if (!rows.length) throw createNotFoundError('File not found');
 
     const { file_path, file_name, file_mime_type } = rows[0];
     const absPath = path.join(process.cwd(), file_path);
-    try { await fs.access(absPath); } catch { return res.status(404).json({ success: false, message: 'File not found on server' }); }
+    try { await fs.access(absPath); } catch { throw createNotFoundError('File not found on server'); }
 
     const stats = await fs.stat(absPath);
     res.setHeader('Content-Type', file_mime_type || 'application/octet-stream');
@@ -326,38 +312,33 @@ export const serveFileWithToken = async (req: Request, res: Response) => {
     // the explicit Office viewer allowlist (see OFFICE_VIEWER_ORIGINS).
     applyOfficeViewerCors(req, res);
 
+    // Stream errors happen mid-response (headers likely already flushed), so the
+    // global envelope can't help — keep the direct terminal 500.
     const stream = createReadStream(absPath);
     stream.on('error', () => { if (!res.headersSent) res.status(500).end(); });
     stream.pipe(res);
-  } catch (error) {
-    logger.error('[RESOURCE] serveFileWithToken error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 // ── Serve file (authenticated) ────────────────────────────────────────────────
 
-export const downloadResourceFile = async (req: AuthReq, res: Response) => {
-  try {
+export const downloadResourceFile = asyncHandler(async (req: AuthReq, res: Response) => {
     const resourceId = parseInt(req.params.id);
     const rows = await prisma.$queryRaw<any[]>(
       Prisma.sql`SELECT file_path, file_name, file_mime_type FROM training_resources WHERE id = ${resourceId} AND file_path IS NOT NULL`
     );
-    if (!rows.length) return res.status(404).json({ success: false, message: 'File not found' });
+    if (!rows.length) throw createNotFoundError('File not found');
 
     const { file_path, file_name, file_mime_type } = rows[0];
     const absPath = path.join(process.cwd(), file_path);
-    try { await fs.access(absPath); } catch { return res.status(404).json({ success: false, message: 'File not found on server' }); }
+    try { await fs.access(absPath); } catch { throw createNotFoundError('File not found on server'); }
 
     const stats = await fs.stat(absPath);
     res.setHeader('Content-Type', file_mime_type || 'application/octet-stream');
     res.setHeader('Content-Length', stats.size);
     res.setHeader('Content-Disposition', `inline; filename="${file_name}"`);
+    // Stream errors happen mid-response (headers likely already flushed), so the
+    // global envelope can't help — keep the direct terminal 500.
     const stream = createReadStream(absPath);
     stream.on('error', () => { if (!res.headersSent) res.status(500).end(); });
     stream.pipe(res);
-  } catch (error) {
-    logger.error('[RESOURCE] downloadResourceFile error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});

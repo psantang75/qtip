@@ -1,7 +1,13 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
-import logger from '../config/logger';
+import {
+  asyncHandler,
+  createValidationError,
+  createNotFoundError,
+  AppError,
+  ErrorType,
+} from '../utils/errorHandler';
 
 interface AuthReq extends Request {
   user?: { user_id: number; role: string };
@@ -24,8 +30,7 @@ function mapQuiz(q: any) {
 const QUIZ_LIBRARY_MAX_PAGE_SIZE = 1000;
 const QUIZ_LIBRARY_DEFAULT_PAGE_SIZE = 200;
 
-export const getQuizLibrary = async (req: AuthReq, res: Response) => {
-  try {
+export const getQuizLibrary = asyncHandler(async (req: AuthReq, res: Response) => {
     const { search, is_active } = req.query;
 
     const conditions: Prisma.Sql[] = [];
@@ -77,14 +82,9 @@ export const getQuizLibrary = async (req: AuthReq, res: Response) => {
       data,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
-  } catch (error) {
-    logger.error('[QUIZ_LIB] getQuizLibrary error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const getLibraryQuizDetail = async (req: AuthReq, res: Response) => {
-  try {
+export const getLibraryQuizDetail = asyncHandler(async (req: AuthReq, res: Response) => {
     const quizId = parseInt(req.params.id);
     const rows = await prisma.$queryRaw<any[]>(
       Prisma.sql`
@@ -98,7 +98,7 @@ export const getLibraryQuizDetail = async (req: AuthReq, res: Response) => {
         GROUP BY q.id
       `
     );
-    if (!rows.length) return res.status(404).json({ success: false, message: 'Quiz not found' });
+    if (!rows.length) throw createNotFoundError('Quiz not found');
 
     const questions = await prisma.$queryRaw<any[]>(
       Prisma.sql`SELECT id, question_text, options, correct_option FROM quiz_questions WHERE quiz_id = ${quizId} ORDER BY id`
@@ -118,25 +118,20 @@ export const getLibraryQuizDetail = async (req: AuthReq, res: Response) => {
     };
 
     res.json({ success: true, data: quiz });
-  } catch (error) {
-    logger.error('[QUIZ_LIB] getLibraryQuizDetail error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const createLibraryQuiz = async (req: AuthReq, res: Response) => {
-  try {
+export const createLibraryQuiz = asyncHandler(async (req: AuthReq, res: Response) => {
     const { quiz_title, pass_score, course_id, is_active, questions, topic_ids } = req.body;
     const active   = is_active === false || is_active === 'false' ? 0 : 1;
 
-    if (!quiz_title) return res.status(400).json({ success: false, message: 'quiz_title is required' });
-    if (pass_score === undefined || pass_score < 1 || pass_score > 100) return res.status(400).json({ success: false, message: 'pass_score must be between 1 and 100' });
-    if (!Array.isArray(questions) || !questions.length) return res.status(400).json({ success: false, message: 'At least one question is required' });
+    if (!quiz_title) throw createValidationError('quiz_title is required');
+    if (pass_score === undefined || pass_score < 1 || pass_score > 100) throw createValidationError('pass_score must be between 1 and 100');
+    if (!Array.isArray(questions) || !questions.length) throw createValidationError('At least one question is required');
 
     for (const q of questions) {
-      if (!q.question_text) return res.status(400).json({ success: false, message: 'Each question must have question_text' });
-      if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 4) return res.status(400).json({ success: false, message: 'Each question must have 2-4 options' });
-      if (q.correct_option === undefined || q.correct_option < 0 || q.correct_option >= q.options.length) return res.status(400).json({ success: false, message: 'correct_option must be a valid 0-based index' });
+      if (!q.question_text) throw createValidationError('Each question must have question_text');
+      if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 4) throw createValidationError('Each question must have 2-4 options');
+      if (q.correct_option === undefined || q.correct_option < 0 || q.correct_option >= q.options.length) throw createValidationError('correct_option must be a valid 0-based index');
     }
 
     // Courses were eliminated from the product; quizzes are now categorized by
@@ -162,26 +157,21 @@ export const createLibraryQuiz = async (req: AuthReq, res: Response) => {
     });
 
     res.status(201).json({ success: true, data: { id: newId }, message: 'Quiz created' });
-  } catch (error) {
-    logger.error('[QUIZ_LIB] createLibraryQuiz error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const updateLibraryQuiz = async (req: AuthReq, res: Response) => {
-  try {
+export const updateLibraryQuiz = asyncHandler(async (req: AuthReq, res: Response) => {
     const quizId = parseInt(req.params.id);
     const { quiz_title, pass_score, is_active, questions, topic_ids } = req.body;
 
     const existing = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM quizzes WHERE id = ${quizId}`);
-    if (!existing.length) return res.status(404).json({ success: false, message: 'Quiz not found' });
+    if (!existing.length) throw createNotFoundError('Quiz not found');
 
     if (questions !== undefined) {
-      if (!Array.isArray(questions) || !questions.length) return res.status(400).json({ success: false, message: 'At least one question is required' });
+      if (!Array.isArray(questions) || !questions.length) throw createValidationError('At least one question is required');
       for (const q of questions) {
-        if (!q.question_text) return res.status(400).json({ success: false, message: 'Each question must have question_text' });
-        if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 4) return res.status(400).json({ success: false, message: 'Each question must have 2-4 options' });
-        if (q.correct_option === undefined || q.correct_option < 0 || q.correct_option >= q.options.length) return res.status(400).json({ success: false, message: 'correct_option must be a valid 0-based index' });
+        if (!q.question_text) throw createValidationError('Each question must have question_text');
+        if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 4) throw createValidationError('Each question must have 2-4 options');
+        if (q.correct_option === undefined || q.correct_option < 0 || q.correct_option >= q.options.length) throw createValidationError('correct_option must be a valid 0-based index');
       }
     }
 
@@ -209,42 +199,30 @@ export const updateLibraryQuiz = async (req: AuthReq, res: Response) => {
     });
 
     res.json({ success: true, message: 'Quiz updated' });
-  } catch (error) {
-    logger.error('[QUIZ_LIB] updateLibraryQuiz error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const toggleQuizStatus = async (req: AuthReq, res: Response) => {
-  try {
+export const toggleQuizStatus = asyncHandler(async (req: AuthReq, res: Response) => {
     const quizId = parseInt(req.params.id);
     const rows = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id, is_active FROM quizzes WHERE id = ${quizId}`);
-    if (!rows.length) return res.status(404).json({ success: false, message: 'Quiz not found' });
+    if (!rows.length) throw createNotFoundError('Quiz not found');
     const newStatus = rows[0].is_active ? 0 : 1;
     await prisma.$executeRaw(Prisma.sql`UPDATE quizzes SET is_active = ${newStatus} WHERE id = ${quizId}`);
     res.json({ success: true, is_active: Boolean(newStatus) });
-  } catch (error) {
-    logger.error('[QUIZ_LIB] toggleQuizStatus error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
-export const deleteLibraryQuiz = async (req: AuthReq, res: Response) => {
-  try {
+export const deleteLibraryQuiz = asyncHandler(async (req: AuthReq, res: Response) => {
     const quizId = parseInt(req.params.id);
     const existing = await prisma.$queryRaw<any[]>(Prisma.sql`SELECT id FROM quizzes WHERE id = ${quizId}`);
-    if (!existing.length) return res.status(404).json({ success: false, message: 'Quiz not found' });
+    if (!existing.length) throw createNotFoundError('Quiz not found');
     const attemptCount = await prisma.$queryRaw<{ cnt: bigint }[]>(Prisma.sql`SELECT COUNT(*) as cnt FROM quiz_attempts WHERE quiz_id = ${quizId}`);
     if (Number(attemptCount[0]?.cnt ?? 0) > 0) {
-      return res.status(409).json({ success: false, message: 'This quiz has recorded attempts and cannot be deleted' });
+      // 409 Conflict — no dedicated factory, so build the AppError directly so the
+      // renderer honors the status code (was res.status(409)).
+      throw new AppError('This quiz has recorded attempts and cannot be deleted', ErrorType.VALIDATION_ERROR, 409);
     }
     await prisma.$transaction(async (tx) => {
       await tx.quizQuestion.deleteMany({ where: { quiz_id: quizId } });
       await tx.$executeRaw(Prisma.sql`DELETE FROM quizzes WHERE id = ${quizId}`);
     });
     res.json({ success: true, message: 'Quiz deleted' });
-  } catch (error) {
-    logger.error('[QUIZ_LIB] deleteLibraryQuiz error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
