@@ -219,9 +219,18 @@ These were started as verified pilots; continue them under the cadence above:
   [`database_review.md`](./database_review.md) were approved and APPLIED as
   migration `20260818190000_add_perf_indexes_drop_redundant_shift_index`
   (hand-authored SQL via `prisma migrate deploy`; verified with `EXPLAIN`).
-  Still proposal-only (needs approval): the `*Raw` unique-grain + idempotent
-  import work, the `AiFormRulePackAssignment` FK/`onDelete`, and the enum/hygiene
-  items. NOTE: this repo's `schema.prisma` is a deliberate partial model — NEVER
+  Still proposal-only: the `AiFormRulePackAssignment` FK/`onDelete` and the
+  enum/hygiene items. The `*Raw` unique-grain + idempotent import work (1D) is
+  **DEFERRED by decision 2026-08-19** — traced end-to-end and found to affect
+  only the Insights → Data Explorer / export (`rawDataService`), NOT any
+  dashboard (those read the idempotent `ie_fact_*` warehouse). Automated feeds
+  are already dup-safe (mailbox claims each message once; punches self-heal via
+  `post_id`); the six non-punch tables lack a unique grain but are not manually
+  uploaded in practice. Planned mitigation = restrict the manual-upload path
+  rather than run a destructive dedupe+UNIQUE migration; re-open only if a
+  read-only dup probe shows real duplicates. Full rationale + the deferred
+  proposal live in [`database_review.md`](./database_review.md) §"Data-integrity
+  — raw ingestion tables". NOTE: this repo's `schema.prisma` is a deliberate partial model — NEVER
   run `prisma migrate dev`; use hand-authored `migration.sql` + `prisma migrate
   deploy` (see [`database_schema_updates.md`](./database_schema_updates.md)).
 - Lint gate wiring — RESOLVED (Phase 1). `backend/package.json` now has

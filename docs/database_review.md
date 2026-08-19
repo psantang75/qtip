@@ -65,15 +65,47 @@ needed — `submitted_by` is FK-indexed and the composite paths already exist.
 served by the `submission_id` FK index prefix; treat an explicit composite as
 LOW value, not HIGH.
 
-## Data-integrity — raw ingestion tables (PROPOSAL — NOT APPLIED; needs approval)
+## Data-integrity — raw ingestion tables (PROPOSAL — DEFERRED by decision 2026-08-19)
 
 The `*Raw` import tables accept bulk `createMany` loads in
 [`backend/src/services/importService.ts`](../backend/src/services/importService.ts)
 (the `import*` handlers; `runImport.ts` only orchestrates them). Except
 `PunchRaw` — which `upsert`s on its `@unique post_id` — none has a **unique
-grain**, so re-importing the same workbook (a common operator action, and the
-mailbox poller can re-deliver) **duplicates rows and double-counts every report
-built on them**. This is the highest data-integrity risk in the system.
+grain**, so importing the *same report twice* (a second manual upload, or the
+source emailing the same non-punch report as two separate messages) would
+**duplicate rows in those six tables**.
+
+**Corrected blast radius (this is NOT the "highest data-integrity risk in the
+system" as originally written).** Traced end-to-end 2026-08-19:
+
+- The Insights **dashboards** read the conformed warehouse (`ie_fact_*`), which
+  is built from the **source systems** (phone/CRM/mail) via a separate,
+  inherently idempotent pipeline (`ie_stg_*` TRUNCATEd each run → `ie_fact_*`
+  upsert / DELETE+INSERT). See `insightsAgentActivity.service.ts` + the
+  `workers/sql/*.extract.sql` FROM clauses. **The dashboards never read the
+  `*Raw` tables.**
+- The `*Raw` tables have exactly two touchpoints in the backend: written by
+  `importService.ts`, read **only** by `rawDataService.ts` — i.e. the
+  **Insights → Data Explorer / raw export** (`/app/insights/explorer`) and
+  nothing else. So a duplicate `*Raw` row can only inflate the *raw explorer /
+  Excel export*, never a report number.
+- Automated ingestion is already largely dup-safe: the mailbox poller claims
+  each message once (`findUnread` + `markRead`-before-import + move to
+  `QTIP Processed`), and punches self-heal via `post_id`. The only residual dup
+  vector is the *same report* arriving as two distinct emails/uploads for the
+  six non-punch types.
+
+**Decision (2026-08-19):** DEFER 1D. In reality these six files are **not
+manually uploaded** — they arrive automated from the source (single-send email
+feeds), so the practical dup vector is near-zero. Rather than run a destructive
+dedupe + `UNIQUE` migration now, the intended mitigation is to **restrict the
+manual-upload path** (so a human can't double-load the six), and revisit the
+unique-grain work only if duplicates actually appear. Prerequisites before
+restricting uploads: (1) confirm all 7 types truly arrive via the mailbox so we
+don't starve a type whose only path is manual; (2) pick the restriction form
+(admin-only vs. block the six dup-prone types vs. break-glass only). Re-open
+this item (apply the PunchRaw-style upsert below) if the read-only probe ever
+shows dupes, or if manual upload of the six is re-enabled.
 
 ### Proposed unique grain per table
 

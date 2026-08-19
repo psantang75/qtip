@@ -23,7 +23,7 @@
 
 import logger from '../../config/logger';
 import { config, mailboxImportConfig } from '../../config/environment';
-import { detectDataType } from '../importService';
+import { detectDataType, DATA_TYPES, type DataType } from '../importService';
 import { runImport } from '../imports/runImport';
 import { ExchangeMailClient, type MailMessage } from './ExchangeMailClient';
 import { isSenderAllowed, loadAllowedSenders, resolveImporter } from './senderAllowlist';
@@ -32,6 +32,32 @@ import { notifyIngestionFailure } from '../notifications/ingestionAlerts';
 const FOLDER_PROCESSED = 'QTIP Processed';
 const FOLDER_FAILED = 'QTIP Failed';
 const MAX_MESSAGES_PER_TICK = 25;
+
+/**
+ * The report types the mailbox is allowed to ingest when nothing is configured.
+ * In practice only the Paychex punch feed arrives by email — every other
+ * `*_raw` dataset comes from the warehouse queries, not the inbox — and punches
+ * are the one type that self-heals on re-import (`PunchRaw` upsert on
+ * `post_id`). Keeping this strict means a stray or spoofed spreadsheet of any
+ * other type can't inject rows into the raw tables via mail.
+ */
+const DEFAULT_MAILBOX_TYPES: readonly DataType[] = ['punch_data'];
+
+/**
+ * Resolve the strict mailbox type allowlist from `MAILBOX_IMPORT_ALLOWED_TYPES`
+ * (comma-separated). Unknown tokens are dropped; if the result is empty (unset,
+ * blank, or all-garbage) we fall back to {@link DEFAULT_MAILBOX_TYPES} so a
+ * typo can neither silently open the gate to every type nor fully close it and
+ * strand the punch feed. Pure + exported for unit testing.
+ */
+export function resolveMailboxAllowedTypes(raw: string | undefined): DataType[] {
+  const known = DATA_TYPES as readonly string[];
+  const parsed = (raw ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s): s is DataType => known.includes(s));
+  return parsed.length > 0 ? Array.from(new Set(parsed)) : [...DEFAULT_MAILBOX_TYPES];
+}
 
 /**
  * How often the poller states that it is alive, whether or not mail arrived.
@@ -231,6 +257,7 @@ async function handleMessage(
   // Work out every attachment's type before importing any of them, so a message
   // carrying one good file and one unrecognised one is refused whole rather than
   // half-loaded.
+  const allowedTypes = resolveMailboxAllowedTypes(mailboxImportConfig.allowedTypesRaw);
   const planned: Array<{ name: string; buffer: Buffer; dataType: ReturnType<typeof detectDataType>['dataType'] }> = [];
   for (const attachment of detail.attachments) {
     if (attachment.content.length > config.MAX_FILE_SIZE) {
@@ -243,6 +270,12 @@ async function handleMessage(
       return `${attachment.name} could not be read as a workbook: ${(err as Error).message}`;
     }
     if (!detected.dataType) return `${attachment.name}: ${detected.reason}`;
+    // Strict type control: the mailbox only accepts what it's meant to (default
+    // punch_data). Everything else comes from the warehouse queries, so a file
+    // of any other type emailed in is refused whole to QTIP Failed.
+    if (!allowedTypes.includes(detected.dataType)) {
+      return `${attachment.name}: report type "${detected.dataType}" is not permitted via mailbox import (allowed: ${allowedTypes.join(', ')})`;
+    }
     planned.push({ name: attachment.name, buffer: attachment.content, dataType: detected.dataType });
   }
 

@@ -63,7 +63,7 @@ vi.mock('../../notifications/ingestionAlerts', () => ({
 import { ExchangeMailClient } from '../ExchangeMailClient';
 import { runImport } from '../../imports/runImport';
 import { notifyIngestionFailure } from '../../notifications/ingestionAlerts';
-import { authVerdict, runOnce } from '../MailboxImportScheduler';
+import { authVerdict, runOnce, resolveMailboxAllowedTypes } from '../MailboxImportScheduler';
 
 // A workbook the real detector will call punch_data.
 const PUNCH_BOOK = (() => {
@@ -78,6 +78,17 @@ const PUNCH_BOOK = (() => {
 
 const UNKNOWN_BOOK = (() => {
   const sheet = XLSX.utils.json_to_sheet([{ Widget: 1, Sprocket: 2 }]);
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, 'S1');
+  return XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+})();
+
+// A workbook the real detector will call email_stats — a *recognised* type that
+// is NOT on the default mailbox allowlist (punch_data only).
+const EMAIL_STATS_BOOK = (() => {
+  const sheet = XLSX.utils.json_to_sheet([{
+    Email: 'a@b.com', ReportDate: '2026-08-03', EmailsSent: 5, EmailsReceived: 9,
+  }]);
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, 'S1');
   return XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
@@ -169,6 +180,20 @@ describe('runOnce', () => {
     expect(summary).toMatchObject({ imported: 0, rejected: 1 });
     expect(runImport).not.toHaveBeenCalled();
     expect(client.calls).toContain('move:QTIP Failed');
+  });
+
+  it('refuses a recognised type that is not on the mailbox allowlist (only punch by default)', async () => {
+    // email_stats is a real import type, but it arrives via the warehouse
+    // queries — not the inbox. Emailing one in must be refused, not loaded.
+    const client = fakeClient({ attachments: [{ name: 'email_stats.xlsx', content: EMAIL_STATS_BOOK }] });
+    const summary = await runOnce();
+
+    expect(summary).toMatchObject({ imported: 0, rejected: 1 });
+    expect(runImport).not.toHaveBeenCalled();
+    expect(client.calls).toContain('move:QTIP Failed');
+    expect(vi.mocked(notifyIngestionFailure).mock.calls[0][0]).toMatchObject({
+      reason: expect.stringContaining('not permitted via mailbox import'),
+    });
   });
 
   it('refuses a message with no spreadsheet attachment', async () => {
@@ -327,6 +352,26 @@ describe('hourly heartbeat', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('resolveMailboxAllowedTypes', () => {
+  it('defaults to punch_data only when unset or blank', () => {
+    expect(resolveMailboxAllowedTypes(undefined)).toEqual(['punch_data']);
+    expect(resolveMailboxAllowedTypes('')).toEqual(['punch_data']);
+    expect(resolveMailboxAllowedTypes('   ')).toEqual(['punch_data']);
+  });
+
+  it('parses a comma-separated override, trimming and lowercasing', () => {
+    expect(resolveMailboxAllowedTypes(' punch_data , Email_Stats ')).toEqual(['punch_data', 'email_stats']);
+  });
+
+  it('drops unknown tokens and de-duplicates', () => {
+    expect(resolveMailboxAllowedTypes('punch_data,bogus,punch_data')).toEqual(['punch_data']);
+  });
+
+  it('falls back to the default when every token is invalid, never opening or closing the gate by accident', () => {
+    expect(resolveMailboxAllowedTypes('nonsense,also_bad')).toEqual(['punch_data']);
   });
 });
 

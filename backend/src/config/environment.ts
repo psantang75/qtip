@@ -111,6 +111,7 @@ interface EnvironmentConfig {
   MAILBOX_IMPORT_DRY_RUN?: boolean;
   MAILBOX_IMPORT_USER_ID?: number;
   MAILBOX_IMPORT_IGNORE_BEFORE?: string;  // 'YYYY-MM-DD'; ignore mail received before this
+  MAILBOX_IMPORT_ALLOWED_TYPES?: string;  // comma-separated DataType allowlist; default 'punch_data'
 
   APP_BASE_URL?: string;            // used for deep links in emails
 
@@ -333,6 +334,7 @@ export const config: EnvironmentConfig = {
     ? parseInt(process.env.MAILBOX_IMPORT_USER_ID, 10)
     : undefined,
   MAILBOX_IMPORT_IGNORE_BEFORE: process.env.MAILBOX_IMPORT_IGNORE_BEFORE,
+  MAILBOX_IMPORT_ALLOWED_TYPES: process.env.MAILBOX_IMPORT_ALLOWED_TYPES,
 
   APP_BASE_URL: process.env.APP_BASE_URL,
 
@@ -512,6 +514,14 @@ export const mailConfig = {
  * `importedByUserId` is normally the only attribution available: the punch
  * report arrives from an automated no-reply address that will never match a
  * QTIP user.
+ *
+ * `allowedTypesRaw` is the STRICT allowlist of report types the mailbox may
+ * ingest. In practice only ONE report (the Paychex punch feed) arrives by
+ * email — every other `*_raw` dataset comes from the warehouse queries, not the
+ * inbox. So this defaults (resolved in `MailboxImportScheduler`) to
+ * `punch_data` only; anything else emailed in is refused to `QTIP Failed`.
+ * Override with a comma-separated `MAILBOX_IMPORT_ALLOWED_TYPES` if that ever
+ * changes — a config edit, not a code change.
  */
 export const mailboxImportConfig = {
   enabled: !!config.EXCHANGE_EWS_URL,
@@ -523,6 +533,7 @@ export const mailboxImportConfig = {
   dryRun: config.MAILBOX_IMPORT_DRY_RUN ?? true,
   importedByUserId: config.MAILBOX_IMPORT_USER_ID,
   ignoreBefore: config.MAILBOX_IMPORT_IGNORE_BEFORE || '',
+  allowedTypesRaw: config.MAILBOX_IMPORT_ALLOWED_TYPES || '',
 };
 
 /**

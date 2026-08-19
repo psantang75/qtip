@@ -37,9 +37,16 @@ Inbox:
 3. **Attachment filter** — `.xlsx` or `.xls` only, under `MAX_FILE_SIZE`.
 4. **Type detection** — `detectDataType()` matches the column headers against
    `REQUIRED_COLUMNS`. No filename or subject convention is involved.
-5. **Claim** — the message is marked read.
-6. **Import** — `runImport()`, the same path the Manual Upload page uses.
-7. **File** — the message moves to `QTIP Processed`, or `QTIP Failed` if any
+5. **Type allowlist (strict)** — the detected type must be on
+   `MAILBOX_IMPORT_ALLOWED_TYPES` (defaults to `punch_data` only). In practice the
+   punch feed is the *only* report that arrives by email; every other `*_raw`
+   dataset comes from the warehouse queries, so a recognised-but-not-allowed file
+   is refused whole to `QTIP Failed`. This stops a stray or spoofed spreadsheet of
+   another type injecting rows into the raw tables — which matters because those
+   other six tables do not self-heal on re-import the way `punch_raw` does.
+6. **Claim** — the message is marked read.
+7. **Import** — `runImport()`, the same path the Manual Upload page uses.
+8. **File** — the message moves to `QTIP Processed`, or `QTIP Failed` if any
    step refused it. Both folders are created under the Inbox on first use.
 
 Three ordering decisions carry weight:
