@@ -1,206 +1,137 @@
-# Backend Architecture Documentation
+# Backend Architecture
 
-## Clean Architecture Implementation
+Express 5 + TypeScript + Prisma + MySQL 8. Layered separation of concerns: a
+thin HTTP layer over business logic over data access.
 
-This backend follows **Clean Architecture** principles with clear separation of concerns across layers.
+> **Authoritative contract:** the *enforceable* API rules (data access, error
+> envelope, validation) live in
+> [`.cursor/rules/backend-api-conventions.mdc`](../.cursor/rules/backend-api-conventions.mdc).
+> This document explains the layering and the "why"; that rule is the checklist
+> to obey when writing a route/controller/service. If the two ever disagree, the
+> rule wins — fix this doc.
 
-## Architecture Layers
+## Layers
 
 ```
-📁 routes/           # HTTP Layer (Thin)
-  ├── form.routes.ts
-  ├── user.routes.ts
-  └── ...
-      ↓
-📁 controllers/      # Request/Response Handling
-  ├── form.controller.ts
-  ├── user.controller.ts
-  └── ...
-      ↓
-📁 services/         # Business Logic
-  ├── FormService.ts
-  ├── UserService.ts
-  └── ...
-      ↓
-📁 repositories/     # Data Access Layer
-  ├── MySQLFormRepository.ts
-  ├── UserRepository.ts
-  └── ...
-      ↓
-📁 models/          # Domain Models
-  ├── Form.ts
-  ├── User.ts
-  └── ...
+routes/        # HTTP layer (thin): endpoints + middleware, delegate to controllers
+   ↓
+controllers/   # Parse/validate request, call a service, shape the response (asyncHandler)
+   ↓
+services/      # Business logic + domain rules. Owns Prisma access.
+   ↓
+Prisma Client  # Data access — backend/src/generated/prisma
+   ↓
+MySQL 8
 ```
 
-## Layer Responsibilities
+Supporting folders:
 
-### 1. Routes Layer (`/routes`)
-- **Purpose**: HTTP routing and middleware application
-- **Responsibilities**:
-  - Define route endpoints
-  - Apply authentication middleware
-  - Delegate to controllers
-- **Example**:
+- `validation/` — Zod schemas for request input.
+- `models/`, `interfaces/`, `types/` — domain models, interfaces, shared DTO types.
+- `middleware/` — auth (JWT access/refresh), uploads (Multer), rate limiting, and the global error handler.
+- `utils/errorHandler.ts` — `asyncHandler` + `AppError` (the response envelope).
+- `config/` — environment, Prisma client, logger (Winston), swagger, timezone.
+- `workers/` — Insights data-warehouse cron jobs (deliberately raw SQL — see below).
+- `repositories/` — LEGACY raw-SQL / `mysql2` data-access classes, being migrated onto Prisma. Do not add new ones.
+
+## Layer responsibilities
+
+### 1. Routes (`/routes`)
+
+HTTP routing + middleware only. Delegate to a controller; do not put business
+logic or DB calls inline in the route file.
+
 ```typescript
 router.post('/', authenticate, createForm);
 router.get('/:id', authenticate, getFormById);
 ```
 
-### 2. Controllers Layer (`/controllers`)
-- **Purpose**: HTTP request/response handling
-- **Responsibilities**:
-  - Parse request parameters
-  - Validate input format
-  - Call appropriate service methods
-  - Format HTTP responses
-  - Handle service errors
-- **Pattern**:
+### 2. Controllers (`/controllers`)
+
+Parse params, validate input with Zod, call a service, shape the HTTP response.
+Keep them thin — no business logic, no direct DB access. Wrap async handlers in
+`asyncHandler` and throw `AppError` rather than hand-rolling error responses.
+
 ```typescript
-export const createForm = async (req: Request, res: Response) => {
-  try {
-    const formData = req.body;
-    const createdBy = req.user?.userId || 1;
-    
-    const result = await formService.createForm(formData, createdBy);
-    return res.status(201).json(result);
-  } catch (error) {
-    // Handle errors appropriately
-  }
-};
+export const createForm = asyncHandler(async (req: Request, res: Response) => {
+  const data = createFormSchema.parse(req.body);
+  const createdBy = req.user!.userId;
+  const result = await formService.createForm(data, createdBy);
+  res.status(201).json(result);
+});
 ```
 
-### 3. Services Layer (`/services`)
-- **Purpose**: Business logic and validation
-- **Responsibilities**:
-  - Implement business rules
-  - Validate data structure
-  - Coordinate between repositories
-  - Handle complex operations
-  - Throw business-specific errors
-- **Pattern**:
+### 3. Services (`/services`)
+
+Business rules, validation, and orchestration. This is where Prisma is used and
+where domain errors are thrown (`AppError` or the `create*Error` factories); the
+global handler renders them.
+
 ```typescript
 export class FormService {
-  async createForm(formData: CreateFormDTO, createdBy: number) {
-    await this.validateFormStructure(formData);
-    const normalizedData = this.normalizeFormData(formData, createdBy);
-    return await this.formRepository.createForm(normalizedData);
+  async createForm(data: CreateFormDTO, createdBy: number) {
+    await this.validateFormStructure(data);
+    return prisma.form.create({ data: normalize(data, createdBy) });
   }
 }
 ```
 
-### 4. Repositories Layer (`/repositories`)
-- **Purpose**: Data access and persistence
-- **Responsibilities**:
-  - Database operations (CRUD)
-  - Query execution
-  - Transaction management
-  - Data mapping
-- **Pattern**:
+### 4. Data access — Prisma is the standard
+
+All DB operations go through Prisma (`config/prisma.ts` → `generated/prisma`).
+Do NOT add `mysql2` pool queries. Transactions use `prisma.$transaction`.
+
+Two deliberate exceptions, both documented and NOT conversion targets:
+
+- The **Insights data-warehouse** layer (`services/QC*Data.ts`, `QCKpiService`,
+  `workers/`, `insights`/`insightsQC` read controllers) is hand-written SQL for
+  analytical performance — see
+  [`.cursor/rules/insights-data-warehouse.mdc`](../.cursor/rules/insights-data-warehouse.mdc).
+- A shrinking set of legacy `repositories/` still open raw `mysql2` connections.
+  When you touch one, prefer converting it to Prisma rather than extending it.
+
+## Error / response envelope
+
+Only three shapes are allowed. Full policy in
+[`backend/src/utils/errorHandler.ts`](../backend/src/utils/errorHandler.ts):
+
+- **(A) Rich envelope** — throw `AppError` (or `createValidationError` /
+  `createNotFoundError` / etc.) from a controller/service wrapped in
+  `asyncHandler`. Use this for ALL new code.
+- **(B) Flat auth envelope** — `ApiErrors.*` from `utils/apiError.ts`, only in
+  auth/authorization middleware that short-circuits before a controller.
+- **(C) Legacy `{ success, message, data }`** — do NOT add to new handlers;
+  existing sites migrate to (A) endpoint-by-endpoint.
+
 ```typescript
-export class MySQLFormRepository {
-  async createForm(formData: CreateFormDTO): Promise<number> {
-    const connection = await this.pool.getConnection();
-    try {
-      await connection.beginTransaction();
-      // Database operations
-      await connection.commit();
-      return formId;
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    }
-  }
-}
+// Service throws a typed error:
+throw createNotFoundError('Form', id);
+// The controller does nothing special — asyncHandler forwards it to the global
+// errorHandler, which renders the (A) envelope with the correct status code.
 ```
 
-## Benefits of This Architecture
+Never hand-roll `res.status(500).json({ error })` — throw instead.
 
-### ✅ **Separation of Concerns**
-- Each layer has a single responsibility
-- Changes in one layer don't affect others
-- Easy to test individual components
+## Validation & logging
 
-### ✅ **Dependency Inversion**
-- Controllers depend on Services (abstractions)
-- Services depend on Repositories (abstractions)
-- Database details are isolated in repositories
+- Validate all request input with Zod schemas in `validation/` (small controllers
+  may use an inline `z.object`). Enforce the shared page-size cap (`MAX_PAGE_SIZE`
+  in `validation/common.ts`) on list endpoints.
+- Log with Winston (`config/logger.ts`). Never `console.log` in request paths.
 
-### ✅ **Testability**
-- Each layer can be unit tested independently
-- Easy to mock dependencies
-- Clear interfaces between layers
+## Adding a new feature
 
-### ✅ **Maintainability**
-- Code is organized and predictable
-- Easy to locate specific functionality
-- Consistent patterns across features
+1. **Define types/DTOs** in `types/`, and a Zod schema in `validation/`.
+2. **Write the service** in `services/` — business logic + Prisma calls.
+3. **Write a thin controller** wrapped in `asyncHandler`; throw `AppError` on failure.
+4. **Wire the route** with auth middleware; delegate to the controller.
+5. **Add tests** (`__tests__/`) — at minimum the controller's response shape and its error branches.
 
-### ✅ **Scalability**
-- Easy to add new features following the same pattern
-- Clear extension points
-- Modular structure
+Keep files under ~200–300 lines; extract a cohesive piece rather than growing a
+file past that.
 
-## Error Handling Pattern
+## Benefits of the layering
 
-### Service Errors
-```typescript
-export class FormServiceError extends Error {
-  constructor(
-    message: string,
-    public code: string,
-    public statusCode: number = 400
-  ) {
-    super(message);
-  }
-}
-```
-
-### Controller Error Handling
-```typescript
-catch (error) {
-  if (error instanceof FormServiceError) {
-    return res.status(error.statusCode).json({ 
-      error: error.message,
-      code: error.code 
-    });
-  }
-  return res.status(500).json({ error: 'Internal server error' });
-}
-```
-
-## Key Improvements Made
-
-### ✅ **Removed Legacy Code**
-- Deleted 1000+ lines of duplicate database logic from controllers
-- Eliminated confusion between different patterns
-
-### ✅ **Consistent Architecture**
-- All features now follow the same layered pattern
-- Consistent error handling across controllers
-- Standardized request/response flow
-
-### ✅ **Professional Standards**
-- Clean separation of concerns
-- Proper dependency injection
-- Comprehensive error handling
-- Clear documentation
-
-### ✅ **Fixed Technical Issues**
-- Proper ID mapping for conditional questions
-- Complete form update functionality
-- Transaction management
-- Foreign key constraint handling
-
-## Adding New Features
-
-When adding new features, follow this pattern:
-
-1. **Define Models** in `/models`
-2. **Create Repository** for data access
-3. **Create Service** for business logic
-4. **Create Controller** for HTTP handling
-5. **Define Routes** with proper middleware
-6. **Add Error Handling** using service error pattern
-
-This ensures consistency and maintainability across the entire codebase. 
+- **Separation of concerns** — HTTP, business rules, and persistence are isolated and independently testable.
+- **Consistency** — every feature follows the same route → controller → service → Prisma flow and the same error envelope.
+- **Maintainability** — predictable locations; the enforceable specifics live in the scoped rule so they can't silently drift from this prose.

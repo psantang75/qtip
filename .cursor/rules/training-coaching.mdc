@@ -1,0 +1,45 @@
+---
+description: Training / coaching / LMS subsystem map — coaching sessions, library, quizzes
+globs: backend/src/controllers/coaching.controller.ts,backend/src/controllers/coachingReport.controller.ts,backend/src/controllers/quiz.controller.ts,backend/src/controllers/quizLibrary.controller.ts,backend/src/controllers/resource.controller.ts,backend/src/controllers/csr/coaching.controller.ts,backend/src/controllers/trainer/**,backend/src/services/coaching/**,backend/src/services/trainer/**,backend/src/routes/trainer.routes.ts,backend/src/routes/quiz.routes.ts,frontend/src/pages/training/**,frontend/src/components/training/**,frontend/src/services/trainingService.ts
+alwaysApply: false
+---
+
+# Training / Coaching / LMS
+
+Coaching sessions (with agent acknowledgement + optional quiz), a knowledge
+library (topics / resources / quizzes), and trainer reporting. Follows
+[.cursor/rules/backend-api-conventions.mdc](mdc:.cursor/rules/backend-api-conventions.mdc).
+
+## Backend map (`backend/src/`)
+
+Coaching logic lives across controllers + trainer services — there is only a thin
+`services/coaching/coaching.notify.ts` (status-change emails), NOT a big coaching
+service folder. There is NO `course` service and NO `course.routes.ts`.
+
+- Controllers: `coaching.controller.ts` (trainer session CRUD/lifecycle),
+  `coachingReport.controller.ts`, `quiz.controller.ts` (attempt submit/history),
+  `quizLibrary.controller.ts`, `resource.controller.ts` (KB resources + topic
+  tagging via `list_items`), `csr/coaching.controller.ts` (CSR self-service),
+  `trainer/*` (dashboard, reports, submissions, health).
+- Services: `services/trainer/*` (reports, dashboard stats, team, health).
+  `utils/coachingAutoAdvance.ts` auto-advances session status after a quiz/CSR
+  action — reuse it rather than hand-advancing status.
+- Routes: `routes/trainer.routes.ts` (`/api/trainer`), `routes/quiz.routes.ts`
+  (`/api/quizzes`); CSR coaching/quiz reads live on `routes/csr.routes.ts`; admin
+  session management on `routes/admin.routes.ts`.
+- Topics are `list_items` (generic list API), not a dedicated table/service.
+- QC coaching analytics (`QCCoachingData.ts`, `insightsQC` coaching reads) are
+  read-only warehouse SQL — see
+  [.cursor/rules/insights-data-warehouse.mdc](mdc:.cursor/rules/insights-data-warehouse.mdc).
+
+## Frontend map (`frontend/src/`)
+
+- `pages/training/` — coaching (`CoachingSessionsPage`, form/detail, `MyCoaching*`)
+  and library (`LibraryTopicsPage`, `LibraryResourcesPage`, `LibraryQuizzesPage`,
+  `LibraryQuizFormPage`) + `TrainingReportsPage`. `coaching-form/*` and
+  `training-detail/layout.tsx` hold shared pieces.
+- `components/training/` — `QuizBuilder`, `QuizPlayer`, `QuizPreviewModal`, plus
+  coaching/library UI (filter bar, tab nav, topic chips, attachment cards).
+- Rich text uses `components/common/RichTextEditor.tsx` (TipTap) — there is no
+  `components/course/` slide editor. API client: `services/trainingService.ts`.
+  Obey [.cursor/rules/ui-design.mdc](mdc:.cursor/rules/ui-design.mdc).

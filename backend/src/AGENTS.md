@@ -24,6 +24,8 @@ routes/ → controllers/ → services/ → (Prisma) → MySQL
 
 ## Conventions (enforced)
 
+Authoritative API contract: [../../.cursor/rules/backend-api-conventions.mdc](../../.cursor/rules/backend-api-conventions.mdc). The bullets below are the summary.
+
 - Prisma is the single data-access standard for ALL DB operations (see `.cursorrules`). Do not add new `mysql2` pool queries; prefer Prisma. Legacy raw-pool code is being migrated off.
 - Standard error/response contract: wrap async controllers in `asyncHandler` and throw `AppError` from [utils/errorHandler.ts](utils/errorHandler.ts) rather than hand-rolling `res.status().json()` envelopes.
 - Validate with Zod (`validation/`); log with Winston (`config/logger.ts`); never `console.log` in request paths.

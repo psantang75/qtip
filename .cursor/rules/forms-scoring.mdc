@@ -27,6 +27,14 @@ shared engine used in both preview and final scoring.
 Form definition CRUD is in `backend/src/controllers/form.controller.ts` +
 `FormService`; follow [.cursor/rules/backend-api-conventions.mdc](mdc:.cursor/rules/backend-api-conventions.mdc).
 
+## Scope note
+
+This rule covers the **form-definition + scoring engine** only. The
+**submission / dispute** workflow that consumes a scored form
+(`SubmissionService`, `services/qa/**`, `dispute.controller.ts`, the
+submission-detail pages) lives in its own map:
+[.cursor/rules/submissions-disputes.mdc](mdc:.cursor/rules/submissions-disputes.mdc).
+
 ## Docs
 
 Scoring logic: [docs/instructions/scoring_logic.md](mdc:docs/instructions/scoring_logic.md).

@@ -11,6 +11,19 @@ lives at the [top-level README](../README.md); deploy templates live in
 
 ---
 
+## Agent & contributor guardrails
+
+The enforcement layer that steers how code is written (read these before large
+changes; Cursor auto-attaches the scoped rules when you edit matching files):
+
+- [`../AGENTS.md`](../AGENTS.md) — repo map + hard constraints (root), plus
+  [`../backend/src/AGENTS.md`](../backend/src/AGENTS.md) and
+  [`../frontend/src/AGENTS.md`](../frontend/src/AGENTS.md).
+- [`../.cursor/rules/`](../.cursor/rules) — scoped rules: backend API conventions,
+  UI design, forms & scoring, AI reviewer, insights data warehouse, date
+  handling, and deploy-to-stage.
+- [`../.cursorrules`](../.cursorrules) — global tech-stack + brand-palette mandates.
+
 ## Project basics
 
 - [`project_overview.md`](./project_overview.md) — system objective, roles, architecture
@@ -22,7 +35,7 @@ lives at the [top-level README](../README.md); deploy templates live in
 
 - [`PRODUCTION_READINESS_GUIDE.md`](./PRODUCTION_READINESS_GUIDE.md) — production checklist
 - [`PRODUCTION_GUIDE.md`](./PRODUCTION_GUIDE.md) — deploy / runbook overview
-- [`deployment_runbook.md`](./deployment_runbook.md) — step-by-step deploy + rollback (PM2 / IIS)
+- [`deployment_runbook.md`](./deployment_runbook.md) — step-by-step deploy + rollback (containerized Docker Compose on stage/prod)
 - [`backup_restore_runbook.md`](./backup_restore_runbook.md) — DB backup, restore, partial-restore flows
 - [`observability.md`](./observability.md) — `/metrics`, alerts, SLOs
 - [`environment_variables.md`](./environment_variables.md) — single env-var reference (backend + frontend)

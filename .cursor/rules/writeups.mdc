@@ -1,0 +1,48 @@
+---
+description: Write-ups (disciplinary) subsystem map — lifecycle, permissions, split controllers/services
+globs: backend/src/services/writeups/**,backend/src/controllers/writeups/**,backend/src/routes/writeup.routes.ts,backend/src/validation/writeup.validation.ts,frontend/src/pages/writeups/**,frontend/src/services/writeupService.ts,frontend/src/hooks/useWriteUpRole.ts
+alwaysApply: false
+---
+
+# Write-ups (Disciplinary)
+
+Employee disciplinary records with a signature/acknowledgement lifecycle, prior-
+discipline history, attachments, and optional linkage to a coaching session.
+Follows [.cursor/rules/backend-api-conventions.mdc](mdc:.cursor/rules/backend-api-conventions.mdc).
+
+## Backend map (`backend/src/`)
+
+There is NO monolithic `writeup.controller.ts` / `writeup.service.ts` — both are
+split by concern. Add new logic to the matching slice; do not recombine.
+
+- `services/writeups/` — `writeup.list.service.ts` (list/detail/prior-discipline),
+  `writeup.lifecycle.service.ts` (create/update + notes),
+  `writeup.transition.service.ts` (status transitions, sign, follow-up),
+  `writeup.search.service.ts` (QA-record + coaching search),
+  `writeup.attachment.service.ts`, `writeup.linkedCoaching.service.ts`.
+  Shared: `writeup.types.ts`, `writeup.permissions.ts` (transition matrix +
+  visibility/CSR guards), `writeup.helpers.ts`, `index.ts` (barrel).
+- `controllers/writeups/` — thin controllers mirroring the services
+  (`list`, `lifecycle`, `search`, `attachment`, `linkedCoaching`). `respond.ts`
+  maps a thrown `WriteUpServiceError` to the response — route errors through it.
+- `routes/writeup.routes.ts` — `/api/writeups`; gated by `authorizePage('pw_list', …)`.
+- `validation/writeup.validation.ts` — `CreateWriteUpSchema` / `UpdateWriteUpSchema`;
+  doc types `VERBAL_WARNING` / `WRITTEN_WARNING` / `FINAL_WARNING`.
+
+## Lifecycle (enforced by `writeup.permissions.ts`)
+
+`DRAFT → SCHEDULED → AWAITING_SIGNATURE → SIGNED | SIGNATURE_REFUSED → CLOSED`,
+with a `FOLLOW_UP_PENDING → FOLLOW_UP_COMPLETED → CLOSED` branch. Never transition
+statuses ad hoc — go through `writeup.transition.service.ts` and the matrix.
+
+## Permissions
+
+`useWriteUpRole` (frontend): `canManage` (admin/QA/manager), `canEdit`
+(admin/manager), `isAgent`. Backend gates on `pw_list` page access; CSRs see only
+their own non-`DRAFT` records; the sign endpoint self-checks the acting user.
+
+## Frontend map (`frontend/src/pages/writeups/`)
+
+Pages `WriteUpsPage` / `MyWriteUpsPage` (+ detail) compose `writeup-form/*` and
+`writeup-detail/*` section components; `writeup-pdf/*` renders the PDF. API +
+status enums live in `services/writeupService.ts`. Obey [.cursor/rules/ui-design.mdc](mdc:.cursor/rules/ui-design.mdc).

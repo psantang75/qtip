@@ -15,7 +15,8 @@ costs the maintainer real review time. Before writing or modifying
 1. [`docs/design.md`](mdc:docs/design.md) — brand colors, typography,
    spacing scale, component variants, iconography.
 2. [`.cursorrules`](mdc:.cursorrules) — tech-stack mandates (shadcn/ui,
-   Tremor, TanStack, lucide-react, etc.).
+   TanStack, lucide-react, etc.). Tremor was removed; never reintroduce it —
+   use the custom KPI/chart components in `frontend/src/components/insights`.
 3. **An existing component that does something similar.** Find one
    before designing a new one. Examples that cover ~95% of UI work:
    - Audit-form questions / "pick one of N" UIs →

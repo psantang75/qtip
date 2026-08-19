@@ -1,0 +1,53 @@
+---
+description: Scheduling, campaigns & attendance subsystem map — grid/templates, campaigns, points engine
+globs: backend/src/services/scheduling/**,backend/src/services/attendance/**,backend/src/services/campaigns/**,backend/src/controllers/scheduling/**,backend/src/controllers/campaigns/**,backend/src/routes/scheduling.routes.ts,backend/src/routes/campaign.routes.ts,backend/src/validation/schedule.validation.ts,backend/src/validation/campaign.validation.ts,backend/src/validation/attendance.validation.ts,frontend/src/pages/scheduling/**,frontend/src/components/scheduling/**,frontend/src/pages/admin/list-management/AttendanceListEditors.tsx,frontend/src/pages/admin/list-management/SchedulingListEditors.tsx,frontend/src/pages/admin/list-management/CoverageThresholdsEditor.tsx,frontend/src/pages/admin/list-management/CampaignListEditor.tsx
+alwaysApply: false
+---
+
+# Scheduling, Campaigns & Attendance
+
+Three related domains: shift scheduling (grid/templates/exceptions), call-
+campaign scheduling, and the attendance points engine. Follows
+[.cursor/rules/backend-api-conventions.mdc](mdc:.cursor/rules/backend-api-conventions.mdc)
+and, for dates, [.cursor/rules/date-handling.mdc](mdc:.cursor/rules/date-handling.mdc).
+
+## Backend map (`backend/src/`)
+
+Services are split by concern under three folders (add to the matching slice):
+
+- `services/scheduling/` — `schedule.template.service.ts`, `schedule.shift.service.ts`
+  (grid, publish/unlock), `schedule.apply.service.ts` (template → roster),
+  `schedule.exception.service.ts` + `timeOff.classify.ts` / `timeOff.derive.service.ts`
+  (time-off import), `schedule.listTypes.service.ts`. Shared: `schedule.types.ts`,
+  `schedule.dates.ts`, `schedule.permissions.ts`.
+- `services/attendance/` — `attendance.engine.ts` + `attendance.rules.ts` (points
+  math — single source of truth; do not duplicate elsewhere), `attendance.config.ts` /
+  `attendance.settings.ts`, `attendance.rollup.service.ts`, `attendance.analytics.service.ts`,
+  `attendance.notify.ts`, and the `punchProvider.ts` / `scheduleProvider.ts` adapters.
+- `services/campaigns/` — campaign library, schedules, month/day overrides, publish
+  (mounted under the scheduling API prefix).
+- Controllers: `controllers/scheduling/*` and `controllers/campaigns/*` (with a
+  `respond.ts` error mapper — route errors through it, mirroring write-ups).
+- Routes: `routes/scheduling.routes.ts` (`/api/scheduling`), `routes/campaign.routes.ts`
+  (`/api/scheduling/campaigns`). Attendance policy CRUD + CSR reports are exposed via
+  the Insights controllers (`insightsAdminAttendance.controller.ts`,
+  `insightsCsr.controller.ts`), NOT a standalone attendance route.
+
+## Attendance analytics = read-only
+
+`attendance.analytics.service.ts` and the Insights attendance reads follow the
+data-warehouse conventions in
+[.cursor/rules/insights-data-warehouse.mdc](mdc:.cursor/rules/insights-data-warehouse.mdc);
+do not turn analytical SQL into per-row Prisma calls.
+
+## Frontend map
+
+- `pages/scheduling/` — `SchedulingPage` (manager grid), `MySchedulePage`,
+  `SchedulingExceptionsPage`, `CampaignSchedulePage`, `TimeOffImportReviewPage`.
+- `components/scheduling/` — grid/cells, shift/template editors, exception editors,
+  coverage bars, campaign grid components. Hooks in `hooks/useScheduleGrid.ts` etc.;
+  API in `services/schedulingService.ts` / `campaignService.ts`.
+- Admin list editors (attendance point bands / thresholds, exception & activity
+  types, coverage thresholds, campaign library) live in
+  `pages/admin/list-management/*` and are wired from `ListManagementPage.tsx`
+  via `CUSTOM_EDITORS`. Obey [.cursor/rules/ui-design.mdc](mdc:.cursor/rules/ui-design.mdc).

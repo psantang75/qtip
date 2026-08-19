@@ -21,7 +21,7 @@ Express + Prisma + MySQL backend.
   the project standard; Tremor is NOT used (removed as an unused dep)
 - Recharts for all chart rendering
 - react-querybuilder for filter/query builder UI
-- React Hook Form for all forms
+- React Hook Form for forms with more than 2 fields
 - dnd-kit for drag and drop
 - TipTap for rich text / course slide editor
 - lucide-react for all icons

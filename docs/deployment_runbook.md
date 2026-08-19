@@ -108,7 +108,7 @@ path, branch, container name, and URL:
 | Rebuild command | `docker compose up -d --build`            | `docker compose up -d --build`                 |
 | App container   | `qtip-app-stage`                          | `qtip-app`                                     |
 | URL             | `https://qtip-stage.dm.local`             | `https://qtip-prod.dm-us.com`                  |
-| DB container    | `qtip-db` MySQL 8.4 (`10.90.15.6:3306`)   | `qtip-db` MySQL 8.4.5 (`10.90.15.5:3306`)      |
+| DB container    | `qtip-db-stage` MySQL 8.4 (`10.90.15.6:3306`) | `qtip-db` MySQL 8.4.5 (`10.90.15.5:3306`)  |
 
 Deploy loop (identical for both — pick the row above; prod keeps the
 verify-stage-first discipline):
@@ -244,7 +244,9 @@ than hardcoding secrets:
 ssh dmadmin@10.90.15.5 'docker exec qtip-db sh -c '\''mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'\'' | gzip > /home/dmadmin/docker-production/qtip-app/backups/pre-deploy-$(date +%Y%m%d_%H%M%S).sql.gz'
 ```
 
-Keep the printed path — it's the rollback target (§4).
+On **stage** the DB container is `qtip-db-stage` and the path is under
+`/home/dmadmin/docker-staging/qtip-app/backups/` — swap both. Keep the printed
+path — it's the rollback target (§4).
 
 ### 3.2 Pull code + rebuild (install + build happen in the image)
 
@@ -259,64 +261,83 @@ ssh dmadmin@10.90.15.5 'git -C /home/dmadmin/docker-production/qtip-app/code pul
 
 ### 3.3 Apply Prisma migrations (only when the release includes one)
 
-Run `prisma migrate deploy` from a throwaway container on the compose network
-(so the `qtip-db` hostname resolves and `env_file` supplies the DB creds). The
-runtime image does **not** bake the `prisma/` source, so you overlay it from the
-freshly-pulled `code/` checkout.
+Do the backup (§3.1) first, then decide HOW to apply. **The runtime image does
+not reliably ship the Prisma CLI**, so always PROBE before assuming
+`migrate deploy` will work.
 
-Two hard-won rules are baked into the command below — read them, they are the
-issues we kept hitting:
+> **Reality check (learned the hard way):** `npx prisma …` inside the container
+> has hung on an interactive "Ok to install prisma?" prompt, and a
+> non-interactive probe reported the CLI absent. So treat the **SQL fallback
+> (Step 2B) as the primary, reliable path** and `migrate deploy` (Step 2A) as the
+> nice-to-have for when the CLI happens to be present. This repo also
+> hand-authors its migration SQL (partitioned + PK-less warehouse tables Prisma
+> can't model) — see [`database_schema_updates.md`](./database_schema_updates.md).
 
-1. **Mount only `prisma/` + `prisma.config.ts`, never the whole `code/backend`.**
-   Bind-mounting `code/backend` over `/app/backend` shadows the image's
-   `node_modules` (where the Prisma CLI lives); `npx prisma` then hangs forever
-   on an interactive "Ok to install prisma?" prompt — you'll see the container
-   "Created" and nothing after. The narrow overlay keeps `node_modules` intact.
-2. **Migrations connect with the same `DB_*` vars the app uses** — no separate
-   `DATABASE_URL` to keep in sync. `prisma.config.ts` builds the datasource URL
-   from `DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` (the exact vars the runtime
-   adapter in `src/config/prisma.ts` uses). This kills the recurring
-   `P1000: Authentication failed` where a rotated password broke migrations while
-   the app stayed healthy.
+All commands below are written **PowerShell-safe** for a Windows workstation:
+the whole remote command is single-quoted and any literal inner single quote is
+doubled (`''`). Examples show **stage**; swap host/paths/DB-container for prod
+(`10.90.15.5`, `…/docker-production/…`, `qtip-db`) and only after stage verifies.
 
-```bash
-# STAGE
-ssh dmadmin@10.90.15.6 'cd /home/dmadmin/docker-staging/qtip-app; \
-  docker compose run --rm --no-deps -w /app/backend \
-    -v "$PWD/code/backend/prisma:/app/backend/prisma" \
-    -v "$PWD/code/backend/prisma.config.ts:/app/backend/prisma.config.ts" \
-    qtip-app sh -c "npx prisma migrate deploy --schema prisma/schema.prisma"'
+#### Step 1 — Probe (read-only; decides the path)
 
-# PROD (only after stage is verified)
-ssh dmadmin@10.90.15.5 'cd /home/dmadmin/docker-production/qtip-app; \
-  docker compose run --rm --no-deps -w /app/backend \
-    -v "$PWD/code/backend/prisma:/app/backend/prisma" \
-    -v "$PWD/code/backend/prisma.config.ts:/app/backend/prisma.config.ts" \
-    qtip-app sh -c "npx prisma migrate deploy --schema prisma/schema.prisma"'
+`-T` disables the TTY so it can't sit on a prompt; `--no-install` makes a missing
+CLI fail fast instead of trying to install. Mount only `prisma/` +
+`prisma.config.ts` — never the whole `code/backend`, which would shadow the
+image's `node_modules` and re-trigger the install hang:
+
+```powershell
+ssh dmadmin@10.90.15.6 'cd /home/dmadmin/docker-staging/qtip-app; docker compose run --rm -T --no-deps -w /app/backend -v "$PWD/code/backend/prisma:/app/backend/prisma" -v "$PWD/code/backend/prisma.config.ts:/app/backend/prisma.config.ts" qtip-app sh -c "npx --no-install prisma migrate status --schema prisma/schema.prisma"'
 ```
 
-Sanity-check first with `... migrate status ...` (same flags) — it should print
-your migration as the only pending one, then `deploy` applies it. Prisma applies
-migrations in lexicographic order of the folder name. See
+- Prints your migration as the only **pending** one → CLI is present, use **Step 2A**.
+- Errors that prisma is **absent / wants to install** → use **Step 2B** (the common case).
+
+#### Step 2A — CLI present: `migrate deploy`
+
+Same overlay as the probe. Migrations connect with the app's own `DB_*` vars via
+`prisma.config.ts` (no separate `DATABASE_URL` to drift, which kills the
+recurring `P1000: Authentication failed`):
+
+```powershell
+ssh dmadmin@10.90.15.6 'cd /home/dmadmin/docker-staging/qtip-app; docker compose run --rm -T --no-deps -w /app/backend -v "$PWD/code/backend/prisma:/app/backend/prisma" -v "$PWD/code/backend/prisma.config.ts:/app/backend/prisma.config.ts" qtip-app sh -c "npx --no-install prisma migrate deploy --schema prisma/schema.prisma"'
+```
+
+#### Step 2B — CLI absent (primary path): apply the SQL, then record it
+
+Pipe the migration file into the env's DB container (`qtip-db-stage` on stage,
+`qtip-db` on prod), then insert the `_prisma_migrations` bookkeeping row so
+`migrate deploy` never re-runs it.
+
+> **PowerShell/SSH quoting rule (this is what keeps biting us):** send SQL over
+> **stdin via `docker exec -i`** — do NOT use `mysql -e "…"`; the double quotes
+> get stripped through PowerShell → ssh → sh and mysql just prints its usage
+> dump. `$MYSQL_ROOT_PASSWORD` / `$MYSQL_DATABASE` stay literal through every
+> layer and are expanded by the innermost container shell.
+
+```powershell
+# 1) Apply the migration SQL (replace <name> with the migration folder name):
+ssh dmadmin@10.90.15.6 'cat /home/dmadmin/docker-staging/qtip-app/code/backend/prisma/migrations/<name>/migration.sql | docker exec -i qtip-db-stage sh -c ''exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'''
+
+# 2) Get the checksum Prisma expects (plain sha256sum hex of the same file):
+ssh dmadmin@10.90.15.6 'sha256sum /home/dmadmin/docker-staging/qtip-app/code/backend/prisma/migrations/<name>/migration.sql'
+
+# 3) Insert the bookkeeping row (paste <checksum> from step 2, and <name>):
+'INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at, finished_at, applied_steps_count) SELECT UUID(), ''<checksum>'', ''<name>'', NOW(3), NOW(3), 1 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM _prisma_migrations WHERE migration_name = ''<name>'');' | ssh dmadmin@10.90.15.6 'docker exec -i qtip-db-stage sh -c ''exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'''
+```
+
+#### Step 3 — Verify (either path)
+
+Confirm the schema change landed AND the history row exists (swap
+`<expected_object>` for something the migration creates, e.g. an index name):
+
+```powershell
+'SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND INDEX_NAME = ''<expected_object>''; SELECT migration_name, finished_at FROM _prisma_migrations WHERE migration_name = ''<name>'';' | ssh dmadmin@10.90.15.6 'docker exec -i qtip-db-stage sh -c ''exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'''
+```
+
+Prisma applies migrations in lexicographic order of the folder name. See
 [`backend/prisma/migrations/README.md`](../backend/prisma/migrations/README.md)
 for the duplicate-timestamp tolerance rule. For not-null/column-drop migrations
 follow the staggered plan in §7.
-
-**Fallback — CLI genuinely can't run (network, engine, etc.).** Only when the
-above is blocked, apply the migration SQL straight into the env's DB container
-(`qtip-db-stage` on stage, `qtip-db` on prod) and record it so Prisma history
-stays consistent. Pipe the file so the container expands its own root password:
-
-```bash
-ssh dmadmin@10.90.15.6 'cat /home/dmadmin/docker-staging/qtip-app/code/backend/prisma/migrations/<name>/migration.sql \
-  | docker exec -i qtip-db-stage sh -c '\''exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'\'''
-```
-
-Then insert one `_prisma_migrations` row so `migrate deploy` won't re-run it:
-`id = UUID()`, `checksum =` the file's **plain `sha256sum`** hex (Prisma uses
-exactly that), `migration_name = <folder name>`, `started_at`/`finished_at =
-NOW(3)`, `applied_steps_count = 1`. Idempotent-guard with
-`WHERE NOT EXISTS (SELECT 1 FROM _prisma_migrations WHERE migration_name = '<name>')`.
 
 ### 3.4a AI Reviewer system user (once per env)
 

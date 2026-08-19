@@ -1,0 +1,49 @@
+---
+description: Submissions & disputes (QA workflow) subsystem map — scoring consumer, dispute + unlock lifecycle
+globs: backend/src/services/SubmissionService.ts,backend/src/services/qa/**,backend/src/services/manager/manager.disputes*.ts,backend/src/services/unlock/**,backend/src/controllers/dispute.controller.ts,backend/src/controllers/qa/**,backend/src/controllers/manager/disputes.controller.ts,backend/src/controllers/unlock.controller.ts,backend/src/routes/submission.routes.ts,backend/src/routes/dispute.routes.ts,frontend/src/pages/quality/submission-detail/**,frontend/src/pages/quality/SubmissionDetailPage.tsx,frontend/src/pages/quality/SubmissionsPage.tsx,frontend/src/pages/quality/DisputesPage.tsx
+alwaysApply: false
+---
+
+# Submissions & Disputes (QA workflow)
+
+The workflow that consumes a scored audit form: an audit is assigned, drafted,
+submitted, scored, optionally disputed, and finalized (with unlock/reopen for
+corrections). Scoring math itself lives in
+[.cursor/rules/forms-scoring.mdc](mdc:.cursor/rules/forms-scoring.mdc); this rule
+covers everything downstream. Follows
+[.cursor/rules/backend-api-conventions.mdc](mdc:.cursor/rules/backend-api-conventions.mdc).
+
+## Statuses
+
+- Submission (`models/Submission.ts`): `DRAFT → SUBMITTED → DISPUTED? → FINALIZED`.
+- Dispute (`types/dispute.types.ts`): `OPEN → UPHELD | REJECTED | ADJUSTED`.
+  Never mutate these ad hoc; score changes from a dispute go through
+  `utils/disputeScoreHistory.ts`.
+
+## Backend map (`backend/src/`)
+
+- `services/SubmissionService.ts` — assignment, draft/submit, scoring, flagging
+  (wired inline from `routes/submission.routes.ts`).
+- `services/qa/` — completed-list, detail, export, `qa.submissions.finalize.service.ts`,
+  `qa.submissions.notify.ts`, `qa.dashboard.service.ts` (barrel `index.ts`).
+- Disputes: `controllers/dispute.controller.ts` (CSR create/read/update/history),
+  `controllers/manager/disputes.controller.ts` + `services/manager/manager.disputes.*`
+  (manager list/detail/resolve/export), `routes/dispute.routes.ts`.
+- Unlock/reopen: `services/unlock/*` + `controllers/unlock.controller.ts` +
+  `middleware/disputeUpload.ts`.
+- QA controllers: `controllers/qa/submissions.controller.ts`,
+  `controllers/trainer/submissions.controller.ts` (read path).
+
+## Frontend map (`frontend/src/pages/quality/`)
+
+`SubmissionDetailPage.tsx` composes `submission-detail/*` panels (`ScorePanel`,
+`ReviewDetailsPanel`, `CallDetailsPanel`, `DisputePanel`/`DisputeForms`,
+`UnlockBanner`/`UnlockDialog`/`ReopenedNotice`). Lists: `SubmissionsPage.tsx`,
+`DisputesPage.tsx`. APIs: `services/submissionService.ts`, `qaService.ts`,
+`unlockService.ts`.
+
+## Query keys
+
+Detail keys are role-scoped (`['submissions','detail',id,roleId]`); follow
+[.cursor/rules/query-keys.mdc](mdc:.cursor/rules/query-keys.mdc) — never drop the
+trailing `roleId` when invalidating. Obey [.cursor/rules/ui-design.mdc](mdc:.cursor/rules/ui-design.mdc).

@@ -41,13 +41,47 @@ Route/permission map: [docs/role_permission_matrix.md](docs/role_permission_matr
 
 ## Where to look by subsystem
 
-- Architecture (layering, patterns): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- Database reference: [docs/database_schema.md](docs/database_schema.md); change process: [docs/database_schema_updates.md](docs/database_schema_updates.md); efficiency review: [docs/database_review.md](docs/database_review.md).
-- Insights data warehouse (registry-driven ingestion, partitioning, workers): [.cursor/rules/insights-data-warehouse.mdc](.cursor/rules/insights-data-warehouse.mdc).
-- UI/UX conformance (shadcn/ui, Tremor, TanStack, brand palette): [.cursor/rules/ui-design.mdc](.cursor/rules/ui-design.mdc) and [docs/design.md](docs/design.md).
+Rules in `.cursor/rules/` auto-attach when you edit files their `globs` match;
+the linked docs are the deeper reference.
+
+**Cross-cutting rules**
+
+- Backend API contract (Prisma DAL, `AppError`/`asyncHandler` envelope, Zod, thin controllers): [.cursor/rules/backend-api-conventions.mdc](.cursor/rules/backend-api-conventions.mdc). Layering write-up: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- UI/UX conformance (shadcn/ui, TanStack, brand palette): [.cursor/rules/ui-design.mdc](.cursor/rules/ui-design.mdc) and [docs/design.md](docs/design.md).
 - Date/time handling: [.cursor/rules/date-handling.mdc](.cursor/rules/date-handling.mdc).
-- Frontend query-key conventions: [docs/frontend_query_keys.md](docs/frontend_query_keys.md).
+- Frontend query keys: [.cursor/rules/query-keys.mdc](.cursor/rules/query-keys.mdc) → [docs/frontend_query_keys.md](docs/frontend_query_keys.md).
+- Deploy / promote (stage + prod): [.cursor/rules/deploy-to-stage.mdc](.cursor/rules/deploy-to-stage.mdc) (quick-card) → [docs/deployment_runbook.md](docs/deployment_runbook.md) (full runbook).
+
+**Subsystem maps** (`.cursor/rules/`)
+
+- Forms & scoring engine: [.cursor/rules/forms-scoring.mdc](.cursor/rules/forms-scoring.mdc).
+- Submissions & disputes (QA workflow): [.cursor/rules/submissions-disputes.mdc](.cursor/rules/submissions-disputes.mdc).
+- Write-ups (disciplinary): [.cursor/rules/writeups.mdc](.cursor/rules/writeups.mdc).
+- Scheduling / campaigns / attendance: [.cursor/rules/scheduling-attendance.mdc](.cursor/rules/scheduling-attendance.mdc).
+- Training / coaching / LMS: [.cursor/rules/training-coaching.mdc](.cursor/rules/training-coaching.mdc).
+- AI reviewer: [.cursor/rules/ai-reviewer.mdc](.cursor/rules/ai-reviewer.mdc).
+- Insights data warehouse (registry-driven ingestion, partitioning, workers): [.cursor/rules/insights-data-warehouse.mdc](.cursor/rules/insights-data-warehouse.mdc).
+
+**Reference docs**
+
+- Database reference: [docs/database_schema.md](docs/database_schema.md); change process: [docs/database_schema_updates.md](docs/database_schema_updates.md); efficiency review: [docs/database_review.md](docs/database_review.md).
 - Code-health cadence + cleanup backlog: [docs/maintenance_cadence.md](docs/maintenance_cadence.md).
+
+## One source per convention (prevents drift)
+
+Each cross-cutting convention has ONE authoritative home. Everywhere else must be
+a one-line pointer, never a second copy that can drift out of sync:
+
+| Convention | Authoritative source |
+| --- | --- |
+| Tech stack + brand palette | [.cursorrules](.cursorrules) |
+| Backend API contract (Prisma, error envelope, Zod, thin controllers) | [.cursor/rules/backend-api-conventions.mdc](.cursor/rules/backend-api-conventions.mdc) |
+| Error/response envelope policy | [backend/src/utils/errorHandler.ts](backend/src/utils/errorHandler.ts) |
+| UI/UX + component patterns | [.cursor/rules/ui-design.mdc](.cursor/rules/ui-design.mdc) |
+| Query-key conventions | [docs/frontend_query_keys.md](docs/frontend_query_keys.md) |
+| 200–300 line refactor + no-duplication | this file (Hard constraints below) |
+| Deploy / promote (stage + prod) | [docs/deployment_runbook.md](docs/deployment_runbook.md) |
+| DB schema change process | [docs/database_schema_updates.md](docs/database_schema_updates.md) |
 
 ## Hard constraints (do not violate)
 

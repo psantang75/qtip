@@ -1,6 +1,6 @@
 ---
 description: Insights data-warehouse conventions (partitioning, workers, adding reports)
-globs: backend/src/workers/**,backend/prisma/migrations/**,backend/src/services/insights*
+globs: backend/src/workers/**,backend/prisma/migrations/**,backend/src/services/insights*,backend/src/services/QC*.ts,backend/src/services/qcQueryHelpers.ts
 alwaysApply: false
 ---
 

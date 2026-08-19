@@ -11,8 +11,8 @@ rule packs, and cost/budget guards.
 
 ## Backend map (`backend/src/services/`)
 
-- `AIReviewerService.ts` — the orchestrator. LARGE (~4.7k lines) and a known
-  refactor target: when you touch it, extract cohesive units (prompt assembly,
+- `AIReviewerService.ts` — the orchestrator. By far the largest service in the
+  tree and a known refactor target: when you touch it, extract cohesive units (prompt assembly,
   reconciliation, self-consistency/voting, cost gating) into siblings rather
   than growing it. Do not add large new blocks inline.
 - `aiReviewerPrompt.ts`, `aiReviewerTwoPassPrompts.ts`, `aiReviewerPromptAddenda.ts`

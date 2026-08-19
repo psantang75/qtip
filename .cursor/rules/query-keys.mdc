@@ -1,0 +1,46 @@
+---
+description: TanStack Query key conventions — domain-first tuples, safe invalidation, shared factories
+globs: frontend/src/hooks/**,frontend/src/pages/**,frontend/src/services/**
+alwaysApply: false
+---
+
+# TanStack Query — Key Conventions
+
+Full policy: [docs/frontend_query_keys.md](mdc:docs/frontend_query_keys.md). This
+rule is the short enforcement summary — read the doc before adding shared keys.
+
+## Shape (mandatory)
+
+Domain-first tuple: `[domain, subResource, ...scope]`.
+
+```ts
+['submissions', 'detail', id, roleId]   // role-scoped detail
+['submissions', 'list', filtersHash]     // filter hash LAST
+['coaching', 'session', sessionId]
+```
+
+1. **Domain first, always** (`submissions`, `coaching`, `writeups`, `insights`,
+   `forms`, `disputes`, `csr`, `on-demand-reports`, …).
+2. **Sub-resource second** (`list` / `detail` / `options` / `summary`) so a single
+   call can invalidate every list in a domain without nuking valid detail views.
+3. **Ids / role scope** next; **filter objects** go through a stable hash at the
+   **last** position.
+
+## Don't drop role scope on invalidation
+
+Detail responses depend on the viewer's role. Invalidate the exact key
+(`['submissions','detail',id,roleId]`) or the coarser prefix
+(`['submissions','detail',id]`) — **never** drop `roleId` and rely on prefix luck.
+Use `exact: true` keys for `getQueryData` / `setQueryData`.
+
+## Where keys live
+
+- Page-local keys may stay inline in the page file.
+- Keys shared by multiple components MUST move to a `*QueryKeys.ts` next to the
+  service (e.g. `services/csrQueryKeys.ts`), exported as a `const` factory object
+  so callers get autocomplete and refactors stay safe. Prefer factories over
+  scattering the same inline tuple — that is the top invalidation-bug risk as the
+  app grows.
+
+`CacheResetGuard` (`app/guards.tsx`) is the only global reset — it clears on user
+change so role-scoped data can't leak between sessions.
