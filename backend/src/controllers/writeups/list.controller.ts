@@ -15,6 +15,7 @@ import {
   getPriorDiscipline as fetchPriorDiscipline,
 } from '../../services/writeups'
 import { getManagedDepartmentIds } from '../../services/manager/manager.access'
+import { parsePagination } from '../../validation/common'
 import { respondWithError } from './respond'
 
 /**
@@ -32,13 +33,14 @@ async function resolveScopedDepartmentIds(req: AuthReq): Promise<number[] | null
 /** GET /api/writeups */
 export const getWriteUps = async (req: AuthReq, res: Response) => {
   try {
+    const { page, limit } = parsePagination(req.query, { defaultLimit: 20 })
     const result = await listWriteUps({
       viewerId:            req.user!.user_id,
       viewerRole:          req.user!.role,
       canViewAll:          req.pageAccess?.canViewAll ?? false,
       scopedDepartmentIds: await resolveScopedDepartmentIds(req),
-      page:         Math.max(1, parseInt(req.query.page as string) || 1),
-      limit:        Math.min(5000, parseInt(req.query.limit as string) || 20),
+      page,
+      limit,
       csrId:        req.query.csr_id        ? parseInt(req.query.csr_id as string) : undefined,
       status:       req.query.status        as string | undefined,
       documentType: req.query.document_type as string | undefined,

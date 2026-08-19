@@ -11,6 +11,7 @@ import {
   type target_scope,
 } from '../types/performanceGoal.types';
 import logger from '../config/logger';
+import { parsePagination } from '../validation/common';
 
 const router = express.Router();
 const performanceGoalService = new EnhancedPerformanceGoalService();
@@ -37,8 +38,7 @@ const adminOnly = authorizeAdmin as unknown as RequestHandler;
  */
 router.get('/', auth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const pageSize = parseInt(req.query.pageSize as string) || 10;
+    const { page, limit: pageSize } = parsePagination(req.query, { defaultLimit: 10 });
 
     const filters: PerformanceGoalFilters = {};
 

@@ -16,6 +16,7 @@ import {
 } from '../../services/manager'
 import { getManagedDepartmentIds } from '../../services/manager/manager.access'
 import { escapeFilename } from '../../utils/contentDisposition'
+import { parsePagination } from '../../validation/common'
 import { respondSuccessError, type AuthenticatedRequest } from './respond'
 
 const filtersFromQuery = (req: AuthenticatedRequest) => ({
@@ -56,12 +57,13 @@ export const listDisputesHandler = async (
       return
     }
 
+    const { page, limit } = parsePagination(req.query, { defaultLimit: 10 })
     const result = await listManagerTeamDisputes({
       userId,
       userRole: req.user?.role,
       scopedDepartmentIds: await resolveScopedDepartmentIds(req),
-      page: parseInt(req.query.page as string) || 1,
-      limit: Math.min(5000, parseInt(req.query.limit as string) || 10),
+      page,
+      limit,
       filters: filtersFromQuery(req),
     })
 

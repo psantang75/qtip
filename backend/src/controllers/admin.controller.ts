@@ -12,6 +12,7 @@ import {
 } from '../services/coachingSessionsReport';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
 import { checkLegacyLock } from '../services/legacyLock';
+import { parsePagination } from '../validation/common';
 import logger from '../config/logger';
 // Local `escapeFilename` removed during pre-production review (item #26).
 // `utils/contentDisposition.formatFilename` is the canonical implementation.
@@ -306,8 +307,7 @@ export const getCSRActivity = async (req: Request, res: Response): Promise<void>
  */
 export const getCompletedForms = async (req: Request, res: Response): Promise<void> => {
   try {
-    const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit as string) || 1000));
+    const { page, limit } = parsePagination(req.query, { defaultLimit: 1000 });
     const offset = (page - 1) * limit;
 
     const formIdParam = req.query.form_id as string;
@@ -762,9 +762,7 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
 export const getAdminCoachingSessions = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const user_id = req.user?.user_id;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const offset = (page - 1) * limit;
+    const { page, limit, skip: offset } = parsePagination(req.query, { defaultLimit: 10 });
 
     const searchTerm = req.query.search as string || '';
     const csr_id = req.query.csr_id as string || '';

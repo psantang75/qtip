@@ -12,6 +12,7 @@ import prisma from '../config/prisma';
 import { Prisma, DisputeStatus as PrismaDisputeStatus, DisputeScoreHistoryType } from '../generated/prisma/client';
 import logger from '../config/logger';
 import cacheService from '../services/CacheService';
+import { parsePagination } from '../validation/common';
 
 // NOTE: getCSRAudits used to live here (mounted at GET /api/disputes/audits)
 // but it was a parallel implementation of the same product feature served by
@@ -251,11 +252,9 @@ export const submitDispute = async (req: Request, res: Response): Promise<void> 
 export const getDisputeHistory = async (req: Request, res: Response): Promise<void> => {
   try {
     const user_id = req.user?.user_id;
-    const page = parseInt(req.query.page as string) || 1;
-    // Cap matches `MAX_PAGE_SIZE` in `validation/common.ts`. See item #40
-    // of the pre-production review for the reasoning behind the 1,000 cap.
-    const perPage = Math.min(1000, parseInt(req.query.perPage as string) || parseInt(req.query.limit as string) || 10);
-    const offset = (page - 1) * perPage;
+    // `parsePagination` reads the `perPage`/`limit` aliases and applies the
+    // shared `MAX_PAGE_SIZE` cap (pre-production review item #40).
+    const { page, limit: perPage, skip: offset } = parsePagination(req.query, { defaultLimit: 10 });
 
     const start_date = req.query.start_date as string;
     const end_date = req.query.end_date as string;

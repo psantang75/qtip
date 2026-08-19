@@ -8,6 +8,7 @@ import {
 } from '../models';
 import logger from '../config/logger';
 import { HttpError } from '../utils/httpError';
+import { parsePagination } from '../validation/common';
 
 /**
  * Get all audit assignments with pagination and optional filtering
@@ -15,9 +16,7 @@ import { HttpError } from '../utils/httpError';
  */
 export const getAuditAssignments = async (req: Request, res: Response): Promise<void> => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const offset = (page - 1) * limit;
+    const { page, limit, skip: offset } = parsePagination(req.query, { defaultLimit: 10 });
 
     const is_active = req.query.is_active;
     const form_id = req.query.form_id;

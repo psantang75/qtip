@@ -4,6 +4,7 @@ import { MySQLUserRepository } from '../repositories/UserRepository';
 import prisma from '../config/prisma';
 import logger from '../config/logger';
 import { cancelFutureShiftsForUser } from '../services/scheduling';
+import { parsePagination } from '../validation/common';
 
 // Initialize user service with repository
 const userRepository = new MySQLUserRepository();
@@ -18,8 +19,7 @@ export const getUsers = async (req: Request, res: Response, next: NextFunction) 
     logger.info('[USER CONTROLLER] Getting users with filters');
     logger.info('[USER CONTROLLER] Query params:', req.query);
     
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const { page, limit } = parsePagination(req.query, { defaultLimit: 20 });
     
     // Handle role name to role_id conversion
     let role_id = req.query.role_id ? parseInt(req.query.role_id as string) : undefined;

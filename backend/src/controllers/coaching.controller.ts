@@ -7,6 +7,7 @@ import { buildCoachingSessionScope } from '../services/coachingSessionsReport';
 import { notifyCoachingStatus } from '../services/coaching/coaching.notify';
 import { checkLegacyLock } from '../services/legacyLock';
 import { formatFilename as escapeFilename } from '../utils/contentDisposition';
+import { parsePagination } from '../validation/common';
 import logger from '../config/logger';
 const fs = require('fs').promises;
 const path = require('path');
@@ -90,9 +91,7 @@ export const getCoachingSessions = async (req: AuthReq, res: Response) => {
   try {
     const userId = req.user!.user_id;
     const role = req.user!.role;
-    const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(5000, parseInt(req.query.limit as string) || 20);
-    const offset = (page - 1) * limit;
+    const { page, limit, skip: offset } = parsePagination(req.query, { defaultLimit: 20 });
     const { csr_id, status, coaching_purpose, coaching_format, topic_ids, date_from, date_to, overdue_only, due_today } = req.query;
 
     const conditions: Prisma.Sql[] = [Prisma.sql`u.is_active = 1`, roleCondition(role, userId)];

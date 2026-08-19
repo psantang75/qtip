@@ -6,6 +6,7 @@ import { serviceLogger } from '../config/logger';
 import prisma from '../config/prisma';
 import { findOpenUnlock, closeUnlock } from '../services/unlock/unlock.service';
 import { isManagerOfSubmissionAgent } from '../services/manager/manager.access';
+import { parsePagination } from '../validation/common';
 
 const router = express.Router();
 
@@ -24,8 +25,7 @@ const getAssignedAudits = async (req: Request, res: Response) => {
       return;
     }
 
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const { page, limit } = parsePagination(req.query, { defaultLimit: 10 });
 
     const result = await submissionService.getAssignedAudits(qa_id, page, limit);
     res.status(200).json(result);

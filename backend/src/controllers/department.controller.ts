@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { DepartmentService, DepartmentServiceError } from '../services/DepartmentService';
 import { MySQLDepartmentRepository } from '../repositories/MySQLDepartmentRepository';
 import { getDescendantDepartmentIds } from '../utils/departmentHierarchy';
+import { parsePagination } from '../validation/common';
 import logger from '../config/logger';
 
 const departmentRepository = new MySQLDepartmentRepository();
@@ -46,8 +47,7 @@ export const getDepartments = async (req: Request, res: Response) => {
   logger.info('[DEPT CONTROLLER] Getting departments');
   
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const { page, limit } = parsePagination(req.query, { defaultLimit: 20 });
     
     const filters = {
       manager_id: req.query.manager_id ? parseInt(req.query.manager_id as string) : undefined,

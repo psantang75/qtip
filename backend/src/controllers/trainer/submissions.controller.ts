@@ -18,6 +18,7 @@ import {
   getTrainerSubmissionDetail,
 } from '../../services/trainer'
 import { respondDetailedError } from './respond'
+import { parsePagination } from '../../validation/common'
 
 export const getTrainerCompletedSubmissions = async (req: Request, res: Response): Promise<void> => {
   const userId = req.user?.user_id
@@ -25,8 +26,7 @@ export const getTrainerCompletedSubmissions = async (req: Request, res: Response
   try {
     trainerLogger.operation('getCompletedSubmissions', userId)
 
-    const page   = Math.max(1,    parseInt(req.query.page  as string) || 1)
-    const limit  = Math.min(1000, Math.max(1, parseInt(req.query.limit as string) || 1000))
+    const { page, limit } = parsePagination(req.query, { defaultLimit: 1000 })
     const formId = req.query.form_id ? parseInt(req.query.form_id as string) : null
 
     const result = await listTrainerCompletedSubmissions({

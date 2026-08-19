@@ -2,6 +2,7 @@
 import { authenticate, authorizeAdmin } from '../middleware/auth';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
+import { parsePagination } from '../validation/common';
 import logger from '../config/logger';
 
 const router = express.Router();
@@ -12,18 +13,14 @@ const router = express.Router();
  * Built with `Prisma.sql` tagged templates so every dynamic value flows
  * through a real placeholder rather than string concatenation — see
  * pre-production review item #42 for why we moved this off
- * `$queryRawUnsafe`. The page-size cap mirrors `MAX_PAGE_SIZE` in
- * `validation/common.ts` (item #40).
+ * `$queryRawUnsafe`. Pagination (incl. the `MAX_PAGE_SIZE` cap, item #40) is
+ * handled by the shared `parsePagination` helper in `validation/common.ts`.
  */
-const MAX_AUDIT_LOG_LIMIT = 1000;
-
 const getAuditLogsHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     logger.info('[AUDIT LOG SERVICE] Getting audit logs');
 
-    const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const requested = parseInt(req.query.limit as string) || 20;
-    const limit = Math.min(MAX_AUDIT_LOG_LIMIT, Math.max(1, isFinite(requested) ? requested : 20));
+    const { page, limit } = parsePagination(req.query, { defaultLimit: 20 });
     const action = req.query.action as string;
     const user_id = req.query.user_id as string;
     const start_date = req.query.start_date as string;

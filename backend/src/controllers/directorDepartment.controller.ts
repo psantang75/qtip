@@ -2,6 +2,7 @@
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import logger from '../config/logger';
+import { parsePagination } from '../validation/common';
 
 // Types
 interface DirectorDepartment {
@@ -16,9 +17,7 @@ interface DirectorDepartment {
 // Get all director department assignments with pagination and filters
 export const getDirectorDepartments = async (req: Request, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const offset = (page - 1) * limit;
+    const { page, limit, skip: offset } = parsePagination(req.query, { defaultLimit: 20 });
 
     const directorId = req.query.director_id;
     const department_id = req.query.department_id;

@@ -40,6 +40,46 @@ export const MAX_PAGE_SIZE  = 1_000
 export const PageSchema     = z.coerce.number().int().min(1).max(10_000).optional()
 export const PageSizeSchema = z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).optional()
 
+export interface Pagination {
+  /** 1-based page number (always ≥ 1). */
+  page: number
+  /** Rows per page, clamped to `[1, maxLimit]`. */
+  limit: number
+  /** Rows to skip = `(page - 1) * limit`, ready for Prisma `skip` / SQL OFFSET. */
+  skip: number
+}
+
+/** Coerce an unknown query value to a positive integer, else 0. */
+const toPositiveInt = (v: unknown): number => {
+  const n = typeof v === 'number' ? v : parseInt(String(v ?? ''), 10)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
+}
+
+/**
+ * Canonical `page` / `limit` parser for list endpoints. Replaces the ~20
+ * hand-rolled `parseInt(req.query.page as string) || 1` snippets that drifted
+ * to caps of 5000 / 1000 / 100 / none. Reads the `limit`, `pageSize`, and
+ * `perPage` aliases the various controllers accept, and hard-caps `limit` at
+ * `maxLimit` (defaults to `MAX_PAGE_SIZE`) so no authenticated client can
+ * request an effectively unbounded result set. The frontend "fetch all"
+ * pattern uses `CLIENT_FETCH_LIMIT = 1000`, so the default cap never truncates.
+ */
+export function parsePagination(
+  query: { page?: unknown; limit?: unknown; pageSize?: unknown; perPage?: unknown },
+  opts: { defaultLimit?: number; maxLimit?: number } = {},
+): Pagination {
+  const defaultLimit = opts.defaultLimit ?? 20
+  const maxLimit = opts.maxLimit ?? MAX_PAGE_SIZE
+  const page = Math.max(1, toPositiveInt(query.page) || 1)
+  const requested =
+    toPositiveInt(query.limit) ||
+    toPositiveInt(query.pageSize) ||
+    toPositiveInt(query.perPage) ||
+    defaultLimit
+  const limit = Math.min(maxLimit, Math.max(1, requested))
+  return { page, limit, skip: (page - 1) * limit }
+}
+
 // ── ISO date strings ─────────────────────────────────────────────────────────
 
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/

@@ -254,6 +254,33 @@ These were started as verified pilots; continue them under the cadence above:
     to `npm ci` (mind npm-workspace hoisting vs. the production stage's
     `backend/node_modules` copy) — THEN remove `|| true` so the image build gates
     on tsc too. Do not attempt blind; build on the box or with local Docker.
+- Pagination cap drift — RESOLVED (Phase 2, part 2.1). `validation/common.ts` now
+  exports `parsePagination(query, { defaultLimit, maxLimit })` → `{ page, limit,
+  skip }`, the **canonical** parser for every list endpoint. It reads the
+  `limit`/`pageSize`/`perPage` aliases and hard-caps `limit` at `MAX_PAGE_SIZE`
+  (1000) by default. Replaced the ~17 hand-rolled `parseInt(req.query.page …)`
+  snippets that had drifted to caps of **5000** (coaching, coachingReport,
+  resource, manager/disputes, writeups/list), **unbounded** (auditLog,
+  auditAssignment, department, user, directorDepartment, manager/audits, admin,
+  submission.routes, enhancedPerformanceGoal.routes, submission getAssignedAudits),
+  and the already-safe 1000 hand-rolls (admin completed-forms, dispute history,
+  trainer/submissions, auditLog.routes, qa/submissions via its `cfg`). Verified
+  safe: frontend `CLIENT_FETCH_LIMIT = 1000`, so the cap never truncates a real
+  client. Unit-tested in `validation/__tests__/pagination.test.ts`. LEFT on purpose
+  (intentional smaller/custom caps): `reportController`/`importController` (100),
+  `admin/emailTemplates` (200/500), `quizLibrary` (its own const), the AI-reviewer
+  `parsePositiveInt` handlers, and `insightsAdminIngestion` (`clampLimit`). Use
+  `parsePagination` for any NEW list endpoint — do not re-introduce inline parsing.
+- Error-envelope migration (legacy `{success:false}` shape C → thrown `AppError`
+  / `asyncHandler`, shape A) — Phase 2, part 2.2, NOT yet started. Safe because the
+  frontend's shared `utils/errorHandling.ts` (`getBackendMessage`/`getErrorMessage`)
+  already normalizes shapes A/B/C and keys 401/403/5xx off HTTP status — so flipping
+  a controller's ERROR path is transparent **iff** the HTTP status and the SUCCESS
+  payload are preserved verbatim. Order (risk-first): `dispute` (already `{message}`)
+  → `coaching` (49) → `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` →
+  `admin` (61, coordinate w/ its decomposition) → `auth` LAST (sensitive; keep
+  `{token,user}`/`{valid}`/`{ok}` success shapes untouched). Add controller tests
+  per slice, mirroring the `insightsAdmin*` pattern.
 
 ## Notes / corrections logged during the program
 

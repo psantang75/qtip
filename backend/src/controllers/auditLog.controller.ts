@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { AuditLogFilters, AuditLogWithDetails } from '../types/auditLog.types';
+import { parsePagination } from '../validation/common';
 import logger from '../config/logger';
 
 /**
@@ -10,9 +11,7 @@ import logger from '../config/logger';
  */
 export const getAuditLogs = async (req: Request, res: Response): Promise<void> => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
-    const offset = (page - 1) * limit;
+    const { page, limit, skip: offset } = parsePagination(req.query, { defaultLimit: 50 });
 
     const filters: AuditLogFilters = {
       user_id: req.query.user_id ? parseInt(req.query.user_id as string) : undefined,

@@ -10,6 +10,7 @@ import {
   listManagerTeamAudits,
   getManagerTeamAuditDetails,
 } from '../../services/manager'
+import { parsePagination } from '../../validation/common'
 import { respondPlainError, type AuthenticatedRequest } from './respond'
 
 export const teamAuditsListHandler = async (
@@ -23,10 +24,11 @@ export const teamAuditsListHandler = async (
       return
     }
 
+    const { page, limit } = parsePagination(req.query, { defaultLimit: 20 })
     const result = await listManagerTeamAudits({
       userId,
-      page: parseInt(req.query.page as string) || 1,
-      limit: parseInt(req.query.limit as string) || 20,
+      page,
+      limit,
       filters: {
         search: req.query.search as string | undefined,
         csr_id: req.query.csr_id as string | undefined,

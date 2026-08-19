@@ -19,6 +19,7 @@ import {
   buildSubmissionExportCsv,
   finalizeSubmission as finalizeSubmissionService,
 } from '../../services/qa'
+import { parsePagination } from '../../validation/common'
 import { respondWithError } from './respond'
 
 export const getCompletedSubmissions = async (req: Request, res: Response): Promise<void> => {
@@ -27,8 +28,7 @@ export const getCompletedSubmissions = async (req: Request, res: Response): Prom
     serviceLogger.operation('QA', 'getCompletedSubmissions', userId)
 
     const cfg    = getQAPagination()
-    const page   = Math.max(1, parseInt(req.query.page  as string) || 1)
-    const limit  = Math.min(cfg.maxLimit, Math.max(1, parseInt(req.query.limit as string) || cfg.defaultLimit))
+    const { page, limit } = parsePagination(req.query, { defaultLimit: cfg.defaultLimit, maxLimit: cfg.maxLimit })
     const formId = req.query.form_id ? parseInt(req.query.form_id as string) : undefined
     const rawStatus = req.query.status as string | undefined
     const status  = rawStatus === 'FINALIZED' || rawStatus === 'DISPUTED' || rawStatus === 'SUBMITTED'

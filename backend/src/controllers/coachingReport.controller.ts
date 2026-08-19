@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { buildCoachingSessionScope, getCsrRoleId } from '../services/coachingSessionsReport';
+import { parsePagination } from '../validation/common';
 import logger from '../config/logger';
 
 /**
@@ -146,9 +147,7 @@ export const getCSRCoachingList = async (req: AuthReq, res: Response) => {
       return res.status(401).json({ success: false, message: 'Authentication required' });
     }
     const { user_id, role } = req.user;
-    const page = Math.max(1, parseInt(req.query.page as string) || 1);
-    const limit = Math.min(5000, parseInt(req.query.limit as string) || 20);
-    const offset = (page - 1) * limit;
+    const { page, limit, skip: offset } = parsePagination(req.query, { defaultLimit: 20 });
     const { date_from, date_to } = req.query;
 
     // Visibility scope is applied in the JOIN-side condition so every aggregate
