@@ -308,9 +308,31 @@ These were started as verified pilots; continue them under the cadence above:
     keeps `logger` for its `logger.info` diagnostics). Covered by 35 new tests across
     `controllers/__tests__/{quizLibrary,resource,onDemandReports,phoneSystem}.controller.test.ts`.
     tsc + full backend suite green (769 passed), lint 97/0.
+  - DONE: `admin.controller.ts` (all 14 handlers → `asyncHandler` + `AppError`).
+    This file mixed **two** legacy success shapes and both were preserved verbatim:
+    the dashboard/forms handlers (`getAdminStats`, `getCSRActivity`, `getCompletedForms`,
+    `getCompletedFormDetails`, `exportCompletedForm`) return **raw** payloads
+    (`res.status(200).json(data)` / CSV `res.send`), while `getAdminCSRs` and every
+    coaching handler keep `{success,data[,total,message]}`. Only the error paths moved
+    to thrown `AppError` (400 `createValidationError`, 404 `createNotFoundError`, 403
+    `createAuthorizationError`, 401/500 `new AppError`). The 8 coaching handlers repeated
+    the same `401-if-no-user` + `getRoleId('CSR')`/`500-if-missing` preamble, so it was
+    consolidated into two shared guards — `requireUserId(req)` (401) and
+    `resolveCsrRoleId()` (500) — killing ~8× duplication; `getAdminCSRs` was retrofitted
+    to the same guards for a single source of truth. Preserved semantics:
+    `getAdminCoachingSessions`' `limit>100` **400** guard (still enforced on top of the
+    shared 1000-cap), `updateAdminCoachingSession`'s `checkLegacyLock` audit call, and
+    `downloadAdminCoachingSessionAttachment`'s mid-stream `on('error')` 500. Removed the
+    now-dead `serviceLogger` import (`logger` stays for `getRoleId` + attachment I/O).
+    Covered by 22 new tests in `controllers/__tests__/admin.controller.test.ts`.
+    tsc + full backend suite green (791 passed), lint 97/0.
+    Handlers are now clean/wrapped, so the Phase 3 file split (dashboard/forms stay in
+    `admin.controller.ts`; the 8 coaching handlers → `controllers/admin/adminCoaching.controller.ts`,
+    mirroring the existing `admin/emailTemplates.controller.ts`) is a low-risk mechanical
+    move + route rewire, not a re-churn of error logic.
   - Order (risk-first): ✅ `dispute` → ✅ `coaching` →
-    ✅ `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` → `admin` (61, coordinate
-    w/ its decomposition) → `auth` LAST (sensitive; keep `{token,user}`/`{valid}`/`{ok}`
+    ✅ `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` → ✅ `admin` →
+    `auth` LAST (sensitive; keep `{token,user}`/`{valid}`/`{ok}`
     success shapes untouched). Add controller tests per slice, mirroring the
     `insightsAdmin*` / dispute pattern.
 

@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
-import { serviceLogger } from '../config/logger';
 import { promises as fs } from 'fs';
 import { createReadStream } from 'fs';
 import path from 'path';
@@ -14,6 +13,14 @@ import { formatFilename as escapeFilename } from '../utils/contentDisposition';
 import { checkLegacyLock } from '../services/legacyLock';
 import { parsePagination } from '../validation/common';
 import logger from '../config/logger';
+import {
+  asyncHandler,
+  createValidationError,
+  createNotFoundError,
+  createAuthorizationError,
+  AppError,
+  ErrorType,
+} from '../utils/errorHandler';
 // Local `escapeFilename` removed during pre-production review (item #26).
 // `utils/contentDisposition.formatFilename` is the canonical implementation.
 
@@ -81,8 +88,7 @@ interface CSRActivityData {
  * Get admin dashboard statistics
  * @route GET /api/admin/stats
  */
-export const getAdminStats = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getAdminStats = asyncHandler(async (_req: Request, res: Response): Promise<void> => {
     const [reviewsCompleted, disputes, coachingSessions] = await Promise.all([
       prisma.$queryRaw<{ thisWeek: bigint; thisMonth: bigint }[]>`
         SELECT
@@ -141,18 +147,13 @@ export const getAdminStats = async (req: Request, res: Response): Promise<void> 
     };
 
     res.status(200).json(stats);
-  } catch (error) {
-    serviceLogger.error('admin', 'getAdminStats', error as Error, req.user?.user_id);
-    res.status(500).json({ message: 'Failed to fetch admin dashboard statistics' });
-  }
-};
+});
 
 /**
  * Get CSR activity data for admin dashboard
  * @route GET /api/admin/csr-activity
  */
-export const getCSRActivity = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getCSRActivity = asyncHandler(async (_req: Request, res: Response): Promise<void> => {
     const csrActivity = await prisma.$queryRaw<any[]>`
       SELECT
         u.id,
@@ -295,18 +296,13 @@ export const getCSRActivity = async (req: Request, res: Response): Promise<void>
     }));
 
     res.status(200).json(formattedCSRActivity);
-  } catch (error) {
-    serviceLogger.error('admin', 'getCSRActivity', error as Error, req.user?.user_id);
-    res.status(500).json({ message: 'Failed to fetch CSR activity data' });
-  }
-};
+});
 
 /**
  * Get completed form submissions for admin with filtering
  * @route GET /api/admin/completed-forms
  */
-export const getCompletedForms = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getCompletedForms = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { page, limit } = parsePagination(req.query, { defaultLimit: 1000 });
     const offset = (page - 1) * limit;
 
@@ -314,8 +310,7 @@ export const getCompletedForms = async (req: Request, res: Response): Promise<vo
     const form_id = formIdParam ? parseInt(formIdParam) : null;
 
     if (formIdParam && (isNaN(form_id!) || form_id! <= 0)) {
-      res.status(400).json({ message: 'Invalid form_id parameter' });
-      return;
+      throw createValidationError('Invalid form_id parameter');
     }
 
     const dateStart = req.query.date_start as string;
@@ -324,8 +319,7 @@ export const getCompletedForms = async (req: Request, res: Response): Promise<vo
     const search = req.query.search as string;
 
     if (search && search.length > 100) {
-      res.status(400).json({ message: 'Search query too long (max 100 characters)' });
-      return;
+      throw createValidationError('Search query too long (max 100 characters)');
     }
 
     // DRAFT is included so AI Reviewer drafts (Calibrating mode) and any
@@ -388,23 +382,17 @@ export const getCompletedForms = async (req: Request, res: Response): Promise<vo
     }));
 
     res.status(200).json(formattedSubmissions);
-  } catch (error) {
-    serviceLogger.error('admin', 'getCompletedForms', error as Error, req.user?.user_id);
-    res.status(500).json({ message: 'Failed to fetch completed forms' });
-  }
-};
+});
 
 /**
  * Get detailed information for a specific completed form submission
  * @route GET /api/admin/completed-forms/:id
  */
-export const getCompletedFormDetails = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getCompletedFormDetails = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const submission_id = parseInt(req.params.id);
 
     if (isNaN(submission_id) || submission_id <= 0) {
-      res.status(400).json({ message: 'Invalid submission ID' });
-      return;
+      throw createValidationError('Invalid submission ID');
     }
 
     const [submissionDetails, metadata, answers, disputes] = await Promise.all([
@@ -445,8 +433,7 @@ export const getCompletedFormDetails = async (req: Request, res: Response): Prom
     ]);
 
     if (submissionDetails.length === 0) {
-      res.status(404).json({ message: 'Submission not found' });
-      return;
+      throw createNotFoundError('Submission not found');
     }
 
     const submission = submissionDetails[0];
@@ -464,23 +451,17 @@ export const getCompletedFormDetails = async (req: Request, res: Response): Prom
     };
 
     res.status(200).json(result);
-  } catch (error) {
-    serviceLogger.error('admin', 'getCompletedFormDetails', error as Error, req.user?.user_id);
-    res.status(500).json({ message: 'Failed to fetch submission details' });
-  }
-};
+});
 
 /**
  * Export a completed form submission as CSV
  * @route GET /api/admin/completed-forms/:id/export
  */
-export const exportCompletedForm = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const exportCompletedForm = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const submission_id = parseInt(req.params.id);
 
     if (isNaN(submission_id) || submission_id <= 0) {
-      res.status(400).json({ message: 'Invalid submission ID' });
-      return;
+      throw createValidationError('Invalid submission ID');
     }
 
     const [submissionData, metadata, answers] = await Promise.all([
@@ -510,8 +491,7 @@ export const exportCompletedForm = async (req: Request, res: Response): Promise<
     ]);
 
     if (submissionData.length === 0) {
-      res.status(404).json({ message: 'Submission not found' });
-      return;
+      throw createNotFoundError('Submission not found');
     }
 
     const submission = submissionData[0];
@@ -550,11 +530,23 @@ export const exportCompletedForm = async (req: Request, res: Response): Promise<
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="submission-${submission_id}.csv"`);
     res.send(csvContent);
-  } catch (error) {
-    serviceLogger.error('admin', 'exportCompletedForm', error as Error, req.user?.user_id);
-    res.status(500).json({ message: 'Failed to export submission' });
-  }
-};
+});
+
+/** 401 unless the request carries an authenticated user; returns the user id.
+ *  Shared by every admin handler so the auth gate is identical. */
+function requireUserId(req: AuthenticatedRequest): number {
+  const id = req.user?.user_id;
+  if (!id) throw new AppError('Unauthorized', ErrorType.AUTHORIZATION_ERROR, 401);
+  return id;
+}
+
+/** Resolve the CSR role id or 500 — every admin coaching/CSR query is scoped to
+ *  it, so a missing role row is an internal misconfiguration, not a user error. */
+async function resolveCsrRoleId(): Promise<number> {
+  const csrRoleId = await getRoleId('CSR');
+  if (!csrRoleId) throw new AppError('CSR role not found', ErrorType.INTERNAL_SERVER_ERROR, 500);
+  return csrRoleId;
+}
 
 /**
  * Default coaching list_items.id for a list_type — the first active option by
@@ -572,9 +564,8 @@ async function defaultCoachingListId(listType: string): Promise<number | null> {
  * Create new coaching session
  * @route POST /api/admin/coaching-sessions
  */
-export const createAdminCoachingSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const adminId = req.user?.user_id;
+export const createAdminCoachingSession = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const adminId = requireUserId(req);
     let { csr_id, session_date, topic_ids, coaching_purpose, coaching_format, notes, status } = req.body;
     const attachment = req.file as Express.Multer.File | undefined;
 
@@ -588,34 +579,19 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
       topic_ids = (topic_ids as unknown[]).map(id => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
     }
 
-    if (!adminId) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
-      return;
-    }
-
     if (!csr_id || !session_date || !status) {
-      res.status(400).json({
-        success: false,
-        message: 'Missing required fields: csr_id, session_date, status'
-      });
-      return;
+      throw createValidationError('Missing required fields: csr_id, session_date, status');
     }
 
     if (!topic_ids || !Array.isArray(topic_ids) || topic_ids.length === 0) {
-      res.status(400).json({ success: false, message: 'At least one topic is required' });
-      return;
+      throw createValidationError('At least one topic is required');
     }
 
     if (!['SCHEDULED', 'COMPLETED'].includes(status)) {
-      res.status(400).json({ success: false, message: 'Invalid status. Must be SCHEDULED or COMPLETED' });
-      return;
+      throw createValidationError('Invalid status. Must be SCHEDULED or COMPLETED');
     }
 
-    const csrRoleId = await getRoleId('CSR');
-    if (!csrRoleId) {
-      res.status(500).json({ success: false, message: 'CSR role not found' });
-      return;
-    }
+    const csrRoleId = await resolveCsrRoleId();
 
     const csrUser = await prisma.user.findFirst({
       where: { id: parseInt(csr_id), role_id: csrRoleId, is_active: true, department: { is_active: true } },
@@ -623,19 +599,16 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
     });
 
     if (!csrUser) {
-      res.status(403).json({ success: false, message: 'CSR not found or inactive' });
-      return;
+      throw createAuthorizationError('CSR not found or inactive');
     }
 
     if (notes && notes.length > 2000) {
-      res.status(400).json({ success: false, message: 'Notes cannot exceed 2000 characters' });
-      return;
+      throw createValidationError('Notes cannot exceed 2000 characters');
     }
 
     const validTopicIds = topic_ids.filter((id: number) => Number.isInteger(Number(id)) && Number(id) > 0);
     if (validTopicIds.length !== topic_ids.length) {
-      res.status(400).json({ success: false, message: 'All topic IDs must be valid positive integers' });
-      return;
+      throw createValidationError('All topic IDs must be valid positive integers');
     }
 
     const validTopics = await prisma.$queryRaw<{ id: number }[]>`
@@ -646,8 +619,7 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
     `;
 
     if (validTopics.length !== topic_ids.length) {
-      res.status(400).json({ success: false, message: 'One or more topic IDs are invalid or inactive' });
-      return;
+      throw createValidationError('One or more topic IDs are invalid or inactive');
     }
 
     let attachmentData: any = { filename: null, path: null, size: null, mime_type: null };
@@ -675,8 +647,7 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
         };
       } catch (err) {
         logger.error('Error saving file:', err);
-        res.status(500).json({ success: false, message: 'Failed to save attachment' });
-        return;
+        throw new AppError('Failed to save attachment', ErrorType.INTERNAL_SERVER_ERROR, 500);
       }
     }
 
@@ -748,20 +719,14 @@ export const createAdminCoachingSession = async (req: AuthenticatedRequest, res:
     };
 
     res.status(201).json({ success: true, data: responseData, message: 'Coaching session created successfully' });
-  } catch (error) {
-    logger.error('Error creating coaching session:', error);
-    serviceLogger.error('admin', 'createAdminCoachingSession', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 /**
  * Get coaching sessions with pagination and filters (admin can see all sessions)
  * @route GET /api/admin/coaching-sessions
  */
-export const getAdminCoachingSessions = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const user_id = req.user?.user_id;
+export const getAdminCoachingSessions = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    requireUserId(req);
     const { page, limit, skip: offset } = parsePagination(req.query, { defaultLimit: 10 });
 
     const searchTerm = req.query.search as string || '';
@@ -771,21 +736,11 @@ export const getAdminCoachingSessions = async (req: AuthenticatedRequest, res: R
     const start_date = req.query.start_date as string || '';
     const end_date = req.query.end_date as string || '';
 
-    if (!user_id) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
-      return;
-    }
-
     if (isNaN(limit) || isNaN(offset) || limit < 1 || limit > 100 || offset < 0) {
-      res.status(400).json({ success: false, message: 'Invalid pagination parameters' });
-      return;
+      throw createValidationError('Invalid pagination parameters');
     }
 
-    const csrRoleId = await getRoleId('CSR');
-    if (!csrRoleId) {
-      res.status(500).json({ success: false, message: 'CSR role not found' });
-      return;
-    }
+    const csrRoleId = await resolveCsrRoleId();
 
     const { sessions, totalCount } = await fetchCoachingSessionsPage(
       { csrRoleId, searchTerm, csr_id, status, coaching_purpose, start_date, end_date },
@@ -793,20 +748,14 @@ export const getAdminCoachingSessions = async (req: AuthenticatedRequest, res: R
     );
 
     res.json({ success: true, data: { sessions, totalCount, page, limit } });
-  } catch (error) {
-    logger.error('Error fetching coaching sessions:', error);
-    serviceLogger.error('admin', 'getAdminCoachingSessions', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 /**
  * Export coaching sessions with current filters (admin can see all sessions)
  * @route GET /api/admin/coaching-sessions/export
  */
-export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const user_id = req.user?.user_id;
+export const exportAdminCoachingSessions = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    requireUserId(req);
     const searchTerm = req.query.search as string || '';
     const csr_id = req.query.csr_id as string || '';
     const status = req.query.status as string || '';
@@ -814,16 +763,7 @@ export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res
     const start_date = req.query.start_date as string || '';
     const end_date = req.query.end_date as string || '';
 
-    if (!user_id) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
-      return;
-    }
-
-    const csrRoleId = await getRoleId('CSR');
-    if (!csrRoleId) {
-      res.status(500).json({ success: false, message: 'CSR role not found' });
-      return;
-    }
+    const csrRoleId = await resolveCsrRoleId();
 
     const sessions = await fetchAllCoachingSessions({
       csrRoleId,
@@ -844,37 +784,21 @@ export const exportAdminCoachingSessions = async (req: AuthenticatedRequest, res
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; ${escapeFilename(fileName)}`);
     res.send(buffer);
-  } catch (error) {
-    logger.error('Error exporting coaching sessions:', error);
-    serviceLogger.error('admin', 'exportAdminCoachingSessions', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 /**
  * Get coaching session details by ID (admin can see any session)
  * @route GET /api/admin/coaching-sessions/:sessionId
  */
-export const getAdminCoachingSessionDetails = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const user_id = req.user?.user_id;
+export const getAdminCoachingSessionDetails = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    requireUserId(req);
     const sessionId = parseInt(req.params.sessionId);
 
-    if (!user_id) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
-      return;
-    }
-
     if (!sessionId || isNaN(sessionId)) {
-      res.status(400).json({ success: false, message: 'Invalid session ID' });
-      return;
+      throw createValidationError('Invalid session ID');
     }
 
-    const csrRoleId = await getRoleId('CSR');
-    if (!csrRoleId) {
-      res.status(500).json({ success: false, message: 'CSR role not found' });
-      return;
-    }
+    const csrRoleId = await resolveCsrRoleId();
 
     const sessionRows = await prisma.$queryRaw<any[]>`
       SELECT
@@ -898,8 +822,7 @@ export const getAdminCoachingSessionDetails = async (req: AuthenticatedRequest, 
     `;
 
     if (!sessionRows || sessionRows.length === 0) {
-      res.status(404).json({ success: false, message: 'Coaching session not found' });
-      return;
+      throw createNotFoundError('Coaching session not found');
     }
 
     const sessionData = sessionRows[0];
@@ -910,20 +833,14 @@ export const getAdminCoachingSessionDetails = async (req: AuthenticatedRequest, 
     };
 
     res.json({ success: true, data: responseData });
-  } catch (error) {
-    logger.error('Error fetching coaching session details:', error);
-    serviceLogger.error('admin', 'getAdminCoachingSessionDetails', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 /**
  * Update coaching session (admin can update any session)
  * @route PUT /api/admin/coaching-sessions/:sessionId
  */
-export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const adminId = req.user?.user_id;
+export const updateAdminCoachingSession = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const adminId = requireUserId(req);
     const sessionId = parseInt(req.params.sessionId);
     let { csr_id, session_date, topic_ids, coaching_purpose, coaching_format, notes, status } = req.body;
     const attachment = req.file as Express.Multer.File | undefined;
@@ -938,21 +855,11 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
       topic_ids = (topic_ids as unknown[]).map(id => parseInt(String(id))).filter((id: number) => !isNaN(id) && id > 0);
     }
 
-    if (!adminId) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
-      return;
-    }
-
     if (!sessionId || isNaN(sessionId)) {
-      res.status(400).json({ success: false, message: 'Invalid session ID' });
-      return;
+      throw createValidationError('Invalid session ID');
     }
 
-    const csrRoleId = await getRoleId('CSR');
-    if (!csrRoleId) {
-      res.status(500).json({ success: false, message: 'CSR role not found' });
-      return;
-    }
+    const csrRoleId = await resolveCsrRoleId();
 
     const sessionRows = await prisma.$queryRaw<{ id: number; current_status: string; csr_name: string }[]>`
       SELECT cs.id, cs.status as current_status, u.username as csr_name
@@ -966,8 +873,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
     `;
 
     if (!sessionRows || sessionRows.length === 0) {
-      res.status(404).json({ success: false, message: 'Coaching session not found' });
-      return;
+      throw createNotFoundError('Coaching session not found');
     }
 
     // Admin-only route: the lock always allows here, but audit-logs the
@@ -985,37 +891,26 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
         attachment !== undefined;
 
       if (hasOtherFieldUpdates) {
-        res.status(400).json({
-          success: false,
-          message: 'Cannot edit completed coaching sessions (except to reopen them by changing status to SCHEDULED)'
-        });
-        return;
+        throw createValidationError('Cannot edit completed coaching sessions (except to reopen them by changing status to SCHEDULED)');
       }
 
       if (!hasOtherFieldUpdates && status !== undefined && status !== 'SCHEDULED') {
-        res.status(400).json({
-          success: false,
-          message: 'Cannot edit completed coaching sessions (except to reopen them by changing status to SCHEDULED)'
-        });
-        return;
+        throw createValidationError('Cannot edit completed coaching sessions (except to reopen them by changing status to SCHEDULED)');
       }
     }
 
     if (status && !['SCHEDULED', 'COMPLETED'].includes(status)) {
-      res.status(400).json({ success: false, message: 'Invalid status. Must be SCHEDULED or COMPLETED' });
-      return;
+      throw createValidationError('Invalid status. Must be SCHEDULED or COMPLETED');
     }
 
     if (topic_ids !== undefined) {
       if (!Array.isArray(topic_ids) || topic_ids.length === 0) {
-        res.status(400).json({ success: false, message: 'At least one topic is required' });
-        return;
+        throw createValidationError('At least one topic is required');
       }
 
       const validTopicIds = topic_ids.filter((id: number) => Number.isInteger(id) && id > 0);
       if (validTopicIds.length === 0) {
-        res.status(400).json({ success: false, message: 'All topic IDs must be valid positive integers' });
-        return;
+        throw createValidationError('All topic IDs must be valid positive integers');
       }
 
       const activeTopicRows = await prisma.$queryRaw<{ id: number }[]>`
@@ -1027,23 +922,17 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
       const activeTopicIds = activeTopicRows.map((r) => r.id);
 
       if (activeTopicIds.length === 0) {
-        res.status(400).json({
-          success: false,
-          message: 'All selected topics are invalid or inactive. Please select at least one active topic.'
-        });
-        return;
+        throw createValidationError('All selected topics are invalid or inactive. Please select at least one active topic.');
       }
       topic_ids = activeTopicIds;
     }
 
     if (notes && notes.length > 2000) {
-      res.status(400).json({ success: false, message: 'Notes cannot exceed 2000 characters' });
-      return;
+      throw createValidationError('Notes cannot exceed 2000 characters');
     }
 
     if (coaching_purpose && !(Number.isInteger(parseInt(coaching_purpose)) && parseInt(coaching_purpose) > 0)) {
-      res.status(400).json({ success: false, message: 'Invalid coaching purpose' });
-      return;
+      throw createValidationError('Invalid coaching purpose');
     }
 
     if (csr_id) {
@@ -1053,8 +942,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
       });
 
       if (!csrUser) {
-        res.status(403).json({ success: false, message: 'CSR not found or inactive' });
-        return;
+        throw createAuthorizationError('CSR not found or inactive');
       }
     }
 
@@ -1083,8 +971,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
         };
       } catch (err) {
         logger.error('Error saving file:', err);
-        res.status(500).json({ success: false, message: 'Failed to save attachment' });
-        return;
+        throw new AppError('Failed to save attachment', ErrorType.INTERNAL_SERVER_ERROR, 500);
       }
     }
 
@@ -1107,8 +994,7 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
     }
 
     if (Object.keys(data).length === 0) {
-      res.status(400).json({ success: false, message: 'No fields to update' });
-      return;
+      throw createValidationError('No fields to update');
     }
 
     await prisma.$transaction(async (tx) => {
@@ -1161,37 +1047,21 @@ export const updateAdminCoachingSession = async (req: AuthenticatedRequest, res:
     };
 
     res.json({ success: true, data: responseData, message: 'Coaching session updated successfully' });
-  } catch (error) {
-    logger.error('Error updating coaching session:', error);
-    serviceLogger.error('admin', 'updateAdminCoachingSession', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 /**
  * Mark coaching session as completed (admin can complete any session)
  * @route PATCH /api/admin/coaching-sessions/:sessionId/complete
  */
-export const completeAdminCoachingSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const adminId = req.user?.user_id;
+export const completeAdminCoachingSession = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const adminId = requireUserId(req);
     const sessionId = parseInt(req.params.sessionId);
 
-    if (!adminId) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
-      return;
-    }
-
     if (!sessionId || isNaN(sessionId)) {
-      res.status(400).json({ success: false, message: 'Invalid session ID' });
-      return;
+      throw createValidationError('Invalid session ID');
     }
 
-    const csrRoleId = await getRoleId('CSR');
-    if (!csrRoleId) {
-      res.status(500).json({ success: false, message: 'CSR role not found' });
-      return;
-    }
+    const csrRoleId = await resolveCsrRoleId();
 
     const sessionRows = await prisma.$queryRaw<{ id: number; current_status: string; csr_name: string }[]>`
       SELECT cs.id, cs.status as current_status, u.username as csr_name
@@ -1205,15 +1075,13 @@ export const completeAdminCoachingSession = async (req: AuthenticatedRequest, re
     `;
 
     if (!sessionRows || sessionRows.length === 0) {
-      res.status(404).json({ success: false, message: 'Coaching session not found' });
-      return;
+      throw createNotFoundError('Coaching session not found');
     }
 
     const currentSession = sessionRows[0];
 
     if (currentSession.current_status === 'COMPLETED') {
-      res.status(400).json({ success: false, message: 'Coaching session is already completed' });
-      return;
+      throw createValidationError('Coaching session is already completed');
     }
 
     await prisma.coachingSession.update({ where: { id: sessionId }, data: { status: 'COMPLETED' } });
@@ -1252,37 +1120,21 @@ export const completeAdminCoachingSession = async (req: AuthenticatedRequest, re
     };
 
     res.json({ success: true, data: responseData, message: 'Coaching session marked as completed successfully' });
-  } catch (error) {
-    logger.error('Error completing coaching session:', error);
-    serviceLogger.error('admin', 'completeAdminCoachingSession', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 /**
  * Re-open a completed coaching session (admin can reopen any session)
  * @route PATCH /api/admin/coaching-sessions/:sessionId/reopen
  */
-export const reopenAdminCoachingSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const adminId = req.user?.user_id;
+export const reopenAdminCoachingSession = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const adminId = requireUserId(req);
     const sessionId = parseInt(req.params.sessionId);
 
-    if (!adminId) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
-      return;
-    }
-
     if (!sessionId || isNaN(sessionId)) {
-      res.status(400).json({ success: false, message: 'Invalid session ID' });
-      return;
+      throw createValidationError('Invalid session ID');
     }
 
-    const csrRoleId = await getRoleId('CSR');
-    if (!csrRoleId) {
-      res.status(500).json({ success: false, message: 'CSR role not found' });
-      return;
-    }
+    const csrRoleId = await resolveCsrRoleId();
 
     const sessionRows = await prisma.$queryRaw<{ id: number; current_status: string; csr_name: string }[]>`
       SELECT cs.id, cs.status as current_status, u.username as csr_name
@@ -1296,15 +1148,13 @@ export const reopenAdminCoachingSession = async (req: AuthenticatedRequest, res:
     `;
 
     if (!sessionRows || sessionRows.length === 0) {
-      res.status(404).json({ success: false, message: 'Coaching session not found' });
-      return;
+      throw createNotFoundError('Coaching session not found');
     }
 
     const currentSession = sessionRows[0];
 
     if (currentSession.current_status !== 'COMPLETED') {
-      res.status(400).json({ success: false, message: 'Can only reopen completed coaching sessions' });
-      return;
+      throw createValidationError('Can only reopen completed coaching sessions');
     }
 
     await prisma.coachingSession.update({ where: { id: sessionId }, data: { status: 'SCHEDULED' } });
@@ -1343,37 +1193,21 @@ export const reopenAdminCoachingSession = async (req: AuthenticatedRequest, res:
     };
 
     res.json({ success: true, data: responseData, message: 'Coaching session reopened successfully' });
-  } catch (error) {
-    logger.error('Error reopening coaching session:', error);
-    serviceLogger.error('admin', 'reopenAdminCoachingSession', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 /**
  * Download coaching session attachment (admin can download any attachment)
  * @route GET /api/admin/coaching-sessions/:sessionId/attachment
  */
-export const downloadAdminCoachingSessionAttachment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const adminId = req.user?.user_id;
+export const downloadAdminCoachingSessionAttachment = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    requireUserId(req);
     const sessionId = parseInt(req.params.sessionId);
 
-    if (!adminId) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
-      return;
-    }
-
     if (!sessionId || isNaN(sessionId)) {
-      res.status(400).json({ success: false, message: 'Invalid session ID' });
-      return;
+      throw createValidationError('Invalid session ID');
     }
 
-    const csrRoleId = await getRoleId('CSR');
-    if (!csrRoleId) {
-      res.status(500).json({ success: false, message: 'CSR role not found' });
-      return;
-    }
+    const csrRoleId = await resolveCsrRoleId();
 
     const sessionRows = await prisma.$queryRaw<any[]>`
       SELECT cs.id, cs.attachment_filename, cs.attachment_path, cs.attachment_mime_type, u.username as csr_name
@@ -1388,8 +1222,7 @@ export const downloadAdminCoachingSessionAttachment = async (req: AuthenticatedR
     `;
 
     if (!sessionRows || sessionRows.length === 0) {
-      res.status(404).json({ success: false, message: 'Coaching session not found or no attachment' });
-      return;
+      throw createNotFoundError('Coaching session not found or no attachment');
     }
 
     const session = sessionRows[0];
@@ -1398,8 +1231,7 @@ export const downloadAdminCoachingSessionAttachment = async (req: AuthenticatedR
     try {
       await fs.access(filePath);
     } catch {
-      res.status(404).json({ success: false, message: 'Attachment file not found on server' });
-      return;
+      throw createNotFoundError('Attachment file not found on server');
     }
 
     const stats = await fs.stat(filePath);
@@ -1425,31 +1257,15 @@ export const downloadAdminCoachingSessionAttachment = async (req: AuthenticatedR
     });
 
     fileStream.pipe(res);
-  } catch (error) {
-    logger.error('Error downloading coaching session attachment:', error);
-    serviceLogger.error('admin', 'downloadAdminCoachingSessionAttachment', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
 
 /**
  * Get all CSRs (admin can see all CSRs in the system)
  * @route GET /api/admin/csrs
  */
-export const getAdminCSRs = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const adminId = req.user?.user_id;
-
-    if (!adminId) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
-      return;
-    }
-
-    const csrRoleId = await getRoleId('CSR');
-    if (!csrRoleId) {
-      res.status(500).json({ success: false, message: 'CSR role not found' });
-      return;
-    }
+export const getAdminCSRs = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    requireUserId(req);
+    const csrRoleId = await resolveCsrRoleId();
 
     const csrs = await prisma.$queryRaw<{ id: number; username: string; email: string; department_name: string }[]>`
       SELECT u.id, u.username, u.email, d.department_name
@@ -1462,9 +1278,4 @@ export const getAdminCSRs = async (req: AuthenticatedRequest, res: Response): Pr
     `;
 
     res.json({ success: true, data: csrs || [], total: csrs?.length || 0 });
-  } catch (error) {
-    logger.error('Error fetching CSRs:', error);
-    serviceLogger.error('admin', 'getAdminCSRs', error as Error, req.user?.user_id);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
+});
