@@ -4,6 +4,8 @@ import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
 import { parsePagination } from '../validation/common';
 import logger from '../config/logger';
+import { validateSchema } from '../validation/csr.validation';
+import { AuditLogListQuerySchema } from '../validation/listFilters.validation';
 
 const router = express.Router();
 
@@ -159,7 +161,7 @@ router.use(authorizeAdmin as unknown as RequestHandler);
  * @desc Get audit logs with pagination and filtering
  * @access Private (Admin)
  */
-router.get('/', getAuditLogsHandler as unknown as RequestHandler);
+router.get('/', validateSchema(AuditLogListQuerySchema), getAuditLogsHandler as unknown as RequestHandler);
 
 /**
  * @route GET /api/audit-logs/:id

@@ -1,4 +1,5 @@
 ﻿import { z } from 'zod';
+import { optionalPositiveInt } from './common';
 
 /**
  * User Validation Schemas
@@ -100,6 +101,21 @@ export const UserSearchSchema = z.object({
   limit: z.number().int().min(1).max(100).default(10),
   sortBy: z.enum(['username', 'email', 'firstName', 'lastName', 'created_at']).default('created_at'),
   sort_order: z.enum(['asc', 'desc']).default('desc')
+});
+
+/**
+ * GET /api/users query validation — `user.controller.getUsers`.
+ *
+ * NARROW BY DESIGN: validates only the numeric-id filters (`role_id`,
+ * `department_id`) that the UI sends as integers. `role` (a role *name* the
+ * controller silently ignores when unrecognised), `is_active`, `search`, and
+ * pagination are intentionally left lenient / omitted so we don't 400 inputs
+ * the handler currently tolerates. Distinct from the older unwired
+ * `UserSearchSchema` above, whose field names never matched this controller.
+ */
+export const UserListQuerySchema = z.object({
+  role_id: optionalPositiveInt(),
+  department_id: optionalPositiveInt(),
 });
 
 // User ID parameter validation

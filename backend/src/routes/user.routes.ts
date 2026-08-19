@@ -14,6 +14,8 @@ import {
   getDirectors,
   getMyDepartments,
 } from '../controllers/user.controller';
+import { validateSchema } from '../validation/csr.validation';
+import { UserListQuerySchema } from '../validation/user.validation';
 
 const router = express.Router();
 
@@ -21,7 +23,7 @@ const router = express.Router();
 router.use(rh(authenticate));
 
 // Read routes — all authenticated users
-router.get('/',                rh(getUsers));
+router.get('/',                validateSchema(UserListQuerySchema), rh(getUsers));
 router.get('/managers',        rh(getManagers));
 router.get('/directors',       rh(getDirectors));
 router.get('/my-departments',  rh(getMyDepartments));

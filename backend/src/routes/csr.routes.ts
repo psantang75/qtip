@@ -25,6 +25,7 @@ import {
   CoachingSessionFiltersSchema,
   SessionIdSchema,
 } from '../validation/csr.validation';
+import { DisputeHistoryQuerySchema } from '../validation/listFilters.validation';
 
 const router = express.Router();
 
@@ -90,7 +91,7 @@ router.put('/audits/:id/finalize',
 router.post('/quizzes/:quiz_id/submit', submitQuizAnswers as unknown as RequestHandler);
 
 // Disputes
-router.get('/disputes/history', ownDisputes, getDisputeHistory as unknown as RequestHandler);
+router.get('/disputes/history', ownDisputes, validateSchema(DisputeHistoryQuerySchema), getDisputeHistory as unknown as RequestHandler);
 // Add the missing POST route for submitting disputes with multer middleware
 router.post('/disputes', ownDisputes, disputeUpload.single('attachment'), submitDispute as unknown as RequestHandler);
 router.get('/disputes/:disputeId/attachment', ownDisputes, downloadDisputeAttachment as unknown as RequestHandler);

@@ -47,6 +47,11 @@ import {
 } from '../controllers/coachingReport.controller';
 import { authenticate, authorizeCoachingUser, authorizeTrainer, authorizePage } from '../middleware/auth';
 import multer from 'multer';
+import { validateSchema } from '../validation/csr.validation';
+import {
+  TrainerCompletedListQuerySchema,
+  TrainerCoachingSessionsListQuerySchema,
+} from '../validation/listFilters.validation';
 
 const router = express.Router();
 
@@ -85,7 +90,7 @@ router.get('/stats', auth, trainer, getTrainingStats as unknown as RequestHandle
 router.get('/team-csrs', auth, coaching, getTrainerTeamCSRs as unknown as RequestHandler);
 router.get('/dashboard-stats', auth, coaching, getTrainerDashboardStats as unknown as RequestHandler);
 router.get('/csr-activity', auth, coaching, getTrainerCSRActivity as unknown as RequestHandler);
-router.get('/completed', auth, coaching, getTrainerCompletedSubmissions as unknown as RequestHandler);
+router.get('/completed', auth, coaching, validateSchema(TrainerCompletedListQuerySchema), getTrainerCompletedSubmissions as unknown as RequestHandler);
 router.get('/completed/:id', auth, coaching, getTrainerSubmissionDetails as unknown as RequestHandler);
 
 // ─── Coaching Sessions ───────────────────────────────────────────────────────
@@ -93,7 +98,7 @@ router.get('/completed/:id', auth, coaching, getTrainerSubmissionDetails as unkn
 // Pre-existing `coaching` middleware kept as a layered fallback during the
 // rollout — both gates must pass. (Removed in Phase 2 once we trust the table.)
 router.get('/coaches', auth, coaching, coachingRead, getEligibleCoaches as unknown as RequestHandler);
-router.get('/coaching-sessions', auth, coaching, coachingRead, getCoachingSessions as unknown as RequestHandler);
+router.get('/coaching-sessions', auth, coaching, coachingRead, validateSchema(TrainerCoachingSessionsListQuerySchema), getCoachingSessions as unknown as RequestHandler);
 router.get('/coaching-sessions/:id/attachment', auth, coaching, coachingRead, downloadAttachment as unknown as RequestHandler);
 router.get('/coaching-sessions/:id', auth, coaching, coachingRead, getCoachingSessionDetail as unknown as RequestHandler);
 router.post('/coaching-sessions', auth, coaching, coachingWrite, upload.single('attachment'), createCoachingSession as unknown as RequestHandler);

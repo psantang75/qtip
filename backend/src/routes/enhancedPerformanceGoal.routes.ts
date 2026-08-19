@@ -12,6 +12,8 @@ import {
 } from '../types/performanceGoal.types';
 import logger from '../config/logger';
 import { parsePagination } from '../validation/common';
+import { validateSchema } from '../validation/csr.validation';
+import { EnhancedPerfGoalListQuerySchema } from '../validation/listFilters.validation';
 
 const router = express.Router();
 const performanceGoalService = new EnhancedPerformanceGoalService();
@@ -36,7 +38,7 @@ const adminOnly = authorizeAdmin as unknown as RequestHandler;
  * @desc Get all performance goals with enhanced filtering and pagination
  * @access Private (Admin/Manager)
  */
-router.get('/', auth, async (req: Request, res: Response): Promise<void> => {
+router.get('/', auth, validateSchema(EnhancedPerfGoalListQuerySchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const { page, limit: pageSize } = parsePagination(req.query, { defaultLimit: 10 });
 

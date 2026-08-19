@@ -360,6 +360,33 @@ These were started as verified pilots; continue them under the cadence above:
     ✅ `resource`/`onDemandReports`/`quizLibrary`/`phoneSystem` → ✅ `admin` (migrated,
     then DELETED as dead code) → ✅ `auth` (documented exception, no change). Controller
     tests added per slice, mirroring the `insightsAdmin*` / dispute pattern.
+- Phase 2, part **2.3 — roll `validateSchema` query validation onto list
+  endpoints. ✅ COMPLETE.** Audit found **16 live `parsePagination` list handlers,
+  0 with query validation**. Deliberately scoped **NARROW + SAFE** (not a blanket
+  strict rollout): because 2.1's `parsePagination` already caps/defaults pagination
+  *leniently*, wrapping these in strict schemas would have 400'd inputs the handlers
+  currently tolerate (e.g. `?page=`). So the new schemas validate **only**
+  (a) numeric IDs (UI always sends an int or omits → a non-numeric id is a real bug
+  worth a clean 400) and (b) hard-bounded enums **verified** against the frontend
+  sender (`target_type` USER/DEPARTMENT via `auditAssignmentService`; `document_type`
+  = the exact 3-value `WriteUpType` via `writeupService`, only sent when truthy).
+  Pagination, dates, booleans, free-text `search`, and **unverified** enums
+  (`status`, `dispute_status`, coaching `status`, `goal_type`/`scope`/`target_scope`)
+  are intentionally **omitted** (z.object strips them → they stay lenient) so no
+  currently-accepted request starts 400-ing. New schemas live in
+  `validation/listFilters.validation.ts` (+ `UserListQuerySchema` in
+  `user.validation.ts`), reusing `optionalPositiveInt` from `validation/common.ts`.
+  Wired via the existing `validateSchema` middleware on: departments, director-
+  departments, audit-assignments, users, manager team-audits, manager disputes,
+  dispute history (both `/api/disputes/history` and `/api/csr/disputes/history`),
+  writeups, qa/completed, trainer/completed, trainer/coaching-sessions, audit-logs,
+  enhanced-performance-goals. **Intentionally NOT wired** (no narrow surface — only
+  `is_active`/`search`/dates, nothing bounded to validate): `trainer/resources`,
+  `trainer/reports/csr-list`, `submissions/assigned`. Covered by 24 unit tests in
+  `validation/__tests__/listFilters.validation.test.ts` (valid passes, bad id/enum
+  rejects, lenient keys ignored). tsc clean, lint 0/85, full suite 793 passing.
+  Follow-up (deferred, not blocking): the unverified enums above could be tightened
+  later once each filter's "no-filter" sentinel is confirmed against its UI sender.
 
 ## Notes / corrections logged during the program
 

@@ -8,6 +8,8 @@ import {
   deactivateAuditAssignment
 } from '../controllers/auditAssignment.controller';
 import { authenticate, authorizeQA } from '../middleware/auth';
+import { validateSchema } from '../validation/csr.validation';
+import { AuditAssignmentListQuerySchema } from '../validation/listFilters.validation';
 
 const router = express.Router();
 
@@ -22,7 +24,7 @@ const qaOrAdmin = authorizeQA as unknown as RequestHandler;
  * @desc Get all audit assignments with pagination and filtering
  * @access Private (QA, Admin)
  */
-router.get('/', auth, qaOrAdmin, getAuditAssignments as unknown as RequestHandler);
+router.get('/', auth, qaOrAdmin, validateSchema(AuditAssignmentListQuerySchema), getAuditAssignments as unknown as RequestHandler);
 
 /**
  * @route GET /api/audit-assignments/:id

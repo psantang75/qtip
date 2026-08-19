@@ -12,6 +12,8 @@ import {
 import { qaFeatureFlags } from '../config/qa.config';
 import { qaCacheService } from '../services/QACacheService';
 import prisma from '../config/prisma';
+import { validateSchema } from '../validation/csr.validation';
+import { QaCompletedListQuerySchema } from '../validation/listFilters.validation';
 
 const router = express.Router();
 
@@ -84,7 +86,7 @@ router.get('/stats',                       submissionsRead,  getQAStats);
 router.get('/csr-activity',                submissionsRead,  getQACSRActivity);
 
 // Editor submission listings (used by the Submissions page).
-router.get('/completed',                   submissionsRead,  getCompletedSubmissions);
+router.get('/completed',                   submissionsRead,  validateSchema(QaCompletedListQuerySchema), getCompletedSubmissions);
 router.get('/completed/:id',               submissionsRead,  getSubmissionDetails);
 router.get('/completed/:id/export',        submissionsRead,  exportSubmission);
 

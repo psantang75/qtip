@@ -5,6 +5,7 @@ import fs from 'fs'
 import { authenticate, authorizePage } from '../middleware/auth'
 import { validateSchema } from '../validation/csr.validation'
 import { CreateWriteUpSchema, UpdateWriteUpSchema } from '../validation/writeup.validation'
+import { WriteUpListQuerySchema } from '../validation/listFilters.validation'
 import {
   getWriteUps,
   getWriteUpById,
@@ -69,7 +70,7 @@ router.get('/prior-discipline/:csrId', pwViewAll, getPriorDiscipline            
 // Self-scoped read routes — any role with OWN+ on pw_list. The service scopes
 // list/detail to the viewer's own non-DRAFT records unless they can see all
 // (`canSeeAll`). Attachment download is needed by the CSR the warning is about.
-router.get('/',                        pwView, getWriteUps                                                                                                      as unknown as RequestHandler)
+router.get('/',                        pwView, validateSchema(WriteUpListQuerySchema), getWriteUps                                                                as unknown as RequestHandler)
 router.get('/:id',                     pwView, getWriteUpById                                                                                                   as unknown as RequestHandler)
 router.get('/:id/attachments/:attachmentId',           pwView,                                                           downloadAttachment                    as unknown as RequestHandler)
 

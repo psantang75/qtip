@@ -16,10 +16,12 @@
  * 2026-06-12: the `/coaching-sessions` route family was removed. It predated
  * the Training coaching module, still referenced the dropped `coaching_type`
  * column, and had no frontend consumers — coaching CRUD lives at
- * `/api/trainer/coaching-sessions` and `/api/admin/coaching-sessions`.
+ * `/api/trainer/coaching-sessions`.
  */
 import express, { RequestHandler } from 'express'
 import { authenticate, authorizeManager, authorizePage } from '../middleware/auth'
+import { validateSchema } from '../validation/csr.validation'
+import { TeamAuditsListQuerySchema, ManagerDisputesListQuerySchema } from '../validation/listFilters.validation'
 import {
   dashboardStatsHandler,
   csrActivityHandler,
@@ -46,7 +48,7 @@ router.get('/csr-activity', csrActivityHandler as unknown as RequestHandler)
 router.get('/team-csrs', teamCsrsHandler as unknown as RequestHandler)
 
 // Team audits
-router.get('/team-audits', teamAuditsListHandler as unknown as RequestHandler)
+router.get('/team-audits', validateSchema(TeamAuditsListQuerySchema), teamAuditsListHandler as unknown as RequestHandler)
 router.get('/team-audits/:id', teamAuditDetailHandler as unknown as RequestHandler)
 
 // Disputes — page-access gates layered on top of `authorizeManager` so that
@@ -58,7 +60,7 @@ router.get('/team-audits/:id', teamAuditDetailHandler as unknown as RequestHandl
 // counterpart).
 const disputesRead  = authorizePage('quality_disputes', 'viewAll') as unknown as RequestHandler
 const disputesWrite = authorizePage('quality_disputes', 'edit')    as unknown as RequestHandler
-router.get('/disputes',                       disputesRead,  listDisputesHandler  as unknown as RequestHandler)
+router.get('/disputes',                       disputesRead,  validateSchema(ManagerDisputesListQuerySchema), listDisputesHandler  as unknown as RequestHandler)
 router.get('/disputes/export',                disputesRead,  exportDisputesHandler as unknown as RequestHandler)
 router.get('/disputes/:disputeId',            disputesRead,  disputeDetailHandler  as unknown as RequestHandler)
 router.post('/disputes/:disputeId/resolve',   disputesWrite, resolveDisputeHandler as unknown as RequestHandler)

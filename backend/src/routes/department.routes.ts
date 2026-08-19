@@ -12,6 +12,8 @@ import {
   getAssignableUsers,
   getDepartmentDescendants
 } from '../controllers/department.controller';
+import { validateSchema } from '../validation/csr.validation';
+import { DepartmentListQuerySchema } from '../validation/listFilters.validation';
 
 const router = Router();
 
@@ -20,6 +22,7 @@ const router = Router();
 // Get all departments — authenticated users only
 router.get('/',
   authenticate as unknown as RequestHandler,
+  validateSchema(DepartmentListQuerySchema),
   getDepartments as unknown as RequestHandler
 );
 

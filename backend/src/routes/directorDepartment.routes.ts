@@ -8,6 +8,8 @@ import {
 } from '../controllers/directorDepartment.controller';
 import { authenticate } from '../middleware/auth';
 import { authorizeAdmin } from '../middleware/auth';
+import { validateSchema } from '../validation/csr.validation';
+import { DirectorDepartmentListQuerySchema } from '../validation/listFilters.validation';
 
 const router = Router();
 
@@ -19,6 +21,7 @@ router.get('/test', (req, res) => {
 // Get all director-department assignments with pagination and filters
 router.get('/',
   authenticate as unknown as RequestHandler,
+  validateSchema(DirectorDepartmentListQuerySchema),
   getDirectorDepartments as unknown as RequestHandler
 );
 

@@ -9,6 +9,8 @@ import {
 } from '../controllers/dispute.controller';
 import { authenticate } from '../middleware/auth';
 import { disputeUpload } from '../middleware/disputeUpload';
+import { validateSchema } from '../validation/csr.validation';
+import { DisputeHistoryQuerySchema } from '../validation/listFilters.validation';
 
 const router = express.Router();
 
@@ -45,6 +47,7 @@ router.post('/',
  */
 router.get('/history', 
   authenticate as unknown as RequestHandler, 
+  validateSchema(DisputeHistoryQuerySchema),
   getDisputeHistory as unknown as RequestHandler
 );
 
