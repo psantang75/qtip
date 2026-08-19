@@ -235,9 +235,25 @@ These were started as verified pilots; continue them under the cadence above:
   when a rule reaches zero, promote it from `warn` to `error`. `no-unused-vars`
   is the first promotion target (the maintainer explicitly cares about
   "declared but never read").
-- Build type-gate — RESOLVED (Phase 1). `deploy/Dockerfile` no longer appends
-  `|| true` to the `tsc` step, so a real backend type error now fails the image
-  build instead of shipping silently. Verified safe: `tsc --noEmit` is clean.
+- Build type-gate — PARTIAL (Phase 1); real fix reopened as a follow-up.
+  Attempting to remove `|| true` from the `deploy/Dockerfile` `tsc` step failed
+  the stage build with type errors across **~50 files** — because that stage runs
+  `npm install` (not `npm ci`) with **no lockfile**, so it resolves newer typed
+  deps (`@types/express`, `mysql2` drifted 3.15→3.23, …) than the committed
+  lockfile. Those errors DO NOT exist against our pinned versions (local
+  `tsc --noEmit` is clean). Root cause = **non-reproducible Docker install**, not
+  our code. Decisions:
+  - `|| true` is kept (with an explanatory comment) so dep drift can't block
+    deploys. The authoritative type gate is the reproducible **pre-deploy** step
+    (`npm run typecheck` / `tsc` against the lockfile) — already a hard stop in
+    "Per change" above.
+  - `mysql2` pinned to `3.15.3` (the tested version) as a first reproducibility
+    step; runtime API is unchanged.
+  - **Follow-up (needs a real Docker build to verify):** make the backend image
+    install reproducible — commit a backend-scoped lockfile and switch the stage
+    to `npm ci` (mind npm-workspace hoisting vs. the production stage's
+    `backend/node_modules` copy) — THEN remove `|| true` so the image build gates
+    on tsc too. Do not attempt blind; build on the box or with local Docker.
 
 ## Notes / corrections logged during the program
 
