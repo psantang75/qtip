@@ -34,6 +34,9 @@
   "author": "Dynamic Media",
   "license": "UNLICENSED",
   "private": true,
+  "overrides": {
+    "@types/express-serve-static-core": "5.1.0"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
     "@e965/xlsx": "^0.20.3",

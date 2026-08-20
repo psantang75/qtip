@@ -257,25 +257,30 @@ These were started as verified pilots; continue them under the cadence above:
   when a rule reaches zero, promote it from `warn` to `error`. `no-unused-vars`
   is the first promotion target (the maintainer explicitly cares about
   "declared but never read").
-- Build type-gate — PARTIAL (Phase 1); real fix reopened as a follow-up.
-  Attempting to remove `|| true` from the `deploy/Dockerfile` `tsc` step failed
-  the stage build with type errors across **~50 files** — because that stage runs
-  `npm install` (not `npm ci`) with **no lockfile**, so it resolves newer typed
-  deps (`@types/express`, `mysql2` drifted 3.15→3.23, …) than the committed
-  lockfile. Those errors DO NOT exist against our pinned versions (local
-  `tsc --noEmit` is clean). Root cause = **non-reproducible Docker install**, not
-  our code. Decisions:
-  - `|| true` is kept (with an explanatory comment) so dep drift can't block
-    deploys. The authoritative type gate is the reproducible **pre-deploy** step
-    (`npm run typecheck` / `tsc` against the lockfile) — already a hard stop in
-    "Per change" above.
-  - `mysql2` pinned to `3.15.3` (the tested version) as a first reproducibility
-    step; runtime API is unchanged.
-  - **Follow-up (needs a real Docker build to verify):** make the backend image
-    install reproducible — commit a backend-scoped lockfile and switch the stage
-    to `npm ci` (mind npm-workspace hoisting vs. the production stage's
-    `backend/node_modules` copy) — THEN remove `|| true` so the image build gates
-    on tsc too. Do not attempt blind; build on the box or with local Docker.
+- Build type-gate — RESOLVED (2026-08-20). The `deploy/Dockerfile` backend stage
+  now runs `npm ci --legacy-peer-deps` against a **committed backend-scoped
+  lockfile** (`backend/package-lock.json`) and the `tsc` step no longer has
+  `|| true` — the image build now fails on type errors, belt-and-suspenders with
+  the pre-deploy `npm run typecheck`.
+  - **Root cause found (box-verified):** the ~50-file failure was a single
+    transitive drift — `@types/express-serve-static-core` floated `5.1.0` → `5.1.3`,
+    which retypes `req.query`/`req.params` as `string | string[]` and breaks ~160
+    call sites. Pinning it via an `overrides` entry (`"5.1.0"`, type-only — Express
+    runtime stays `5.2.1`, no downgrade) yields `tsc` = 0 errors. `mysql2` stays
+    pinned to `3.15.3`.
+  - **Verification (on the stage box, node:20-alpine, the real build image):**
+    `npm ci` exit 0 → `prisma generate` exit 0 → `npx tsc --skipLibCheck` exit 0,
+    0 errors. The lockfile was GENERATED in that same image so versions match
+    bit-for-bit. A locally re-resolved lockfile is unsafe here — it pins
+    current-latest (`express@5.2.1`, `@types/express@5.0.6`), which is why the
+    lockfile is generated in-image, not on Windows.
+  - The backend lockfile is used ONLY by the standalone Docker build (the repo is
+    an npm workspace; local dev installs from the workspace root and ignores it),
+    so it does not disturb local/workspace installs.
+  - Follow-up (optional, low priority): the "correct" long-term fix is to make the
+    code handle the stricter `string | string[]` query typing at the ~160 sites
+    and drop the `overrides` pin; the pin is the pragmatic, reproducible choice
+    for now and matches the tested surface.
 - Pagination cap drift — RESOLVED (Phase 2, part 2.1). `validation/common.ts` now
   exports `parsePagination(query, { defaultLimit, maxLimit })` → `{ page, limit,
   skip }`, the **canonical** parser for every list endpoint. It reads the

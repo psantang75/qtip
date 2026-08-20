@@ -12,23 +12,25 @@ WORKDIR /app/backend
 COPY backend/package*.json ./
 COPY backend/tsconfig.json ./
 COPY backend/prisma ./prisma/
-RUN npm install --legacy-peer-deps
+# Reproducible install: `npm ci` installs the exact tree from the committed
+# backend/package-lock.json (this stage builds backend standalone — no workspace
+# root — so a backend-scoped lockfile is what pins it). The lockfile was
+# generated in THIS image (node:20-alpine) so the versions match bit-for-bit.
+# An `overrides` pin on @types/express-serve-static-core (5.1.0) holds the
+# Express request-typing surface steady; without it a floated 5.1.3 retypes
+# req.query/req.params as `string | string[]` and breaks tsc across ~160 sites.
+RUN npm ci --legacy-peer-deps
 COPY backend/ ./
 # Regenerate the Prisma client from the copied schema. The generated client under
 # src/generated is git-ignored, so the build context can carry a stale copy from an
 # older schema; regenerating here guarantees the client matches schema.prisma before
 # tsc compiles it. Without this, new models are missing from the shipped client.
 RUN npx prisma generate
-# NOTE: `|| true` is deliberate here for now. This stage runs `npm install`
-# (not `npm ci`) with no lockfile, so it resolves newer minor/patch versions of
-# typed deps (@types/express, mysql2, …) than the committed lockfile — surfacing
-# ~50 files of type errors that DO NOT exist against our pinned versions. Until
-# the backend image install is made reproducible (committed backend lockfile +
-# `npm ci`), the Docker build must not gate on tsc. The authoritative type gate
-# is the reproducible pre-deploy step (`npm run typecheck` / `tsc`, run against
-# the lockfile) — see docs/maintenance_cadence.md. Do not remove `|| true`
-# before the reproducible-install work lands and is verified with a real build.
-RUN npx tsc --skipLibCheck || true
+# Type gate: the reproducible install above makes this deterministic, so the
+# image build now fails on type errors (belt-and-suspenders with the pre-deploy
+# `npm run typecheck`). Verified clean in this exact image before `|| true` was
+# removed — see docs/maintenance_cadence.md.
+RUN npx tsc --skipLibCheck
 RUN npm run copy:assets
 
 # Stage 3: Production Runtime
