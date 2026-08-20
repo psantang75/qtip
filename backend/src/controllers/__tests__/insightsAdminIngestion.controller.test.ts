@@ -129,6 +129,59 @@ describe('getIngestionLog (SQL channel)', () => {
     expect(body[0].id).toBe('ie-2');
   });
 
+  it('applies a finished-time window and keeps still-running rows visible', async () => {
+    db.ieIngestionLog.findMany.mockResolvedValue([ieRow()]);
+    const res = mockRes();
+    const next = vi.fn();
+
+    await getIngestionLog(
+      { query: { channel: 'sql', date_from: '2026-02-01', date_to: '2026-02-02' } } as never,
+      res as never,
+      next,
+    );
+
+    // Window is inclusive of the whole date_to day; a null finish (RUNNING) is OR'd in.
+    expect(db.ieIngestionLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          OR: [
+            {
+              run_finished_at: {
+                gte: new Date('2026-02-01T00:00:00.000Z'),
+                lte: new Date('2026-02-02T23:59:59.999Z'),
+              },
+            },
+            { run_finished_at: null },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('windows the Excel-import branch on created_at (its finish time)', async () => {
+    db.ieIngestionLog.findMany.mockResolvedValue([]);
+    db.importLog.findMany.mockResolvedValue([]);
+    const res = mockRes();
+    const next = vi.fn();
+
+    await getIngestionLog(
+      { query: { date_from: '2026-02-01', date_to: '2026-02-02' } } as never,
+      res as never,
+      next,
+    );
+
+    expect(db.importLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          created_at: {
+            gte: new Date('2026-02-01T00:00:00.000Z'),
+            lte: new Date('2026-02-02T23:59:59.999Z'),
+          },
+        },
+      }),
+    );
+  });
+
   it('sorts newest-first and clamps to the requested limit', async () => {
     db.ieIngestionLog.findMany.mockResolvedValue([
       ieRow({ id: 1, run_started_at: new Date('2026-02-01T00:00:00.000Z') }),

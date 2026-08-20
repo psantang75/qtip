@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { api } from '@/services/authService'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { ListFilterBar } from '@/components/common/ListFilterBar'
+import { ListPagination } from '@/components/common/ListPagination'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
@@ -43,21 +45,66 @@ const CHANNEL_STYLES: Record<Channel, string> = {
   manual: 'bg-slate-50 text-slate-600 border-slate-200',
 }
 
-export default function InsightsIngestionLogPage() {
-  const [channelFilter, setChannelFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
+function ymd(d: Date) {
+  return d.toISOString().slice(0, 10)
+}
 
+export default function InsightsIngestionLogPage() {
+  // Default window: the last 7 days (by FINISHED time) so the log stays short.
+  const defaults = useMemo(() => ({
+    from: ymd(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
+    to:   ymd(new Date()),
+  }), [])
+
+  const [channelFilter, setChannelFilter] = useState('all')
+  const [statusFilter, setStatusFilter]   = useState('all')
+  const [sourceFilter, setSourceFilter]   = useState('all')
+  const [dateFrom, setDateFrom]           = useState(defaults.from)
+  const [dateTo, setDateTo]               = useState(defaults.to)
+  const [page, setPage]                   = useState(1)
+  const [pageSize, setPageSize]           = useState(20)
+
+  // Channel/status/date are applied server-side (they bound the fetch); the
+  // date window keeps the payload small. Source + pagination are client-side.
   const { data: logs = [], isLoading, refetch, dataUpdatedAt } = useQuery({
-    queryKey: ['ie-ingestion-log', channelFilter, statusFilter],
+    queryKey: ['ie-ingestion-log', channelFilter, statusFilter, dateFrom, dateTo],
     queryFn: async () => {
       const params = new URLSearchParams()
       if (channelFilter !== 'all') params.set('channel', channelFilter)
       if (statusFilter !== 'all') params.set('status', statusFilter)
+      if (dateFrom) params.set('date_from', dateFrom)
+      if (dateTo) params.set('date_to', dateTo)
+      params.set('limit', '500')
       const response = await api.get(`/insights/admin/ingestion-log?${params}`)
       return response.data as UnifiedIngestionRow[]
     },
     refetchInterval: 30_000,
   })
+
+  // Source options are derived from the current result set; the selection falls
+  // back to "all" if a refetch (e.g. a new date window) drops that source.
+  const sourceOptions = useMemo(
+    () => Array.from(new Set(logs.map(l => l.source).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [logs],
+  )
+  const effectiveSource = sourceFilter !== 'all' && sourceOptions.includes(sourceFilter) ? sourceFilter : 'all'
+
+  const displayed = useMemo(
+    () => (effectiveSource === 'all' ? logs : logs.filter(l => l.source === effectiveSource)),
+    [logs, effectiveSource],
+  )
+
+  const totalPages = Math.max(1, Math.ceil(displayed.length / pageSize))
+  const safePage   = Math.min(page, totalPages)
+  const pageRows   = displayed.slice((safePage - 1) * pageSize, safePage * pageSize)
+
+  const isDefaultRange = dateFrom === defaults.from && dateTo === defaults.to
+  const hasFilters = channelFilter !== 'all' || statusFilter !== 'all' || effectiveSource !== 'all' || !isDefaultRange
+
+  function resetFilters() {
+    setChannelFilter('all'); setStatusFilter('all'); setSourceFilter('all')
+    setDateFrom(defaults.from); setDateTo(defaults.to); setPage(1)
+  }
 
   function formatDate(d: string | null) {
     if (!d) return '—'
@@ -86,7 +133,7 @@ export default function InsightsIngestionLogPage() {
           {
             id: 'channel',
             value: channelFilter,
-            onChange: setChannelFilter,
+            onChange: v => { setChannelFilter(v); setPage(1) },
             placeholder: 'All Channels',
             width: 'w-[170px]',
             options: [
@@ -99,7 +146,7 @@ export default function InsightsIngestionLogPage() {
           {
             id: 'status',
             value: statusFilter,
-            onChange: setStatusFilter,
+            onChange: v => { setStatusFilter(v); setPage(1) },
             placeholder: 'All Status',
             options: [
               { value: 'all', label: 'All Status' },
@@ -109,11 +156,41 @@ export default function InsightsIngestionLogPage() {
               { value: 'PARTIAL', label: 'Partial' },
             ],
           },
+          {
+            id: 'source',
+            value: effectiveSource,
+            onChange: v => { setSourceFilter(v); setPage(1) },
+            placeholder: 'All Sources',
+            width: 'w-[200px]',
+            options: [
+              { value: 'all', label: 'All Sources' },
+              ...sourceOptions.map(s => ({ value: s, label: s })),
+            ],
+          },
         ]}
-        hasFilters={channelFilter !== 'all' || statusFilter !== 'all'}
-        onReset={() => { setChannelFilter('all'); setStatusFilter('all') }}
-        resultCount={{ total: logs.length }}
-      />
+        hasFilters={hasFilters}
+        onReset={resetFilters}
+        resultCount={{ filtered: displayed.length, total: logs.length }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] text-slate-500 whitespace-nowrap">Finished</span>
+          <Input
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={e => { setDateFrom(e.target.value); setPage(1) }}
+            className="h-9 w-[150px] text-[13px]"
+          />
+          <span className="text-slate-400 text-[12px]">to</span>
+          <Input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={e => { setDateTo(e.target.value); setPage(1) }}
+            className="h-9 w-[150px] text-[13px]"
+          />
+        </div>
+      </ListFilterBar>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <Table>
@@ -134,9 +211,9 @@ export default function InsightsIngestionLogPage() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
-            ) : logs.length === 0 ? (
+            ) : displayed.length === 0 ? (
               <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No ingestion logs found</TableCell></TableRow>
-            ) : logs.map(l => (
+            ) : pageRows.map(l => (
               <TableRow key={l.id} className="hover:bg-slate-50/50">
                 <TableCell>
                   <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold border ${CHANNEL_STYLES[l.channel] ?? 'bg-slate-50 text-slate-600'}`}>
@@ -161,6 +238,15 @@ export default function InsightsIngestionLogPage() {
           </TableBody>
         </Table>
       </div>
+
+      <ListPagination
+        page={safePage}
+        totalPages={totalPages}
+        totalItems={displayed.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={s => { setPageSize(s); setPage(1) }}
+      />
     </div>
   )
 }

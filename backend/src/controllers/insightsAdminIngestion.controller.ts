@@ -39,22 +39,46 @@ function clampLimit(raw: unknown): number {
 }
 
 /**
+ * Parse a `YYYY-MM-DD` query param into a UTC day boundary. `end` snaps to the
+ * last millisecond of the day so `date_to` is inclusive. Returns undefined for
+ * anything malformed (the filter is then simply not applied). UTC boundaries
+ * match how the timestamps are stored/serialized (`.toISOString()` elsewhere).
+ */
+function parseDateBoundary(raw: unknown, end: boolean): Date | undefined {
+  if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return undefined;
+  return new Date(`${raw}T${end ? '23:59:59.999' : '00:00:00.000'}Z`);
+}
+
+/**
  * GET /api/insights/admin/ingestion-log
  * Query: channel=all|sql|email|manual, status=all|SUCCESS|FAILED|RUNNING|PARTIAL,
- *        worker=<ie worker_name> (SQL channel only), limit=1..500
+ *        worker=<ie worker_name> (SQL channel only), limit=1..500,
+ *        date_from / date_to (YYYY-MM-DD) — window on the FINISHED time
+ *        (SQL: run_finished_at; Excel: created_at, which is the synchronous
+ *        finish). SQL runs still in flight (run_finished_at IS NULL) always pass
+ *        the window so active runs never disappear from the log.
  */
 export const getIngestionLog = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const channel = (req.query.channel as string) || 'all';
   const status = (req.query.status as string) || 'all';
   const worker = (req.query.worker as string) || 'all';
   const limit = clampLimit(req.query.limit);
+  const fromDate = parseDateBoundary(req.query.date_from, false);
+  const toDate = parseDateBoundary(req.query.date_to, true);
+  const finishedRange = fromDate || toDate
+    ? { ...(fromDate ? { gte: fromDate } : {}), ...(toDate ? { lte: toDate } : {}) }
+    : undefined;
 
   const rows: UnifiedIngestionRow[] = [];
 
   // ── SQL pipeline (ie_ingestion_log) ──────────────────────────────────────
   if (channel === 'all' || channel === 'sql') {
     const ieRows = await prisma.ieIngestionLog.findMany({
-      where: worker && worker !== 'all' ? { worker_name: worker } : undefined,
+      where: {
+        ...(worker && worker !== 'all' ? { worker_name: worker } : {}),
+        // Finished within the window OR still running (null finish stays visible).
+        ...(finishedRange ? { OR: [{ run_finished_at: finishedRange }, { run_finished_at: null }] } : {}),
+      },
       orderBy: { run_started_at: 'desc' },
       take: limit,
     });
@@ -78,6 +102,8 @@ export const getIngestionLog = asyncHandler(async (req: Request, res: Response):
   // ── Excel imports (import_logs) — email + manual ─────────────────────────
   if (channel === 'all' || channel === 'email' || channel === 'manual') {
     const logs = await prisma.importLog.findMany({
+      // Excel imports run synchronously, so created_at IS the finish time.
+      where: finishedRange ? { created_at: finishedRange } : undefined,
       orderBy: { created_at: 'desc' },
       take: limit,
       include: { importer: { select: { username: true } } },
