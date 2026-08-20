@@ -155,26 +155,44 @@ punch data already behaves. `import_id` updates to the latest run on conflict.
 
 ## Schema drift / correctness
 
-- `AiFormRulePackAssignment.form_id` has an `@@index` and `@@unique([form_id,
-  rule_pack_id])` but **no `@relation` to `Form`** — so there is no FK / no
-  `onDelete`. Deleting a form leaves orphan assignment rows.
-  - Proposed: add `form Form @relation(fields: [form_id], references: [id], onDelete: Cascade)`.
+- `AiFormRulePackAssignment.form_id` had an `@@index` and `@@unique([form_id,
+  rule_pack_id])` but **no `@relation` to `Form`** — so there was no FK / no
+  `onDelete`, and deleting a form left orphan assignment rows.
+  - **APPLIED** (migration `20260820120000`): added the Prisma `@relation` +
+    `ai_form_rule_pack_assignment_form_id_fkey` FK with `onDelete: Cascade`
+    (mirrors the sibling `rule_pack` FK). Orphan probe = 0 before applying.
 - `ScheduleShift` had both `@@unique([user_id, shift_date])` and
   `@@index([user_id, shift_date])` on the **same columns** — the unique
   constraint already provides that index, so the explicit `@@index` was redundant.
   - **APPLIED** (migration `20260818190000`): dropped `idx_schedule_shift_user_date`.
-- Coaching `list_items` foreign keys were reported as lacking relations — confirm
-  against `CoachingSession` and add relations where the scalar FK has no
-  `@relation`.
+- Coaching `list_items` foreign keys lacked FKs on `coaching_purpose`,
+  `coaching_format`, and `source_type` (each a `// FK -> list_items.id` scalar).
+  - **APPLIED** (migration `20260820120000`): added three DB-level FKs into
+    `list_items(id)` with `ON DELETE SET NULL` (columns are nullable, so history
+    is preserved; list items are only ever soft-deleted so this never fires in
+    practice). These are **DB-level only** — `ListItem` is `@@ignore`d in
+    `schema.prisma` (raw-SQL-managed via List Management), exactly like the four
+    FKs that already point into it (`quiz_topics`, `resource_topics`,
+    `coaching_session_behavior_flags`, `write_up_list_items`), so they cannot be
+    modeled as Prisma `@relation`s. This is expected, guardrail-covered drift.
 
 ## Efficiency / hygiene (lower priority, mostly consistent already)
 
 - Money uses `Decimal` consistently (e.g. `total_score Decimal(5,2)`,
   `pass_score Decimal(5,2)`) — good; no `Float`-for-money issues found in spot checks.
-- Several status/scope columns are `VarChar` where an enum would be safer
-  (`RecordUnlock.prior_status` / `new_status`, `reason_code`). Some are
-  intentionally strings (curated via List Management) — leave those; convert only
-  the truly fixed vocabularies.
+- Several status/scope columns are `VarChar` where an enum *might* look safer.
+  **CLOSED — no change (reviewed 2026-08-20):** on inspection none of the
+  `RecordUnlock` columns are a good enum candidate:
+  - `reason_code` is **intentionally** a string — it holds a code from the
+    admin-managed `unlock_reason` list (`list_items`), curated in List
+    Management (see the model doc-comment). An enum would defeat that.
+  - `prior_status` is a **cross-entity status snapshot** — it stores the prior
+    status of *either* a submission *or* a dispute (`entity_type` selects which),
+    so no single enum vocabulary fits it, and historical rows may hold values
+    outside any current enum. Leaving it `VarChar(20)` is correct.
+  - `new_status` does **not exist** on the model (the record captures a
+    `prior_snapshot` for the auto re-lock sweep instead), so there is nothing to
+    convert. Item resolved as "leave as-is."
 - `@updatedAt` is present on high-churn tables (`Call`, `AgentActivity`,
   `ScheduleShift`) but missing on some append-only logs — acceptable for
   immutable logs.

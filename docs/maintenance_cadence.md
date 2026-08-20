@@ -219,8 +219,18 @@ These were started as verified pilots; continue them under the cadence above:
   [`database_review.md`](./database_review.md) were approved and APPLIED as
   migration `20260818190000_add_perf_indexes_drop_redundant_shift_index`
   (hand-authored SQL via `prisma migrate deploy`; verified with `EXPLAIN`).
-  Still proposal-only: the `AiFormRulePackAssignment` FK/`onDelete` and the
-  enum/hygiene items. The `*Raw` unique-grain + idempotent import work (1D) is
+  Also APPLIED 2026-08-20 (migration
+  `20260820120000_add_form_rule_pack_and_coaching_listitem_fks`): the
+  `AiFormRulePackAssignment.form_id` FK (`onDelete: Cascade`, Prisma-modeled) and
+  three DB-level `coaching_sessions.{coaching_purpose,coaching_format,source_type}
+  → list_items(id)` FKs (`ON DELETE SET NULL`; DB-only because `ListItem` is
+  `@@ignore`d, matching the 4 pre-existing `list_items` FKs). Orphan probes = 0
+  on every column before applying. The enum-hygiene item (`RecordUnlock`) was
+  reviewed and **CLOSED with no change** — `reason_code` is an intentionally
+  curated string, `prior_status` is a cross-entity status snapshot (no single
+  enum fits), and `new_status` does not exist on the model (see
+  [`database_review.md`](./database_review.md) §"Efficiency / hygiene").
+  The `*Raw` unique-grain + idempotent import work (1D) is
   **DEFERRED by decision 2026-08-19** — traced end-to-end and found to affect
   only the Insights → Data Explorer / export (`rawDataService`), NOT any
   dashboard (those read the idempotent `ie_fact_*` warehouse). Automated feeds

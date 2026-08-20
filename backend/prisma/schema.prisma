@@ -199,6 +199,7 @@ model Form {
   audit_assignments      AuditAssignment[]
   submissions            Submission[]
   performance_goals_form PerformanceGoal[]   @relation("GoalTargetForm")
+  ai_rule_pack_assignments AiFormRulePackAssignment[]
 
   @@index([interaction_type])
   @@index([ai_base_prompt_id], map: "idx_forms_ai_base_prompt")
@@ -2083,6 +2084,7 @@ model AiFormRulePackAssignment {
   created_at   DateTime @default(now()) @db.DateTime(3)
 
   rule_pack AiRulePack @relation(fields: [rule_pack_id], references: [id], onDelete: Cascade)
+  form      Form       @relation(fields: [form_id], references: [id], onDelete: Cascade)
 
   @@unique([form_id, rule_pack_id], map: "uk_form_rule_pack")
   @@index([form_id], map: "idx_form_rule_pack_form")
