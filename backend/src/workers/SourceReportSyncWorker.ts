@@ -252,8 +252,15 @@ function fmtDate(d: Date): string {
  */
 function splitSqlStatements(sql: string): string[] {
   const stripped = sql
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')   // block comments
-    .replace(/--[^\n]*$/gm, '');         // line comments
+    // Strip regular block comments but PRESERVE MySQL optimizer hints
+    // (`/*+ ... */`), which share the same delimiters. A blanket strip silently
+    // removed task_open's `/*+ MAX_EXECUTION_TIME(120000) */`, dropping that
+    // extract back onto the pool's 25s session cap and causing intermittent
+    // "Query execution was interrupted" failures when the CRM source was slow.
+    // The negative lookahead on `+` keeps hints; hints carry no `:param` tokens,
+    // so mysql2's named-placeholder parser is unaffected.
+    .replace(/\/\*(?!\+)[\s\S]*?\*\//g, ' ')   // block comments (not /*+ hints */)
+    .replace(/--[^\n]*$/gm, '');               // line comments
   return stripped
     .split(/;\s*(?:\r?\n|$)/)
     .map((s) => s.trim())
