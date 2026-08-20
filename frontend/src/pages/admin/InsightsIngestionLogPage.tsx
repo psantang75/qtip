@@ -3,9 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { api } from '@/services/authService'
 import { Button } from '@/components/ui/button'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
@@ -83,32 +81,39 @@ export default function InsightsIngestionLogPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap gap-3">
-        <Select value={channelFilter} onValueChange={setChannelFilter}>
-          <SelectTrigger className="w-[170px]"><SelectValue placeholder="All Channels" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Channels</SelectItem>
-            <SelectItem value="sql">SQL pipeline</SelectItem>
-            <SelectItem value="email">Email pickup</SelectItem>
-            <SelectItem value="manual">Manual upload</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[145px]"><SelectValue placeholder="All Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="SUCCESS">Success</SelectItem>
-            <SelectItem value="FAILED">Failed</SelectItem>
-            <SelectItem value="RUNNING">Running</SelectItem>
-            <SelectItem value="PARTIAL">Partial</SelectItem>
-          </SelectContent>
-        </Select>
-        <button
-          onClick={() => { setChannelFilter('all'); setStatusFilter('all') }}
-          disabled={channelFilter === 'all' && statusFilter === 'all'}
-          className="ml-auto text-[12px] font-medium text-primary hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
-        >Reset Filters</button>
-      </div>
+      <ListFilterBar
+        selects={[
+          {
+            id: 'channel',
+            value: channelFilter,
+            onChange: setChannelFilter,
+            placeholder: 'All Channels',
+            width: 'w-[170px]',
+            options: [
+              { value: 'all', label: 'All Channels' },
+              { value: 'sql', label: 'SQL pipeline' },
+              { value: 'email', label: 'Email pickup' },
+              { value: 'manual', label: 'Manual upload' },
+            ],
+          },
+          {
+            id: 'status',
+            value: statusFilter,
+            onChange: setStatusFilter,
+            placeholder: 'All Status',
+            options: [
+              { value: 'all', label: 'All Status' },
+              { value: 'SUCCESS', label: 'Success' },
+              { value: 'FAILED', label: 'Failed' },
+              { value: 'RUNNING', label: 'Running' },
+              { value: 'PARTIAL', label: 'Partial' },
+            ],
+          },
+        ]}
+        hasFilters={channelFilter !== 'all' || statusFilter !== 'all'}
+        onReset={() => { setChannelFilter('all'); setStatusFilter('all') }}
+        resultCount={{ total: logs.length }}
+      />
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <Table>

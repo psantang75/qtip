@@ -18,6 +18,7 @@ import userService from '@/services/userService'
 import type { Department } from '@/services/departmentService'
 import { Button } from '@/components/ui/button'
 import { TableErrorState } from '@/components/common/TableErrorState'
+import { ListFilterBar } from '@/components/common/ListFilterBar'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { RowActionButton } from '@/components/common/RowActionButton'
 import { Input } from '@/components/ui/input'
@@ -265,39 +266,26 @@ export default function AdminDepartmentsPage() {
         </Button>
       </div>
 
-      {/* Filters — same pattern as Users page */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[240px] max-w-[360px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Search departments…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[145px]"><SelectValue placeholder="All Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <button
-          onClick={() => { setSearch(''); setStatusFilter('active') }}
-          disabled={search === '' && statusFilter === 'active'}
-          className="ml-auto text-[12px] font-medium text-primary hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          Reset Filters
-        </button>
-      </div>
-
-      {/* Count */}
-      <p className="text-[13px] text-muted-foreground">
-        Showing {departments.length} of {allDepartments.length} departments
-      </p>
+      {/* Filters — shared ListFilterBar (same pattern as other list pages) */}
+      <ListFilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search departments…"
+        selects={[{
+          id: 'status',
+          value: statusFilter,
+          onChange: setStatusFilter,
+          placeholder: 'All Status',
+          options: [
+            { value: 'all', label: 'All Status' },
+            { value: 'active', label: 'Active' },
+            { value: 'inactive', label: 'Inactive' },
+          ],
+        }]}
+        hasFilters={search !== '' || statusFilter !== 'active'}
+        onReset={() => { setSearch(''); setStatusFilter('active') }}
+        resultCount={{ filtered: departments.length, total: allDepartments.length }}
+      />
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

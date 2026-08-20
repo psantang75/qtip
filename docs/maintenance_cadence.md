@@ -211,10 +211,25 @@ These were started as verified pilots; continue them under the cadence above:
   imported in `AppRoutes`; the `analytics` route redirects to
   `/app/insights/qc-quality`) and has been DELETED (tsc clean afterward,
   confirming nothing referenced it).
-  Still open: unify bespoke filter bars / multi-selects onto the shared
-  `ListFilterBar`/`InsightsFilterBar` + `StagedMultiSelect`/`SearchableMultiSelect`.
-  This is a visual, prominent-UI change → do it deliberately with a browser
-  verification pass, not as a blind sweep.
+  Filter bars / multi-selects — a bespoke-UI inventory was taken (15 spots) and
+  the SAFE, behavior-preserving ones were migrated:
+    • `AdminDepartmentsPage` + `InsightsIngestionLogPage` list filters → shared
+      `ListFilterBar` (drop-ins; search/select/reset parity, `resultCount`).
+    • The two write-up coaching modals (`CoachingSearchModal` +
+      `AssignCoachingModal`'s `CreateCoachingModal`) had a byte-for-byte copy of
+      an inline grouped topic picker — extracted to one
+      `writeup-form/InlineTopicMultiSelect.tsx` (keeps the inline-panel UX; the
+      `training_topic` query now lives in the component, one source of truth).
+  DELIBERATELY LEFT bespoke (migrating would REGRESS UX, not a like-for-like
+  swap — revisit only if the shared components gain the missing capability):
+    • `AdminDepartmentsPage` manager picker + `admin/users/UserFilterBar` —
+      `SearchableMultiSelect` renders a plain label only, so it would drop the
+      per-row role badge + `Users` icon; `UserFilterBar`'s role/dept filters are
+      STAGED NUMERIC multi-selects that don't fit `ListFilterBar.selects`
+      (single-value only).
+    • `OnDemandReportViewPage` sticky bar (Run action + draft/applied state),
+      the `CoachingFormSections` picker family (grouping + chips + immediate-vs-
+      staged), and `RulePackChipPicker` (intentional chip UX) — all non-trivial.
 - DB: the HIGH-value indexes + the `ScheduleShift` redundant-index drop from
   [`database_review.md`](./database_review.md) were approved and APPLIED as
   migration `20260818190000_add_perf_indexes_drop_redundant_shift_index`

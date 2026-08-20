@@ -1,7 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { getErrorMessage } from '@/utils/errorHandling'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
@@ -10,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Checkbox } from '@/components/ui/checkbox'
+import { InlineTopicMultiSelect } from './InlineTopicMultiSelect'
 import { Field } from '@/pages/training/coaching-form/CoachingFormSections'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { useToast } from '@/hooks/use-toast'
@@ -134,29 +133,11 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
   const [source,         setSource]        = useState<number | ''>('')
   const [format,         setFormat]        = useState<number | ''>('')
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set())
-  const [draftTopics,    setDraftTopics]   = useState<Set<string>>(new Set())
-  const [topicOpen,      setTopicOpen]     = useState(false)
   const [notes,          setNotes]         = useState('')
 
-  const { data: topicItems = [] } = useQuery({
-    queryKey: ['list-items', 'training_topic'],
-    queryFn:  () => import('@/services/listService').then(m => m.default.getItems('training_topic')),
-    staleTime: 5 * 60_000,
-  })
   const { data: purposeItems = [] } = useQuery({ queryKey: ['list-items', 'coaching_purpose'], queryFn: () => listService.getItems('coaching_purpose'), staleTime: 5 * 60_000 })
   const { data: sourceItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_source'],  queryFn: () => listService.getItems('coaching_source'),  staleTime: 5 * 60_000 })
   const { data: formatItems = [] }  = useQuery({ queryKey: ['list-items', 'coaching_format'],  queryFn: () => listService.getItems('coaching_format'),  staleTime: 5 * 60_000 })
-  const activeTopics        = (topicItems as any[]).filter(t => t.is_active)
-  const topicCategories     = useMemo(() => [...new Set(activeTopics.map((t: any) => t.category).filter(Boolean))] as string[], [activeTopics])
-  const topicsByCat         = (cat: string) => activeTopics.filter((t: any) => t.category === cat)
-  const uncategorizedTopics = activeTopics.filter((t: any) => !t.category)
-
-  const openTopicDropdown = () => { setDraftTopics(new Set(selectedTopics)); setTopicOpen(true) }
-  const applyTopics       = () => { setSelectedTopics(new Set(draftTopics)); setTopicOpen(false) }
-  const cancelTopics      = () => setTopicOpen(false)
-  const toggleDraft       = (label: string) => setDraftTopics(prev => {
-    const next = new Set(prev); next.has(label) ? next.delete(label) : next.add(label); return next
-  })
 
   const createMut = useMutation({
     mutationFn: () => writeupService.createLinkedCoachingSession({
@@ -220,53 +201,12 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
           </div>
 
           <Field label="Topics">
-            <button type="button" onClick={openTopicDropdown}
-              className="w-full flex items-center justify-between h-9 px-3 border border-slate-200 rounded-md bg-white text-[13px] hover:border-primary/50 transition-colors">
-              <span className={selectedTopics.size === 0 ? 'text-slate-400' : 'text-slate-700'}>
-                {selectedTopics.size === 0 ? 'No topics selected' : `${selectedTopics.size} topic${selectedTopics.size === 1 ? '' : 's'} selected`}
-              </span>
-              <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform ${topicOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {topicOpen && (
-              <div className="mt-1 border border-slate-200 rounded-lg bg-white overflow-hidden">
-                <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
-                  {activeTopics.length === 0 && (
-                    <p className="px-4 py-4 text-[13px] text-slate-400 text-center">No topics found in list management</p>
-                  )}
-                  {topicCategories.map(cat => (
-                    <div key={cat}>
-                      <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold text-slate-500 uppercase tracking-widest bg-slate-50 border-b border-slate-100">{cat}</p>
-                      {topicsByCat(cat).map((t: any) => (
-                        <label key={t.id} className="flex items-center gap-2.5 px-4 py-1.5 text-[13px] text-slate-700 hover:bg-slate-50 cursor-pointer select-none">
-                          <Checkbox checked={draftTopics.has(t.label)} onCheckedChange={() => toggleDraft(t.label)} />
-                          {t.label}
-                        </label>
-                      ))}
-                    </div>
-                  ))}
-                  {uncategorizedTopics.length > 0 && (
-                    <div>
-                      {topicCategories.length > 0 && (
-                        <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-100">Uncategorized</p>
-                      )}
-                      {uncategorizedTopics.map((t: any) => (
-                        <label key={t.id} className="flex items-center gap-2.5 px-4 py-1.5 text-[13px] text-slate-700 hover:bg-slate-50 cursor-pointer select-none">
-                          <Checkbox checked={draftTopics.has(t.label)} onCheckedChange={() => toggleDraft(t.label)} />
-                          {t.label}
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100 bg-slate-50">
-                  <button type="button" onClick={() => setDraftTopics(new Set())} className="text-[12px] text-slate-400 hover:text-slate-600">Clear all</button>
-                  <div className="flex items-center gap-2">
-                    <Button type="button" variant="outline" size="sm" className="h-7 text-[12px]" onClick={cancelTopics}>Cancel</Button>
-                    <Button type="button" size="sm" className="h-7 text-[12px] bg-primary hover:bg-primary/90 text-white" onClick={applyTopics}>Apply</Button>
-                  </div>
-                </div>
-              </div>
-            )}
+            <InlineTopicMultiSelect
+              selected={Array.from(selectedTopics)}
+              onChange={vals => setSelectedTopics(new Set(vals))}
+              emptyLabel="No topics selected"
+              emptyDataMessage="No topics found in list management"
+            />
           </Field>
 
           <Field label="Notes">
