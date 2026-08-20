@@ -85,19 +85,20 @@ export const NAV_CONFIG: SectionConfig[] = [
       { label: 'Coaching',             path: '/app/insights/qc-coaching', icon: 'BookOpen',        roles: [], pageKey: 'qc_coaching', group: 'Quality, Coaching & Performance Warnings' },
       { label: 'Performance Warnings', path: '/app/insights/qc-warnings', icon: 'AlertTriangle',   roles: [], pageKey: 'qc_warnings', group: 'Quality, Coaching & Performance Warnings' },
       { label: 'Agent Performance',    path: '/app/insights/qc-agents',   icon: 'Users',           roles: [], pageKey: 'qc_agents',   group: 'Quality, Coaching & Performance Warnings' },
-      // ── Agent Activity ──
+      // ── Sales Agent Activity ──
       // `roles` is ignored when `pageKey` is set — visibility comes from
       // /api/insights/navigation (i.e. ie_page_role_access). The section only
       // renders when the user can access at least one page under it.
-      { label: 'Call Activity',   path: '/app/insights/aa-call',    icon: 'Phone',      roles: [], pageKey: 'aa_sales_call',    group: 'Agent Activity' },
-      { label: 'Leads',           path: '/app/insights/aa-leads',   icon: 'Target',     roles: [], pageKey: 'aa_sales_leads',   group: 'Agent Activity' },
-      { label: 'Margin',          path: '/app/insights/aa-margin',  icon: 'DollarSign', roles: [], pageKey: 'aa_sales_margin',  group: 'Agent Activity' },
-      { label: 'Tickets & Tasks', path: '/app/insights/aa-tickets', icon: 'Ticket',     roles: [], pageKey: 'aa_sales_tickets', group: 'Agent Activity' },
-      { label: 'Ticket and Task Workload', path: '/app/insights/aa-workload', icon: 'ClipboardList', roles: [], pageKey: 'aa_sales_workload', group: 'Agent Activity' },
-      { label: 'Workload Validation', path: '/app/insights/workload-validation', icon: 'ListChecks', roles: [], pageKey: 'aa_sales_workload', group: 'Agent Activity' },
-      { label: 'Productivity',    path: '/app/insights/aa-productivity', icon: 'Gauge', roles: [], pageKey: 'aa_sales_productivity_report', group: 'Agent Activity' },
-      { label: 'Email Activity',  path: '/app/insights/aa-email',   icon: 'Mail',       roles: [], pageKey: 'aa_sales_email',   group: 'Agent Activity' },
+      { label: 'Call Activity',   path: '/app/insights/aa-call',    icon: 'Phone',      roles: [], pageKey: 'aa_sales_call',    group: 'Sales Agent Activity' },
+      { label: 'Leads',           path: '/app/insights/aa-leads',   icon: 'Target',     roles: [], pageKey: 'aa_sales_leads',   group: 'Sales Agent Activity' },
+      { label: 'Margin',          path: '/app/insights/aa-margin',  icon: 'DollarSign', roles: [], pageKey: 'aa_sales_margin',  group: 'Sales Agent Activity' },
+      { label: 'Tickets & Tasks', path: '/app/insights/aa-tickets', icon: 'Ticket',     roles: [], pageKey: 'aa_sales_tickets', group: 'Sales Agent Activity' },
+      { label: 'Ticket and Task Workload', path: '/app/insights/aa-workload', icon: 'ClipboardList', roles: [], pageKey: 'aa_sales_workload', group: 'Sales Agent Activity' },
+      { label: 'Workload Validation', path: '/app/insights/workload-validation', icon: 'ListChecks', roles: [], pageKey: 'aa_sales_workload', group: 'Sales Agent Activity' },
+      { label: 'Productivity',    path: '/app/insights/aa-productivity', icon: 'Gauge', roles: [], pageKey: 'aa_sales_productivity_report', group: 'Sales Agent Activity' },
+      { label: 'Email Activity',  path: '/app/insights/aa-email',   icon: 'Mail',       roles: [], pageKey: 'aa_sales_email',   group: 'Sales Agent Activity' },
       // ── CSR Agent Activity ──
+      { label: 'Call Activity',   path: '/app/insights/csr-call',       icon: 'Phone',         roles: [], pageKey: 'csr_call',       group: 'CSR Agent Activity' },
       { label: 'Attendance',      path: '/app/insights/csr-attendance', icon: 'CalendarCheck', roles: [], pageKey: 'csr_attendance', group: 'CSR Agent Activity' },
       { label: 'Tickets & Tasks', path: '/app/insights/csr-tickets',    icon: 'Ticket',        roles: [], pageKey: 'csr_tickets',    group: 'CSR Agent Activity' },
       { label: 'Ticket and Task Workload', path: '/app/insights/csr-workload', icon: 'ClipboardList', roles: [], pageKey: 'csr_workload', group: 'CSR Agent Activity' },

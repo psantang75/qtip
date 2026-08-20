@@ -104,6 +104,33 @@ export const getCallActivity = async (req: Request, res: Response): Promise<void
 };
 
 /**
+ * GET /api/insights/csr/call
+ * The same Call Activity report for the Agent Activity - CSR section: identical
+ * shape, scoped to the CSR-area agents (everyone outside the Sales Department -
+ * All subtree) and its own page grant.
+ */
+export const getCsrCallActivity = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const scope = await resolveAaScope(req, res, 'csr_call');
+    if (!scope) return;
+    const { period, start, end, users, departments } = req.query as Record<string, string | undefined>;
+    const result = await svcGetCallActivity({
+      period: period || 'current_month',
+      customStart: start,
+      customEnd: end,
+      users: users ? users.split(',').filter(Boolean) : undefined,
+      departments: departments ? departments.split(',').filter(Boolean) : undefined,
+      selfEmployeeKey: scope.selfEmployeeKey,
+      area: 'csr',
+    });
+    res.json(result);
+  } catch (error) {
+    logger.error('getCsrCallActivity error:', error);
+    res.status(500).json({ error: 'Failed to load call activity' });
+  }
+};
+
+/**
  * GET /api/insights/agent-activity/tickets
  * Tickets & Tasks snapshot (open work items by agent/classification, bucketed
  * Current/Due Today/Past Due). SNAPSHOT report — no period; only agent/department.

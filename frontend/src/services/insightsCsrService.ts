@@ -7,7 +7,7 @@
  * which talks to insightsAdminService.
  */
 import { api } from './authService'
-import type { PastDueItem, PastDueQuery, TicketsTasksResponse, TicketDailyPoint, TicketHistoryParams, TicketProductivityRow } from './insightsService'
+import type { AAParams, CallActivityResponse, PastDueItem, PastDueQuery, TicketsTasksResponse, TicketDailyPoint, TicketHistoryParams, TicketProductivityRow } from './insightsService'
 
 export interface AttendanceParams {
   users?: string
@@ -146,6 +146,15 @@ export const getAttendanceDayOfWeek = async (
   p: AttendanceParams,
 ): Promise<{ asOf: string; windowFrom: string; days: DayOfWeekRow[] }> => {
   const response = await api.get('/insights/csr/attendance/day-of-week', { params: p })
+  return response.data
+}
+
+// ── Call Activity ────────────────────────────────────────────────────────────
+// The CSR twin of the Sales report: identical response shape (types reused from
+// insightsService), scoped server-side to the CSR-area agents.
+
+export const getCsrCallActivity = async (p: AAParams): Promise<CallActivityResponse> => {
+  const response = await api.get('/insights/csr/call', { params: p })
   return response.data
 }
 

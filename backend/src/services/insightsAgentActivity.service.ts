@@ -421,6 +421,13 @@ export interface CallActivityFilters {
    * numbers. Resolved from ie_page_role_access via InsightsPermissionService.
    */
   selfEmployeeKey?: number | null;
+  /**
+   * Which Agent Activity section is asking. 'sales' keeps the Sales Department -
+   * All subtree; 'csr' takes its complement (Customer Service / Tech Support /
+   * Billing/CS / etc.) so the CSR section shows the agents it owns and nothing
+   * else. The CSR-role guard applies either way. Defaults to 'sales'.
+   */
+  area?: 'sales' | 'csr';
 }
 
 export interface CallSummaryRow {
@@ -488,15 +495,20 @@ export async function getCallActivity(filters: CallActivityFilters): Promise<Cal
   // uses for its per-day averages. The Business Calendar is reserved for pace.
   const todayKey = toDateKey(new Date());
 
-  // Base predicate: Inbound/Outbound only, in-period, CSR role, sales subtree.
+  // Base predicate: Inbound/Outbound only, in-period, CSR role, section subtree.
+  // 'sales' keeps the Sales Department - All subtree; 'csr' reads its complement
+  // (COALESCE so a not-yet-backfilled hierarchy_path still counts as non-Sales).
   const EMP_JOIN = `JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key`;
   const DEPT_JOIN = `JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key`;
   const DATE_JOIN = `JOIN ie_dim_date d ON d.date_key = f.date_key`;
+  const deptGuard = filters.area === 'csr'
+    ? "COALESCE(dpt.hierarchy_path, '') <> ? AND COALESCE(dpt.hierarchy_path, '') NOT LIKE CONCAT(?, '/%')"
+    : "(dpt.hierarchy_path = ? OR dpt.hierarchy_path LIKE CONCAT(?, '/%'))";
   const baseWhere = [
     "f.call_direction IN ('Inbound', 'Outbound')",
     'f.date_key BETWEEN ? AND ?',
     'e.role_name = ?',
-    "(dpt.hierarchy_path = ? OR dpt.hierarchy_path LIKE CONCAT(?, '/%'))",
+    deptGuard,
   ];
   const baseParams: (string | number)[] = [fromKey, toKey, AGENT_ROLE, SALES_DEPT_ROOT_PATH, SALES_DEPT_ROOT_PATH];
 
