@@ -73,11 +73,11 @@ function nextDue(s: CoachingSession): { date: string | null; type: 'D' | 'F' | n
 
 export default function CoachingSessionsPage() {
   const navigate = useNavigate()
-  const { purposeMap: PURPOSE_MAP, formatMap: FORMAT_MAP, formatOptions } = useCoachingLabels()
+  const { formatMap: FORMAT_MAP, formatOptions } = useCoachingLabels()
   const { start: defaultFrom, end: defaultTo } = useMemo(() => defaultDateRange90(), [])
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
-    agents: '', statuses: '', formats: '', topics: '',
+    coaches: '', agents: '', statuses: '', formats: '', topics: '',
     from: defaultFrom, to: defaultTo, overdue: '', dueToday: '', sessionId: '',
     page: '1', size: '20', expanded: '',
   })
@@ -90,6 +90,7 @@ export default function CoachingSessionsPage() {
     set('expanded', [...next].join(','))
   }
 
+  const coachesParam  = get('coaches')
   const agentsParam   = get('agents')
   const statusesParam = get('statuses')
   const formatsParam  = get('formats')
@@ -105,6 +106,7 @@ export default function CoachingSessionsPage() {
   const setPage     = (p: number) => set('page', String(p))
   const setPageSize = (s: number) => setMany({ size: String(s), page: '1' })
 
+  const selectedCoaches  = useMemo(() => coachesParam  ? coachesParam.split(',').filter(Boolean)   : [], [coachesParam])
   const selectedAgents   = useMemo(() => agentsParam   ? agentsParam.split(',').filter(Boolean)   : [], [agentsParam])
   const selectedStatuses = useMemo(() => statusesParam ? statusesParam.split(',').filter(Boolean)  : [], [statusesParam])
   const selectedFormats  = useMemo(() => formatsParam  ? formatsParam.split(',').filter(Boolean)   : [], [formatsParam])
@@ -127,6 +129,10 @@ export default function CoachingSessionsPage() {
   const allItems = data?.items ?? []
 
   // Dropdown options from the FULL result set
+  const coachOptions = useMemo(() => {
+    return Array.from(new Set(allItems.map(s => s.created_by_name).filter(Boolean))).sort()
+  }, [allItems])
+
   const agentOptions = useMemo(() => {
     return Array.from(new Set(allItems.map(s => s.csr_name).filter(Boolean))).sort()
   }, [allItems])
@@ -146,12 +152,13 @@ export default function CoachingSessionsPage() {
   const filtered = useMemo(() => {
     let items = allItems
     if (sessionId)                        items = items.filter(s => String(s.id).includes(sessionId))
+    if (selectedCoaches.length)           items = items.filter(s => selectedCoaches.includes(s.created_by_name))
     if (selectedAgents.length)            items = items.filter(s => selectedAgents.includes(s.csr_name))
     if (effectiveSelectedStatuses.length) items = items.filter(s => effectiveSelectedStatuses.includes(STATUS_LABELS[s.status] ?? s.status))
     if (selectedFormats.length)           items = items.filter(s => selectedFormats.includes(FORMAT_MAP[s.coaching_format] ?? s.coaching_format))
     if (selectedTopics.length)            items = items.filter(s => s.topics.some(t => selectedTopics.includes(t)))
     return items
-  }, [allItems, sessionId, selectedAgents, effectiveSelectedStatuses, selectedFormats, selectedTopics, FORMAT_MAP])
+  }, [allItems, sessionId, selectedCoaches, selectedAgents, effectiveSelectedStatuses, selectedFormats, selectedTopics, FORMAT_MAP])
 
   const { sort, dir, toggle, sorted: sortedItems } = useListSort(filtered)
 
@@ -202,6 +209,8 @@ export default function CoachingSessionsPage() {
         onReset={reset}
         resultTotal={displayTotal}
         itemCount={allItems.length}
+        coachOptions={coachOptions}
+        selectedCoaches={selectedCoaches}
         agentOptions={agentOptions}
         selectedAgents={selectedAgents}
         topicOptions={topicOptions}
@@ -217,11 +226,11 @@ export default function CoachingSessionsPage() {
           <Table>
             <TableHeader>
               <StandardTableHeaderRow>
-                <SortableTableHead field="id" sort={sort} dir={dir} onSort={toggle} className="w-[100px]">Session #</SortableTableHead>
+                <SortableTableHead field="id" sort={sort} dir={dir} onSort={toggle} className="w-[80px]">#</SortableTableHead>
                 <SortableTableHead field="session_date"  sort={sort} dir={dir} onSort={toggle} className="min-w-[110px]">Date</SortableTableHead>
                 <SortableTableHead field="status"        sort={sort} dir={dir} onSort={toggle} className="min-w-[110px]">Status</SortableTableHead>
+                <SortableTableHead field="created_by_name" sort={sort} dir={dir} onSort={toggle} className="min-w-[160px]">Coach</SortableTableHead>
                 <SortableTableHead field="csr_name"      sort={sort} dir={dir} onSort={toggle} className="min-w-[200px]">Agent</SortableTableHead>
-                <TableHead className="min-w-[120px]">Purpose</TableHead>
                 <TableHead className="min-w-[120px]">Format</TableHead>
                 <TableHead className="min-w-[160px]">Topics</TableHead>
                 <TableHead className="min-w-[80px]">Quiz</TableHead>
@@ -254,13 +263,13 @@ export default function CoachingSessionsPage() {
                       {formatQualityDate(s.session_date)}
                     </TableCell>
                     <TableCell><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{s.created_by_name}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 text-[13px] text-slate-500">
                         <Users className="h-3.5 w-3.5 text-primary shrink-0" />
                         <span>{batchSessions!.length} Agents</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-[13px] text-slate-600">{PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">{FORMAT_MAP[s.coaching_format] ?? s.coaching_format}</TableCell>
                     <TableCell className="max-w-[180px]">
                       <TopicListTooltip topics={s.topics} />
@@ -287,6 +296,7 @@ export default function CoachingSessionsPage() {
                       {formatQualityDate(s.session_date)}
                     </TableCell>
                     <TableCell><StatusBadge status={s.status} /></TableCell>
+                    <TableCell className="text-[13px] text-slate-600">{s.created_by_name}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span className="text-[13px] text-slate-600">{s.csr_name}</span>
@@ -309,7 +319,6 @@ export default function CoachingSessionsPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-[13px] text-slate-600">{PURPOSE_MAP[s.coaching_purpose] ?? s.coaching_purpose}</TableCell>
                     <TableCell className="text-[13px] text-slate-600">{FORMAT_MAP[s.coaching_format] ?? s.coaching_format}</TableCell>
                     <TableCell className="max-w-[180px]">
                       <TopicListTooltip topics={s.topics} />
@@ -355,10 +364,10 @@ export default function CoachingSessionsPage() {
                       {formatQualityDate(bs.session_date)}
                     </TableCell>
                     <TableCell><StatusBadge status={bs.status} /></TableCell>
+                    <TableCell className="text-[13px] text-slate-500">{bs.created_by_name}</TableCell>
                     <TableCell>
                       <span className="text-[13px] text-slate-600">{bs.csr_name}</span>
                     </TableCell>
-                    <TableCell className="text-[13px] text-slate-500">{PURPOSE_MAP[bs.coaching_purpose] ?? bs.coaching_purpose}</TableCell>
                     <TableCell className="text-[13px] text-slate-500">{FORMAT_MAP[bs.coaching_format] ?? bs.coaching_format}</TableCell>
                     <TableCell><span className="text-[13px] text-slate-300">&mdash;</span></TableCell>
                     <TableCell><QuizStatusBadge session={bs} /></TableCell>

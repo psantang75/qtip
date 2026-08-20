@@ -33,6 +33,9 @@ interface CoachingFilterBarProps {
   onReset: () => void
   resultTotal: number
   itemCount: number
+  /** Coach filter — the session's creator/coach (created_by). */
+  coachOptions?: string[]
+  selectedCoaches?: string[]
   /** Agent filter — only shown for admin/trainer view */
   agentOptions?: string[]
   selectedAgents?: string[]
@@ -48,6 +51,8 @@ export function CoachingFilterBar({
   onReset,
   resultTotal,
   itemCount,
+  coachOptions,
+  selectedCoaches,
   agentOptions,
   selectedAgents,
   topicOptions,
@@ -66,6 +71,15 @@ export function CoachingFilterBar({
       resultCount={{ total: resultTotal }}
       truncated={itemCount >= CLIENT_FETCH_LIMIT}
     >
+      {coachOptions && selectedCoaches && (
+        <StagedMultiSelect
+          options={coachOptions}
+          selected={selectedCoaches}
+          onApply={v => setMany({ coaches: v.join(','), page: '1' })}
+          placeholder="All Coaches"
+          width="w-[240px]"
+        />
+      )}
       {agentOptions && selectedAgents && (
         <StagedMultiSelect
           options={agentOptions}
@@ -99,13 +113,13 @@ export function CoachingFilterBar({
         placeholder="All Statuses"
         width="w-[180px]"
       />
+
+      <div className="w-full" />
       <IdSearchInput
         value={values.sessionId}
         onChange={v => setMany({ sessionId: v, page: '1' })}
         placeholder="Session #"
       />
-
-      <div className="w-full" />
       <div className="flex items-center gap-1.5">
         <span className="text-[12px] text-slate-500 shrink-0">Session</span>
         <Input type="date" value={values.dateFrom} max={values.dateTo || undefined}
