@@ -250,13 +250,22 @@ These were started as verified pilots; continue them under the cadence above:
   `lint`/`lint:fix`/`typecheck`, and `backend/eslint.config.mjs` (flat config,
   typescript-eslint) mirrors the frontend. Root `npm run lint:backend` is green.
   Adoption used the industry-standard ratchet: rules that fire on intentional
-  patterns are `off` (see the config header), and pre-existing style debt is
-  `warn` (currently **101 warnings, 0 errors**) so the gate stays green without
-  churning ~25 unrelated files. **Burn-down:** clear warnings as you touch files
-  (biggest buckets: `prefer-const` ~50, `@typescript-eslint/no-unused-vars` ~42);
-  when a rule reaches zero, promote it from `warn` to `error`. `no-unused-vars`
-  is the first promotion target (the maintainer explicitly cares about
-  "declared but never read").
+  patterns are `off` (see the config header), and pre-existing style debt started
+  at `warn` so the gate stayed green without churning ~25 unrelated files.
+  **Burn-down — DONE (2026-08-20):** cleared from 101 → **4 warnings, 0 errors**
+  and promoted the burned-down rules from `warn` to `error` in
+  `eslint.config.mjs`: `@typescript-eslint/no-unused-vars` (the maintainer's
+  "declared but never read" concern), `prefer-const`,
+  `@typescript-eslint/no-empty-object-type`, `no-case-declarations`,
+  `no-irregular-whitespace`. Regressions on any of these now fail lint.
+  `_`-prefixed args/vars/caught-errors remain the explicit opt-out for
+  deliberately-unused bindings. **Remaining (still `warn`):** 4
+  `no-useless-catch` — pure-rethrow `try/catch` wrappers around large repository
+  `$transaction` bodies (`EnhancedPerformanceGoalRepository` ×2,
+  `MySQLSubmissionRepository` ×2); unwrapping is a mechanical de-indent whose
+  regression risk outweighs the cosmetic win, so burn them down when those
+  methods are next touched, then promote `no-useless-catch` too. Verified:
+  `tsc` clean, full backend suite 802 passing.
 - Build type-gate — RESOLVED (2026-08-20). The `deploy/Dockerfile` backend stage
   now runs `npm ci --legacy-peer-deps` against a **committed backend-scoped
   lockfile** (`backend/package-lock.json`) and the `tsc` step no longer has

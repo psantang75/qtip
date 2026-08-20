@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { UserService, UserServiceError } from '../services/UserService';
+import { UserService } from '../services/UserService';
 import { MySQLUserRepository } from '../repositories/UserRepository';
 import prisma from '../config/prisma';
 import logger from '../config/logger';

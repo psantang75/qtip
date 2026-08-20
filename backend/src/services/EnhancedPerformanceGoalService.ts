@@ -7,8 +7,6 @@
   PerformanceGoalReport,
   PerformanceGoalServiceError,
   FormOption,
-  GoalScope,
-  target_scope
 } from '../types/performanceGoal.types';
 import { EnhancedPerformanceGoalRepository } from '../repositories/EnhancedPerformanceGoalRepository';
 import prisma from '../config/prisma';

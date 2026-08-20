@@ -2,7 +2,6 @@
 import { authenticate } from '../middleware/auth';
 import prisma from '../config/prisma';
 import { Prisma } from '../generated/prisma/client';
-import { Call } from '../models/Call';
 import phoneSystemService, { type ConversationDetailResponse, type ConversationMeta, type CallRecordingResponse } from '../services/PhoneSystemService';
 import logger from '../config/logger';
 

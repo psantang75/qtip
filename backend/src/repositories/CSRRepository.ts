@@ -214,7 +214,7 @@ export class CSRRepository {
     }
   }
 
-  static async getCSRTrainingStats(csr_id: number): Promise<{ completed: number; assigned: number }> {
+  static async getCSRTrainingStats(_csr_id: number): Promise<{ completed: number; assigned: number }> {
     return { completed: 0, assigned: 0 };
   }
 

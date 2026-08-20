@@ -327,7 +327,6 @@ export async function runGoldenEval(opts: EvalRunOptions): Promise<EvalRunResult
     const ticketId = ticketIdForRow ?? 0;
 
     // Build (golden, ai) pairs per question.
-    const goldenByQid = new Map(sub.submission_answers.map((a) => [a.question_id, a]));
     const aiByQid = new Map(analysis.answers.map((a) => [a.question_id, a]));
     const questions: NonNullable<PerSubmissionEvalResult['questions']> = [];
     const localPairs: RaterPair[] = [];

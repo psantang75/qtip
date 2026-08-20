@@ -78,14 +78,14 @@ export class RulePackError extends Error {
 let packCache: Map<string, RulePack> | null = null;
 /** form_id → ordered list of pack KEYS assigned to it */
 let assignmentCache: Map<number, string[]> | null = null;
-let cacheLoadedAt = 0;
+let _cacheLoadedAt = 0;
 let refreshTimer: NodeJS.Timeout | null = null;
 
 /** Reset both in-memory caches and stop the background refresh timer. Used by tests. */
 export function clearRulePackCache(): void {
   packCache = null;
   assignmentCache = null;
-  cacheLoadedAt = 0;
+  _cacheLoadedAt = 0;
   if (refreshTimer) {
     clearInterval(refreshTimer);
     refreshTimer = null;
@@ -150,7 +150,7 @@ async function refreshCache(): Promise<void> {
 
   packCache = newPackCache;
   assignmentCache = newAssignmentCache;
-  cacheLoadedAt = Date.now();
+  _cacheLoadedAt = Date.now();
 }
 
 /**

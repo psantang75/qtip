@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { register, collectDefaultMetrics, Counter, Histogram, Gauge } from 'prom-client';
+import { collectDefaultMetrics, Counter, Histogram, Gauge } from 'prom-client';
 import prisma from '../config/prisma';
 import { config } from '../config/environment';
 import { getPerformanceMetrics, healthCheckMiddleware } from '../middleware/performance';
@@ -28,7 +28,9 @@ const httpRequestDuration = new Histogram({
   buckets: [0.1, 0.5, 1, 2, 5]
 });
 
-const activeConnections = new Gauge({
+// Registered for side-effect (prom-client auto-registers on construction);
+// the handle is intentionally unused (prefixed `_`) — the gauge stays exported.
+const _activeConnections = new Gauge({
   name: 'database_connections_active',
   help: 'Number of active database connections'
 });
@@ -77,7 +79,7 @@ router.get('/health', healthCheckMiddleware, async (req: Request, res: Response)
       },
       errors: healthCheckErrors
     });
-  } catch (error) {
+  } catch {
     res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
@@ -324,7 +326,7 @@ async function getDatabaseConnectionCount(): Promise<number> {
       WHERE db = ${dbName} AND command != 'Sleep'
     `;
     return Number(rows[0]?.connection_count) || 0;
-  } catch (error) {
+  } catch {
     return 0;
   }
 }
@@ -406,7 +408,7 @@ router.get('/system-metrics', async (req, res) => {
         memory: process.memoryUsage()
       }
     });
-  } catch (error) {
+  } catch {
     res.status(500).json({
       status: 'error',
       message: 'Failed to collect system metrics'

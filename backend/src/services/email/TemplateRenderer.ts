@@ -4,7 +4,6 @@ import fs from 'fs';
 import prisma from '../../config/prisma';
 import { mailConfig } from '../../config/environment';
 import logger from '../../config/logger';
-import type { EmailTemplate } from '../../generated/prisma/client';
 
 /**
  * Handlebars-based renderer with DB-first / filesystem-fallback lookup.

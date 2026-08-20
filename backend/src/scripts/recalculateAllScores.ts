@@ -1,5 +1,4 @@
 import pool from '../config/database';
-import { RowDataPacket } from 'mysql2';
 
 /**
  * Script to recalculate scores for all submissions

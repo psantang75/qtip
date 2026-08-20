@@ -50,10 +50,10 @@ export default tseslint.config(
       // auto-removal would be unsafe — net noise on validation regexes.
       'no-useless-escape': 'off',
 
-      // ── WARN: pre-existing debt to burn down (keeps the gate green) ──────────
+      // ── ERROR: burned down to zero, now enforced (regressions fail lint) ─────
       // `_`-prefixed args/vars are the opt-out for deliberately unused bindings.
       '@typescript-eslint/no-unused-vars': [
-        'warn',
+        'error',
         {
           argsIgnorePattern: '^_',
           varsIgnorePattern: '^_',
@@ -61,11 +61,16 @@ export default tseslint.config(
           ignoreRestSiblings: true,
         },
       ],
-      'prefer-const': 'warn',
+      'prefer-const': 'error',
+      '@typescript-eslint/no-empty-object-type': 'error',
+      'no-case-declarations': 'error',
+      'no-irregular-whitespace': 'error',
+
+      // ── WARN: remaining pre-existing debt (keeps the gate green) ─────────────
+      // 4 pure-rethrow try/catch wrappers around large repository transaction
+      // bodies; unwrapping is a mechanical de-indent with regression risk that
+      // outweighs the cosmetic win. Burn down when those methods are next touched.
       'no-useless-catch': 'warn',
-      '@typescript-eslint/no-empty-object-type': 'warn',
-      'no-case-declarations': 'warn',
-      'no-irregular-whitespace': 'warn',
     },
   },
 );

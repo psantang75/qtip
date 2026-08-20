@@ -1,6 +1,4 @@
 import { Request, Response } from 'express'
-import pool from '../config/database'
-import { RowDataPacket } from 'mysql2'
 import { InsightsPermissionService } from '../services/InsightsPermissionService'
 import type { InsightsAccessResult } from '../services/InsightsPermissionService'
 import { resolveDeptFilter } from '../services/insightsScope'

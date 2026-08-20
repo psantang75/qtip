@@ -332,7 +332,7 @@ export class MySQLFormRepository {
     currentCategoryIndex: number,
     currentQuestionIndex: number,
     questionIdMap: Map<string, number>,
-    condIdx: number
+    _condIdx: number
   ): number {
     if (target_question_id < 0) {
       for (let tci = 0; tci < formData.categories.length; tci++) {

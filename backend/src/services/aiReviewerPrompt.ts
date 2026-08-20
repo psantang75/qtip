@@ -23,7 +23,6 @@ import prisma from '../config/prisma';
 import logger from '../config/logger';
 import {
   renderTranscriptBlock as renderTranscriptBlockShared,
-  formatTranscriptContent as formatTranscriptContentShared,
 } from './transcriptRender';
 
 /**
@@ -293,10 +292,6 @@ function buildUserVars(input: PromptInput): Record<string, string> {
  */
 function renderTranscriptBlock(notes: CRMNote[]): string {
   return renderTranscriptBlockShared(notes);
-}
-
-function formatTranscriptContent(raw: string): string {
-  return formatTranscriptContentShared(raw);
 }
 
 function renderFormForPrompt(form: FormForPrompt): string {

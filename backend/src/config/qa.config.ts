@@ -2,7 +2,7 @@
  * QA-specific configuration for different environments
  */
 
-import { config, isDevelopment, isProduction } from './environment';
+import { config } from './environment';
 
 interface QAConfig {
   pagination: {

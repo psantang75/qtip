@@ -28,13 +28,10 @@ export interface UserWithDetails extends User {
   manager_name?: string;
 }
 
-export interface UserCreateRequest extends CreateUserDTO {
-  // Note: manager relationships are now handled via department_managers table
-}
+// Note: manager relationships are now handled via department_managers table
+export type UserCreateRequest = CreateUserDTO;
 
-export interface UserUpdateRequest extends UpdateUserDTO {
-  // Note: manager relationships are now handled via department_managers table  
-}
+export type UserUpdateRequest = UpdateUserDTO;
 
 // User repository interface for dependency injection
 interface IUserRepository {

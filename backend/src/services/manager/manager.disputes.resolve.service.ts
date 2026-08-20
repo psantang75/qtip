@@ -247,7 +247,7 @@ export async function resolveManagerDispute(
       },
       { entityType: 'dispute', entityId: Number(disputeId), deepLinkPath: `/app/quality/disputes` },
     )
-  } catch (mailErr) {
+  } catch {
     // intentionally swallow
   }
 

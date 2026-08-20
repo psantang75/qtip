@@ -330,7 +330,7 @@ export function getTableSchema(tableName: string): ColumnSchema[] {
 }
 
 /** Return RawTableConfig records accessible to this role. */
-export async function getAvailableTables(userRole: string) {
+export async function getAvailableTables(_userRole: string) {
   // Non-admin roles only see is_active tables
   const where: any = { is_active: true };
 

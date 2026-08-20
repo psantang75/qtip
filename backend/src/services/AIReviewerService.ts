@@ -75,14 +75,13 @@ import rulePackService from './RulePackService';
 import { estimateUsdCost, formatUsdCost, type CostEstimate } from './aiCostEstimator';
 import { checkBudget } from './AIReviewerCostGuard';
 import { applyCalibration, applyAnswerCalibration } from './ConfidenceCalibrator';
-import { detectCasePivots, type CasePivot } from './aiReviewerPivotDetector';
+import { detectCasePivots } from './aiReviewerPivotDetector';
 import { voteOnTraces, type TraceAgreement } from './aiReviewerTraceVoting';
 import {
   mergeUniqueStrings,
   tryParseJson,
   clampConfidence,
   clampDelta,
-  escapeHtml,
 } from './aiReviewerParsing';
 import {
   parsePlaybookSteps,

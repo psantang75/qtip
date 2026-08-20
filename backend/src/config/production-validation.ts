@@ -1,5 +1,5 @@
 import logger from './logger';
-﻿/**
+/**
  * Production Environment Validation Module
  * 
  * Validates that all required environment variables are set for production deployment.
@@ -40,15 +40,6 @@ const RECOMMENDED_ENV_VARS = [
   'BCRYPT_ROUNDS',
   'RATE_LIMIT_WINDOW',
   'RATE_LIMIT_MAX_REQUESTS'
-] as const;
-
-/**
- * Environment variables that should not use default values in production
- */
-const NO_DEFAULT_IN_PROD = [
-  'JWT_SECRET',
-  'DB_PASSWORD',
-  'SESSION_SECRET'
 ] as const;
 
 /**
@@ -102,7 +93,7 @@ const validateEnvVar = (
       }
       break;
 
-    case 'PORT':
+    case 'PORT': {
       const port = parseInt(value);
       if (isNaN(port) || port < 1024 || port > 65535) {
         return {
@@ -111,6 +102,7 @@ const validateEnvVar = (
         };
       }
       break;
+    }
 
     case 'JWT_SECRET':
       if (value.length < 32) {
@@ -121,7 +113,7 @@ const validateEnvVar = (
       }
       break;
 
-    case 'BCRYPT_ROUNDS':
+    case 'BCRYPT_ROUNDS': {
       const rounds = parseInt(value);
       if (isNaN(rounds) || rounds < 10 || rounds > 15) {
         return {
@@ -130,6 +122,7 @@ const validateEnvVar = (
         };
       }
       break;
+    }
 
     case 'LOG_LEVEL':
       if (!['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly'].includes(value)) {

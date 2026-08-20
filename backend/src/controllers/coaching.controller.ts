@@ -61,11 +61,6 @@ interface BehaviorFlagRow {
   [key: string]: unknown;
 }
 
-interface RecentSessionRow {
-  [key: string]: unknown;
-  topics?: string | null;
-}
-
 // Local `escapeFilename` removed during pre-production review (item #26).
 // The previous copy here was actually the *unsafe* variant — it skipped the
 // RFC 5987 fallback so any filename containing a space or non-ASCII character
@@ -318,10 +313,11 @@ export const getCoachingSessionDetail = asyncHandler(async (req: AuthReq, res: R
 export const createCoachingSession = asyncHandler(async (req: AuthReq, res: Response) => {
     const userId = req.user!.user_id;
     const attachment = req.file;
-    let { csr_id, csr_ids, session_date, coaching_purpose, coaching_format, source_type, notes, topic_ids,
+    const { csr_id, csr_ids, session_date, coaching_purpose, coaching_format, source_type, notes,
           required_action, resource_ids, kb_url, quiz_ids,
           require_acknowledgment, require_action_plan, due_date,
           follow_up_required, follow_up_date, coach_id } = req.body;
+    let { topic_ids } = req.body;
 
     if (typeof topic_ids === 'string') topic_ids = topic_ids.split(',').map((x: string) => parseInt(x.trim())).filter(Boolean);
     if (!Array.isArray(topic_ids)) topic_ids = topic_ids ? [parseInt(topic_ids)] : [];
@@ -453,12 +449,13 @@ export const updateCoachingSession = asyncHandler(async (req: AuthReq, res: Resp
     const sessionId = parseInt(req.params.id);
     const attachment = req.file;
 
-    let { session_date, coaching_purpose, coaching_format, source_type, notes, topic_ids,
+    const { session_date, coaching_purpose, coaching_format, source_type, notes,
           required_action, resource_ids, kb_url, quiz_ids,
           require_acknowledgment, require_action_plan, due_date,
           follow_up_required, follow_up_date, follow_up_notes,
           internal_notes, behavior_flag_ids, root_cause_ids, support_needed_ids,
           coach_id, remove_attachment } = req.body;
+    let { topic_ids } = req.body;
 
     const updateBehaviorFlagIds: number[] | undefined = behavior_flag_ids !== undefined
       ? String(behavior_flag_ids).split(',').map(Number).filter(Boolean)

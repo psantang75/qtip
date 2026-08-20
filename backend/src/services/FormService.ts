@@ -9,11 +9,6 @@
 import { 
   CreateFormDTO, 
   FormWithCategories, 
-  FormCategoryWithQuestions, 
-  FormQuestion, 
-  RadioOption, 
-  CreateFormMetadataFieldDTO, 
-  FormQuestionCondition 
 } from '../models';
 import { MySQLFormRepository } from '../repositories/MySQLFormRepository';
 import logger from '../config/logger';
@@ -158,8 +153,8 @@ export class FormService implements IFormService {
    */
   async updateForm(form_id: number, formData: CreateFormDTO, updatedBy: number): Promise<{ form_id: number; message: string }> {
     try {
-      // Validate form exists
-      const existingForm = await this.getFormById(form_id, true);
+      // Validate form exists (throws if not found)
+      await this.getFormById(form_id, true);
       
       // Validate form structure
       await this.validateFormStructure(formData);
@@ -389,7 +384,7 @@ export class FormService implements IFormService {
   /**
    * Validate question conditional logic
    */
-  private async validateQuestionConditions(question: any, category_name: string): Promise<void> {
+  private async validateQuestionConditions(question: any, _category_name: string): Promise<void> {
     // Handle legacy conditional format conversion
     if (question.is_conditional && !question.conditions) {
       question.conditions = [{

@@ -17,7 +17,7 @@
 import prisma from '../../config/prisma';
 import { ScheduleScope, ScheduleServiceError } from './schedule.types';
 import { assertCanWriteUsers } from './schedule.permissions';
-import { fetchShiftsInRange, today } from './schedule.shift.service';
+import { fetchShiftsInRange } from './schedule.shift.service';
 import {
   dayOfWeek, sourceDateFor, combineLocal, dateOnlyValue, dateStrFromDate,
   hmsFromTime, hmFromDateTime,
@@ -106,7 +106,6 @@ async function buildOps(params: ApplyParams): Promise<Op[]> {
   const existing = await fetchShiftsInRange(userIds, from, to);
   const existingByKey = new Map(existing.map((s) => [`${s.user_id}:${dateStrFromDate(s.shift_date)}`, s]));
   const dayTypes = await getCalendarDayTypes(dates);
-  const td = today();
 
   const tplResolve = mode === 'template' ? await templateResolver(params.templateId!) : null;
   const copyResolve = mode === 'copy' ? await copyResolver(userIds, params.sourceWeekStart!, dates) : null;

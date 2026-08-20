@@ -345,7 +345,7 @@ export async function importCallActivity(
           wrap_minutes: num(row['WrapMinutes']),
           import_id: logId,
         });
-      } catch (e) {
+      } catch {
         errored++;
       }
     }

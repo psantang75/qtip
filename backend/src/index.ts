@@ -83,7 +83,6 @@ function normalizePort(val: string | number): string | number | false {
 
 // Create Express server
 const app = express();
-const PORT = config.PORT;
 
 // Trust proxy for accurate IP addresses
 // In production/staging behind IIS/nginx, trust all proxies

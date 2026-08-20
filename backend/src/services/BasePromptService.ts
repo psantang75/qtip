@@ -150,13 +150,13 @@ const VALID_KINDS: ReadonlySet<PromptKind> = new Set(['base', 'trace']);
 let baseCacheById: Map<number, BaseResolution> | null = null;
 /** prompt_kind → id of the non-archived row marked is_default for that kind. */
 let defaultsByKind: Map<PromptKind, number> | null = null;
-let cacheLoadedAt = 0;
+let _cacheLoadedAt = 0;
 let refreshTimer: NodeJS.Timeout | null = null;
 
 export function clearBasePromptCache(): void {
   baseCacheById = null;
   defaultsByKind = null;
-  cacheLoadedAt = 0;
+  _cacheLoadedAt = 0;
   if (refreshTimer) {
     clearInterval(refreshTimer);
     refreshTimer = null;
@@ -203,7 +203,7 @@ async function refreshCache(): Promise<void> {
 
   baseCacheById = newBaseCache;
   defaultsByKind = newDefaults;
-  cacheLoadedAt = Date.now();
+  _cacheLoadedAt = Date.now();
 }
 
 /**
