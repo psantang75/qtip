@@ -240,8 +240,31 @@ export default function AdminDepartmentsPage() {
     else { setSortField(field); setSortDir('asc') }
   }
 
+  // Options for the access dropdown: the assignable Manager/QA/Trainer set,
+  // PLUS any already-assigned user who isn't in that set (role changed since
+  // assignment, deactivated, or assigned before the role filter existed).
+  // Without this an existing assignee (e.g. an Admin) shows "1 selected" but
+  // renders no pill and no checkbox row — invisible and impossible to remove.
+  const managerOptions = useMemo<{ id: number; username: string; role_name?: string }[]>(() => {
+    const base = managers.map(m => ({ id: Number(m.id), username: m.username ?? '—', role_name: m.role_name }))
+    const known = new Set(base.map(o => o.id))
+    for (const rawId of selectedIds) {
+      const id = Number(rawId)
+      if (known.has(id)) continue
+      const fromAssignable = assignable.find(u => Number(u.id) === id)
+      const fromDept = editDept?.managers?.find(m => Number(m.manager_id) === id)
+      base.push({
+        id,
+        username: fromAssignable?.username ?? fromDept?.manager_name ?? `User #${id}`,
+        role_name: fromAssignable?.role_name,
+      })
+      known.add(id)
+    }
+    return base
+  }, [managers, assignable, selectedIds, editDept])
+
   // Managers filtered by the in-dropdown search term
-  const visibleManagers = managers.filter(m =>
+  const visibleManagers = managerOptions.filter(m =>
     (m.username ?? '').toLowerCase().includes(managerQuery.toLowerCase())
   )
 
@@ -249,7 +272,7 @@ export default function AdminDepartmentsPage() {
   const managerTriggerLabel = selectedIds.length === 0
     ? 'Select staff…'
     : selectedIds.length === 1
-      ? managers.find(m => Number(m.id) === selectedIds[0])?.username ?? '1 selected'
+      ? managerOptions.find(m => Number(m.id) === selectedIds[0])?.username ?? '1 selected'
       : `${selectedIds.length} selected`
 
   return (
@@ -410,7 +433,7 @@ export default function AdminDepartmentsPage() {
                 {selectedIds.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {selectedIds.map(id => {
-                      const m = managers.find(u => Number(u.id) === Number(id))
+                      const m = managerOptions.find(u => Number(u.id) === Number(id))
                       if (!m) return null
                       return (
                         <span
