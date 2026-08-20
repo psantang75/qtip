@@ -1,10 +1,10 @@
 import { api } from './authService'
 
-// ── Curated manual-upload registry ────────────────────────────────────────────
-// SINGLE source of truth for which data types are uploadable in the admin
-// Manual Upload area. Only entries listed here are offered; every other raw
-// table (and all automated Insights Engine reports) is intentionally excluded.
-// Adding a type here is a deliberate one-line change.
+// ── Ingestable data-type catalog ──────────────────────────────────────────────
+// SINGLE source of truth for the known Excel report types and their metadata.
+// Used by the Email Feeds config (which may map an inbox to any known type) and,
+// filtered, by the admin Manual Upload area. Every other raw table (and all
+// automated Insights Engine reports) is intentionally excluded.
 export interface ManualUploadType {
   code: string
   label: string
@@ -12,7 +12,7 @@ export interface ManualUploadType {
   requiredColumns: string[]
 }
 
-export const MANUAL_UPLOAD_TYPES: ManualUploadType[] = [
+export const INGESTABLE_DATA_TYPES: ManualUploadType[] = [
   {
     code: 'punch_data',
     label: 'Paychex Punch Data',
@@ -56,6 +56,24 @@ export const MANUAL_UPLOAD_TYPES: ManualUploadType[] = [
     requiredColumns: ['Email', 'ReportDate', 'EmailsSent', 'EmailsReceived'],
   },
 ]
+
+// ── Manual-upload allowlist ───────────────────────────────────────────────────
+// Which of the catalog types the admin Manual Upload area actually OFFERS.
+// Kept to `punch_data` on purpose: the six non-punch datasets land in `*_raw`
+// tables that have no unique grain, so a re-upload duplicates rows in the Data
+// Explorer. In practice they are never hand-uploaded — they arrive via the
+// automated warehouse sync (-> idempotent `ie_fact_*`), which is what the
+// dashboards read. punch_data is the one safe manual upload: it self-heals on
+// Post ID. This MIRRORS the backend's `IMPORT_ALLOWED_TYPES` allowlist (default
+// `punch_data`), which is the authoritative guard — this list is only UX.
+//
+// To re-enable a type for manual upload you must do BOTH: add its code here AND
+// add it to the backend `IMPORT_ALLOWED_TYPES` env (see docs/database_review.md).
+export const MANUAL_UPLOAD_CODES: string[] = ['punch_data']
+
+export const MANUAL_UPLOAD_TYPES: ManualUploadType[] = INGESTABLE_DATA_TYPES.filter(
+  t => MANUAL_UPLOAD_CODES.includes(t.code),
+)
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

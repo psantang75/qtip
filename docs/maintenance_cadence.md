@@ -230,17 +230,20 @@ These were started as verified pilots; continue them under the cadence above:
   curated string, `prior_status` is a cross-entity status snapshot (no single
   enum fits), and `new_status` does not exist on the model (see
   [`database_review.md`](./database_review.md) §"Efficiency / hygiene").
-  The `*Raw` unique-grain + idempotent import work (1D) is
-  **DEFERRED by decision 2026-08-19** — traced end-to-end and found to affect
-  only the Insights → Data Explorer / export (`rawDataService`), NOT any
-  dashboard (those read the idempotent `ie_fact_*` warehouse). Automated feeds
-  are already dup-safe (mailbox claims each message once; punches self-heal via
-  `post_id`); the six non-punch tables lack a unique grain but are not manually
-  uploaded in practice. Planned mitigation = restrict the manual-upload path
-  rather than run a destructive dedupe+UNIQUE migration; re-open only if a
-  read-only dup probe shows real duplicates. Full rationale + the deferred
-  proposal live in [`database_review.md`](./database_review.md) §"Data-integrity
-  — raw ingestion tables". NOTE: this repo's `schema.prisma` is a deliberate partial model — NEVER
+  The `*Raw` unique-grain work (1D): the destructive dedupe+UNIQUE migration
+  stays **DEFERRED**, but its **mitigation is APPLIED (2026-08-20)** — the
+  manual-upload path is now allowlisted to `punch_data` only. Traced end-to-end:
+  the six non-punch `*_raw` tables are fed only by manual upload/mailbox and feed
+  the Data Explorer/export (`rawDataService`), NOT any dashboard (those read the
+  idempotent `ie_fact_*` warehouse produced by `SourceReportSyncWorker`), so
+  blocking manual upload of the six cannot starve a report. Guard =
+  `IMPORT_ALLOWED_TYPES` (default `punch_data`) enforced in `importController`
+  via the shared `resolveAllowedDataTypes` helper (also used by the mailbox
+  poller — one allowlist, two entry points); the frontend `MANUAL_UPLOAD_TYPES`
+  registry mirrors it. Re-open the UNIQUE migration only if a read-only dup probe
+  shows real duplicates, or if the allowlist is widened. Full rationale in
+  [`database_review.md`](./database_review.md) §"Data-integrity — raw ingestion
+  tables". NOTE: this repo's `schema.prisma` is a deliberate partial model — NEVER
   run `prisma migrate dev`; use hand-authored `migration.sql` + `prisma migrate
   deploy` (see [`database_schema_updates.md`](./database_schema_updates.md)).
 - Lint gate wiring — RESOLVED (Phase 1). `backend/package.json` now has

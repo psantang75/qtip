@@ -1,8 +1,47 @@
 import { Request, Response } from 'express';
-import { DATA_TYPES, previewImport } from '../services/importService';
+import {
+  DATA_TYPES,
+  previewImport,
+  resolveAllowedDataTypes,
+  type DataType,
+} from '../services/importService';
 import { isDataType, runImport } from '../services/imports/runImport';
+import { config } from '../config/environment';
 import prisma from '../config/prisma';
 import logger from '../config/logger';
+
+/**
+ * Report types the manual Import Center may ingest when nothing is configured.
+ * Only the Paychex punch feed is safe to (re)upload by hand — it self-heals on
+ * `post_id`. The six non-punch `*_raw` datasets have no unique grain and are fed
+ * automatically (warehouse sync -> `ie_fact_*`), so hand-uploading them would
+ * only inject duplicate rows into the Data Explorer. Override with a
+ * comma-separated `IMPORT_ALLOWED_TYPES` (a config edit, not a code change).
+ */
+const DEFAULT_IMPORT_TYPES: readonly DataType[] = ['punch_data'];
+
+/**
+ * Validate the request's `data_type` against the format list AND the ingestion
+ * allowlist, writing the 400 response itself on failure. Shared by the upload
+ * and preview handlers so both gate identically. Returns the type on success.
+ */
+function resolveRequestedType(req: Request, res: Response): DataType | null {
+  const dataType = req.body?.data_type;
+  if (!isDataType(dataType)) {
+    res.status(400).json({
+      message: `Invalid or missing data_type. Must be one of: ${DATA_TYPES.join(', ')}`,
+    });
+    return null;
+  }
+  const allowed = resolveAllowedDataTypes(config.IMPORT_ALLOWED_TYPES, DEFAULT_IMPORT_TYPES);
+  if (!allowed.includes(dataType)) {
+    res.status(400).json({
+      message: `Manual upload of "${dataType}" is disabled. Allowed types: ${allowed.join(', ')}.`,
+    });
+    return null;
+  }
+  return dataType;
+}
 
 /**
  * POST /api/imports/upload
@@ -18,13 +57,8 @@ export const uploadImport = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const dataType = req.body?.data_type;
-    if (!isDataType(dataType)) {
-      res.status(400).json({
-        message: `Invalid or missing data_type. Must be one of: ${DATA_TYPES.join(', ')}`,
-      });
-      return;
-    }
+    const dataType = resolveRequestedType(req, res);
+    if (!dataType) return;
 
     const userId = req.user?.user_id;
     if (!userId) {
@@ -56,13 +90,8 @@ export const previewImportHandler = async (req: Request, res: Response): Promise
       return;
     }
 
-    const dataType = req.body?.data_type;
-    if (!isDataType(dataType)) {
-      res.status(400).json({
-        message: `Invalid or missing data_type. Must be one of: ${DATA_TYPES.join(', ')}`,
-      });
-      return;
-    }
+    const dataType = resolveRequestedType(req, res);
+    if (!dataType) return;
 
     const result = await previewImport(file.buffer, dataType);
 

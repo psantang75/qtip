@@ -113,6 +113,13 @@ interface EnvironmentConfig {
   MAILBOX_IMPORT_IGNORE_BEFORE?: string;  // 'YYYY-MM-DD'; ignore mail received before this
   MAILBOX_IMPORT_ALLOWED_TYPES?: string;  // comma-separated DataType allowlist; default 'punch_data'
 
+  // Manual Import Center (Admin > Manual Upload). Comma-separated DataType
+  // allowlist for the interactive/API upload path; default 'punch_data'. The
+  // six non-punch *_raw datasets have no unique grain and arrive automatically
+  // (warehouse sync -> ie_fact_*), so manual upload of them is disabled by
+  // default to prevent duplicate rows in the Data Explorer's raw tables.
+  IMPORT_ALLOWED_TYPES?: string;
+
   APP_BASE_URL?: string;            // used for deep links in emails
 
   
@@ -335,6 +342,7 @@ export const config: EnvironmentConfig = {
     : undefined,
   MAILBOX_IMPORT_IGNORE_BEFORE: process.env.MAILBOX_IMPORT_IGNORE_BEFORE,
   MAILBOX_IMPORT_ALLOWED_TYPES: process.env.MAILBOX_IMPORT_ALLOWED_TYPES,
+  IMPORT_ALLOWED_TYPES: process.env.IMPORT_ALLOWED_TYPES,
 
   APP_BASE_URL: process.env.APP_BASE_URL,
 

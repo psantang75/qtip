@@ -53,6 +53,29 @@ export const DATA_TYPES = [
 export type DataType = typeof DATA_TYPES[number];
 
 /**
+ * Resolve a strict ingestion allowlist from a comma-separated env string
+ * (e.g. `MAILBOX_IMPORT_ALLOWED_TYPES`, `IMPORT_ALLOWED_TYPES`). Tokens are
+ * trimmed/lower-cased; anything that isn't a known {@link DataType} is dropped.
+ * If the result is empty (unset, blank, or all-garbage) we fall back to
+ * `defaults` so a typo can neither silently open the gate to every type nor
+ * fully close it. Pure + exported for unit testing.
+ *
+ * Shared by both ingestion entry points (mailbox poller + manual Import Center)
+ * so the "which report types may be ingested" rule lives in exactly one place.
+ */
+export function resolveAllowedDataTypes(
+  raw: string | undefined,
+  defaults: readonly DataType[],
+): DataType[] {
+  const known = DATA_TYPES as readonly string[];
+  const parsed = (raw ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s): s is DataType => known.includes(s));
+  return parsed.length > 0 ? Array.from(new Set(parsed)) : [...defaults];
+}
+
+/**
  * Parse an Excel buffer into an array of row objects.
  * Uses the first sheet found. Returns raw: true to preserve negative values.
  */

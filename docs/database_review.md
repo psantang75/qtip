@@ -65,7 +65,7 @@ needed — `submitted_by` is FK-indexed and the composite paths already exist.
 served by the `submission_id` FK index prefix; treat an explicit composite as
 LOW value, not HIGH.
 
-## Data-integrity — raw ingestion tables (PROPOSAL — DEFERRED by decision 2026-08-19)
+## Data-integrity — raw ingestion tables (mitigation APPLIED 2026-08-20; UNIQUE migration deferred)
 
 The `*Raw` import tables accept bulk `createMany` loads in
 [`backend/src/services/importService.ts`](../backend/src/services/importService.ts)
@@ -95,17 +95,31 @@ system" as originally written).** Traced end-to-end 2026-08-19:
   vector is the *same report* arriving as two distinct emails/uploads for the
   six non-punch types.
 
-**Decision (2026-08-19):** DEFER 1D. In reality these six files are **not
-manually uploaded** — they arrive automated from the source (single-send email
-feeds), so the practical dup vector is near-zero. Rather than run a destructive
-dedupe + `UNIQUE` migration now, the intended mitigation is to **restrict the
-manual-upload path** (so a human can't double-load the six), and revisit the
-unique-grain work only if duplicates actually appear. Prerequisites before
-restricting uploads: (1) confirm all 7 types truly arrive via the mailbox so we
-don't starve a type whose only path is manual; (2) pick the restriction form
-(admin-only vs. block the six dup-prone types vs. break-glass only). Re-open
-this item (apply the PunchRaw-style upsert below) if the read-only probe ever
-shows dupes, or if manual upload of the six is re-enabled.
+**Decision (2026-08-19):** DEFER the destructive dedupe + `UNIQUE` migration. In
+reality these six files are **not manually uploaded** — they arrive automated
+from the source, so the practical dup vector is near-zero.
+
+**Mitigation APPLIED (2026-08-20):** the manual-upload path is now **restricted
+to an allowlist** instead of running the schema migration. Prerequisite (1) was
+confirmed by tracing the pipelines: the six non-punch `*_raw` tables are fed
+ONLY by manual upload / mailbox, while the dashboards read the idempotent
+`ie_fact_*` tables produced by `SourceReportSyncWorker` (delete-window+insert) —
+two independent paths, so blocking manual upload of the six cannot starve a
+report. Restriction form (prerequisite 2) = **block the six dup-prone types**,
+allowing only `punch_data` (which self-heals on `post_id`):
+
+- Authoritative backend guard: `importController` rejects any `data_type` not in
+  `IMPORT_ALLOWED_TYPES` (default `punch_data`) on both `/upload` and `/preview`,
+  via the shared `resolveAllowedDataTypes` helper (the same one the mailbox
+  poller uses — one allowlist implementation, two entry points).
+- Frontend `MANUAL_UPLOAD_TYPES` registry mirrors it (derived from the full
+  `INGESTABLE_DATA_TYPES` catalog, which the Email Feeds config still uses in
+  full) so the UI only offers `punch_data`.
+- Unit tests: `resolveAllowedDataTypes.test.ts` + `importController.guard.test.ts`.
+
+Re-open the unique-grain work below (apply the PunchRaw-style upsert) only if a
+read-only dup probe shows real duplicates, or if manual upload of the six is
+re-enabled by widening `IMPORT_ALLOWED_TYPES`.
 
 ### Proposed unique grain per table
 

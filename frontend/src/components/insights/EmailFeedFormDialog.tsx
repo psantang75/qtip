@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useCreateEmailFeed, useUpdateEmailFeed, type EmailFeed } from '@/hooks/useSourceReports'
-import { MANUAL_UPLOAD_TYPES } from '@/services/manualImportService'
+import { INGESTABLE_DATA_TYPES } from '@/services/manualImportService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,7 +31,7 @@ export function EmailFeedFormDialog({ open, onOpenChange, feed, usedDataTypes }:
   const update = useUpdateEmailFeed()
   const pending = create.isPending || update.isPending
 
-  const available = MANUAL_UPLOAD_TYPES.filter(t => !usedDataTypes.includes(t.code))
+  const available = INGESTABLE_DATA_TYPES.filter(t => !usedDataTypes.includes(t.code))
 
   const [dataType, setDataType] = useState('')
   const [name, setName] = useState('')
@@ -61,8 +61,8 @@ export function EmailFeedFormDialog({ open, onOpenChange, feed, usedDataTypes }:
   // When the picked type changes during create, default the name to its label.
   function pickType(code: string) {
     setDataType(code)
-    const label = MANUAL_UPLOAD_TYPES.find(t => t.code === code)?.label ?? ''
-    if (!name.trim() || name === MANUAL_UPLOAD_TYPES.find(t => t.code === dataType)?.label) {
+    const label = INGESTABLE_DATA_TYPES.find(t => t.code === code)?.label ?? ''
+    if (!name.trim() || name === INGESTABLE_DATA_TYPES.find(t => t.code === dataType)?.label) {
       setName(label)
     }
   }

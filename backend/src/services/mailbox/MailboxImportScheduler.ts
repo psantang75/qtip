@@ -23,7 +23,7 @@
 
 import logger from '../../config/logger';
 import { config, mailboxImportConfig } from '../../config/environment';
-import { detectDataType, DATA_TYPES, type DataType } from '../importService';
+import { detectDataType, resolveAllowedDataTypes, type DataType } from '../importService';
 import { runImport } from '../imports/runImport';
 import { ExchangeMailClient, type MailMessage } from './ExchangeMailClient';
 import { isSenderAllowed, loadAllowedSenders, resolveImporter } from './senderAllowlist';
@@ -44,19 +44,13 @@ const MAX_MESSAGES_PER_TICK = 25;
 const DEFAULT_MAILBOX_TYPES: readonly DataType[] = ['punch_data'];
 
 /**
- * Resolve the strict mailbox type allowlist from `MAILBOX_IMPORT_ALLOWED_TYPES`
- * (comma-separated). Unknown tokens are dropped; if the result is empty (unset,
- * blank, or all-garbage) we fall back to {@link DEFAULT_MAILBOX_TYPES} so a
- * typo can neither silently open the gate to every type nor fully close it and
- * strand the punch feed. Pure + exported for unit testing.
+ * Resolve the strict mailbox type allowlist from `MAILBOX_IMPORT_ALLOWED_TYPES`,
+ * defaulting to {@link DEFAULT_MAILBOX_TYPES}. Thin wrapper over the shared
+ * {@link resolveAllowedDataTypes} so the mailbox and the manual Import Center
+ * parse their allowlists identically. Exported for unit testing.
  */
 export function resolveMailboxAllowedTypes(raw: string | undefined): DataType[] {
-  const known = DATA_TYPES as readonly string[];
-  const parsed = (raw ?? '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter((s): s is DataType => known.includes(s));
-  return parsed.length > 0 ? Array.from(new Set(parsed)) : [...DEFAULT_MAILBOX_TYPES];
+  return resolveAllowedDataTypes(raw, DEFAULT_MAILBOX_TYPES);
 }
 
 /**
