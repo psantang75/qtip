@@ -536,9 +536,9 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     code: 'aa_prod_utilization', name: 'Utilization',
     format: 'PERCENT', direction: 'UP_IS_GOOD', goal: 70, warn: 64, crit: 63,
     scope: 'department',
-    description: 'Share of clocked-in time spent working — on a call, or active at the desk while off queue. Answers whether the paid hours produced work.',
-    formulaPlain: '(on-call minutes + desk work off queue) / clocked minutes × 100',
-    source: 'phone routing/presence, DeskTime activity, time clock',
+    description: 'Share of paid time spent on calls — engaged on the phone while punched in. Answers whether the paid hours produced phone work.',
+    formulaPlain: 'on-call minutes / paid minutes × 100',
+    source: 'phone routing/presence, time clock',
   },
   aa_prod_handle_time: {
     code: 'aa_prod_handle_time', name: 'Avg Handle Time',

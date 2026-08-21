@@ -1,72 +1,110 @@
 /**
  * Pins the arithmetic behind the Productivity drill-down.
  *
- * The claim the page makes to a manager is that every clocked minute is
- * accounted for, so the "Time accounting" column has to reconcile exactly — a
- * silent 40-minute residual would read as a real finding about the agent rather
- * than a bug in the partition. These run over every generated agent-day so a
- * change to the sample generator or the bucket rules cannot quietly break it.
+ * The claim the page makes to a manager is that every paid minute is accounted
+ * for, so the "Phone status" (time-accounting) column has to reconcile exactly —
+ * a silent residual would read as a real finding about the agent rather than a
+ * bug in the partition. The fixtures below stand in for the live `AgentDay` the
+ * API now returns, so the model + bucket rules are pinned independent of the
+ * source systems.
  */
 
 import { describe, it, expect } from 'vitest'
 import { buildDayModel } from '../productivityModel'
 import { PRODUCTIVITY_KPIS } from '../productivityHeader'
-import { buildPeerComparison, rosterForDate } from '../productivityBenchmark'
-import { SAMPLE_AGENTS } from '../placeholderData'
-import { SAMPLE_DATES, getAgentDay, departmentOf, peersIn } from '../productivitySampleData'
+import { buildPeerComparison } from '../productivityBenchmark'
 import { getKpiDef } from '../../../../constants/kpiDefs'
+import type { AgentDay, ProductivityRosterRow } from '../productivityTypes'
 
-const everyDay = SAMPLE_AGENTS.flatMap(agent =>
-  SAMPLE_DATES.map(date => ({ agent, date, model: buildDayModel(getAgentDay(agent, date)) })),
-)
+// A full day whose routing tiles the whole worked window, so the waterfall has
+// nothing left "unaccounted". Clock: work 09:00–12:00 and 12:30–16:00, unpaid
+// meal 12:00–12:30, paid break 16:00–16:15.
+const day: AgentDay = {
+  schedule: null,
+  clock: [
+    { start: '09:00', end: '12:00', status: 'Working' },
+    { start: '12:00', end: '12:30', status: 'Meal' },
+    { start: '12:30', end: '16:00', status: 'Working' },
+    { start: '16:00', end: '16:15', status: 'Break' },
+  ],
+  routing: [
+    { start: '09:00', end: '10:00', status: 'INTERACTING' },
+    { start: '10:00', end: '10:30', status: 'IDLE' },
+    { start: '10:30', end: '11:00', status: 'COMMUNICATING' },
+    { start: '11:00', end: '11:05', status: 'NOT_RESPONDING' },
+    { start: '11:05', end: '12:00', status: 'OFF_QUEUE' },
+    { start: '12:30', end: '15:00', status: 'INTERACTING' },
+    { start: '15:00', end: '16:15', status: 'IDLE' },
+  ],
+  presence: [
+    { start: '11:05', end: '12:00', status: 'Meeting' },
+  ],
+  calls: [
+    { conversationId: 'c1', start: '09:00', end: '09:20', direction: 'Inbound', answered: true, acd: true, holdMins: 2, wrapMins: 3, transferred: false },
+    { conversationId: 'c2', start: '09:30', end: '09:45', direction: 'Inbound', answered: true, acd: true, holdMins: 0, wrapMins: 2, transferred: true },
+    { conversationId: 'c3', start: '10:30', end: '10:50', direction: 'Outbound', answered: true, acd: false, holdMins: 0, wrapMins: 0, transferred: false },
+    { conversationId: 'c4', start: '11:00', end: '11:00', direction: 'Inbound', answered: false, acd: true, holdMins: 0, wrapMins: 0, transferred: false },
+  ],
+  outbound: { dials: 3, connected: 1, voicemail: 1, noAnswer: 1 },
+  tickets: [
+    { time: '15:10', updated: 2, completed: 1, ids: [
+      { itemType: 'ticket', itemId: 1, url: 'http://crm/1', subject: 'A', action: 'Updated' },
+      { itemType: 'ticket', itemId: 2, url: 'http://crm/2', subject: null, action: 'Updated' },
+      { itemType: 'task',   itemId: 3, url: null,           subject: 'C', action: 'Completed' },
+    ] },
+  ],
+}
+
+// A day with no phone identity resolved — clock only. Exercises the empty-stream
+// path (no routing/calls) without breaking the partition.
+const clockOnly: AgentDay = {
+  schedule: null,
+  clock: [{ start: '09:00', end: '12:00', status: 'Working' }],
+  routing: [], presence: [], calls: [],
+  outbound: { dials: 0, connected: 0, voicemail: 0, noAnswer: 0 }, tickets: [],
+}
+
+const days = [day, clockOnly]
 
 describe('time accounting', () => {
-  it('has a day for every agent and date', () => {
-    expect(everyDay).toHaveLength(SAMPLE_AGENTS.length * SAMPLE_DATES.length)
-    everyDay.forEach(({ model }) => expect(model.hasData).toBe(true))
-  })
-
-  it('partitions clocked time exactly', () => {
-    everyDay.forEach(({ agent, date, model }) => {
-      const summed = model.timeAccounting.reduce((a, b) => a + b.mins, 0)
-      expect(summed, `${agent} ${date}`).toBe(model.clockedMin)
+  it('partitions paid time exactly', () => {
+    days.forEach((d, i) => {
+      const m = buildDayModel(d)
+      const summed = m.timeAccounting.reduce((a, b) => a + b.mins, 0)
+      expect(summed, `day ${i}`).toBe(m.clockedMin)
     })
   })
 
-  it('leaves nothing material unaccounted', () => {
-    everyDay.forEach(({ agent, date, model }) => {
-      const other = model.timeAccounting.find(b => b.key === 'other')
-      expect(other?.mins ?? 0, `${agent} ${date}`).toBeLessThanOrEqual(2)
-    })
+  it('leaves nothing material unaccounted when routing covers the day', () => {
+    const m = buildDayModel(day)
+    const other = m.timeAccounting.find(b => b.key === 'other')
+    expect(other?.mins ?? 0).toBeLessThanOrEqual(2)
   })
 
-  it('keeps utilization inside the clock and consistent with its buckets', () => {
-    everyDay.forEach(({ agent, date, model }) => {
-      expect(model.utilizationPct, `${agent} ${date}`).toBeLessThanOrEqual(100)
-      expect(model.utilizationPct).toBe(
-        Math.round(((model.onCallMin + model.deskWorkOffQueueMin) / model.clockedMin) * 100),
-      )
-      expect(model.onCallMin).toBeLessThanOrEqual(model.engagedMin)
-    })
+  it('keeps utilization inside the clock and consistent with on-call minutes', () => {
+    const m = buildDayModel(day)
+    expect(m.utilizationPct).toBeLessThanOrEqual(100)
+    expect(m.utilizationPct).toBe(Math.round((m.onCallMin / m.clockedMin) * 100))
+    expect(m.onCallMin).toBeLessThanOrEqual(m.engagedMin)
+  })
+
+  it('derives occupancy from engaged over on-queue time', () => {
+    const m = buildDayModel(day)
+    expect(m.occupancyPct).toBe(Math.round((m.engagedMin / m.onQueueMin) * 100))
   })
 })
 
 describe('call handling figures', () => {
   it('derives handle time from its three parts', () => {
-    everyDay.forEach(({ model }) => {
-      const c = model.callSummary
-      expect(c.handleMins).toBe(c.talkMins + c.holdMins + c.wrapMins)
-      expect(c.answered + c.missed).toBe(c.total)
-      expect(c.transferred).toBeLessThanOrEqual(c.answered)
-    })
+    const c = buildDayModel(day).callSummary
+    expect(c.handleMins).toBe(c.talkMins + c.holdMins + c.wrapMins)
+    expect(c.answered + c.missed).toBe(c.total)
+    expect(c.transferred).toBeLessThanOrEqual(c.answered)
   })
 
   it('never reports more connected dials than dials placed', () => {
-    everyDay.forEach(({ model }) => {
-      const c = model.callSummary
-      expect(c.connected + c.voicemail + c.noAnswer).toBe(c.dials)
-      expect(c.connected).toBe(c.outbound)
-    })
+    const c = buildDayModel(day).callSummary
+    expect(c.connected + c.voicemail + c.noAnswer).toBe(c.dials)
   })
 })
 
@@ -82,89 +120,62 @@ describe('header KPIs', () => {
   })
 
   it('registers every headline KPI in kpiDefs so KpiTile can render it', () => {
-    // KpiTile reads name/format/thresholds/info from the shared registry; an
-    // unregistered code would render as a bare code with no formatting.
     PRODUCTIVITY_KPIS.forEach(k => expect(getKpiDef(k.code), k.code).toBeDefined())
   })
 
-  it('computes a finite value for every agent-day', () => {
-    everyDay.forEach(({ model }) => {
-      PRODUCTIVITY_KPIS.forEach(k => {
-        expect(Number.isFinite(k.value(model)), k.code).toBe(true)
-      })
+  it('computes a finite value for every day', () => {
+    days.forEach(d => {
+      const m = buildDayModel(d)
+      PRODUCTIVITY_KPIS.forEach(k => expect(Number.isFinite(k.value(m)), k.code).toBe(true))
     })
   })
 })
 
 describe('peer comparison', () => {
+  const row = (agent: string, department: string, o: Partial<ProductivityRosterRow> = {}): ProductivityRosterRow => ({
+    employeeKey: 0, agent, department,
+    clockedMin: 480, utilizationPct: 40, occupancyPct: 55, callsPerHour: 8, ahtMins: 3, missedCalls: 0,
+    handleMin: 200, onQueueMin: 380, ticketsTouched: 50, ...o,
+  })
+  const roster: ProductivityRosterRow[] = [
+    row('A1', 'Billing', { handleMin: 220, onQueueMin: 400, ticketsTouched: 60, occupancyPct: 60 }),
+    row('A2', 'Billing', { handleMin: 180, onQueueMin: 360, ticketsTouched: 40, occupancyPct: 50 }),
+    row('A3', 'Billing', { handleMin: 90, onQueueMin: 300, ticketsTouched: 20, occupancyPct: 35 }),
+    row('B1', 'Installs', { handleMin: 150, onQueueMin: 320, ticketsTouched: 30, occupancyPct: 45 }),
+  ]
+
   it('compares an agent only against their own department', () => {
-    const date = SAMPLE_DATES[0]
-    SAMPLE_AGENTS.forEach(agent => {
-      const cmp = buildPeerComparison(agent, date, buildDayModel(getAgentDay(agent, date)))
-      expect(cmp.department).toBe(departmentOf(agent))
-      expect(cmp.comparable).toBe(peersIn(departmentOf(agent)).length > 1)
-    })
+    const cmp = buildPeerComparison('A1', roster)
+    expect(cmp.department).toBe('Billing')
+    expect(cmp.comparable).toBe(true)
+    expect(cmp.peerCount).toBe(3)
   })
 
   it('marks a solo department as not comparable, with nothing flagged', () => {
-    const solo = SAMPLE_AGENTS.find(a => peersIn(departmentOf(a)).length === 1)!
-    const date = SAMPLE_DATES[0]
-    const cmp = buildPeerComparison(solo, date, buildDayModel(getAgentDay(solo, date)))
+    const cmp = buildPeerComparison('B1', roster)
     expect(cmp.comparable).toBe(false)
     expect(cmp.peerCount).toBe(1)
     expect(cmp.flagged).toHaveLength(0)
   })
 
-  it('renders rows in a fixed order and only ranks the banner worst-gap first', () => {
-    const rank = { off: 0, watch: 1, inline: 2, info: 3 }
-    const date = SAMPLE_DATES[0]
-    // The row list is stable across agents (e.g. Time in Queue always above Idle);
-    // the worst-first ranking is used only for the out-of-line banner.
-    const ORDER = ['phone', 'queue', 'tickets', 'productive', 'idle']
-    SAMPLE_AGENTS.forEach(agent => {
-      const cmp = buildPeerComparison(agent, date, buildDayModel(getAgentDay(agent, date)))
-      expect(cmp.metrics.map(m => m.key), agent).toEqual(ORDER)
-      const flaggedStates = cmp.flagged.map(m => rank[m.state])
-      expect([...flaggedStates].sort((a, b) => a - b)).toEqual(flaggedStates)
+  it('renders rows in a fixed order', () => {
+    const ORDER = ['phone', 'queue', 'tickets', 'occupancy']
+    roster.forEach(r => {
+      expect(buildPeerComparison(r.agent, roster).metrics.map(m => m.key), r.agent).toEqual(ORDER)
     })
   })
 
   it('brackets each agent inside the range drawn on the strip', () => {
-    const date = SAMPLE_DATES[2]
-    SAMPLE_AGENTS.forEach(agent => {
-      buildPeerComparison(agent, date, buildDayModel(getAgentDay(agent, date))).metrics.forEach(m => {
-        expect(m.peerMin).toBeLessThanOrEqual(m.median)
-        expect(m.peerMax).toBeGreaterThanOrEqual(m.median)
-        expect(m.q1).toBeLessThanOrEqual(m.q3)
-      })
-    })
-  })
-})
-
-describe('roster', () => {
-  const day = SAMPLE_DATES[SAMPLE_DATES.length - 1]
-
-  it('agrees with the day it is built from', () => {
-    rosterForDate(day).forEach(row => {
-      const m = buildDayModel(getAgentDay(row.agent, day))
-      expect(row.clockedMin).toBe(m.clockedMin)
-      expect(row.utilizationPct).toBe(m.utilizationPct)
-      expect(row.missedCalls).toBe(m.callSummary.missed)
-      expect(row.callsPerHour).toBeCloseTo(
-        m.clockedMin > 0 ? m.callSummary.answered / (m.clockedMin / 60) : 0, 5,
-      )
+    buildPeerComparison('A1', roster).metrics.forEach(m => {
+      expect(m.peerMin).toBeLessThanOrEqual(m.median)
+      expect(m.peerMax).toBeGreaterThanOrEqual(m.median)
+      expect(m.q1).toBeLessThanOrEqual(m.q3)
     })
   })
 
-  it('has a laggard in each multi-person department, so the exception path is exercised', () => {
-    // Averaged over the sample days: the per-agent pace is a deliberate bias, but
-    // a single noisy day can put two agents within a point, so the laggard is a
-    // property of the period, not of one day.
-    const meanUtil = (agent: string) => {
-      const vals = SAMPLE_DATES.map(d => rosterForDate(d).find(r => r.agent === agent)!.utilizationPct)
-      return vals.reduce((a, b) => a + b, 0) / vals.length
-    }
-    expect(meanUtil('Megan Foti')).toBeLessThan(meanUtil('Jamie Waldie'))
-    expect(meanUtil('Nick Robinson')).toBeLessThan(meanUtil('Mitchell Stempowski'))
+  it('flags the laggard in a multi-person department', () => {
+    // A3 is well below the Billing median on phone time / tickets / occupancy.
+    const cmp = buildPeerComparison('A3', roster)
+    expect(cmp.flagged.length).toBeGreaterThan(0)
   })
 })

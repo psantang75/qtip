@@ -1,4 +1,5 @@
 import { api } from './authService'
+import type { AgentDay, ProductivityRosterResponse } from '@/components/insights/agentActivity/productivityTypes'
 
 // ── Shared enums ─────────────────────────────────────────────────────────────
 
@@ -648,4 +649,29 @@ export const updateEmailFeed = async (id: number, data: EmailFeedUpdate): Promis
 
 export const deleteEmailFeed = async (id: number): Promise<void> => {
   await api.delete(`/insights/admin/email-feeds/${id}`)
+}
+
+// ── Productivity (Agent Activity) ─────────────────────────────────────────────
+// Live, day-scoped: the roster is one row per in-scope agent for a day; the day
+// drill-down is assembled on expand from the punch clock, Genesys and the CRM.
+// One area-aware pair serves both the Sales and CSR pages (the endpoints differ
+// only by the section's page grant + department subtree).
+
+export type ProductivityArea = 'sales' | 'csr'
+
+const productivityBase = (area: ProductivityArea): string =>
+  area === 'csr' ? '/insights/csr/productivity' : '/insights/agent-activity/productivity'
+
+export const getProductivityRoster = async (
+  area: ProductivityArea, date: string,
+): Promise<ProductivityRosterResponse> => {
+  const response = await api.get(productivityBase(area), { params: { date } })
+  return response.data
+}
+
+export const getProductivityDay = async (
+  area: ProductivityArea, employeeKey: number, date: string,
+): Promise<AgentDay> => {
+  const response = await api.get(`${productivityBase(area)}/day`, { params: { employeeKey, date } })
+  return response.data
 }

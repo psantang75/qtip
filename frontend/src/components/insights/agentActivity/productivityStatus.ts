@@ -7,12 +7,15 @@
  *   - primary presence → tblPrimaryPresence.PresenceStatus, labelled through
  *     tblSystemPresence (why are they off queue?)
  *
- * COLOR RULE: only the five QTIP brand tones are used, each meaning exactly one
- * thing across every row of the chart — blue = on a call / working, green =
- * available, orange = break/idle, red = needs attention, grey = off queue. A
- * manager scans for those meanings, never for "Communicating", so statuses that
- * share a meaning share a color and the exact status lives in the tooltip where
- * precision belongs.
+ * COLOR RULE: the five QTIP brand tones still carry the scannable, cross-row
+ * meanings — blue = on a call / working, green = available in queue, orange =
+ * break or meal, red = needs attention, grey = off queue with no reason. On top
+ * of those, each distinct off-queue *presence reason* gets its own hue (meeting,
+ * training, warehouse, follow-up, do-not-disturb) so a manager can tell a
+ * warehouse span from a meeting at a glance rather than reading every tooltip.
+ * Idle is deliberately NOT an attention colour: Genesys only reports "Idle" once
+ * the agent is already off queue and away from the computer, so it reads as
+ * ordinary away time, never red.
  *
  * The streams the reference mockup color-codes (call direction, ticket action)
  * are coded from these same brand tones rather than new hues: inbound is the
@@ -34,9 +37,6 @@ export type PresenceStatus =
 
 /** Time-clock / attendance state, sourced from the punch clock. */
 export type ClockStatus = 'Working' | 'Break' | 'Meal' | 'Away' | 'Offline'
-
-/** DeskTime computer-activity state, sourced from the DeskTime API (Phase 2). */
-export type DeskStatus = 'Active' | 'Idle'
 
 export type CallDirection = 'Inbound' | 'Outbound'
 export type CallLabel = CallDirection | 'Missed'
@@ -61,21 +61,38 @@ export const TRACK = 'bg-slate-100'
 /** The planned shift, shown only where the agent was not punched in. */
 export const SCHEDULE_TRACK = 'bg-slate-200'
 
-/** Presence reasons that mean the agent stepped away, not merely left the queue. */
-const BREAK_REASONS: PresenceStatus[] = ['Break', 'Meal', 'Idle', 'Away']
-
 /**
- * Off-queue colour depends on why: a break or a meal is orange (stepped away),
- * everything else legitimate — a meeting, warehouse time, training — stays the
- * neutral grey of simply being off the queue.
+ * Per-reason colour for off-queue presence. The brand tones stay meaningful
+ * (green = ready/available, orange = break or meal, grey = off queue with no
+ * reason); every other reason gets a distinct Tailwind hue so the Status row and
+ * the Phone Status card read the reason without a tooltip. Idle shares the away
+ * slate — Genesys only reports it off queue, so it is ordinary away time, not an
+ * attention colour. All values are stock Tailwind utilities (no custom CSS).
  */
+export const PRESENCE_CLS: Record<PresenceStatus, string> = {
+  'On Queue':           TONE.ready,
+  'Available':          TONE.ready,
+  'Break':              TONE.off,
+  'Meal':               TONE.off,
+  'Meeting':            'bg-indigo-500',
+  'Training':           'bg-purple-500',
+  'Follow-Up Extended': 'bg-sky-500',
+  'In Warehouse':       'bg-amber-700',
+  'Do Not Disturb':     'bg-rose-500',
+  'Busy':               'bg-rose-400',
+  'Away':               'bg-slate-500',
+  'Idle':               'bg-slate-400',
+  'Offline':            TONE.neutral,
+}
+
+/** Off-queue colour is the presence reason's own hue; no reason set stays grey. */
 export const offQueueCls = (reason: PresenceStatus | null): string =>
-  reason && BREAK_REASONS.includes(reason) ? TONE.off : TONE.neutral
+  reason ? PRESENCE_CLS[reason] : TONE.neutral
 
 /**
  * The chart legend, grouped the way a manager reads it: the phone-status tones
- * first (shared by the Clock, DeskTime and Status rows), then the two streams
- * that reuse those same brand tones with their own labels.
+ * first (shared by the Clock and Status rows), then the two streams that reuse
+ * those same brand tones with their own labels.
  */
 export interface LegendItem { label: string; cls: string; outline?: boolean }
 export const CHART_LEGEND_GROUPS: { group: string; items: LegendItem[] }[] = [
@@ -84,7 +101,13 @@ export const CHART_LEGEND_GROUPS: { group: string; items: LegendItem[] }[] = [
     items: [
       { label: 'On call', cls: TONE.work },
       { label: 'Available in queue', cls: TONE.ready },
-      { label: 'Break or idle', cls: TONE.off },
+      { label: 'Break or meal', cls: TONE.off },
+      { label: 'Meeting', cls: 'bg-indigo-500' },
+      { label: 'Training', cls: 'bg-purple-500' },
+      { label: 'Follow-up extended', cls: 'bg-sky-500' },
+      { label: 'In warehouse', cls: 'bg-amber-700' },
+      { label: 'Do not disturb', cls: 'bg-rose-500' },
+      { label: 'Away or idle', cls: 'bg-slate-500' },
       { label: 'Off queue', cls: TONE.neutral },
       { label: 'Needs attention', cls: TONE.alert },
     ],
@@ -138,7 +161,7 @@ export const PRESENCE_ORDER: PresenceStatus[] = [
   'Break', 'Meal', 'Busy', 'Do Not Disturb', 'Away', 'Idle', 'Offline',
 ]
 
-// ── Clock / DeskTime / Calls / Tickets ───────────────────────────────────────
+// ── Clock / Calls / Tickets ──────────────────────────────────────────────────
 
 export const CLOCK_CLS: Record<ClockStatus, string> = {
   'Working': TONE.work,
@@ -146,11 +169,6 @@ export const CLOCK_CLS: Record<ClockStatus, string> = {
   'Meal':    TONE.off,
   'Away':    TONE.neutral,
   'Offline': TONE.neutral,
-}
-
-export const DESK_CLS: Record<DeskStatus, string> = {
-  'Active': TONE.work,
-  'Idle':   TONE.off,
 }
 
 // Direction reuses the brand tones (teal in, blue out) rather than new hues;

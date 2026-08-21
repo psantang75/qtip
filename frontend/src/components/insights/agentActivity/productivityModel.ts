@@ -14,10 +14,10 @@
 
 import type {
   AgentDay, CallSpan, TicketEvent,
-} from './productivitySampleData'
+} from './productivityTypes'
 import {
-  PRESENCE_ORDER, ROUTING_LABEL, isEngaged, isOnQueue,
-  type CallLabel, type ClockStatus, type DeskStatus, type PresenceStatus, type RoutingStatus,
+  PRESENCE_ORDER, isEngaged, isOnQueue,
+  type CallLabel, type ClockStatus, type PresenceStatus, type RoutingStatus,
 } from './productivityStatus'
 
 // ── Formatting ──────────────────────────────────────────────────────────────
@@ -85,11 +85,6 @@ export interface CallBlock {
   tone: 'inbound' | 'outbound' | 'missed'
   inboundMins: number; outboundMins: number; missed: number
   calls: CallInBlock[]
-  /** The phone (routing) status that covered most of the block, for the hover. */
-  statusLabel: string | null
-  /** How many phone-status changes happened inside the block — the way a change
-   *  shorter than five minutes is surfaced when the bar can only show one tone. */
-  statusChanges: number
 }
 
 /** One 5-minute slot of the Tickets row that had activity, with its touches. */
@@ -97,25 +92,18 @@ export interface TicketBlock {
   startMin: number; leftPct: number; widthPct: number
   tone: 'completed' | 'updated'
   completed: number; updated: number; ids: TicketEvent['ids']
-  statusLabel: string | null
-  statusChanges: number
 }
 
 /**
- * A single 5-minute bar of a "status" row (DeskTime, phone Status). The row is
- * drawn as a continuous run of these bars — the DeskTime-style productivity bar
- * — so the day reads as discrete five-minute blocks rather than a few long runs.
- * The bar is coloured by whichever status covered most of its five minutes;
- * `changes` counts any shorter switches hiding inside it, which is how a change
- * under five minutes is surfaced when the bar itself can only show one tone.
+ * A single 5-minute bar of the phone Status row. The row is drawn as a
+ * continuous run of these bars so the day reads as discrete five-minute blocks
+ * rather than a few long runs. The bar is coloured by whichever status covered
+ * most of its five minutes; the exact status runs (and any shorter switches
+ * hiding inside the block) are listed in the bar's hover detail.
  */
-export interface DeskBlock {
-  startMin: number; leftPct: number; widthPct: number
-  status: DeskStatus; changes: number
-}
 export interface StatusBlock {
   startMin: number; leftPct: number; widthPct: number
-  status: RoutingStatus; reason: PresenceStatus | null; changes: number
+  status: RoutingStatus; reason: PresenceStatus | null
 }
 
 export interface SummaryRow<T extends string> { status: T; mins: number; pct: number }
@@ -154,9 +142,7 @@ export interface DayModel {
   scheduleSegments: ScheduleSegment[]
   statusSegments: StatusSegment[]
   clockSegments: Segment<ClockStatus>[]
-  desktimeSegments: Segment<DeskStatus>[]
-  /** DeskTime and phone Status, drawn as continuous runs of 5-minute bars. */
-  desktimeBlocks: DeskBlock[]
+  /** Phone Status, drawn as a continuous run of 5-minute bars. */
   statusBlocks: StatusBlock[]
   /** Calls and tickets, aggregated into 5-minute blocks for the timeline. */
   callBlocks: CallBlock[]
@@ -197,14 +183,10 @@ export interface DayModel {
   engagedMin: number
   /** Engaged minutes that fall inside punched-in working time. */
   onCallMin: number
-  deskActiveMin: number
-  deskIdleMin: number
-  /** Engaged share of on-queue time. */
+  /** Engaged share of on-queue time — the report's headline metric. */
   occupancyPct: number
-  /** Productive share of clocked time — engaged, plus active desk work off queue. */
+  /** Phone-handle share of clocked (paid) time. */
   utilizationPct: number
-  /** Minutes of desk activity while off queue, i.e. non-phone work. */
-  deskWorkOffQueueMin: number
   notRespondingCount: number
 }
 
@@ -246,7 +228,7 @@ export function buildDayModel(day: AgentDay | null): DayModel {
 
   // The axis spans everything on screen — including the planned shift — so no
   // row can overflow the shared time window.
-  const raw = [...routing, ...(day?.clock ?? []), ...(day?.desktime ?? [])]
+  const raw = [...routing, ...(day?.clock ?? [])]
   const allStarts = raw.map(s => toMin(s.start))
   const allEnds = raw.map(s => toMin(s.end))
   if (schedStart !== null) allStarts.push(schedStart)
@@ -276,30 +258,25 @@ export function buildDayModel(day: AgentDay | null): DayModel {
    * Cut a set of exact runs into a continuous row of 5-minute bars, each carrying
    * the run that covered most of it plus a count of the shorter switches inside.
    * Only slots that fall inside a run get a bar, so the empty time before and
-   * after the shift stays blank the way the DeskTime bar does.
+   * after the shift stays blank rather than drawing empty bars.
    */
-  function toBlocks<S extends { startMin: number; endMin: number }>(segs: S[]): { startMin: number; leftPct: number; widthPct: number; cover: S; changes: number }[] {
-    const out: { startMin: number; leftPct: number; widthPct: number; cover: S; changes: number }[] = []
+  function toBlocks<S extends { startMin: number; endMin: number }>(segs: S[]): { startMin: number; leftPct: number; widthPct: number; cover: S }[] {
+    const out: { startMin: number; leftPct: number; widthPct: number; cover: S }[] = []
     if (!hasData) return out
     for (let s = startMin; s < endMin; s += BLOCK_MIN) {
       const e = s + BLOCK_MIN
-      let cover: S | null = null, best = 0, count = 0
+      let cover: S | null = null, best = 0
       for (const seg of segs) {
         const ov = Math.min(seg.endMin, e) - Math.max(seg.startMin, s)
         if (ov <= 0) continue
-        count += 1
         if (ov > best) { best = ov; cover = seg }
       }
-      if (cover) out.push({ startMin: s, leftPct: pct(s), widthPct: blockWidth, cover, changes: Math.max(0, count - 1) })
+      if (cover) out.push({ startMin: s, leftPct: pct(s), widthPct: blockWidth, cover })
     }
     return out
   }
 
   const clockSegments = (day?.clock ?? []).map(s => place<ClockStatus>(s))
-  const desktimeSegments = (day?.desktime ?? []).map(s => place<DeskStatus>(s))
-  const desktimeBlocks: DeskBlock[] = toBlocks(desktimeSegments).map(b => ({
-    startMin: b.startMin, leftPct: b.leftPct, widthPct: b.widthPct, status: b.cover.status, changes: b.changes,
-  }))
 
   // Off-queue runs are labelled with whichever presence span covers their
   // midpoint, so the timeline can name the reason without a second row.
@@ -313,7 +290,7 @@ export function buildDayModel(day: AgentDay | null): DayModel {
 
   const statusBlocks: StatusBlock[] = toBlocks(statusSegments).map(b => ({
     startMin: b.startMin, leftPct: b.leftPct, widthPct: b.widthPct,
-    status: b.cover.status, reason: b.cover.reason, changes: b.changes,
+    status: b.cover.status, reason: b.cover.reason,
   }))
 
   const scheduleBar: ScheduleBar | null = sched && schedStart !== null && schedEnd !== null
@@ -324,41 +301,27 @@ export function buildDayModel(day: AgentDay | null): DayModel {
     return { leftPct: pct(s), widthPct: ((e - s) / total) * 100, kind: b.kind, startMin: s, endMin: e }
   })
 
-  const callMarks: CallMark[] = (day?.calls ?? []).map((c: CallSpan) => {
-    const s = toMin(c.start), e = toMin(c.end)
-    return {
-      leftPct: Math.max(0, pct(s)),
-      widthPct: Math.max(0.4, ((e - s) / total) * 100),
-      label: !c.answered ? 'Missed' : c.direction,
-      mins: e - s, startMin: s, endMin: e,
-      conversationId: c.conversationId, acd: c.acd, holdMins: c.holdMins, wrapMins: c.wrapMins,
-    }
-  })
+  // A "missed" call is an inbound/queued call that alerted and went unanswered.
+  // An unanswered OUTBOUND leg is a dial that reached nobody — that is dialling
+  // effort (surfaced in the Dialing summary), not a missed call, so it is not
+  // drawn on the Calls row and never counted as missed.
+  const callMarks: CallMark[] = (day?.calls ?? [])
+    .filter((c: CallSpan) => c.answered || c.acd)
+    .map((c: CallSpan) => {
+      const s = toMin(c.start), e = toMin(c.end)
+      return {
+        leftPct: Math.max(0, pct(s)),
+        widthPct: Math.max(0.4, ((e - s) / total) * 100),
+        label: !c.answered ? 'Missed' : c.direction,
+        mins: e - s, startMin: s, endMin: e,
+        conversationId: c.conversationId, acd: c.acd, holdMins: c.holdMins, wrapMins: c.wrapMins,
+      }
+    })
 
   // ── 5-minute blocks for the Calls and Tickets rows ────────────────────────
   const callBlocks: CallBlock[] = []
   const ticketEvents = day?.tickets ?? []
   const ticketBlocks: TicketBlock[] = []
-
-  // The phone status a Calls/Tickets block sat inside, plus how many status
-  // changes fell within it. This is how a status change shorter than the
-  // five-minute block is surfaced: the bar shows the dominant tone, and the
-  // hover names the status and counts any changes hiding inside the slot.
-  const slotStatus = (s: number, e: number): { statusLabel: string | null; statusChanges: number } => {
-    let cover: StatusSegment | null = null
-    let coverOverlap = 0
-    let count = 0
-    for (const seg of statusSegments) {
-      const ov = Math.min(seg.endMin, e) - Math.max(seg.startMin, s)
-      if (ov <= 0) continue
-      count += 1
-      if (ov > coverOverlap) { coverOverlap = ov; cover = seg }
-    }
-    const label = cover
-      ? (cover.status === 'OFF_QUEUE' && cover.reason ? cover.reason : ROUTING_LABEL[cover.status])
-      : null
-    return { statusLabel: label, statusChanges: Math.max(0, count - 1) }
-  }
 
   if (hasData) {
     for (let s = startMin; s < endMin; s += BLOCK_MIN) {
@@ -389,7 +352,7 @@ export function buildDayModel(day: AgentDay | null): DayModel {
         const tone: CallBlock['tone'] =
           inboundMins === 0 && outboundMins === 0 ? 'missed' :
           inboundMins >= outboundMins ? 'inbound' : 'outbound'
-        callBlocks.push({ startMin: s, leftPct: pct(s), widthPct: blockWidth, tone, inboundMins, outboundMins, missed, calls, ...slotStatus(s, e) })
+        callBlocks.push({ startMin: s, leftPct: pct(s), widthPct: blockWidth, tone, inboundMins, outboundMins, missed, calls })
       }
 
       // Tickets: touches are instantaneous, so a slot simply gathers the events
@@ -407,7 +370,6 @@ export function buildDayModel(day: AgentDay | null): DayModel {
         ticketBlocks.push({
           startMin: s, leftPct: pct(s), widthPct: blockWidth,
           tone: completed >= updated ? 'completed' : 'updated', completed, updated, ids,
-          ...slotStatus(s, e),
         })
       }
     }
@@ -444,14 +406,12 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   const offQueueMin = sumMins(offQueueSegs)
   const engagedMin = sumMins(statusSegments.filter(s => isEngaged(s.status)))
 
-  const deskActiveSegs = desktimeSegments.filter(s => s.status === 'Active')
-  const deskActiveMin = sumMins(deskActiveSegs)
-  const deskIdleMin = sumMins(desktimeSegments.filter(s => s.status === 'Idle'))
-
   // ── Paid-time waterfall ───────────────────────────────────────────────────
   // The buckets below partition paid time (worked time + paid breaks). Paid
   // breaks win over whatever the phone was reporting at the time; the unpaid meal
-  // is not paid time, so it never appears here at all.
+  // is not paid time, so it never appears here at all. Without a desk-activity
+  // signal, time away from the queue is one bucket — it can't be split into
+  // working vs idle — so "Off queue" carries the presence reason in its hover.
   const workBounds = clockSegments.filter(s => s.status === 'Working')
   const breakMin = sumMins(clockSegments.filter(s => s.status === 'Break'))
   const routingIn = (pick: (s: StatusSegment) => boolean) =>
@@ -460,18 +420,13 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   const onCallMin = routingIn(s => isEngaged(s.status))
   const availableMin = routingIn(s => s.status === 'IDLE')
   const notRespondingMin = routingIn(s => s.status === 'NOT_RESPONDING')
-  // Ticket and admin work done away from the queue still counts as productive,
-  // which matters for outbound-heavy teams where off queue is normal.
-  const offQueueWorkBounds = intersect(intersect(offQueueSegs, deskActiveSegs), workBounds)
-  const deskWorkOffQueueMin = spanMins(offQueueWorkBounds)
-  const offQueueIdleMin = spanMins(intersect(intersect(offQueueSegs, desktimeSegments.filter(s => s.status === 'Idle')), workBounds))
+  const offQueueMinInWork = spanMins(intersect(offQueueSegs, workBounds))
 
-  const accounted = onCallMin + availableMin + notRespondingMin + deskWorkOffQueueMin + offQueueIdleMin + breakMin
+  const accounted = onCallMin + availableMin + notRespondingMin + offQueueMinInWork + breakMin
   const timeAccounting: TimeBucket[] = ([
     ['call',      'On a call',            onCallMin],
     ['available', 'Available in queue',   availableMin],
-    ['offwork',   'Off queue — working',  deskWorkOffQueueMin],
-    ['offidle',   'Off queue — idle',     offQueueIdleMin],
+    ['offqueue',  'Off queue',            offQueueMinInWork],
     ['break',     'Paid break',           breakMin],
     ['noanswer',  'Not responding',       notRespondingMin],
     ['other',     'Unaccounted',          Math.max(0, clockedMin - accounted)],
@@ -489,7 +444,9 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   const callSummary = {
     total: calls.length,
     answered: answered.length,
-    missed: calls.length - answered.length,
+    // Inbound/queued calls that alerted and went unanswered — matches the roster's
+    // Missed column and excludes outbound dials that reached nobody.
+    missed: calls.filter(c => !c.answered && c.acd).length,
     inbound: answered.filter(c => c.direction === 'Inbound').length,
     outbound: answered.filter(c => c.direction === 'Outbound').length,
     talkMins, holdMins, wrapMins,
@@ -514,18 +471,18 @@ export function buildDayModel(day: AgentDay | null): DayModel {
     // The label reports the exact worked window, not the hour-snapped axis.
     windowLabel: hasData ? `${fmtClock(workedStart)} – ${fmtClock(workedEnd)}` : 'No data',
     scheduleBar, scheduleSegments,
-    statusSegments, clockSegments, desktimeSegments, desktimeBlocks, statusBlocks,
+    statusSegments, clockSegments, statusBlocks,
     callBlocks, ticketBlocks, axisTicks,
     offQueueSummary: summarize(
       offQueueSegs.filter(s => s.reason).map(s => ({ status: s.reason as PresenceStatus, mins: s.mins })),
       PRESENCE_ORDER,
     ),
     timeAccounting, callSummary, ticketTotals,
-    clockedMin, onQueueMin, offQueueMin, engagedMin, onCallMin, deskActiveMin, deskIdleMin, deskWorkOffQueueMin,
+    clockedMin, onQueueMin, offQueueMin, engagedMin, onCallMin,
     occupancyPct: pctOf(engagedMin, onQueueMin),
-    // Both terms are clock-restricted, so utilization agrees with the waterfall
-    // rather than counting phone minutes logged over an unpunched break.
-    utilizationPct: pctOf(onCallMin + deskWorkOffQueueMin, clockedMin),
+    // Clock-restricted, so utilization agrees with the waterfall rather than
+    // counting phone minutes logged over an unpunched break.
+    utilizationPct: pctOf(onCallMin, clockedMin),
     notRespondingCount: statusSegments.filter(s => s.status === 'NOT_RESPONDING').length,
   }
 }

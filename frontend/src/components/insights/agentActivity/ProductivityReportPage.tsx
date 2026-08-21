@@ -1,7 +1,9 @@
 import { useEffect, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import ActivityReportShell from './ActivityReportShell'
 import ProductivityReport from './ProductivityReport'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
+import { getProductivityRoster, type ProductivityArea } from '@/services/insightsService'
 
 /**
  * The Productivity report is day-scoped: one day drives the whole page from the
@@ -11,8 +13,8 @@ import { useActivityFilters } from '@/hooks/useActivityFilters'
  *
  * The Period selector is the same control the rest of Insights uses, restricted
  * to a single day — Today, Yesterday, or a Custom date (one date, not a range).
- * Sample data is deterministic per agent + date, so any chosen day renders a
- * plausible day; Phase 2 sources the real day from the business calendar.
+ * Data is read live for the chosen day: the roster aggregates it, the drill-down
+ * assembles it on expand from the punch clock, Genesys and the CRM.
  */
 
 const PERIOD_OPTIONS = ['Today', 'Yesterday', 'Custom'] as const
@@ -35,13 +37,15 @@ interface ProductivityReportPageProps {
   agentLabel: string
   /** Own storage key so the day picked here does not leak onto other AA reports. */
   storageKey: string
+  /** Selects the section's endpoint (page grant + department subtree). */
+  area: ProductivityArea
 }
 
 export default function ProductivityReportPage({
-  title, description, agentLabel, storageKey,
+  title, description, agentLabel, storageKey, area,
 }: ProductivityReportPageProps) {
   const filters = useActivityFilters(storageKey)
-  const { period, setPeriod, customStart } = filters
+  const { period, setPeriod, customStart, users, departments } = filters
 
   // A persisted range period (e.g. a stale "Current Month") is not a single day
   // for this report, so snap it to Today.
@@ -55,17 +59,40 @@ export default function ProductivityReportPage({
     return dayFromToday(0)
   }, [period, customStart])
 
+  // The roster drives both the table and the filter-bar dropdowns, so the Agent
+  // and Department options are the real people/teams in scope for the day (not
+  // placeholders). React Query dedupes this against the identical query inside
+  // ProductivityReport, so the day is fetched once.
+  const { data } = useQuery({
+    queryKey: ['productivity-roster', area, date],
+    queryFn: () => getProductivityRoster(area, date),
+  })
+  const availableUsers = useMemo(
+    () => [...new Set((data?.rows ?? []).map(r => r.agent))].sort((a, b) => a.localeCompare(b)),
+    [data],
+  )
+  const availableDepts = useMemo(() => data?.departments ?? [], [data])
+
   return (
     <ActivityReportShell
       title={title}
       description={description}
       filters={filters}
+      availableUsers={availableUsers}
+      availableDepts={availableDepts}
       periodOptions={PERIOD_OPTIONS}
       singleDayCustom
       hideBusinessDays
       hideDateRange
+      live
     >
-      <ProductivityReport agentLabel={agentLabel} date={date} />
+      <ProductivityReport
+        agentLabel={agentLabel}
+        date={date}
+        area={area}
+        selectedUsers={users}
+        selectedDepts={departments}
+      />
     </ActivityReportShell>
   )
 }

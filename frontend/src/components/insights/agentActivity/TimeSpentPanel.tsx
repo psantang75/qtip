@@ -5,6 +5,8 @@ import MetricTooltip from './MetricTooltip'
 import PeerCompareColumn from './PeerCompareColumn'
 import { fmtHM, type DayModel, type TimeBucket } from './productivityModel'
 import { buildPeerComparison, type PeerState } from './productivityBenchmark'
+import { PRESENCE_CLS, type PresenceStatus } from './productivityStatus'
+import type { ProductivityRosterRow } from './productivityTypes'
 
 /**
  * "How the time was spent" — three columns answering three different questions,
@@ -71,16 +73,16 @@ function AccountingRow({ bucket, reasons }: { bucket: TimeBucket; reasons: { sta
   return (
     <MetricTooltip
       title={bucket.label}
-      description="Time away from the queue, by the presence reason the agent had set. Working means the computer was active; idle means it was not."
-      rows={reasons.map(r => ({ label: r.status, value: fmtHM(r.mins) }))}
+      description="Time away from the queue, by the presence reason the agent had set. Each reason is colour-matched to the Status row above."
+      rows={reasons.map(r => ({ label: r.status, value: fmtHM(r.mins), dotCls: PRESENCE_CLS[r.status as PresenceStatus] }))}
     >
       {row}
     </MetricTooltip>
   )
 }
 
-export default function TimeSpentPanel({ agent, date, model }: { agent: string; date: string; model: DayModel }) {
-  const cmp = useMemo(() => buildPeerComparison(agent, date, model), [agent, date, model])
+export default function TimeSpentPanel({ agent, model, roster }: { agent: string; model: DayModel; roster: ProductivityRosterRow[] }) {
+  const cmp = useMemo(() => buildPeerComparison(agent, roster), [agent, roster])
   const worst: PeerState = cmp.flagged.some(f => f.state === 'off') ? 'off' : 'watch'
   const c = model.callSummary
   const t = model.ticketTotals

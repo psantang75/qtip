@@ -214,6 +214,35 @@ export class InsightsPermissionService {
     return result;
   }
 
+  /**
+   * The set of department keys a page's data covers, defined by its department
+   * grants (`ie_page_department_access`, can_access = 1) and expanded to include
+   * each granted department's descendants — a grant on a parent covers the whole
+   * subtree, mirroring the department gate's ancestor cascade. Empty when the
+   * page has no department grants (population is then left to the caller's own
+   * defaults). This is a report-population definition, distinct from the
+   * per-viewer data scope in `resolveAccess`.
+   */
+  async getPageDepartmentScope(pageKey: string): Promise<number[]> {
+    const [pageRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT id FROM ie_page WHERE page_key = ? AND is_active = 1',
+      [pageKey],
+    );
+    if (pageRows.length === 0) return [];
+    const [deptRows] = await pool.execute<RowDataPacket[]>(
+      'SELECT department_key FROM ie_page_department_access WHERE page_id = ? AND can_access = 1',
+      [pageRows[0].id as number],
+    );
+    if (deptRows.length === 0) return [];
+    const keys = new Set<number>();
+    for (const r of deptRows) {
+      const root = r.department_key as number;
+      keys.add(root);
+      for (const k of await getDescendantDepartmentKeys(root)) keys.add(k);
+    }
+    return [...keys];
+  }
+
   async resolveAccess(
     userId: number,
     roleId: number,

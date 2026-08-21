@@ -21,20 +21,13 @@ import {
   systemExclusionEnabled,
   TOUCHED_EXCLUDE_SYSTEM_FLAG,
 } from './insights/systemNoteClassifier';
+// The "who is an agent" rule (CSR role + Sales-subtree guard) lives in one place
+// so this reader, the Productivity roster/day services, and the Workload
+// aggregator cannot drift apart. See insightsAgentScope for the guard itself.
+import { AGENT_ROLE, SALES_DEPT_ROOT_PATH } from './insightsAgentScope';
 
 /** Direction that counts as a "sent" email on the Email Activity report. */
 const SENT_DIRECTION = 'Outbound';
-
-/**
- * Agent Activity reports are sales-only. Two always-on guards, regardless of
- * what the fact table contains:
- *   1. CSR role only — never surface admin/manager/qa/trainer or unmatched mailboxes.
- *   2. Sales department subtree only — the employee's department must roll up
- *      under "Sales Department - All" (so CSRs in Customer Service / Tech
- *      Support / etc. are excluded). Matched via ie_dim_department.hierarchy_path.
- */
-const AGENT_ROLE = 'CSR';
-const SALES_DEPT_ROOT_PATH = '/Sales Department - All';
 
 /**
  * Apply a SELF data-scope restriction to a report's BASE predicate. When a

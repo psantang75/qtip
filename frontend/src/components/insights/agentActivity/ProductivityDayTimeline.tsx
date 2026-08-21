@@ -1,10 +1,13 @@
 import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import ActivityGantt from './ActivityGantt'
 import HeaderMetrics from './HeaderMetrics'
 import TimeSpentPanel from './TimeSpentPanel'
 import { buildDayModel } from './productivityModel'
-import { getAgentDay } from './productivitySampleData'
+import { getProductivityDay, type ProductivityArea } from '@/services/insightsService'
+import type { ProductivityRosterRow } from './productivityTypes'
+import { PageSpinner } from '@/components/common/PageSpinner'
 
 /**
  * Per-agent, per-day drill-down shown inline when a roster row is expanded.
@@ -19,24 +22,53 @@ import { getAgentDay } from './productivitySampleData'
  * only produce a number that disagrees with the official one. The planned shift
  * appears here as context on the Clock row, never as a score.
  *
- * Sample data only until the Phase 2 data layer + DeskTime API land.
+ * The day is read live on expand (punch clock, Genesys, CRM); the prior calendar
+ * day feeds each KPI tile's "vs prior" delta. The roster is passed in so the
+ * department comparison reads the same day the table above was built from.
  */
-export default function ProductivityDayTimeline({ agent, date }: { agent: string; date: string }) {
-  const model = useMemo(() => buildDayModel(getAgentDay(agent, date)), [agent, date])
-  // The prior calendar day feeds each KPI tile's "vs prior" delta.
+
+/** ISO date `days` before the given ISO date (local-safe). */
+function shiftDate(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number)
+  const dt = new Date(y, m - 1, d + days)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+
+interface Props {
+  area: ProductivityArea
+  employeeKey: number
+  agent: string
+  date: string
+  roster: ProductivityRosterRow[]
+}
+
+export default function ProductivityDayTimeline({ area, employeeKey, agent, date, roster }: Props) {
+  const priorDate = useMemo(() => shiftDate(date, -1), [date])
+
+  const dayQuery = useQuery({
+    queryKey: ['productivity-day', area, employeeKey, date],
+    queryFn: () => getProductivityDay(area, employeeKey, date),
+  })
+  const priorQuery = useQuery({
+    queryKey: ['productivity-day', area, employeeKey, priorDate],
+    queryFn: () => getProductivityDay(area, employeeKey, priorDate),
+  })
+
+  const model = useMemo(() => buildDayModel(dayQuery.data ?? null), [dayQuery.data])
   const priorModel = useMemo(() => {
-    const [y, m, d] = date.split('-').map(Number)
-    const prev = new Date(y, m - 1, d - 1)
-    const iso = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-${String(prev.getDate()).padStart(2, '0')}`
-    const pm = buildDayModel(getAgentDay(agent, iso))
+    if (!priorQuery.data) return null
+    const pm = buildDayModel(priorQuery.data)
     return pm.hasData ? pm : null
-  }, [agent, date])
+  }, [priorQuery.data])
+
+  if (dayQuery.isLoading) return <div className="py-8"><PageSpinner /></div>
+  if (dayQuery.isError) return <p className="py-10 text-center text-sm text-destructive">Failed to load this day.</p>
 
   return (
     <TooltipProvider delayDuration={150}>
       <div className="space-y-3">
         {!model.hasData ? (
-          <p className="py-10 text-center text-sm text-slate-400">No shift data for {agent} on this day.</p>
+          <p className="py-10 text-center text-sm text-slate-400">No activity for {agent} on this day.</p>
         ) : (
           <>
             <HeaderMetrics model={model} priorModel={priorModel} />
@@ -46,7 +78,7 @@ export default function ProductivityDayTimeline({ agent, date }: { agent: string
               <ActivityGantt model={model} />
             </div>
 
-            <TimeSpentPanel agent={agent} date={date} model={model} />
+            <TimeSpentPanel agent={agent} model={model} roster={roster} />
           </>
         )}
       </div>

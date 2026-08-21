@@ -78,14 +78,20 @@ const taskSql = (userPlaceholders: string) => `
          a.Note        AS note,
          -- Same deep-link rules as task_open.extract.sql. CHAR(63) is the
          -- question-mark char; a literal one would be read as a bind placeholder
-         -- by mysql2 (even inside a comment). JobID is a scalar subquery (not a
-         -- join) so a task with more than one job can't duplicate the touch rows
-         -- this endpoint counts.
+         -- by mysql2 (even inside a comment). It MUST be built with USING utf8mb4:
+         -- a bare CHAR() returns VARBINARY, and a CONCAT that is all-binary comes
+         -- back from mysql2 as a Buffer, not a string (the extract only dodges
+         -- this because it writes through a VARCHAR column that launders it). The
+         -- task branch happens to include a text column (tt.NewScreen) so it
+         -- coerces to a string regardless, but we pin the charset here too so both
+         -- branches are string-typed by construction. JobID is a scalar subquery
+         -- (not a join) so a task with more than one job can't duplicate the touch
+         -- rows this endpoint counts.
          CASE
            WHEN t.TaskTypeID IN (14, 42, 46)
-             THEN CONCAT('http://crm.dm-us.com/Jobs/', tt.NewScreen, CHAR(63), 'JobID=',
+             THEN CONCAT('http://crm.dm-us.com/Jobs/', tt.NewScreen, CHAR(63 USING utf8mb4), 'JobID=',
                          (SELECT jj.JobID FROM tblJobs jj WHERE jj.TaskID = t.TaskID LIMIT 1))
-           ELSE CONCAT('http://crm.dm-us.com/TaskManager/', tt.NewScreen, CHAR(63), 'TaskID=', t.TaskID)
+           ELSE CONCAT('http://crm.dm-us.com/TaskManager/', tt.NewScreen, CHAR(63 USING utf8mb4), 'TaskID=', t.TaskID)
          END           AS crmUrl
   FROM tblAction a
     JOIN tblTask t      ON t.TaskID = a.TaskID
@@ -106,7 +112,12 @@ const ticketSql = (userPlaceholders: string) => `
          tn.Note      AS note,
          -- Same deep-link rule as ticket_open.extract.sql. CHAR(63) is the
          -- question-mark char (a literal one would be read as a bind placeholder).
-         CONCAT('http://crm.dm-us.com/Tickets/Edit', CHAR(63), 'CustomerID=0&JobID=0&TicketID=', tn.TicketID) AS crmUrl
+         -- USING utf8mb4 is REQUIRED: this CONCAT has no text column, so a bare
+         -- CHAR() leaves the whole value VARBINARY and mysql2 returns it as a
+         -- Buffer, which serialises to a useless {type:'Buffer'} href — the exact
+         -- reason the ticket link was dead while the task link (which carries a
+         -- text column) worked. Pinning the charset keeps it a real string.
+         CONCAT('http://crm.dm-us.com/Tickets/Edit', CHAR(63 USING utf8mb4), 'CustomerID=0&JobID=0&TicketID=', tn.TicketID) AS crmUrl
   FROM tblTicketNote tn
     LEFT JOIN tblTicket tk               ON tk.TicketID = tn.TicketID
     LEFT JOIN tblTicketClassification tc2 ON tk.ClassificationID = tc2.ClassificationID

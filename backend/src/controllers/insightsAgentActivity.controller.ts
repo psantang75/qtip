@@ -14,6 +14,8 @@ import {
   getMargin as svcGetMargin,
 } from '../services/insightsAgentActivity.service';
 import { getTicketTouchDetail as svcGetTicketTouchDetail } from '../services/insightsTouchDetail.service';
+import { getProductivityDay as svcGetProductivityDay } from '../services/insightsProductivityDay.service';
+import { getProductivityRoster as svcGetProductivityRoster } from '../services/insightsProductivityRoster.service';
 
 const permissionService = new InsightsPermissionService();
 
@@ -28,14 +30,22 @@ async function resolveAaScope(
   req: Request,
   res: Response,
   pageKey: string,
-): Promise<{ selfEmployeeKey: number | null } | null> {
+): Promise<{ selfEmployeeKey: number | null; departmentKeys: number[]; pageDepartmentKeys: number[] } | null> {
   if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return null; }
   const roleId = getInsightsRoleId(req.user.role);
   if (roleId === null) { res.status(403).json({ error: 'Unknown role' }); return null; }
   const access = await permissionService.resolveAccess(req.user.user_id, roleId, pageKey);
   if (!access.canAccess) { res.status(403).json({ error: 'Access denied' }); return null; }
   const selfEmployeeKey = access.dataScope === 'SELF' ? (access.employeeKey ?? -1) : null;
-  return { selfEmployeeKey };
+  // Per-viewer narrowing: DEPARTMENT/DIVISION restrict to the viewer's own
+  // department subtree. ALL and SELF carry no viewer department list.
+  const departmentKeys =
+    access.dataScope === 'DEPARTMENT' || access.dataScope === 'DIVISION' ? access.departmentKeys : [];
+  // Report population: the departments configured on the page (Insights → Page
+  // Management). Empty = not configured → the service falls back to its built-in
+  // area/subtree split.
+  const pageDepartmentKeys = await permissionService.getPageDepartmentScope(pageKey);
+  return { selfEmployeeKey, departmentKeys, pageDepartmentKeys };
 }
 
 /**
@@ -320,6 +330,76 @@ export const getTicketTouchDetail = async (req: Request, res: Response): Promise
     res.status(500).json({ error: 'Failed to load touch detail' });
   }
 };
+
+/**
+ * Shared handler for the Productivity single-day roster. Each row is a live,
+ * day-scoped aggregate for one in-scope agent (paid time, occupancy, calls,
+ * tickets). SELF folds the roster to the viewer's own row; DEPARTMENT/DIVISION
+ * restrict it to the viewer's department subtree; ALL returns the full set.
+ */
+function productivityRosterHandler(pageKey: string, area: 'sales' | 'csr') {
+  return async (req: Request, res: Response): Promise<void> => {
+    try {
+      const scope = await resolveAaScope(req, res, pageKey);
+      if (!scope) return;
+      const { date } = req.query as Record<string, string | undefined>;
+      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        res.status(400).json({ error: 'date (YYYY-MM-DD) is required' });
+        return;
+      }
+      const result = await svcGetProductivityRoster(area, date, scope);
+      res.json(result);
+    } catch (error) {
+      logger.error('getProductivityRoster error:', error);
+      res.status(500).json({ error: 'Failed to load productivity roster' });
+    }
+  };
+}
+
+/**
+ * Shared handler for the Productivity per-agent, per-day drill-down. Read live
+ * from the punch clock, Genesys and the CRM, so it only runs on expand. SELF
+ * scope pins the caller to their own employee key.
+ */
+function productivityDayHandler(pageKey: string, area: 'sales' | 'csr') {
+  return async (req: Request, res: Response): Promise<void> => {
+    try {
+      const scope = await resolveAaScope(req, res, pageKey);
+      if (!scope) return;
+      const { employeeKey: empRaw, date } = req.query as Record<string, string | undefined>;
+      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        res.status(400).json({ error: 'date (YYYY-MM-DD) is required' });
+        return;
+      }
+      const requested = empRaw ? Number(empRaw) : NaN;
+      const employeeKey = scope.selfEmployeeKey ?? requested;
+      if (!Number.isFinite(employeeKey) || employeeKey <= 0) {
+        res.status(400).json({ error: 'employeeKey is required' });
+        return;
+      }
+      // The agent must sit inside both the page population and the viewer's own
+      // department scope; the service returns an empty day for an out-of-scope key.
+      const result = await svcGetProductivityDay(area, employeeKey, date, {
+        pageDepartmentKeys: scope.pageDepartmentKeys,
+        viewerDepartmentKeys: scope.departmentKeys,
+      });
+      res.json(result);
+    } catch (error) {
+      logger.error('getProductivityDay error:', error);
+      res.status(500).json({ error: 'Failed to load productivity day' });
+    }
+  };
+}
+
+/**
+ * GET /api/insights/agent-activity/productivity           (roster)
+ * GET /api/insights/agent-activity/productivity/day        (drill-down)
+ * GET /api/insights/csr/productivity[ /day]                (CSR twin)
+ */
+export const getProductivityRoster = productivityRosterHandler('aa_sales_productivity_report', 'sales');
+export const getProductivityDay = productivityDayHandler('aa_sales_productivity_report', 'sales');
+export const getCsrProductivityRoster = productivityRosterHandler('csr_productivity_report', 'csr');
+export const getCsrProductivityDay = productivityDayHandler('csr_productivity_report', 'csr');
 
 /**
  * GET /api/insights/agent-activity/leads

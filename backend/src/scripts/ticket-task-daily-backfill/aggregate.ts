@@ -22,10 +22,8 @@
  */
 import { RowDataPacket } from 'mysql2';
 import pool from '../../config/database';
-
-/** Mirrors AGENT_ROLE / SALES_DEPT_ROOT_PATH in insightsAgentActivity.service.ts. */
-const AGENT_ROLE = 'CSR';
-const SALES_DEPT_ROOT_PATH = '/Sales Department - All';
+// Same "who is an agent" rule the live pipeline uses — imported, not re-declared.
+import { AGENT_ROLE, SALES_DEPT_ROOT_PATH } from '../../services/insightsAgentScope';
 
 /** The one task type the Sales Productivity page splits out from everything else. */
 const CONTACT_MANAGER_TITLE = 'Contact Manager';

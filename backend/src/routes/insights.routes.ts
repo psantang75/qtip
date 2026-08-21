@@ -6,7 +6,7 @@ import {
   getDataFreshness,
   getKpiConfig,
 } from '../controllers/insights.controller';
-import { getAgentActivityStatus, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
+import { getAgentActivityStatus, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getProductivityRoster, getProductivityDay, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
 import qcRouter from './insightsQC.routes';
 import csrRouter from './insightsCsr.routes';
 
@@ -74,6 +74,18 @@ router.get('/agent-activity/tickets/productivity',
 router.get('/agent-activity/tickets/touch-detail',
   authenticate as unknown as RequestHandler,
   getTicketTouchDetail as unknown as RequestHandler
+);
+
+// Productivity: single-day roster + on-demand per-agent day drill-down. Live
+// reads (punch clock, Genesys, CRM), so the day only runs on expand.
+router.get('/agent-activity/productivity',
+  authenticate as unknown as RequestHandler,
+  getProductivityRoster as unknown as RequestHandler
+);
+
+router.get('/agent-activity/productivity/day',
+  authenticate as unknown as RequestHandler,
+  getProductivityDay as unknown as RequestHandler
 );
 
 router.get('/agent-activity/leads',

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 
 /**
  * Metric explainer for the Productivity report. The explained element is itself
@@ -12,7 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 export default function MetricTooltip({ title, description, rows, children }: {
   title: string
   description: string
-  rows: { label: string; value: string }[]
+  rows: { label: string; value: string; dotCls?: string }[]
   children: ReactNode
 }) {
   return (
@@ -24,7 +25,10 @@ export default function MetricTooltip({ title, description, rows, children }: {
         <div className="mt-2 space-y-1">
           {rows.map(r => (
             <div key={r.label} className="flex items-center justify-between gap-6">
-              <span className="text-[10px] uppercase tracking-wide text-slate-400">{r.label}</span>
+              <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-400">
+                {r.dotCls && <span className={cn('h-2 w-2 shrink-0 rounded-sm', r.dotCls)} />}
+                {r.label}
+              </span>
               <span className="text-[12px] font-medium tabular-nums text-slate-800">{r.value}</span>
             </div>
           ))}

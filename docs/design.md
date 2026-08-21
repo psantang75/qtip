@@ -100,6 +100,36 @@ Error messages, destructive button states
 
 *Contrast ratios measured against --color-neutral-100 background.
 
+3.2 Productivity presence palette (documented exception)
+
+The CSR/AA Productivity report's activity timeline is the one place that colors
+beyond the core brand tones. Its Status row must let a manager tell a *warehouse*
+span from a *meeting* at a glance, so each distinct Genesys off-queue presence
+reason gets its own hue on top of the five brand meanings. This is intentional
+and lives in one file — `frontend/src/components/insights/agentActivity/productivityStatus.ts`
+(`PRESENCE_CLS`) — do not fork it. The five brand tones keep their meanings
+(blue = on a call, green = available in queue, orange = break/meal, red = needs
+attention, grey = off queue with no reason); the extras are stock Tailwind
+utilities, never custom CSS or new hex tokens.
+
+| Phone status | Tailwind | Meaning |
+| --- | --- | --- |
+| On a call | `bg-primary` | Interacting / Communicating |
+| Available / On Queue | `bg-success` | Ready in queue |
+| Break + Meal | `bg-warning` | Paid break or unpaid meal (combined) |
+| Meeting | `bg-indigo-500` | Supervisor / team meeting |
+| Training | `bg-purple-500` | Trainer session |
+| Follow-Up Extended | `bg-sky-500` | Extended post-call notes |
+| In Warehouse | `bg-amber-700` | Warehouse work away from desk |
+| Do Not Disturb | `bg-rose-500` | DND |
+| Away / Idle | `bg-slate-500` / `bg-slate-400` | Away from desk; Idle is only ever reported off queue, so it reads as away time — never red |
+| Off queue (no reason) | `bg-slate-300` | Off queue, no presence reason set |
+| Not Responding | `bg-destructive` | On queue but not answering — the only attention state |
+
+Idle is deliberately not an attention color: Genesys only records "Idle" once the
+agent is already off queue and away from the computer, so it cannot represent
+"not working between calls" and must not be flagged red.
+
 4. Typography
 
 Style
