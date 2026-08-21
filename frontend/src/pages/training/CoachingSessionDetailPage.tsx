@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { ROLE_IDS } from '@/hooks/useQualityRole'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Pencil } from 'lucide-react'
 import trainingService, { type CoachingSession } from '@/services/trainingService'
 import listService from '@/services/listService'
 import { ListPageHeader } from '@/components/common/ListPageHeader'
@@ -29,7 +28,7 @@ import { AttachmentCard } from '@/components/training/AttachmentCard'
 import { ResourcesTable, QuizSummaryTable } from '@/components/training/ReadOnlySections'
 import { emptyForm, type CoachingFormState } from './coaching-form/types'
 
-import { Section, Sub, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow, TopicList, ListItemReadOnly } from './training-detail/layout'
+import { Section, Sub, InfoRow, NoteBlock, SideCard, SideTitle, ProgressRow, TopicList } from './training-detail/layout'
 import { InternalNotesPanel } from '@/components/common/InternalNotesPanel'
 import { downloadSessionAttachment } from '@/utils/trainingHelpers'
 
@@ -574,9 +573,9 @@ export default function CoachingSessionDetailPage() {
                   </div>
                 </div>
               )}
-              <InternalNotesSection form={internalDraft as any} flagItems={flagItems}
+              <InternalNotesSection form={internalDraft} flagItems={flagItems}
                 rootCauseItems={rootCauseItems} supportNeededItems={supportNeededItems}
-                update={(k: any, v: any) => updateInternalDraft(k, v)} />
+                update={updateInternalDraft} />
               <SectionEditBar
                 onSave={() => internalSaveMut.mutate()}
                 onCancel={cancelEditInternal}

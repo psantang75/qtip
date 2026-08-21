@@ -221,8 +221,9 @@ export default function WriteUpFormPage() {
   // (see `validateSchema` in `backend/src/validation/csr.validation.ts`).
   // Show the field-level messages so the user can fix the actual problem
   // instead of staring at a generic "Save failed".
-  const reportSaveError = (err: any) => {
-    const fields = err?.response?.data?.errors as Array<{ path: string; message: string }> | undefined
+  const reportSaveError = (err: unknown) => {
+    const fields = (err as { response?: { data?: { errors?: Array<{ path: string; message: string }> } } })
+      ?.response?.data?.errors
     if (fields && fields.length > 0) {
       const lines = fields.map(f => (f.path ? `${prettifyPath(f.path)}: ${f.message}` : f.message))
       toast(t.msg.writeups.fixFields(fields.length, lines))

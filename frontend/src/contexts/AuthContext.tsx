@@ -23,7 +23,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [sessionTimeoutId, setSessionTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  const [, setSessionTimeoutId] = useState<NodeJS.Timeout | null>(null);
   
   // Session timeout functionality
   const setupSessionTimeout = useCallback((tokenExpiryTime?: number) => {

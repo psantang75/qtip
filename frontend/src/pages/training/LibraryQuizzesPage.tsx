@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { Plus, Pencil, Eye } from 'lucide-react'
 import trainingService, { type LibraryQuiz } from '@/services/trainingService'
 import { ListPageShell } from '@/components/common/ListPageShell'
@@ -27,7 +27,6 @@ type StatusFilter = 'all' | 'active' | 'inactive'
 
 export default function LibraryQuizzesPage() {
   const navigate        = useNavigate()
-  const qc              = useQueryClient()
   const { toast }       = useToast()
 
   const [search,        setSearch]        = useState('')
@@ -74,18 +73,6 @@ export default function LibraryQuizzesPage() {
   }, [baseFiltered])
 
   const hasFilters = search.trim().length > 0 || statusFilter !== 'active' || topicFilter.length > 0
-
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['quiz-library-all'] })
-
-  const toggleMut = useMutation({
-    mutationFn: (id: number) => trainingService.toggleQuizStatus(id),
-    onSuccess: invalidate,
-    onError: () => toast({
-      variant: 'destructive',
-      title: "Couldn't update quiz status",
-      description: 'Try again.',
-    }),
-  })
 
   const [previewQuiz, setPreviewQuiz] = useState<{ id?: number; quiz_title: string; pass_score: number; questions: { question_text: string; options: string[]; correct_option: number }[] } | null>(null)
 

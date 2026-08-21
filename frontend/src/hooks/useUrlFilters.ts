@@ -24,7 +24,7 @@ export function useUrlFilters(defaults: Record<string, string>) {
       setParams(
         p => {
           const n = new URLSearchParams(p)
-          value !== (defaults[key] ?? '') ? n.set(key, value) : n.delete(key)
+          if (value !== (defaults[key] ?? '')) { n.set(key, value) } else { n.delete(key) }
           return n
         },
         { replace: true },
@@ -39,7 +39,7 @@ export function useUrlFilters(defaults: Record<string, string>) {
         p => {
           const n = new URLSearchParams(p)
           Object.entries(updates).forEach(([k, v]) => {
-            v !== (defaults[k] ?? '') ? n.set(k, v) : n.delete(k)
+            if (v !== (defaults[k] ?? '')) { n.set(k, v) } else { n.delete(k) }
           })
           return n
         },

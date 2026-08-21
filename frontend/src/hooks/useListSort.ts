@@ -14,9 +14,10 @@ export function useListSort<T>(data: T[]) {
 
   const sorted = useMemo(() => {
     if (!sort || !dir) return data
-    return [...data].sort((a: any, b: any) => {
-      const av = a[sort] ?? ''
-      const bv = b[sort] ?? ''
+    const key = sort
+    return [...data].sort((a, b) => {
+      const av = (a as Record<string, unknown>)[key] ?? ''
+      const bv = (b as Record<string, unknown>)[key] ?? ''
       const cmp = typeof av === 'number' && typeof bv === 'number'
         ? av - bv
         : String(av).localeCompare(String(bv), undefined, { numeric: true })

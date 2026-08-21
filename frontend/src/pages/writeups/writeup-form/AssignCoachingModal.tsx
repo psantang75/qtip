@@ -14,6 +14,7 @@ import { Field } from '@/pages/training/coaching-form/CoachingFormSections'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { useToast } from '@/hooks/use-toast'
 import trainingService from '@/services/trainingService'
+import type { CoachingSession } from '@/services/trainingService'
 import writeupService from '@/services/writeupService'
 
 import listService from '@/services/listService'
@@ -23,6 +24,10 @@ import {
 } from '@/constants/labels'
 
 const OPEN_STATUSES = ['SCHEDULED', 'IN_PROGRESS', 'IN_PROCESS', 'PENDING_CSR', 'AWAITING_CSR_ACTION', 'FOLLOW_UP_REQUIRED']
+
+// The list payload always carries `topics`; `topic_names` is a legacy fallback
+// some responses still include, so widen the row type to cover it.
+type CoachingSessionRow = CoachingSession & { topic_names?: string[] | string | null }
 
 export function AssignCoachingModal({ csrId, onSelect, onClose }: {
   csrId: number
@@ -36,7 +41,7 @@ export function AssignCoachingModal({ csrId, onSelect, onClose }: {
   })
 
   const sessions = (sessionData?.items ?? []).filter(
-    (s: any) => OPEN_STATUSES.includes(s.status ?? '')
+    (s: CoachingSessionRow) => OPEN_STATUSES.includes(s.status ?? '')
   )
 
   return (
@@ -69,7 +74,7 @@ export function AssignCoachingModal({ csrId, onSelect, onClose }: {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sessions.map((s: any) => {
+              {sessions.map((s: CoachingSessionRow) => {
                 const topics: string[] = Array.isArray(s.topics) ? s.topics.filter(Boolean)
                   : Array.isArray(s.topic_names) ? s.topic_names.filter(Boolean)
                   : s.topic_names ? [s.topic_names] : []
@@ -147,7 +152,7 @@ export function CreateCoachingModal({ csrId, onCreated, onClose }: {
       notes: notes || undefined,
     }),
     onSuccess: ({ id, label }) => { onCreated(id, label); onClose() },
-    onError: (err: any) => toast({
+    onError: (err) => toast({
       variant: 'destructive',
       title: "Couldn't create coaching session",
       description: getErrorMessage(err, 'Try again.'),

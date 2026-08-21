@@ -68,7 +68,7 @@ export default function MyCoachingDetailPage() {
       qc.invalidateQueries({ queryKey: ['my-coaching'] })
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },
-    onError: (err: any) =>
+    onError: (err) =>
       toast({
         variant: 'destructive',
         title: "Couldn't submit",

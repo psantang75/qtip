@@ -42,7 +42,7 @@ export function GoldenSetCard({ formId }: Props) {
       qc.invalidateQueries({ queryKey: ['ai-reviewer-golden-set', formId] })
       toast({ title: 'Archived' })
     },
-    onError: (e: any) => toast({
+    onError: (e) => toast({
       variant: 'destructive',
       title: "Couldn't archive item",
       description: getErrorMessage(e, 'Try again.'),

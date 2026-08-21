@@ -1,4 +1,4 @@
-import apiClient, { apiGet, apiPost, apiPut } from './apiClient';
+import apiClient, { apiGet, apiPut } from './apiClient';
 import type { CSRDashboardData, CSRAudit, CSRAuditDetail, CSRDispute } from '../types/csr.types';
 import { logError } from '../utils/errorHandling';
 
@@ -79,7 +79,7 @@ export const fetchAuditDetails = (id: number): Promise<CSRAuditDetail> =>
 
 // Submit a dispute for an audit. FormData requires multipart — the request
 // interceptor strips the JSON Content-Type so axios can set the boundary.
-export const submitDispute = async (_submissionId: number, disputeData: FormData): Promise<any> => {
+export const submitDispute = async (_submissionId: number, disputeData: FormData): Promise<unknown> => {
   try {
     const response = await apiClient.post('/csr/disputes', disputeData);
     return response.data;
@@ -90,13 +90,13 @@ export const submitDispute = async (_submissionId: number, disputeData: FormData
 };
 
 // Finalize an audit (CSR accepts the review)
-export const finalizeAudit = (submissionId: number, finalData: any): Promise<any> =>
+export const finalizeAudit = (submissionId: number, finalData: unknown): Promise<unknown> =>
   apiPut(SCOPE, `/csr/audits/${submissionId}/finalize`, finalData);
 
 // Finalize a submission (QA/Manager/Admin accepts the review).
 // apiClient already sets baseURL to '/api', so the path must NOT include the
 // prefix (pre-production review item #80 — this was the one site that did).
-export const finalizeSubmission = (submissionId: number, finalData: any): Promise<any> =>
+export const finalizeSubmission = (submissionId: number, finalData: unknown): Promise<unknown> =>
   apiPut(SCOPE, `/submissions/${submissionId}/finalize`, finalData);
 
 // Check if an audit is disputable
@@ -141,7 +141,7 @@ export const getDisputeDetails = (disputeId: number): Promise<CSRDispute> =>
   apiGet<CSRDispute>(SCOPE, `/disputes/${disputeId}`);
 
 // Update a dispute (reason and/or attachment). FormData triggers multipart.
-export const updateDispute = async (disputeId: number, disputeData: FormData): Promise<any> => {
+export const updateDispute = async (disputeId: number, disputeData: FormData): Promise<unknown> => {
   try {
     const response = await apiClient.put(`/disputes/${disputeId}`, disputeData);
     return response.data;

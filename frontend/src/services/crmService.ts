@@ -58,8 +58,8 @@ const crmService = {
     try {
       const res = await apiClient.get<TaskHeader>(`/crm/task/${taskId}`);
       return res.data;
-    } catch (error: any) {
-      if (error?.response?.status === 404) return null;
+    } catch (error) {
+      if ((error as { response?: { status?: number } })?.response?.status === 404) return null;
       logError('crmService', `[CRM] Failed to load task ${taskId}`, error);
       throw new Error('Failed to load task');
     }
@@ -81,8 +81,8 @@ const crmService = {
     try {
       const res = await apiClient.get<TicketHeader>(`/crm/ticket/${ticketId}`);
       return res.data;
-    } catch (error: any) {
-      if (error?.response?.status === 404) return null;
+    } catch (error) {
+      if ((error as { response?: { status?: number } })?.response?.status === 404) return null;
       logError('crmService', `[CRM] Failed to load ticket ${ticketId}`, error);
       throw new Error('Failed to load ticket');
     }

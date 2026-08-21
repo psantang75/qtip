@@ -115,7 +115,7 @@ export default function AIReviewerFormDetail() {
     )
   }
 
-  const form = formQ.data as any
+  const form = formQ.data
   const aiEnabled = form.ai_enabled === true
 
   if (!aiEnabled) {

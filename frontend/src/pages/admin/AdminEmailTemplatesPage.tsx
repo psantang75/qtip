@@ -322,7 +322,7 @@ function TemplateEditor({
       void queryClient.invalidateQueries({ queryKey: ['emailTemplate', templateId] })
       void queryClient.invalidateQueries({ queryKey: ['emailTemplates'] })
     },
-    onError: (err: any) =>
+    onError: (err) =>
       toast({
         variant: 'destructive',
         title: "Couldn't save template",
@@ -399,7 +399,7 @@ function TemplateEditor({
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={v => onTabChange(v as any)}>
+      <Tabs value={tab} onValueChange={v => onTabChange(v as 'editor' | 'history' | 'recent' | 'health')}>
         <div className="px-5 border-b border-slate-100">
           <TabsList className="bg-transparent border-b-0 rounded-none gap-1 h-10 p-0">
             <TabsTrigger value="editor"  className="text-[13px]">Editor</TabsTrigger>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { InsightsFilterBar, InsightsSection, KpiTile, StatusBadge, ExpandableRow, QCPageSkeleton, ErrorCard } from '@/components/insights'
+import { InsightsFilterBar, InsightsSection, KpiTile, ExpandableRow, QCPageSkeleton, ErrorCard } from '@/components/insights'
 import WarningsPipelineSection from '@/components/insights/WarningsPipelineSection'
 import WarningsActiveSection from '@/components/insights/WarningsActiveSection'
 import { useQCFilters } from '@/hooks/useQCFilters'
@@ -13,8 +13,6 @@ import {
 
 const TYPE_LABEL: Record<string, string> = { VERBAL_WARNING: 'Verbal', WRITTEN_WARNING: 'Written', FINAL_WARNING: 'Final' }
 const TYPE_COLOR: Record<string, string> = { VERBAL_WARNING: 'text-yellow-600 bg-yellow-50 border-yellow-200', WRITTEN_WARNING: 'text-orange-600 bg-orange-50 border-orange-200', FINAL_WARNING: 'text-red-600 bg-red-50 border-red-200' }
-const STATUS_LABEL: Record<string, string> = { DRAFT: 'Draft', SCHEDULED: 'Scheduled', AWAITING_SIGNATURE: 'Awaiting Sig.', SIGNED: 'Signed', FOLLOW_UP_PENDING: 'Follow-Up', CLOSED: 'Closed' }
-
 function TypeBadge({ type }: { type: string }) {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${TYPE_COLOR[type] ?? 'text-slate-600 bg-slate-100 border-slate-200'}`}>{TYPE_LABEL[type] ?? type}</span>
 }

@@ -82,7 +82,7 @@ export function EditDisputeForm({
       qc.invalidateQueries({ queryKey: ['agent-dispute-history'] })
       onSuccess()
     },
-    onError: (err: any) =>
+    onError: (err) =>
       toast({
         variant: 'destructive',
         title: "Couldn't update dispute",

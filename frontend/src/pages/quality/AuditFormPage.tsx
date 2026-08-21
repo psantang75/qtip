@@ -6,7 +6,7 @@ import { ArrowLeft, Save, Send, AlertCircle, Calculator } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getFormById } from '@/services/formService'
 import { normalizeFormMetadata } from '@/pages/quality/form-builder/formBuilderUtils'
-import submissionService from '@/services/submissionService'
+import submissionService, { type SubmissionPayload } from '@/services/submissionService'
 import aiReviewerService from '@/services/aiReviewerService'
 import { unlockService } from '@/services/unlockService'
 import { useUnlockReasons } from '@/hooks/useUnlockReasons'
@@ -17,6 +17,7 @@ import MultipleCallSelector from '@/components/common/MultipleCallSelector'
 import { CallDetailsPanel } from './submission-detail/CallDetailsPanel'
 import TicketTaskSelector, { type TicketTaskRef } from '@/components/common/TicketTaskSelector'
 import type { Call } from '@/services/callService'
+import type { Form, FormQuestion } from '@/types/form.types'
 import FormMetadataDisplay from '@/components/common/FormMetadataDisplay'
 import userService from '@/services/userService'
 import {
@@ -42,6 +43,13 @@ interface AnswerType {
   answer: string
   score: number
   notes: string
+}
+
+// Minimal shape of the axios error we read off failed prefill queries
+// (status + backend `code`/`error`). Mirrors the local `ApiError` in
+// submission-detail/UnlockDialog.tsx.
+interface ApiError {
+  response?: { status?: number; data?: { code?: string; error?: unknown } }
 }
 
 // Normalize the shared `Answer` shape (notes/score optional) returned by
@@ -73,7 +81,6 @@ export default function AuditFormPage() {
 
   const formIdParam = searchParams.get('formId')
   const callId = searchParams.get('callId')
-  const agentId = searchParams.get('csrId')
   // ── Prefill modes ────────────────────────────────────────────────────
   // ?promoteDraft=<aiSubmissionId>            — load AI's DRAFT, edit, promote to SUBMITTED
   // ?calibrationOverlayFor=<aiSubmissionId>   — load AI's SUBMITTED answers, write a NEW human submission
@@ -135,8 +142,8 @@ export default function AuditFormPage() {
         ai_overall_confidence: null as number | null,
         ai_extras: null as import('@/services/aiReviewerService').AiExtras | null,
         answers: (detail.answers ?? [])
-          .filter((a: any) => a.question_id != null)
-          .map((a: any) => ({ question_id: Number(a.question_id), answer: String(a.answer ?? ''), notes: '' })),
+          .filter((a) => a.question_id != null)
+          .map((a) => ({ question_id: Number(a.question_id), answer: String(a.answer ?? ''), notes: '' })),
         metadata: [] as Array<{ field_id: number; value: string }>,
         ticket_tasks: [] as Array<{ kind: 'TICKET' | 'TASK'; external_id: number }>,
         calls: [] as NonNullable<import('@/services/aiReviewerService').AiDraftDetail['calls']>,
@@ -158,7 +165,7 @@ export default function AuditFormPage() {
   // instead of a generic "request failed" or — worse — a blank page.
   const aiPrefillErrorDetail = useMemo(() => {
     if (!aiPrefillError) return null
-    const e = aiPrefillErrorObj as any
+    const e = aiPrefillErrorObj as ApiError
     const status: number | undefined = e?.response?.status
     const code: string | undefined = e?.response?.data?.code
     const serverMsg: string | undefined =
@@ -200,8 +207,8 @@ export default function AuditFormPage() {
   const resumeAlreadyClosed =
     prefillMode === 'resume' &&
     aiPrefillError &&
-    ((aiPrefillErrorObj as any)?.response?.status === 409 ||
-      (aiPrefillErrorObj as any)?.response?.data?.code === 'NOT_A_DRAFT')
+    ((aiPrefillErrorObj as ApiError)?.response?.status === 409 ||
+      (aiPrefillErrorObj as ApiError)?.response?.data?.code === 'NOT_A_DRAFT')
 
   useEffect(() => {
     if (!resumeAlreadyClosed || !aiSubmissionId) return
@@ -287,7 +294,7 @@ export default function AuditFormPage() {
   const [correctionReason, setCorrectionReason] = useState<string>('')
 
   const { mutate: doSubmit, isPending: isSubmitting } = useMutation({
-    mutationFn: (payload: any) => {
+    mutationFn: (payload: SubmissionPayload) => {
       if (aiMode === 'promote' && aiSubmissionId) {
         return aiReviewerService.promoteDraft(aiSubmissionId, {
           answers: payload.answers,
@@ -345,7 +352,7 @@ export default function AuditFormPage() {
   })
 
   const { mutate: doSaveDraft, isPending: isSavingDraft } = useMutation({
-    mutationFn: (payload: any) => submissionService.saveDraft(payload),
+    mutationFn: (payload: SubmissionPayload) => submissionService.saveDraft(payload),
     onSuccess: () => {
       // This navigates straight to the Completed Forms list, so the new/updated
       // draft has to be there. Without this the list re-serves its cached copy.
@@ -386,9 +393,9 @@ export default function AuditFormPage() {
     if (prefillMode && aiPrefill?.answers) {
       for (const a of aiPrefill.answers) {
         const qid = Number(a.question_id)
-        let foundQ: any
+        let foundQ: FormQuestion | undefined
         for (const cat of form.categories) {
-          const q = (cat.questions ?? []).find((q: any) => q.id === qid)
+          const q = (cat.questions ?? []).find((q) => q.id === qid)
           if (q) { foundQ = q; break }
         }
         const qScore = foundQ ? getQuestionScore(foundQ, a.answer) : 0
@@ -424,8 +431,8 @@ export default function AuditFormPage() {
     if (prefillMode && aiPrefill?.ticket_tasks?.length) {
       setLinkedTicketTasks(
         aiPrefill.ticket_tasks
-          .filter((t: any) => t && (t.kind === 'TICKET' || t.kind === 'TASK') && Number.isFinite(Number(t.external_id)))
-          .map((t: any) => ({ kind: t.kind, external_id: Number(t.external_id) }))
+          .filter((t) => t && (t.kind === 'TICKET' || t.kind === 'TASK') && Number.isFinite(Number(t.external_id)))
+          .map((t) => ({ kind: t.kind, external_id: Number(t.external_id) }))
       )
     }
 
@@ -437,8 +444,8 @@ export default function AuditFormPage() {
     if (prefillMode && aiPrefill?.calls?.length) {
       setSelectedCalls(
         aiPrefill.calls
-          .filter((c: any) => c && Number.isFinite(Number(c.id)) && typeof c.call_id === 'string')
-          .map((c: any) => ({
+          .filter((c) => c && Number.isFinite(Number(c.id)) && typeof c.call_id === 'string')
+          .map((c) => ({
             id: Number(c.id),
             call_id: String(c.call_id),
             csr_id: Number(c.csr_id),
@@ -452,7 +459,7 @@ export default function AuditFormPage() {
     }
   }, [form, user, prefillMode, aiPrefill])
 
-  const updateRenderData = (formData: any, currentAnswers: Record<number, AnswerType>) => {
+  const updateRenderData = (formData: Form, currentAnswers: Record<number, AnswerType>) => {
     if (!formData) return
     const answerStrings: Record<number, string> = {}
     Object.entries(currentAnswers).forEach(([qId, a]) => { answerStrings[Number(qId)] = a.answer || '' })
@@ -470,11 +477,11 @@ export default function AuditFormPage() {
     setFormRenderData(prepareFormForRender(formData, withRollups, newVisibility, {}, totalScore))
   }
 
-  const handleAnswerChange = (questionId: number, value: string, _questionType: string) => {
+  const handleAnswerChange = (questionId: number, value: string) => {
     if (!form) return
-    let foundQ: any
+    let foundQ: FormQuestion | undefined
     for (const cat of form.categories) {
-      const q = cat.questions.find((q: any) => q.id === questionId)
+      const q = cat.questions.find((q) => q.id === questionId)
       if (q) { foundQ = q; break }
     }
     if (!foundQ) return
@@ -496,7 +503,7 @@ export default function AuditFormPage() {
 
     if (form.metadata_fields?.length > 0) {
       const missing: string[] = []
-      form.metadata_fields.forEach((field: any) => {
+      form.metadata_fields.forEach((field) => {
         if (field.is_required) {
           const key = (field.id && field.id !== 0) ? field.id.toString() : field.field_name
           if (!metadataValues[key]?.trim()) missing.push(field.field_name)
@@ -511,7 +518,7 @@ export default function AuditFormPage() {
     const validation = validateAnswers(form.categories, answers, visibilityMap)
     if (!validation.isValid) {
       const qMap = new Map<number, string>()
-      form.categories.forEach((cat: any) => cat.questions?.forEach((q: any) => { if (q.id) qMap.set(q.id, q.question_text) }))
+      form.categories.forEach((cat) => cat.questions?.forEach((q) => { if (q.id) qMap.set(q.id, q.question_text) }))
       setErrorMessage(`Please answer all required questions:\n${validation.unansweredQuestions.map((qId: number) => `- ${qMap.get(qId) || `Q${qId}`}`).join('\n')}`)
       setMissingQuestions(validation.unansweredQuestions)
       if (validation.unansweredQuestions.length > 0) setTimeout(() => scrollToQuestion(validation.unansweredQuestions[0]), 100)
@@ -521,7 +528,7 @@ export default function AuditFormPage() {
     let customerId: string | null = null
     let agentUserId: number | null = null
     if (form.metadata_fields && metadataValues) {
-      for (const f of form.metadata_fields as any[]) {
+      for (const f of form.metadata_fields) {
         const key = (f.id && f.id !== 0) ? f.id.toString() : f.field_name
         const val = metadataValues[key]
         if (!val) continue
@@ -809,7 +816,7 @@ export default function AuditFormPage() {
                   <FormMetadataDisplay
                     metadataFields={form.metadata_fields}
                     values={Object.fromEntries(
-                      form.metadata_fields.map((field: any) => {
+                      form.metadata_fields.map((field) => {
                         const key = (field.id && field.id !== 0) ? field.id.toString() : field.field_name
                         return [key, metadataValues[key] || '']
                       })

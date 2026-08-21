@@ -4,12 +4,32 @@
  */
 
 /**
+ * Minimal structural shape of the axios/fetch errors these helpers inspect.
+ * Errors arrive as `unknown` from `catch` blocks; casting to this narrows the
+ * optional-chained property reads without resorting to `any`.
+ */
+interface AxiosLikeError {
+  response?: {
+    status?: number;
+    data?: {
+      message?: string;
+      error?: string | { message?: string };
+      reason?: string;
+      [key: string]: unknown;
+    };
+  };
+  request?: unknown;
+  code?: string;
+  message?: string;
+}
+
+/**
  * Checks if an error is a 401 (Unauthorized) authentication error
  * @param error - The error object from a catch block
  * @returns true if this is a 401 error that should be handled by the auth interceptor
  */
-export function isAuthenticationError(error: any): boolean {
-  return error?.response?.status === 401;
+export function isAuthenticationError(error: unknown): boolean {
+  return (error as AxiosLikeError)?.response?.status === 401;
 }
 
 /**
@@ -44,7 +64,7 @@ export function handleAuthenticationFailure(): void {
  * @param error - The error object from a catch block
  * @returns true if this was an authentication error (handled), false if caller should handle it
  */
-export function handleErrorIfAuthentication(error: any): boolean {
+export function handleErrorIfAuthentication(error: unknown): boolean {
   if (isAuthenticationError(error)) {
     if (!import.meta.env.PROD) {
       // eslint-disable-next-line no-console
@@ -120,8 +140,8 @@ function isTransportNoise(s: string): boolean {
  *
  * Machine labels are filtered out so users never see "UNAUTHORIZED".
  */
-export function getBackendMessage(error: any): string | null {
-  const data = error?.response?.data;
+export function getBackendMessage(error: unknown): string | null {
+  const data = (error as AxiosLikeError)?.response?.data;
   if (!data || typeof data !== 'object') return null;
 
   if (typeof data.message === 'string' && data.message.trim() && !isMachineLabel(data.message)) {
@@ -153,8 +173,9 @@ export function getBackendMessage(error: any): string | null {
  * @param error - The error object (axios error, thrown Error, or unknown).
  * @param defaultMessage - Fallback when nothing more specific is available.
  */
-export function getErrorMessage(error: any, defaultMessage: string = "Something went wrong. Try again."): string {
-  const status: number | undefined = error?.response?.status;
+export function getErrorMessage(error: unknown, defaultMessage: string = "Something went wrong. Try again."): string {
+  const err = error as AxiosLikeError;
+  const status: number | undefined = err?.response?.status;
 
   // 401 / 403 → canonical wording (backend text here is terse/machine-ish).
   if (status === 401) return STATUS_MESSAGE[401];
@@ -169,12 +190,12 @@ export function getErrorMessage(error: any, defaultMessage: string = "Something 
   if (typeof status === 'number') return messageForStatus(status);
 
   // No HTTP response → transport-level failures.
-  if (error?.code === 'ECONNABORTED') return 'This is taking too long. Try again.';
-  if (error?.request) return "Can't reach the server. Check your connection and try again.";
+  if (err?.code === 'ECONNABORTED') return 'This is taking too long. Try again.';
+  if (err?.request) return "Can't reach the server. Check your connection and try again.";
 
   // A thrown app Error carrying real human text (but never axios noise).
-  if (typeof error?.message === 'string' && error.message.trim() && !isTransportNoise(error.message) && !isMachineLabel(error.message)) {
-    return error.message.trim();
+  if (typeof err?.message === 'string' && err.message.trim() && !isTransportNoise(err.message) && !isMachineLabel(err.message)) {
+    return err.message.trim();
   }
 
   return defaultMessage;
@@ -183,8 +204,8 @@ export function getErrorMessage(error: any, defaultMessage: string = "Something 
 /**
  * Type guard to check if an error has a response object
  */
-export function hasErrorResponse(error: any): error is { response: { status: number; data: any } } {
-  return error && typeof error === 'object' && 'response' in error;
+export function hasErrorResponse(error: unknown): error is { response: { status: number; data: unknown } } {
+  return typeof error === 'object' && error !== null && 'response' in error;
 }
 
 /**

@@ -41,7 +41,7 @@ export interface RoutePermissions {
   /** Whether route requires authentication */
   requiresAuth: boolean;
   /** Custom permission check function */
-  customCheck?: (user: any) => boolean;
+  customCheck?: (user: unknown) => boolean;
 }
 
 /**
@@ -87,7 +87,7 @@ export interface RouteConfig {
     /** Whether to show this route in breadcrumbs */
     show?: boolean;
     /** Function to generate dynamic breadcrumb */
-    dynamic?: (params: any) => BreadcrumbItem;
+    dynamic?: (params: Record<string, string | undefined>) => BreadcrumbItem;
   };
   /** Loading state configuration */
   loading?: {

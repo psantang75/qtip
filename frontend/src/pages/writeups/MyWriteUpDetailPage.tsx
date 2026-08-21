@@ -85,7 +85,7 @@ export default function MyWriteUpDetailPage() {
 
           <div className="space-y-4 mt-2">
             {/* Legacy (imported) records cannot be signed — backend rejects with LEGACY_LOCKED. */}
-            {Boolean(Number(writeup.is_legacy)) ? (
+            {Number(writeup.is_legacy) ? (
               <StatusBanner writeup={writeup} />
             ) : writeup.status === 'AWAITING_SIGNATURE' ? (
               <SignatureSection

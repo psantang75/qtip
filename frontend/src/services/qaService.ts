@@ -269,18 +269,19 @@ export interface DisputeHistoryItem {
 // QA/Admin list:   total_score, submitted_at, auditor_name, form_name (root)
 // CSR list:        score (number), submittedDate, formName (root)
 // CSR detail:      score, submittedDate, form.form_name, form.categories (nested)
-function normalizeSubmission(item: any): any {
+function normalizeSubmission(item: unknown): unknown {
   if (!item || typeof item !== 'object') return item
-  const rawScore = item.score ?? item.total_score ?? 0
-  const nestedForm = item.form && typeof item.form === 'object' ? item.form : null
+  const it = item as Record<string, unknown>
+  const nestedForm = it.form && typeof it.form === 'object' ? (it.form as Record<string, unknown>) : null
+  const rawScore = it.score ?? it.total_score ?? 0
   return {
-    ...item,
+    ...it,
     score:         typeof rawScore === 'string' ? parseFloat(rawScore) || 0 : Number(rawScore) || 0,
-    form_name:     item.form_name     ?? item.formName ?? nestedForm?.form_name ?? '',
-    created_at:    item.created_at    ?? item.submitted_at ?? item.submittedDate ?? '',
-    reviewer_name: item.reviewer_name ?? item.auditor_name ?? item.qa_analyst_name ?? undefined,
-    formData:      item.formData ?? (nestedForm?.categories ? nestedForm : undefined),
-    scoreBreakdown: item.scoreBreakdown ?? undefined,
+    form_name:     it.form_name     ?? it.formName ?? nestedForm?.form_name ?? '',
+    created_at:    it.created_at    ?? it.submitted_at ?? it.submittedDate ?? '',
+    reviewer_name: it.reviewer_name ?? it.auditor_name ?? it.qa_analyst_name ?? undefined,
+    formData:      it.formData ?? (nestedForm?.categories ? nestedForm : undefined),
+    scoreBreakdown: it.scoreBreakdown ?? undefined,
   }
 }
 
@@ -410,11 +411,13 @@ const qaService = {
     })
     return api.get(`/manager/disputes?${q}`).then(r => {
       const d = r.data
-      const toNum = (v: any) => v == null ? null : (typeof v === 'string' ? parseFloat(v) || 0 : Number(v))
+      const toNum = (v: unknown) => v == null ? null : (typeof v === 'string' ? parseFloat(v) || 0 : Number(v))
       // Manager disputes endpoint returns { disputes: [...], total, page, limit, totalPages }
-      const raw: any[] = d?.disputes ?? d?.items ?? d?.data ?? []
+      const raw: unknown[] = d?.disputes ?? d?.items ?? d?.data ?? []
       return {
-        items: raw.map((item: any) => ({
+        items: raw.map((row) => {
+          const item = row as Record<string, unknown>
+          return {
           ...item,
           // Normalize field names: manager returns dispute_id, submission_id, total_score, etc.
           id:             item.id             ?? item.dispute_id,
@@ -431,7 +434,8 @@ const qaService = {
           resolution_notes:   item.resolution_notes,
           resolution_action:  item.resolution_action,
           qa_analyst_name:    item.qa_analyst_name,
-        })) as DisputeRecord[],
+          }
+        }) as unknown as DisputeRecord[],
         total:      d?.total ?? raw.length,
         page:       d?.page  ?? 1,
         totalPages: d?.totalPages ?? 1,
@@ -452,15 +456,18 @@ const qaService = {
   getCSRDisputeHistory: (params?: { page?: number; limit?: number; status?: string }) =>
     api.get('/csr/disputes/history', { params }).then(r => {
       const d = r.data
-      const raw: any[] = d?.data ?? d?.items ?? (Array.isArray(d) ? d : [])
-      const toNum = (v: any) => v == null ? null : (typeof v === 'string' ? parseFloat(v) || 0 : Number(v))
+      const raw: unknown[] = d?.data ?? d?.items ?? (Array.isArray(d) ? d : [])
+      const toNum = (v: unknown) => v == null ? null : (typeof v === 'string' ? parseFloat(v) || 0 : Number(v))
       return {
-        items: raw.map((item: any) => ({
+        items: raw.map((row) => {
+          const item = row as Record<string, unknown>
+          return {
           ...item,
           score:          toNum(item.score) ?? 0,
           previous_score: toNum(item.previous_score),
           adjusted_score: toNum(item.adjusted_score),
-        })) as DisputeHistoryItem[],
+          }
+        }) as unknown as DisputeHistoryItem[],
         total:      d?.total ?? raw.length,
         page:       d?.page ?? 1,
         totalPages: d?.totalPages ?? 1,

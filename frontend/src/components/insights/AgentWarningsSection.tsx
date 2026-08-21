@@ -1,5 +1,5 @@
 import { ShieldCheck } from 'lucide-react'
-import { InsightsSection, StatRow, StatusBadge } from '@/components/insights'
+import { InsightsSection, StatRow } from '@/components/insights'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { AgentProfile } from '@/services/insightsQCService'
 import { TL, TC, SL } from './agentProfileHelpers'

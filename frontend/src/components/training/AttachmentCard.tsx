@@ -63,7 +63,7 @@ export function AttachmentCard({
             <Input
               type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
               className="text-[13px] text-slate-600 file:mr-3 file:py-1 file:px-3 file:border-0 file:rounded file:bg-primary/10 file:text-primary file:text-[12px] file:cursor-pointer"
-              onChange={e => onFileSelect?.(e.target.files?.[0]!)}
+              onChange={e => { const f = e.target.files?.[0]; if (f) onFileSelect?.(f) }}
             />
             <p className="text-[11px] text-slate-400 mt-1">Max 10 MB · PDF, Word, Images</p>
           </div>

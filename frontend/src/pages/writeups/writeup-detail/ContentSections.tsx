@@ -264,8 +264,6 @@ function InternalNotesEditableSection({
   id?: number
   onInvalidate?: () => void
 }) {
-  if (isAgentView) return null
-
   const { toast } = useToast()
   const qc        = useQueryClient()
 
@@ -341,6 +339,10 @@ function InternalNotesEditableSection({
     }),
   })
 
+  // Agent view never renders this management-only section. Guard placed
+  // after all hooks so hook order stays stable (react-hooks/rules-of-hooks).
+  if (isAgentView) return null
+
   const busy = saveMut.isPending || saveAndCloseMut.isPending
 
   const startEdit = () => {
@@ -354,7 +356,7 @@ function InternalNotesEditableSection({
   }
 
   if (editing) {
-    const update = (k: keyof InternalDraft, v: any) => setDraft(d => ({ ...d, [k]: v }))
+    const update = <K extends keyof InternalDraft>(k: K, v: InternalDraft[K]) => setDraft(d => ({ ...d, [k]: v }))
 
     // FOLLOW_UP_COMPLETED is reached only after follow-up notes are saved
     // via the Follow-Up section, so no extra gate is needed here.
@@ -363,11 +365,11 @@ function InternalNotesEditableSection({
     return (
       <div className="space-y-2">
         <InternalNotesSection
-          form={draft as any}
+          form={draft}
           flagItems={flagItems}
           rootCauseItems={rootCauseItems}
           supportNeededItems={supportNeededItems}
-          update={update as any}
+          update={update}
         />
 
         <div className="bg-white rounded-xl border border-slate-200 p-3 mt-2">

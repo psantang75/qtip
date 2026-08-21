@@ -28,9 +28,6 @@ export const SAMPLE_AGENTS = [
   'Jamie Waldie', 'Levi Roose', 'Megan Foti', 'Mitchell Stempowski', 'Nick Robinson', 'Steven Selley',
 ]
 
-const WEEKS = ['Wk 1', 'Wk 2', 'Wk 3', 'Wk 4', 'Wk 5', 'Wk 6', 'Wk 7', 'Wk 8']
-const trend = (vals: number[]): TrendPoint[] => WEEKS.map((label, i) => ({ label, value: vals[i] }))
-
 // ── Call Activity ─────────────────────────────────────────────────────────────
 
 // Business days in the selected range. Sourced from the Business Calendar

@@ -122,12 +122,13 @@ export const validateAnswer = (
       }
       break;
     
-    case 'SCALE':
+    case 'SCALE': {
       const num = parseInt(answer, 10);
       if (isNaN(num) || num < 0) {
         return { valid: false, error: 'Scale answer must be a number 0 or greater' };
       }
       break;
+    }
   }
   
   return { valid: true };

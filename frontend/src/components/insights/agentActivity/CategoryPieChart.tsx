@@ -96,7 +96,10 @@ export default function CategoryPieChart({ data, height = 360, unit }: CategoryP
   // panel. We draw our own elbow leader line (Recharts' default labelLine is off):
   // the start/elbow use the slice's real geometry from props, while the label Y is
   // the de-collided value from buildLayout — so labels never overlap.
-  const renderLabel = (props: any) => {
+  const renderLabel = (props: {
+    cx: number; cy: number; midAngle: number; outerRadius: number
+    name: string; value: number; index: number
+  }) => {
     const { cx, cy, midAngle, outerRadius, name, value, index } = props
     if (index === 0) layout.current = buildLayout(cx, cy, outerRadius)
 
@@ -132,7 +135,10 @@ export default function CategoryPieChart({ data, height = 360, unit }: CategoryP
     )
   }
 
-  const TooltipContent = ({ active, payload }: any) => {
+  const TooltipContent = ({ active, payload }: {
+    active?: boolean
+    payload?: Array<{ payload: Slice }>
+  }) => {
     if (!active || !payload?.length) return null
     const slice: Slice = payload[0].payload
     return (

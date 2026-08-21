@@ -2,6 +2,7 @@ import React from 'react';
 import { processConditionalLogic } from './formConditions';
 import { getMaxPossibleScore, getQuestionScore } from './scoringEngine';
 import { RichTextDisplay } from '../../components/common/RichTextDisplay';
+import type { Form, FormCategory, FormQuestion, RadioOption } from '../../types/form.types';
 
 interface QuestionWithScore {
   id: number;
@@ -26,14 +27,35 @@ interface CategoryScore {
   subCategories: Record<string, QuestionWithScore[]>;
 }
 
+/** The subset of an answer this renderer reads. Kept loose so callers can pass
+ *  their own read-only answer maps (e.g. the submission-detail page). */
+interface AnswerLike {
+  answer?: string;
+  score?: number;
+  notes?: string;
+}
+
+interface CategoryBreakdownEntry {
+  raw_score?: number;
+  weighted_score?: number;
+  weighted_possible?: number;
+  earned_points?: number;
+  possible_points?: number;
+  category_weight?: number;
+}
+
+interface ScoreBreakdown {
+  categoryBreakdown?: Record<number, CategoryBreakdownEntry>;
+}
+
 interface ScoreRendererProps {
-  formData: any;
-  answers: Record<number, any>;
+  formData: Form;
+  answers: Record<number, AnswerLike>;
   showCategoryBreakdown?: boolean;
   showDetailedScores?: boolean;
   userRole?: number;
   backendScore?: number;
-  scoreBreakdown?: any;
+  scoreBreakdown?: ScoreBreakdown;
 }
 
 /**
@@ -59,35 +81,35 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
 
   // The "AI Reviewer" category is rendered separately (simple feedback card),
   // not as a row in the breakdown table or as a Q/A scoring grid.
-  const isAiReviewerCat = (c: any) =>
-    String(c?.category_name || c?.name || '').trim().toLowerCase() === 'ai reviewer';
+  const isAiReviewerCat = (c: FormCategory) =>
+    String(c?.category_name || (c as { name?: string })?.name || '').trim().toLowerCase() === 'ai reviewer';
 
   const aiReviewerCategory = formData.categories.find(isAiReviewerCat);
-  const nonAiCategories    = formData.categories.filter((c: any) => !isAiReviewerCat(c));
+  const nonAiCategories    = formData.categories.filter((c: FormCategory) => !isAiReviewerCat(c));
 
   // Per-question `visible_to_csr` is the source of truth for CSR visibility.
   // Zero-weight categories are otherwise hidden for CSR, except for
   // "Overall Feedback" which intentionally has weight 0 but should be shown
   // (with question-level Agent Visible deciding which questions appear).
-  const isOverallFeedbackCat = (c: any) =>
-    String(c?.category_name || c?.name || '').trim().toLowerCase() === 'overall feedback';
+  const isOverallFeedbackCat = (c: FormCategory) =>
+    String(c?.category_name || (c as { name?: string })?.name || '').trim().toLowerCase() === 'overall feedback';
 
   const visibleCategories = userRole === 3
-    ? nonAiCategories.filter((category: any) => (category.weight || 0) > 0 || isOverallFeedbackCat(category))
+    ? nonAiCategories.filter((category: FormCategory) => (category.weight || 0) > 0 || isOverallFeedbackCat(category))
     : nonAiCategories;
 
   // Pull the AI Reviewer Feedback answer (always TEXT) for the simplified card.
   const aiReviewerFeedback = (() => {
     if (!aiReviewerCategory) return null;
     const q = (aiReviewerCategory.questions || []).find(
-      (qq: any) => (qq.question_text || '').trim().toLowerCase() === 'ai reviewer feedback'
-    ) || (aiReviewerCategory.questions || []).find((qq: any) => (qq.question_type || '').toLowerCase() === 'text');
+      (qq: FormQuestion) => (qq.question_text || '').trim().toLowerCase() === 'ai reviewer feedback'
+    ) || (aiReviewerCategory.questions || []).find((qq: FormQuestion) => (qq.question_type || '').toLowerCase() === 'text');
     if (!q) return null;
-    return { questionId: q.id as number, text: String(answers[q.id]?.answer ?? '').trim() };
+    return { questionId: q.id as number, text: String(answers[q.id as number]?.answer ?? '').trim() };
   })();
 
-  const categoryScores = visibleCategories.map((category: any) => {
-    const bd = scoreBreakdown?.categoryBreakdown?.[category.id];
+  const categoryScores = visibleCategories.map((category: FormCategory) => {
+    const bd = scoreBreakdown?.categoryBreakdown?.[category.id as number];
 
     const earnedPoints     = bd?.earned_points    ?? 0;
     const possiblePoints   = bd?.possible_points  ?? 0;
@@ -98,7 +120,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
 
     const subCategories: Record<string, QuestionWithScore[]> = { 'default': [] };
 
-    (category.questions || []).forEach((question: any) => {
+    (category.questions || []).forEach((question: FormQuestion) => {
       if (!question.id) return;
       const qType = (question.question_type || '').toLowerCase();
 
@@ -137,12 +159,12 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
       let displayAnswer = answer?.answer || 'No answer';
       if (displayAnswer !== 'No answer') {
         if (qType === 'radio' && question.radio_options) {
-          const opt = question.radio_options.find((o: any) => o.option_value === displayAnswer);
+          const opt = question.radio_options.find((o: RadioOption) => o.option_value === displayAnswer);
           if (opt) displayAnswer = opt.option_text;
         } else if (qType === 'multi_select' && question.radio_options) {
           const selected = displayAnswer.split(',').map((v: string) => v.trim()).filter(Boolean);
           const labels = selected.map((val: string) => {
-            const opt = question.radio_options.find((o: any) => o.option_value === val || o.option_text === val);
+            const opt = question.radio_options!.find((o: RadioOption) => o.option_value === val || o.option_text === val);
             return opt ? opt.option_text : val;
           });
           displayAnswer = labels.join(', ');
@@ -155,7 +177,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
       }
 
       const rawAnswer = String(answer?.answer ?? '').trim().toLowerCase();
-      const isCritical = question.is_critical === true || question.is_critical === 1;
+      const isCritical = question.is_critical === true || (question.is_critical as unknown) === 1;
       const criticalMissed = isCritical && (rawAnswer === 'no' || rawAnswer === 'false');
 
       subCategories[subCategoryKey].push({
@@ -172,7 +194,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
 
     return {
       id: category.id,
-      name: category.category_name || category.name || `Category ${category.id}`,
+      name: category.category_name || (category as { name?: string }).name || `Category ${category.id}`,
       weight: categoryWeight,
       pointsEarned: earnedPoints,
       pointsPossible: possiblePoints,
@@ -199,7 +221,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     : 0);
   
   
-  const scoreClass = (_s: number) => 'text-slate-700';
+  const scoreClass = () => 'text-slate-700';
 
   return (
     <div className="space-y-6 p-5">
@@ -234,7 +256,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                     <td className="px-3 py-2.5 text-right text-slate-600">
                       {category.pointsPossible === 0 ? <span className="text-slate-300">—</span> : category.weightedPointsPossible.toFixed(2)}
                     </td>
-                    <td className={`px-4 py-2.5 text-right font-semibold ${category.pointsPossible === 0 ? 'text-slate-300' : scoreClass(category.score)}`}>
+                    <td className={`px-4 py-2.5 text-right font-semibold ${category.pointsPossible === 0 ? 'text-slate-300' : scoreClass()}`}>
                       {category.pointsPossible === 0 ? '—' : `${category.score.toFixed(1)}%`}
                     </td>
                   </tr>
@@ -246,7 +268,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                   <td className="px-3 py-2.5 text-center font-semibold text-primary">100%</td>
                   <td className="px-3 py-2.5 text-right font-semibold text-primary">{totalWeightedPointsEarned.toFixed(2)}</td>
                   <td className="px-3 py-2.5 text-right font-semibold text-primary">{totalWeightedPointsPossible.toFixed(2)}</td>
-                  <td className={`px-4 py-2.5 text-right font-bold text-[15px] ${scoreClass(formScore)}`}>
+                  <td className={`px-4 py-2.5 text-right font-bold text-[15px] ${scoreClass()}`}>
                     {formScore.toFixed(1)}%
                   </td>
                 </tr>
@@ -272,7 +294,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-[11px] text-slate-500">Weight: {(category.weight * 100).toFixed(0)}%</span>
-                  <span className={`text-[13px] font-bold ${category.pointsPossible === 0 ? 'text-slate-400' : scoreClass(category.score)}`}>
+                  <span className={`text-[13px] font-bold ${category.pointsPossible === 0 ? 'text-slate-400' : scoreClass()}`}>
                     {category.pointsPossible === 0 ? 'N/A' : `${category.score.toFixed(1)}%`}
                   </span>
                 </div>

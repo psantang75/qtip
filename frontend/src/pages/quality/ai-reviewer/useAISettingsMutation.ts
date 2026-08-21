@@ -37,7 +37,7 @@ export function useAISettingsMutation(formId: number) {
       qc.invalidateQueries({ queryKey: ['ai-reviewer-prompt-preview', formId] })
       toast({ title: 'Saved' })
     },
-    onError: (e: any) => {
+    onError: (e) => {
       toast({
         title: "Couldn't save settings",
         description: getErrorMessage(e, 'Try again.'),

@@ -11,6 +11,7 @@ import { formatQualityDate } from '@/utils/dateFormat'
 import { stripHtml } from '@/components/common/RichTextDisplay'
 import { useToast } from '@/hooks/use-toast'
 import writeupService from '@/services/writeupService'
+import type { WriteUpType, WriteUpStatus } from '@/services/writeupService'
 import {
   WRITE_UP_TYPE_LABELS as WRITEUP_TYPE_LABELS,
   WRITE_UP_STATUS_LABELS as WRITEUP_STATUS_LABELS,
@@ -24,6 +25,33 @@ interface PriorDisciplineModalProps {
   selected: PriorDisciplineRef[]
   onSave: (refs: PriorDisciplineRef[]) => void
   onClose: () => void
+}
+
+// Shapes returned by `writeupService.getPriorDiscipline`. The raw endpoint rows
+// (id / meeting_date / created_at / session_date) differ from the service's
+// declared `PriorDisciplineData` type, so we model the real payload locally.
+interface PriorWriteUp {
+  id:                    number
+  document_type:         WriteUpType
+  status:                WriteUpStatus
+  meeting_date:          string | null
+  created_at:            string | null
+  policies_violated:     string[]
+  incident_descriptions: string[]
+}
+
+interface PriorCoaching {
+  id:               number
+  session_date:     string | null
+  coaching_purpose: string | null
+  status:           string | null
+  notes:            string | null
+  topic_names:      string[]
+}
+
+interface PriorDisciplineHistory {
+  write_ups:         PriorWriteUp[]
+  coaching_sessions: PriorCoaching[]
 }
 
 export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: PriorDisciplineModalProps) {
@@ -51,7 +79,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
       description: 'Try again.',
     }),
   })
-  const data = fetchMut.data
+  const data = fetchMut.data as unknown as PriorDisciplineHistory | undefined
 
   const filterByDate = (dateStr?: string | null) => {
     if (!dateStr) return true
@@ -63,7 +91,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
 
   const writeUps = useMemo(() => {
     const all = data?.write_ups ?? []
-    return all.filter((w: any) => {
+    return all.filter(w => {
       if (!filterByDate(w.meeting_date ?? w.created_at)) return false
       if (policyFilters.length > 0) {
         const policies: string[] = w.policies_violated ?? []
@@ -75,7 +103,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
 
   const coachingSessions = useMemo(() => {
     const all = data?.coaching_sessions ?? []
-    return all.filter((c: any) => {
+    return all.filter(c => {
       if (!filterByDate(c.session_date)) return false
       if (topicFilters.length > 0) {
         const topics: string[] = c.topic_names ?? []
@@ -87,7 +115,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
 
   const toggle = (type: 'write_up' | 'coaching_session', id: number) => {
     const key = `${type}:${id}`
-    setDraft(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next })
+    setDraft(prev => { const next = new Set(prev); if (next.has(key)) { next.delete(key) } else { next.add(key) } return next })
   }
 
   const handleSave = () => {
@@ -96,20 +124,20 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
       const [type, idStr] = key.split(':')
       const id = Number(idStr)
       const refType = type as 'write_up' | 'coaching_session'
-      const item: any = refType === 'write_up'
-        ? (data?.write_ups ?? []).find((w: any) => Number(w.id) === id)
-        : (data?.coaching_sessions ?? []).find((c: any) => Number(c.id) === id)
 
-      if (!item) {
+      const pushExisting = () => {
         const existingRef = selected.find(r => r.reference_type === refType && r.reference_id === id)
         if (existingRef) refs.push(existingRef)
-        return
       }
 
       if (refType === 'write_up') {
+        const item = (data?.write_ups ?? []).find(w => Number(w.id) === id)
+        if (!item) { pushExisting(); return }
         const typeLabel = (item.document_type ?? '').replace('_WARNING', '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
         refs.push({ reference_type: refType, reference_id: id, label: `Performance Warning #${id}`, date: item.meeting_date?.slice(0, 10) ?? item.created_at?.slice(0, 10), subtype: typeLabel || 'Performance Warning', detail: Array.isArray(item.policies_violated) ? item.policies_violated.filter(Boolean) : [], notes: Array.isArray(item.incident_descriptions) && item.incident_descriptions.length ? item.incident_descriptions.join(' · ') : undefined, status: item.status })
       } else {
+        const item = (data?.coaching_sessions ?? []).find(c => Number(c.id) === id)
+        if (!item) { pushExisting(); return }
         refs.push({ reference_type: refType, reference_id: id, label: `Coaching #${id}`, date: item.session_date?.slice(0, 10), subtype: COACHING_PURPOSE_LABELS[item.coaching_purpose as keyof typeof COACHING_PURPOSE_LABELS] ?? (item.coaching_purpose ?? 'Coaching'), detail: Array.isArray(item.topic_names) ? item.topic_names.filter(Boolean) : [], notes: item.notes ?? undefined, status: item.status })
       }
     })
@@ -166,7 +194,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
                     <p className="text-[13px] text-slate-400 py-6 text-center">No coaching sessions found</p>
                   ) : (
                     <div className="divide-y divide-slate-50">
-                      {coachingSessions.map((c: any) => {
+                      {coachingSessions.map(c => {
                         const key = `coaching_session:${c.id}`
                         const topics: string[] = c.topic_names ?? []
                         return (
@@ -203,7 +231,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
                     <p className="text-[13px] text-slate-400 py-6 text-center">No prior performance warnings found</p>
                   ) : (
                     <div className="divide-y divide-slate-50">
-                      {writeUps.map((w: any) => {
+                      {writeUps.map(w => {
                         const key = `write_up:${w.id}`
                         const policies: string[] = w.policies_violated ?? []
                         return (

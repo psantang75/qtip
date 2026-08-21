@@ -3,12 +3,20 @@ import { Field, ListItemMultiSelect } from '@/pages/training/coaching-form/Coach
 import type { ListItem } from '@/services/listService'
 import type { WriteUpFormState } from './types'
 
+// This section only touches the internal-notes fields of the form, so it
+// accepts a structural subset. Callers passing the full `WriteUpFormState`
+// (write-up form + detail edit view) remain compatible.
+type InternalNotesFields = Pick<
+  WriteUpFormState,
+  'internal_notes' | 'behavior_flag_ids' | 'root_cause_ids' | 'support_needed_ids'
+>
+
 interface Props {
-  form: WriteUpFormState
+  form: InternalNotesFields
   flagItems: ListItem[]
   rootCauseItems?: ListItem[]
   supportNeededItems?: ListItem[]
-  update: <K extends keyof WriteUpFormState>(k: K, v: WriteUpFormState[K]) => void
+  update: <K extends keyof InternalNotesFields>(k: K, v: InternalNotesFields[K]) => void
 }
 
 /**

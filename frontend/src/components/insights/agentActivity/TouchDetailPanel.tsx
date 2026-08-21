@@ -19,7 +19,7 @@ const REASON_TEXT: Record<string, string> = {
   'no-crm-user': 'No CRM user matches this agent’s email, so no task/ticket activity could be read.',
 }
 
-const COLUMNS: ColumnDef<TouchDetailRow, any>[] = [
+const COLUMNS: ColumnDef<TouchDetailRow, unknown>[] = [
   {
     id: 'type', header: 'Type', accessorKey: 'itemType', meta: { width: 'w-[10%]' },
     cell: ({ row }) => (

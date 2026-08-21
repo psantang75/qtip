@@ -60,7 +60,7 @@ export function RulePackChipPicker({ formId }: RulePackChipPickerProps) {
       qc.invalidateQueries({ queryKey: ['ai-reviewer-form-rule-packs', formId] })
       toast({ title: 'Rule packs saved' })
     },
-    onError: (e: any) => {
+    onError: (e) => {
       toast({
         variant: 'destructive',
         title: "Couldn't save assignments",

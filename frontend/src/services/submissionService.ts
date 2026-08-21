@@ -193,21 +193,22 @@ const submissionService = {
       const api = getAuthorizedAxios();
       const response = await api.post<SubmissionResult>('/submissions', submissionData);
       return response.data;
-    } catch (error: any) {
+    } catch (error) {
       logError('submissionService', 'Error submitting audit:', error);
-      
+
+      const err = error as { response?: { data?: unknown }; request?: unknown; message?: string };
       // Pass through the full error response for better error handling
-      if (error.response) {
+      if (err.response) {
         // The server responded with a status code outside the 2xx range
-        logError('submissionService', 'Server response:', error.response.data);
+        logError('submissionService', 'Server response:', err.response.data);
         throw error;
-      } else if (error.request) {
+      } else if (err.request) {
         // The request was made but no response was received
         logError('submissionService', 'No response received');
         throw error;
       } else {
         // Something happened in setting up the request
-        logError('submissionService', 'Request setup error:', error.message);
+        logError('submissionService', 'Request setup error:', err.message);
         throw error;
       }
     }

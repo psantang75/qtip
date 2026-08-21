@@ -22,7 +22,7 @@ export interface TranscriptPhrase {
     startTimeMs: number;
     duration: { milliseconds: number };
   }>;
-  alternatives: any[];
+  alternatives: unknown[];
   participantPurpose: 'internal' | 'external';
   phraseIndex: number;
 }
@@ -37,7 +37,7 @@ export interface TranscriptData {
   startTime: number;
   duration: { milliseconds: number };
   phrases: TranscriptPhrase[];
-  analytics: any;
+  analytics: unknown;
 }
 
 export interface ConversationTranscript {
@@ -46,7 +46,7 @@ export interface ConversationTranscript {
   communicationId: string;
   recordingId: string;
   transcripts: TranscriptData[];
-  participants: any[];
+  participants: unknown[];
   uri: string;
   startTime: number;
   duration: { milliseconds: number };
@@ -112,7 +112,7 @@ export function extractTranscriptText(transcriptData: string | ConversationTrans
       }
       // If it's just a plain string, return as-is
       return transcriptData;
-    } catch (error) {
+    } catch {
       // If parsing fails, it's likely plain text, return as-is
       return transcriptData;
     }

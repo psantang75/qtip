@@ -28,17 +28,18 @@ export const getFormById = async (formId: number, includeInactive = false): Prom
     const url = includeInactive ? `/forms/${formId}?include_inactive=true` : `/forms/${formId}`;
     const response = await apiClient.get(url);
     return response.data;
-  } catch (error: any) {
-    if (error.response) {
-      const { status, data } = error.response;
+  } catch (error) {
+    const err = error as { response?: { status?: number; data?: { error?: string; message?: string } }; request?: unknown; code?: string };
+    if (err.response) {
+      const { status, data } = err.response;
       if (status === 401) throw new Error('Authentication expired. Please login again.');
       if (status === 404) throw new Error('Form not found. The form may have been deleted or you may not have permission to view it.');
       if (status === 403) throw new Error('Access denied. You do not have permission to view this form.');
       if (status === 500) throw new Error('Server error occurred while loading the form. Please try again.');
       if (data?.error) throw new Error(data.error);
-    } else if (error.request) {
+    } else if (err.request) {
       throw new Error('Unable to connect to server. Please check your internet connection and try again.');
-    } else if (error.code === 'ECONNABORTED') {
+    } else if (err.code === 'ECONNABORTED') {
       throw new Error('Request timed out. Please try again.');
     }
     throw error;
@@ -53,16 +54,17 @@ export const createForm = async (formData: Form): Promise<{ message: string; for
       headers: { 'Content-Type': 'application/json' },
     });
     return response.data;
-  } catch (error: any) {
-    if (error.response) {
-      const { status, data } = error.response;
+  } catch (error) {
+    const err = error as { response?: { status?: number; data?: { error?: string; message?: string } }; request?: unknown; code?: string };
+    if (err.response) {
+      const { status, data } = err.response;
       if (status === 404) throw new Error('Form endpoint not found. Please check if the server is running correctly.');
       if (status === 500) throw new Error('Server error occurred while creating form. Please try again.');
       if (status === 413) throw new Error('Form data is too large. Please reduce the number of questions or categories.');
       if (data?.message) throw new Error(data.message);
-    } else if (error.request) {
+    } else if (err.request) {
       throw new Error('No response received from server. Please check your connection and try again.');
-    } else if (error.code === 'ECONNABORTED') {
+    } else if (err.code === 'ECONNABORTED') {
       throw new Error('Request timed out. The form might be too complex. Please try again or contact support.');
     }
     logError('formService', 'Error creating form:', error);
@@ -78,16 +80,17 @@ export const updateForm = async (formId: number, formData: Form): Promise<{ mess
       headers: { 'Content-Type': 'application/json' },
     });
     return response.data;
-  } catch (error: any) {
-    if (error.response) {
-      const { status, data } = error.response;
+  } catch (error) {
+    const err = error as { response?: { status?: number; data?: { error?: string; message?: string } }; request?: unknown; code?: string };
+    if (err.response) {
+      const { status, data } = err.response;
       if (status === 404) throw new Error(`Form with ID ${formId} not found. Please check if the form exists.`);
       if (status === 500) throw new Error('Server error occurred while updating form. Please try again.');
       if (status === 413) throw new Error('Form data is too large. Please reduce the number of questions or categories.');
       if (data?.message) throw new Error(data.message);
-    } else if (error.request) {
+    } else if (err.request) {
       throw new Error('No response received from server. Please check your connection and try again.');
-    } else if (error.code === 'ECONNABORTED') {
+    } else if (err.code === 'ECONNABORTED') {
       throw new Error('Request timed out. The form might be too complex. Please try again or contact support.');
     }
     logError('formService', `Error updating form ${formId}:`, error);
@@ -100,17 +103,18 @@ export const deactivateForm = async (formId: number): Promise<{ message: string 
   try {
     const response = await apiClient.delete(`/forms/${formId}`);
     return response.data;
-  } catch (error: any) {
-    if (error.response) {
-      const { status, data } = error.response;
+  } catch (error) {
+    const err = error as { response?: { status?: number; data?: { error?: string; message?: string } }; request?: unknown; code?: string };
+    if (err.response) {
+      const { status, data } = err.response;
       if (status === 401) throw new Error('Authentication expired. Please login again.');
       if (status === 404) throw new Error('Form not found. The form may have been deleted.');
       if (status === 403) throw new Error('Access denied. You do not have permission to deactivate this form.');
       if (status === 500) throw new Error(data?.error || data?.message || 'Server error occurred while deactivating the form. Please try again.');
       if (data?.error) throw new Error(data.error);
-    } else if (error.request) {
+    } else if (err.request) {
       throw new Error('Unable to connect to server. Please check your internet connection and try again.');
-    } else if (error.code === 'ECONNABORTED') {
+    } else if (err.code === 'ECONNABORTED') {
       throw new Error('Request timed out. Please try again.');
     }
     logError('formService', `Error deactivating form ${formId}:`, error);

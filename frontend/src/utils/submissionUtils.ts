@@ -108,8 +108,8 @@ export async function submitFormReview(
   callId: string | number | null,
   user: User, 
   answers: Record<number, AnswerType>,
-  onSuccess?: (response: any) => void,
-  onError?: (error: any) => void,
+  onSuccess?: (response: unknown) => void,
+  onError?: (error: unknown) => void,
   metadata?: Record<string, string>
 ): Promise<boolean> {
   try {
@@ -129,18 +129,24 @@ export async function submitFormReview(
     }
     
     return true;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error submitting review:', error);
     
     // Check for authentication errors (401) - let the axios interceptor handle redirect
     if (handleErrorIfAuthentication(error)) {
       return false;
     }
-    
+
+    const err = error as {
+      response?: {
+        status?: number;
+        data?: { unanswered?: number[]; unansweredDetails?: { id: number; question_text: string }[] };
+      };
+    };
     // Handle specific 400 error for unanswered required questions
-    if (error.response?.status === 400 && error.response?.data?.unanswered) {
-      const unansweredQuestions = error.response.data.unanswered;
-      const unansweredDetails = error.response.data.unansweredDetails || [];
+    if (err.response?.status === 400 && err.response?.data?.unanswered) {
+      const unansweredQuestions = err.response.data.unanswered;
+      const unansweredDetails = err.response.data.unansweredDetails || [];
       
       console.error('Missing required answers for questions:', unansweredQuestions);
       
@@ -149,14 +155,14 @@ export async function submitFormReview(
         let errorMessage = 'Please answer all required questions:';
         if (unansweredDetails.length > 0) {
           errorMessage += '\n' + unansweredDetails
-            .map((q: { id: number; question_text: string }) => `- ${q.question_text || `Question ${q.id}`}`)
+            .map((q) => `- ${q.question_text || `Question ${q.id}`}`)
             .join('\n');
         } else {
           errorMessage += ' ' + unansweredQuestions.join(', ');
         }
         
         onError({
-          ...error,
+          ...(error as object),
           unansweredQuestions,
           unansweredDetails,
           isValidationError: true,
@@ -179,8 +185,8 @@ export async function saveFormReviewDraft(
   callId: string | number | null,
   user: User,
   answers: Record<number, AnswerType>,
-  onSuccess?: (response: any) => void,
-  onError?: (error: any) => void,
+  onSuccess?: (response: unknown) => void,
+  onError?: (error: unknown) => void,
   metadata?: Record<string, string>
 ): Promise<boolean> {
   try {
@@ -200,7 +206,7 @@ export async function saveFormReviewDraft(
     }
     
     return true;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error saving review draft:', error);
     
     // Check for authentication errors (401) - let the axios interceptor handle redirect
@@ -225,8 +231,8 @@ export async function updateFormReview(
   callId: string | number | null,
   user: User,
   answers: Record<number, AnswerType>,
-  onSuccess?: (response: any) => void,
-  onError?: (error: any) => void
+  onSuccess?: (response: unknown) => void,
+  onError?: (error: unknown) => void
 ): Promise<boolean> {
   try {
     const submissionData = prepareSubmissionData(formId, callId, user, answers, 'SUBMITTED');
@@ -261,8 +267,8 @@ export async function updateFormReview(
 export async function createScoreSnapshot(
   submissionId: number,
   user: User,
-  onSuccess?: (response: any) => void,
-  onError?: (error: any) => void
+  onSuccess?: (response: unknown) => void,
+  onError?: (error: unknown) => void
 ): Promise<boolean> {
   try {
     // Use the dedicated service method for creating score snapshots
@@ -295,8 +301,8 @@ export async function finalizeFormReview(
   user: User,
   finalScore?: number, // Optional final score adjustment
   comments?: string,
-  onSuccess?: (response: any) => void,
-  onError?: (error: any) => void
+  onSuccess?: (response: unknown) => void,
+  onError?: (error: unknown) => void
 ): Promise<boolean> {
   try {
     // Use the shared api instance (baseURL '/api', auth + CSRF + 401-refresh

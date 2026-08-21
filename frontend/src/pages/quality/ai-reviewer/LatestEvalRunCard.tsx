@@ -71,7 +71,7 @@ export function LatestEvalRunCard({ formId }: Props) {
         variant: data.pass ? 'default' : 'destructive',
       })
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({
         variant: 'destructive',
         title: "Couldn't run eval",

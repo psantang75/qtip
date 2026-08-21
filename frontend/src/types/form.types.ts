@@ -223,6 +223,26 @@ export interface BaseForm {
   ai_sample_low_score_always?: boolean;
 
   /**
+   * Trusted-mode sampling: AI submissions whose reviewer confidence falls
+   * below this threshold (0-1) are routed to the QA Inbox. NULL disables
+   * the confidence gate. Edited from the Calibration/Sampling card.
+   */
+  ai_sample_low_confidence_threshold?: number | null;
+
+  /**
+   * Trusted-mode routing: when the AI's score disagrees with the human
+   * baseline by more than this threshold, the submission is routed for
+   * re-audit. NULL disables the disagreement gate.
+   */
+  ai_disagreement_route_threshold?: number | null;
+
+  /**
+   * Optional monthly spend cap (USD) for this form's AI Reviewer usage,
+   * enforced by the backend cost guard. NULL means no per-form budget.
+   */
+  ai_monthly_cost_budget_usd?: number | null;
+
+  /**
    * Layer 1 of the AI Reviewer's 4-layer system prompt: which universal
    * base this form uses. NULL means "inherit the seeded default for the
    * requested prompt_kind" (`base.v1` today). Edited from the Universal

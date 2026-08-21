@@ -33,15 +33,6 @@ export default function FormsPage() {
   const [searchParams] = useSearchParams()
 
   const { isAdmin } = useQualityRole()
-  if (user && !isAdmin) {
-    return (
-      <div className="p-6">
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-amber-700">
-          You don't have permission to access Form Builder.
-        </div>
-      </div>
-    )
-  }
 
   const path = location.pathname
   const isNew       = path.endsWith('/new')
@@ -98,6 +89,18 @@ export default function FormsPage() {
     }
   }, [isNew, formId])
 
+  // Permission gate — placed after all hooks so hook order stays stable
+  // across renders (react-hooks/rules-of-hooks).
+  if (user && !isAdmin) {
+    return (
+      <div className="p-6">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-amber-700">
+          You don't have permission to access Form Builder.
+        </div>
+      </div>
+    )
+  }
+
   const handleChange = (updated: Form) => { setForm(updated); setHasChanges(true) }
 
   const setStep = (newStep: Step) => {
@@ -147,7 +150,7 @@ export default function FormsPage() {
       }
       setHasChanges(false)
       setTimeout(() => navigate(FORMS_BASE), 1500)
-    } catch (e: any) {
+    } catch (e) {
       toast({
         variant: 'destructive',
         title: "Couldn't save form",

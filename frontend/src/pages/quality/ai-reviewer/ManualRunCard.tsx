@@ -41,6 +41,14 @@ import {
   trimAttachedSources,
 } from './manualRunCardState'
 
+// Minimal shape of the axios error thrown by a failed run — the backend
+// returns `{ error, code }` on the AI Reviewer routes (error is a string
+// or `{ message }` from the global middleware).
+interface ApiError {
+  response?: { data?: { error?: string | { message?: string }; code?: string } }
+  message?: string
+}
+
 interface Props {
   formId: number
   /**
@@ -172,25 +180,26 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
             : `Score ${data.total_score}. Open the submission to view it.`) + costSuffix,
       })
     },
-    onError: (e: any) => {
+    onError: (e) => {
       // Server error payloads come in two flavours across our routes:
       //   { error: 'string' }          — the AI Reviewer routes
       //   { error: { message: '...' } }— the global error middleware
       // Normalize to a string so the toast never gets an object as a
       // child (which crashes React).
-      const raw = e?.response?.data?.error
+      const err = e as ApiError
+      const raw = err?.response?.data?.error
       const fallback =
         typeof raw === 'string'
           ? raw
           : raw?.message
           ? String(raw.message)
-          : e?.message
-          ? String(e.message)
+          : err?.message
+          ? String(err.message)
           : 'AI run failed'
       // Backend AI Reviewer routes return { error, code } — surface the
       // code in the inline strip so operators can recognise repeat issues
       // (e.g. INTERACTION_NOT_CLOSED) without digging through server logs.
-      const code = e?.response?.data?.code ?? null
+      const code = err?.response?.data?.code ?? null
       const codeStr = typeof code === 'string' ? code : null
       // Translate known codes to user-facing wording; fall back to backend text.
       const desc = t.msg.aiReviewer.runCodeToDescription(codeStr, fallback)
@@ -218,17 +227,18 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
             key,
           )
           return { key, value }
-        } catch (e: any) {
-          const raw = e?.response?.data?.error
+        } catch (e) {
+          const err = e as ApiError
+          const raw = err?.response?.data?.error
           const message =
             typeof raw === 'string'
               ? raw
               : raw?.message
               ? String(raw.message)
-              : e?.message
-              ? String(e.message)
+              : err?.message
+              ? String(err.message)
               : 'Run failed'
-          const code = e?.response?.data?.code ?? null
+          const code = err?.response?.data?.code ?? null
           return { key, error: { message, code: typeof code === 'string' ? code : null } }
         }
       })
@@ -291,17 +301,18 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
             tier,
           )
           return { key: tier, value }
-        } catch (e: any) {
-          const raw = e?.response?.data?.error
+        } catch (e) {
+          const err = e as ApiError
+          const raw = err?.response?.data?.error
           const message =
             typeof raw === 'string'
               ? raw
               : raw?.message
               ? String(raw.message)
-              : e?.message
-              ? String(e.message)
+              : err?.message
+              ? String(err.message)
               : 'Run failed'
-          const code = e?.response?.data?.code ?? null
+          const code = err?.response?.data?.code ?? null
           return { key: tier, error: { message, code: typeof code === 'string' ? code : null } }
         }
       })

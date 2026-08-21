@@ -191,7 +191,7 @@ const callService = {
     totalDuration: number;
   }> => {
     try {
-      const params: any = { csr_id: csrId };
+      const params: { csr_id: number; date_start?: string; date_end?: string } = { csr_id: csrId };
       if (startDate) params.date_start = startDate;
       if (endDate) params.date_end = endDate;
       
@@ -251,7 +251,7 @@ const callService = {
   },
 
   // Check if conversation ID is already used in any submission
-  checkConversationIdInSubmissions: async (conversationId: string): Promise<{ exists: boolean; submissions: any[] }> => {
+  checkConversationIdInSubmissions: async (conversationId: string): Promise<{ exists: boolean; submissions: unknown[] }> => {
     try {
       const response = await apiClient.get(`/calls/check-submission/${conversationId}`);
       return response.data;

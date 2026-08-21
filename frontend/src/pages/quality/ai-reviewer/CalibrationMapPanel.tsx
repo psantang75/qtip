@@ -53,7 +53,7 @@ export function CalibrationMapPanel({ formId }: Props) {
         description: `${data.sample_count} samples, ${data.bins_with_data} bins with data. Review and activate when ready.`,
       })
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({
         variant: 'destructive',
         title: "Couldn't fit calibration",
@@ -67,7 +67,7 @@ export function CalibrationMapPanel({ formId }: Props) {
       qc.invalidateQueries({ queryKey: ['ai-reviewer-calibration-map', formId] })
       toast({ title: 'Activated' })
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({
         variant: 'destructive',
         title: "Couldn't activate calibration",

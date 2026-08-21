@@ -89,7 +89,7 @@ export default function LibraryQuizFormPage() {
       toast({ title: isEdit ? 'Quiz updated' : 'Quiz created' })
       navigate('/app/training/library/quizzes')
     },
-    onError: (err: any) => toast({
+    onError: (err) => toast({
       variant: 'destructive',
       title: "Couldn't save quiz",
       description: getErrorMessage(err, 'Try again.'),

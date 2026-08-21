@@ -17,7 +17,7 @@ export interface AgentColMeta {
 }
 
 interface SortableTableProps<T> {
-  columns: ColumnDef<T, any>[]
+  columns: ColumnDef<T, unknown>[]
   data: T[]
   initialSorting: SortingState
   /**

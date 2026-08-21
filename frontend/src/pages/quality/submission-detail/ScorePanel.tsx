@@ -1,7 +1,8 @@
 import { ScoreRenderer } from '@/utils/forms/scoreRenderer'
-import { FormRenderer } from '@/utils/forms'
+import { FormRenderer, type FormRenderData } from '@/utils/forms'
 import { CategoryBreakdown } from './SubmissionDetailPrimitives'
 import type { SubmissionDetail } from '@/services/qaService'
+import type { Form } from '@/types/form.types'
 
 interface Props {
   score:           number
@@ -10,12 +11,12 @@ interface Props {
   adjScore:        number | null
   resolutionMode:  boolean
   liveScore:       number
-  editRenderData:  any
-  formData:        any
-  answersMap:      Record<number, any>
+  editRenderData:  FormRenderData | null
+  formData:        Form | undefined
+  answersMap:      Record<number, { answer: string; score?: number; notes: string }>
   roleId:          number
   detail:          SubmissionDetail
-  scoreBreakdown?: any
+  scoreBreakdown?: SubmissionDetail['scoreBreakdown']
   onEditAnswer:    (id: number, value: string, type: string) => void
 }
 

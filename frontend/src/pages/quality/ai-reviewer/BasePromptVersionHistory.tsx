@@ -72,7 +72,7 @@ export function BasePromptVersionHistory({ open, base, onClose, onRolledBack }: 
       setSelectedVersion(null)
       onRolledBack()
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({
         variant: 'destructive',
         title: "Couldn't roll back",

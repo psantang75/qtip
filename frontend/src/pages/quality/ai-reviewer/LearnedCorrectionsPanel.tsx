@@ -63,7 +63,7 @@ export function LearnedCorrectionsPanel({ formId }: Props) {
       qc.invalidateQueries({ queryKey: ['ai-reviewer-absorbed', formId] })
       toast({ title: 'Marked absorbed' })
     },
-    onError: (e: any) => {
+    onError: (e) => {
       toast({
         title: 'Could not mark absorbed',
         description: getErrorMessage(e, 'Try again.'),

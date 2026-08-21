@@ -6,6 +6,7 @@ import { STATUS_LABELS } from '@/constants/labels'
 import { cn } from '@/lib/utils'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
 import qaService from '@/services/qaService'
+import type { Form } from '@/types/form.types'
 import { EditDisputeForm } from './DisputeForms'
 
 interface Dispute {
@@ -39,7 +40,7 @@ interface Props {
   onEditDispute:    (v: boolean) => void
   canResolveDispute: boolean
   resolution:       ResolutionState
-  formData:         any
+  formData:         Form | undefined
   /** Admin-only: this determination is closed and can be reopened. */
   canReopen?:       boolean
   onReopen?:        () => void

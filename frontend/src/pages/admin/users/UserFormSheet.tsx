@@ -29,7 +29,7 @@ const passwordRules = z.string()
   .regex(/[A-Z]/, 'Add an uppercase letter')
   .regex(/[a-z]/, 'Add a lowercase letter')
   .regex(/[0-9]/, 'Add a number')
-  .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/, 'Add a special character')
+  .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, 'Add a special character')
 
 const makeSchema = (isCreate: boolean) =>
   z.object({

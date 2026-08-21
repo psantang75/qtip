@@ -104,8 +104,8 @@ const authService = {
         `/auth/reset-password/validate`, { params: { token } },
       );
       return response.data;
-    } catch (err: any) {
-      const data = err?.response?.data;
+    } catch (err) {
+      const data = (err as { response?: { data?: { reason?: 'invalid' | 'expired' | 'used' } } })?.response?.data;
       return { valid: false, reason: data?.reason ?? 'invalid' };
     }
   },
@@ -121,8 +121,8 @@ const authService = {
         '/auth/reset-password', { token, newPassword, confirmPassword },
       );
       return response.data;
-    } catch (err: any) {
-      const data = err?.response?.data;
+    } catch (err) {
+      const data = (err as { response?: { data?: { message?: string } } })?.response?.data;
       return {
         ok: false,
         message: data?.message ?? 'Password reset failed.',

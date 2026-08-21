@@ -1,5 +1,5 @@
 import { api } from './authService'
-import { normalizePaginated, PaginatedResult } from './qaService'
+import { PaginatedResult } from './qaService'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -160,14 +160,36 @@ export interface CSRHistoryResponse {
   repeat_topics: string[]
 }
 
+/** One row of the trainer "Agent Breakdown" coaching report table. */
+export interface CSRCoachingListRow {
+  user_id: number
+  csr_name: string
+  total_sessions?: number
+  completed_sessions?: number
+  completion_rate?: number
+  avg_days_to_completion?: number | null
+  quizzes_passed?: number
+  most_common_topic?: string | null
+  last_session_date?: string | null
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+interface RawCoachingPage {
+  data?: { sessions?: CoachingSession[]; totalCount?: number; page?: number; limit?: number }
+  sessions?: CoachingSession[]
+  totalCount?: number
+  page?: number
+  limit?: number
+}
+
 /** Convert a raw backend paginated coaching response into PaginatedResult<CoachingSession> */
-function normalizeCoachingPage(raw: any): PaginatedResult<CoachingSession> {
-  const sessions: CoachingSession[] = raw?.data?.sessions ?? raw?.sessions ?? []
-  const totalCount = raw?.data?.totalCount ?? raw?.totalCount ?? sessions.length
-  const page       = raw?.data?.page  ?? raw?.page  ?? 1
-  const limit      = raw?.data?.limit ?? raw?.limit ?? sessions.length
+function normalizeCoachingPage(raw: unknown): PaginatedResult<CoachingSession> {
+  const r = (raw ?? {}) as RawCoachingPage
+  const sessions: CoachingSession[] = r.data?.sessions ?? r.sessions ?? []
+  const totalCount = r.data?.totalCount ?? r.totalCount ?? sessions.length
+  const page       = r.data?.page  ?? r.page  ?? 1
+  const limit      = r.data?.limit ?? r.limit ?? sessions.length
   return {
     items:      sessions,
     total:      Number(totalCount),
@@ -181,7 +203,7 @@ function normalizeCoachingPage(raw: any): PaginatedResult<CoachingSession> {
 
 export const trainingService = {
 
-  async getCoachingSessions(params?: Record<string, any>): Promise<PaginatedResult<CoachingSession>> {
+  async getCoachingSessions(params?: Record<string, unknown>): Promise<PaginatedResult<CoachingSession>> {
     const { data } = await api.get('/trainer/coaching-sessions', { params })
     return normalizeCoachingPage(data)
   },
@@ -239,7 +261,7 @@ export const trainingService = {
 
   // ── CSR ────────────────────────────────────────────────────────────────────
 
-  async getMyCoachingSessions(params?: Record<string, any>): Promise<PaginatedResult<CoachingSession>> {
+  async getMyCoachingSessions(params?: Record<string, unknown>): Promise<PaginatedResult<CoachingSession>> {
     const { data } = await api.get('/csr/coaching-sessions', { params })
     return normalizeCoachingPage(data)
   },
@@ -275,7 +297,7 @@ export const trainingService = {
 
   // ── Resources ─────────────────────────────────────────────────────────────
 
-  async getResources(params?: Record<string, any>): Promise<PaginatedResult<TrainingResource>> {
+  async getResources(params?: Record<string, unknown>): Promise<PaginatedResult<TrainingResource>> {
     const { data } = await api.get('/trainer/resources', { params })
     // Backend: { success: true, data: { resources: [...], totalCount, page, limit } }
     const inner = data?.data ?? data
@@ -339,7 +361,7 @@ export const trainingService = {
 
   // ── Quiz Library ──────────────────────────────────────────────────────────
 
-  async getQuizLibrary(params?: Record<string, any>): Promise<PaginatedResult<LibraryQuiz>> {
+  async getQuizLibrary(params?: Record<string, unknown>): Promise<PaginatedResult<LibraryQuiz>> {
     const { data } = await api.get('/trainer/quiz-library', { params })
     const items: LibraryQuiz[] = Array.isArray(data?.data) ? data.data : (data?.items ?? [])
     // Backend now returns `{ data, pagination }`. Surface the real
@@ -397,16 +419,20 @@ export const trainingService = {
 
   // ── Stats / Reports ────────────────────────────────────────────────────────
 
-  async getReportsSummary(params?: Record<string, any>): Promise<any> {
+  // Heterogeneous, untyped aggregate-report payload consumed via a `?? {}`
+  // fallback on the page; a concrete type would break that call site, so the
+  // dynamic shape is deliberately left as `any`.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic aggregate report payload
+  async getReportsSummary(params?: Record<string, unknown>): Promise<any> {
     const { data } = await api.get('/trainer/reports/summary', { params })
     return data?.data ?? data
   },
 
-  async getCSRCoachingList(params?: Record<string, any>): Promise<PaginatedResult<any>> {
+  async getCSRCoachingList(params?: Record<string, unknown>): Promise<PaginatedResult<CSRCoachingListRow>> {
     const { data } = await api.get('/trainer/reports/csr-list', { params })
     // Backend: { success: true, data: { csrs: [...], totalCount, page, limit } }
     const inner = data?.data ?? data
-    const items: any[] = Array.isArray(inner?.csrs) ? inner.csrs : (Array.isArray(inner) ? inner : [])
+    const items: CSRCoachingListRow[] = Array.isArray(inner?.csrs) ? inner.csrs : (Array.isArray(inner) ? inner : [])
     return {
       items,
       total:      Number(inner?.totalCount ?? items.length),

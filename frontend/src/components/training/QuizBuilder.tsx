@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Plus, Trash2, HelpCircle, CheckCircle2, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -82,8 +81,6 @@ export function QuizBuilder({ value, onChange, errors, topics }: QuizBuilderProp
     )
     update({ questions: qs })
   }
-
-  const sel = 'w-full h-9 px-3 border border-slate-200 rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-primary/40'
 
   return (
     <div className="space-y-5">

@@ -36,7 +36,7 @@
     "verify:remote:stage": "bash ./scripts/verify_remote.sh stage",
     "verify:remote:prod": "bash ./scripts/verify_remote.sh prod",
     "bootstrap:stage": "scp ./scripts/bootstrap_vm.sh qtip-admin@10.90.15.6:/tmp/qtip-bootstrap.sh && ssh qtip-admin@10.90.15.6 'sudo bash /tmp/qtip-bootstrap.sh' && ssh qtip-admin@10.90.15.6 'rm /tmp/qtip-bootstrap.sh'",
-    "bootstrap:prod":  "scp ./scripts/bootstrap_vm.sh qtip-admin@10.90.15.5:/tmp/qtip-bootstrap.sh && ssh qtip-admin@10.90.15.5 'sudo bash /tmp/qtip-bootstrap.sh' && ssh qtip-admin@10.90.15.5 'rm /tmp/qtip-bootstrap.sh'",
+    "bootstrap:prod": "scp ./scripts/bootstrap_vm.sh qtip-admin@10.90.15.5:/tmp/qtip-bootstrap.sh && ssh qtip-admin@10.90.15.5 'sudo bash /tmp/qtip-bootstrap.sh' && ssh qtip-admin@10.90.15.5 'rm /tmp/qtip-bootstrap.sh'",
     "clean": "rimraf backend/dist frontend/dist logs/*.log",
     "clean:all": "npm run clean && rimraf node_modules backend/node_modules frontend/node_modules",
     "install:all": "npm install && npm run install:backend && npm run install:frontend",
@@ -53,12 +53,18 @@
     "lint:frontend": "cd frontend && npm run lint",
     "lint:fix": "npm run lint:fix:backend && npm run lint:fix:frontend",
     "lint:fix:backend": "cd backend && npm run lint:fix",
-    "lint:fix:frontend": "cd frontend && npm run lint:fix"
+    "lint:fix:frontend": "cd frontend && npm run lint:fix",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": "node scripts/eslint-staged.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.0",
     "concurrently": "^8.2.2",
     "dotenv": "^16.4.7",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "rimraf": "^5.0.10",
     "serve": "^14.2.4",
     "ts-node": "^10.9.2",

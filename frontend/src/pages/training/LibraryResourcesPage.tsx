@@ -30,8 +30,6 @@ import { useToast } from '@/hooks/use-toast'
 import { useListSort } from '@/hooks/useListSort'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { TopicListTooltip } from '@/components/training/TopicListTooltip'
-import { cn } from '@/lib/utils'
-
 // ── Resource type config ──────────────────────────────────────────────────────
 
 const RESOURCE_TYPES: { value: ResourceType; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -86,7 +84,7 @@ export default function LibraryResourcesPage() {
   const { toast }    = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [editing,      setEditing]      = useState<TrainingResource | null | {}>( null )
+  const [editing,      setEditing]      = useState<TrainingResource | null | object>( null )
   const [form,         setForm]         = useState<ResourceForm>(EMPTY)
   const [urlErr,       setUrlErr]       = useState('')
   const [titleErr,     setTitleErr]     = useState('')

@@ -112,7 +112,7 @@ export default function LibraryTopicsPage() {
   }
 
   const toggleExpanded = (id: number) =>
-    setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+    setExpanded(prev => { const s = new Set(prev); if (s.has(id)) { s.delete(id) } else { s.add(id) } return s })
 
   const openPreview = (quizId: number, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -225,7 +225,7 @@ export default function LibraryTopicsPage() {
                 <p className="text-[12px] text-slate-400">No resources linked</p>
               ) : (
                 <div className="space-y-1">
-                  {topicResources.map((r: any) => (
+                  {topicResources.map(r => (
                     <div key={r.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-200">
                       <ResourceLink resource={r} maxWidth="max-w-none flex-1" />
                       <span className="text-[11px] text-slate-400 shrink-0">{r.resource_type}</span>
@@ -240,7 +240,7 @@ export default function LibraryTopicsPage() {
                 <p className="text-[12px] text-slate-400">No quizzes linked</p>
               ) : (
                 <div className="space-y-1">
-                  {topicQuizzes.map((q: any) => (
+                  {topicQuizzes.map(q => (
                     <div key={q.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-slate-200">
                       <button onClick={e => openPreview(q.id, e)}
                         className="flex-1 text-[13px] font-medium text-primary hover:underline truncate text-left">

@@ -56,7 +56,7 @@ function FormScoresSection({ formScores, params, qaGoal, qaWarn }: {
     enabled:  expanded !== null,
   })
 
-  const agentColumns = useMemo<ColumnDef<FormAgentRow, any>[]>(() => [
+  const agentColumns = useMemo<ColumnDef<FormAgentRow, unknown>[]>(() => [
     { accessorKey: 'name', header: 'Agent', cell: ({ row }) => <span className="text-primary hover:underline">{row.original.name}</span> },
     { accessorKey: 'dept', header: 'Department', cell: ({ row }) => <span className="text-slate-500">{row.original.dept}</span> },
     { accessorKey: 'audits', header: 'Reviews', meta: { bold: true } },
@@ -142,7 +142,7 @@ function LowScoresSection({ audits, qaThresh }: {
 }) {
   const navigate = useNavigate()
 
-  const columns = useMemo<ColumnDef<LowScoringAudit, any>[]>(() => [
+  const columns = useMemo<ColumnDef<LowScoringAudit, unknown>[]>(() => [
     {
       accessorKey: 'id',
       header: 'Review ID',
@@ -345,7 +345,7 @@ function DeptComparisonSection({ deptComp, qaThresh, auditGoal, auditWarn, onSel
   auditWarn:    number | null
   onSelectDept: (dept: string) => void
 }) {
-  const columns = useMemo<ColumnDef<DeptQualityRow, any>[]>(() => [
+  const columns = useMemo<ColumnDef<DeptQualityRow, unknown>[]>(() => [
     { accessorKey: 'dept', header: 'Department', cell: ({ row }) => <span className="font-medium text-slate-800">{row.original.dept}</span> },
     { accessorKey: 'audits', header: 'Audits', cell: ({ row }) => <span className="text-slate-500">{row.original.audits}</span> },
     {
@@ -395,7 +395,6 @@ function DeptComparisonSection({ deptComp, qaThresh, auditGoal, auditWarn, onSel
 }
 
 export default function QCQualityPage() {
-  const navigate = useNavigate()
   const { departments, setDepartments, period, setPeriod,
           customStart, setCustomStart, customEnd, setCustomEnd,
           forms, setForms, resetFilters, params } = useQCFilters()

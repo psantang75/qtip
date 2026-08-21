@@ -14,7 +14,8 @@ import {
   getQuestionScore,
   type FormRenderData,
 } from '@/utils/forms'
-import type { Form, Answer, FormMetadataField } from '@/types/form.types'
+import type { Form, Answer, FormMetadataField, FormQuestion } from '@/types/form.types'
+import type { AiExtras } from '@/services/aiReviewerService'
 
 interface SubmissionCall {
   call_id?: string
@@ -28,6 +29,13 @@ type SubmissionDetailWithForm = SubmissionDetail & {
   calls?: SubmissionCall[]
   ticket_tasks?: Array<{ kind: 'TICKET' | 'TASK'; external_id: number; sort_order: number }>
   submitted_at?: string | Date
+  /**
+   * AI side outputs persisted in submissions.ai_extras. `answer_evidence`
+   * is the per-question evidence map zipped with question text below.
+   */
+  ai_extras?: (AiExtras & {
+    answer_evidence?: Record<string, { evidence_source?: string; evidence_quote?: string }>
+  }) | null
 }
 
 /**
@@ -38,14 +46,12 @@ type SubmissionDetailWithForm = SubmissionDetail & {
  * data source is present.
  */
 function buildAnswerEvidenceEntries(detail: SubmissionDetailWithForm): AnswerEvidenceEntry[] {
-  const evidence = (detail as any).ai_extras?.answer_evidence as
-    | Record<string, { evidence_source?: string; evidence_quote?: string }>
-    | undefined
+  const evidence = detail.ai_extras?.answer_evidence
   if (!evidence) return []
   const qText = new Map<number, string>()
   for (const cat of detail.formData?.categories ?? []) {
-    for (const q of (cat as any).questions ?? []) {
-      if (q?.id != null) qText.set(Number(q.id), String(q.question_text ?? q.text ?? ''))
+    for (const q of cat.questions ?? []) {
+      if (q?.id != null) qText.set(Number(q.id), String(q.question_text ?? ''))
     }
   }
   const out: AnswerEvidenceEntry[] = []
@@ -207,8 +213,8 @@ export default function SubmissionDetailPage() {
   }
 
   // Build read-only answers map for ScoreRenderer
-  const answersMap: Record<number, any> = {}
-  ;(detail.answers ?? []).forEach((a: any) => {
+  const answersMap: Record<number, { answer: string; score?: number; notes: string }> = {}
+  ;(detail.answers ?? []).forEach((a) => {
     if (a.question_id) answersMap[a.question_id] = { answer: a.answer, score: a.score, notes: '' }
   })
 
@@ -255,9 +261,9 @@ export default function SubmissionDetailPage() {
   // ── Resolution mode handlers ──────────────────────────────────────────────
   const enterResolutionMode = () => {
     if (!formData) return
-    const initial: Record<number, any> = {}
-    ;(detail.answers ?? []).forEach((a: any) => {
-      if (a.question_id) initial[a.question_id] = { question_id: a.question_id, answer: a.answer || '', score: a.score || 0, notes: a.notes || '' }
+    const initial: Record<number, Answer> = {}
+    ;(detail.answers ?? []).forEach((a) => {
+      if (a.question_id) initial[a.question_id] = { question_id: a.question_id, answer: a.answer || '', score: a.score || 0, notes: (a as { notes?: string }).notes || '' }
     })
     setEditedAnswers(initial)
     const { totalScore, categoryScores } = calculateFormScore(formData, initial)
@@ -269,11 +275,11 @@ export default function SubmissionDetailPage() {
     setResolutionMode(true)
   }
 
-  const handleEditAnswer = (questionId: number, value: string, _questionType: string) => {
+  const handleEditAnswer = (questionId: number, value: string) => {
     if (!formData) return
-    let foundQ: any
+    let foundQ: FormQuestion | undefined
     for (const cat of formData.categories ?? []) {
-      const q = cat.questions?.find((q: any) => q.id === questionId)
+      const q = cat.questions?.find((q) => q.id === questionId)
       if (q) { foundQ = q; break }
     }
     const qScore = foundQ ? getQuestionScore(foundQ, value) : 0
@@ -309,7 +315,7 @@ export default function SubmissionDetailPage() {
       qc.invalidateQueries({ queryKey: ['agent-dispute-history'] })
       setResolutionMode(false)
       setResNotes('')
-    } catch (err: any) {
+    } catch (err) {
       setResError(getErrorMessage(err, "Couldn't resolve the dispute. Try again."))
     } finally {
       setResSubmitting(false)
@@ -437,11 +443,11 @@ export default function SubmissionDetailPage() {
             {/* AI side outputs persisted in submissions.ai_extras. Each
                 panel auto-hides when its array is empty so human-authored
                 submissions stay visually unchanged. */}
-            {(detail as any).ai_extras && (
+            {detail.ai_extras && (
               <>
-                <TimelinePanel items={(detail as any).ai_extras.timeline ?? null} />
+                <TimelinePanel items={detail.ai_extras.timeline ?? null} />
                 <AdvisoryObservationsPanel
-                  items={((detail as any).ai_extras.observations ?? null) as AdvisoryObservation[] | null}
+                  items={(detail.ai_extras.observations ?? null) as AdvisoryObservation[] | null}
                 />
                 <AnswerEvidencePanel items={buildAnswerEvidenceEntries(detail)} />
               </>

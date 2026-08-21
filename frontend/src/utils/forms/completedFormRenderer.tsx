@@ -7,9 +7,22 @@ import { calculateFormScore } from './scoringEngine';
 import { processConditionalLogic } from './formConditions';
 import type { Form as FormType, Answer as AnswerType } from '../../types/form.types';
 
+interface CompletedAnswer {
+  question_id?: number;
+  answer?: string;
+  score?: number;
+  notes?: string;
+}
+
+interface CompletedSubmissionData {
+  form_id?: number;
+  form?: FormType;
+  answers?: CompletedAnswer[];
+}
+
 interface CompletedFormProps {
   submissionId?: number;
-  submissionData?: any;
+  submissionData?: CompletedSubmissionData;
   formId?: number;
   showScore?: boolean;
   onError?: (error: string) => void;
@@ -56,7 +69,7 @@ const CompletedFormRenderer: React.FC<CompletedFormProps> = ({
     const answersByQuestionId: Record<number, AnswerType> = {};
 
     if (Array.isArray(rawSubmission?.answers)) {
-      rawSubmission.answers.forEach((answer: any) => {
+      rawSubmission.answers.forEach((answer: CompletedAnswer) => {
         if (!answer?.question_id) return;
 
         const questionObj = formData.categories

@@ -5,7 +5,6 @@
  */
 
 import type { Form, FormCategory, FormQuestion, FormMetadataField } from '../../types/form.types';
-import { validateForm } from './formValidation';
 
 /**
  * Create a new empty form with default values

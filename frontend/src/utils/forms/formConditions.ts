@@ -153,7 +153,7 @@ const evaluateSingleCondition = (
   let conditionMet = false;
   
   switch (conditionType) {
-    case 'EQUALS':
+    case 'EQUALS': {
       // Special handling for YES/NO questions
       const isYesValue = ['yes', 'true', '1', 'on'].includes(normalizedTargetAnswer);
       const isNoValue = ['no', 'false', '0', 'off'].includes(normalizedTargetAnswer);
@@ -166,6 +166,7 @@ const evaluateSingleCondition = (
         conditionMet = normalizedTargetAnswer === normalizedTargetValue;
       }
       break;
+    }
       
     case 'NOT_EQUALS':
       conditionMet = normalizedTargetAnswer !== normalizedTargetValue;

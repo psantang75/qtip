@@ -75,6 +75,14 @@ export function ScoreBreakdownTables({
   visibilityMap,
   finalScoreOverride,
 }: ScoreBreakdownTablesProps) {
+  // Pre-flatten the form's questions once so the per-row max-score
+  // lookup doesn't re-traverse `form.categories` on every render.
+  // Declared before the early return so hook order stays stable.
+  const allFormQuestions = React.useMemo(
+    () => form.categories.flatMap((c) => c.questions),
+    [form.categories],
+  );
+
   if (!formRenderData?.categories) {
     return (
       <div className="p-4 text-[13px] text-slate-400 text-center">
@@ -82,13 +90,6 @@ export function ScoreBreakdownTables({
       </div>
     );
   }
-
-  // Pre-flatten the form's questions once so the per-row max-score
-  // lookup doesn't re-traverse `form.categories` on every render.
-  const allFormQuestions = React.useMemo(
-    () => form.categories.flatMap((c) => c.questions),
-    [form.categories],
-  );
 
   return (
     <div className="space-y-3">
@@ -113,8 +114,8 @@ export function ScoreBreakdownTables({
             </thead>
             <tbody>
               {(formRenderData.categories as CategoryRenderData[]).map((cat, ci) => {
-                const scoringQs = (cat.allQuestions || []).filter((q: any) => {
-                  const t = (q.type || q.question_type || '').toLowerCase();
+                const scoringQs = (cat.allQuestions || []).filter((q) => {
+                  const t = (q.type || (q as { question_type?: string }).question_type || '').toLowerCase();
                   return !['text', 'sub_category', 'info_block'].includes(t);
                 });
                 if (!scoringQs.length) return null;
@@ -130,7 +131,7 @@ export function ScoreBreakdownTables({
                         </div>
                       </td>
                     </tr>
-                    {scoringQs.map((q: any, qi: number) => {
+                    {scoringQs.map((q, qi) => {
                       const ans = answers[q.id];
                       const vis = visibilityMap[q.id] !== false;
                       const qScore = Number(ans?.score) || 0;
@@ -138,7 +139,7 @@ export function ScoreBreakdownTables({
                       // can pull both the max-score AND `is_critical`
                       // off the same record (the prepared render data
                       // sometimes loses those flags during shaping).
-                      const orig = allFormQuestions.find((x: any) => x.id === q.id);
+                      const orig = allFormQuestions.find((x) => x.id === q.id);
                       let maxScore = 0;
                       if (vis && orig) {
                         const isNA =
@@ -146,9 +147,12 @@ export function ScoreBreakdownTables({
                           ans?.answer?.toLowerCase() === 'n/a';
                         maxScore = isNA && orig.is_na_allowed ? 0 : getMaxPossibleScore(orig);
                       }
+                      // is_critical can arrive as a boolean or a numeric 1
+                      // from the backend, so widen the compared value.
+                      const origCritical = orig?.is_critical as boolean | number | undefined;
                       const isCritical =
-                        (orig as any)?.is_critical === true ||
-                        (orig as any)?.is_critical === 1 ||
+                        origCritical === true ||
+                        origCritical === 1 ||
                         q.isCritical === true;
                       const rawAns = String(ans?.answer ?? '').trim().toLowerCase();
                       // A critical question "fails" when the reviewer

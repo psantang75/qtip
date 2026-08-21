@@ -31,6 +31,7 @@ const formatAnswer = (answer: string) =>
 interface FormOption {
   id:        number
   form_name: string
+  name?:     string
 }
 
 interface RadioOption {
@@ -46,6 +47,9 @@ interface FormQuestion {
   max_value?:    number | null
   is_na_allowed: boolean
   radio_options?: RadioOption[]
+  scale_min?:    number | null
+  scale_max?:    number | null
+  max_scale?:    number | null
 }
 
 interface FormCategory {
@@ -75,8 +79,8 @@ function AnswerPicker({ question, value, onChange }: { question: FormQuestion; v
   )
   if (question.question_type === 'YES_NO') return <div className="flex flex-wrap gap-2 mt-2">{chip('Yes','Yes')}{chip('No','No')}{question.is_na_allowed && chip('N/A','N/A')}</div>
   if (question.question_type === 'SCALE') {
-    const min = (question as any).scale_min ?? 1
-    const max = (question as any).scale_max ?? (question as any).max_scale ?? 5
+    const min = question.scale_min ?? 1
+    const max = question.scale_max ?? question.max_scale ?? 5
     return <div className="flex flex-wrap gap-2 mt-2">{Array.from({ length: max - min + 1 }, (_, i) => min + i).map(v => chip(String(v), String(v)))}{question.is_na_allowed && chip('N/A','N/A')}</div>
   }
   if (question.question_type === 'RADIO' || question.question_type === 'MULTI_SELECT') {
@@ -144,8 +148,8 @@ export function QaSearchModal({ csrId, onImport, onClose }: QaSearchModalProps) 
   const handleFormChange = (v: string) => { setFormId(v); setFilters([]); setRawResults([]); setSelected(new Set()); setExpandedCats(new Set()) }
   const toggleQuestion = (id: number) => { setFilters(prev => prev.find(f => f.questionId === id) ? prev.filter(f => f.questionId !== id) : [...prev, { questionId: id, answerValue: '' }]); setRawResults([]); setSelected(new Set()) }
   const setAnswer = (questionId: number, value: string) => setFilters(prev => prev.map(f => f.questionId === questionId ? { ...f, answerValue: value } : f))
-  const toggleSel = (id: number) => setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
-  const toggleCat = (catId: number) => setExpandedCats(prev => { const next = new Set(prev); next.has(catId) ? next.delete(catId) : next.add(catId); return next })
+  const toggleSel = (id: number) => setSelected(prev => { const next = new Set(prev); if (next.has(id)) { next.delete(id) } else { next.add(id) } return next })
+  const toggleCat = (catId: number) => setExpandedCats(prev => { const next = new Set(prev); if (next.has(catId)) { next.delete(catId) } else { next.add(catId) } return next })
 
   useEffect(() => {
     if (searchableCategories.length > 0) setExpandedCats(new Set(searchableCategories.map(c => c.id)))
@@ -154,7 +158,7 @@ export function QaSearchModal({ csrId, onImport, onClose }: QaSearchModalProps) 
   const searchMut = useMutation({
     mutationFn: () => writeupService.searchQaRecords({ csr_id: csrId, form_id: formId ? Number(formId) : undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined, question_filters: completeFilters.map(f => ({ question_id: f.questionId, answer_value: f.answerValue })) }),
     onSuccess: (data) => { setRawResults(data); setSelected(new Set()) },
-    onError: (err: any) => toast({
+    onError: (err) => toast({
       variant: 'destructive',
       title: "Couldn't search QA records",
       description: getErrorMessage(err, 'Try again.'),
@@ -195,7 +199,7 @@ export function QaSearchModal({ csrId, onImport, onClose }: QaSearchModalProps) 
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Form</p>
                 <Select value={formId} onValueChange={handleFormChange}>
                   <SelectTrigger className="h-8 text-[13px]"><SelectValue placeholder="Select a form…" /></SelectTrigger>
-                  <SelectContent>{forms.map(f => <SelectItem key={f.id} value={String(f.id)}>{(f as any).form_name ?? (f as any).name}</SelectItem>)}</SelectContent>
+                  <SelectContent>{forms.map(f => <SelectItem key={f.id} value={String(f.id)}>{f.form_name ?? f.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="flex-1">

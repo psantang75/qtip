@@ -224,7 +224,7 @@ export default function OnDemandReportViewPage() {
     try {
       setDownloading(true)
       await downloadReport(reportId, toFilterParams(applied), `${reportId}.xlsx`)
-    } catch (err: any) {
+    } catch (err) {
       toast({
         variant: 'destructive',
         title: "Couldn't download report",

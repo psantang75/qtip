@@ -144,10 +144,11 @@ export const ScaleQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
 // ── Text ──────────────────────────────────────────────────────────────────────
 
 export const TextQuestion: React.FC<QuestionProps> = ({ question, isDisabled = false, onAnswerChange }) => {
-  if (!question.isVisible) return null;
   const { id, text, currentValue } = question;
   const value = currentValue || '';
+  // Hook must run before any early return to keep hook order stable.
   const ref = useAutoGrowTextarea(value, 2);
+  if (!question.isVisible) return null;
 
   // Auto-managed AI Reviewer Feedback question: the AI is the only writer
   // (per backend ensureAiReviewerFeedbackQuestion). Render its HTML payload

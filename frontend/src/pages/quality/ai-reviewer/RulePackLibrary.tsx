@@ -91,7 +91,7 @@ export default function RulePackLibrary() {
       qc.invalidateQueries({ queryKey: ['ai-reviewer-rule-packs'] })
       toast({ title: 'Pack archived' })
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({ variant: 'destructive', title: "Couldn't archive rule pack", description: getErrorMessage(e, 'Try again.') }),
   })
 
@@ -101,7 +101,7 @@ export default function RulePackLibrary() {
       qc.invalidateQueries({ queryKey: ['ai-reviewer-rule-packs'] })
       toast({ title: 'Pack restored' })
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({ variant: 'destructive', title: "Couldn't restore rule pack", description: getErrorMessage(e, 'Try again.') }),
   })
 
@@ -341,7 +341,7 @@ function RulePackEditorSheet({ state, onClose, onSaved }: RulePackEditorSheetPro
       toast({ title: isEdit ? 'Pack updated' : `Pack created (${pack.key})` })
       onSaved()
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({
         variant: 'destructive',
         title: "Couldn't save rule pack",

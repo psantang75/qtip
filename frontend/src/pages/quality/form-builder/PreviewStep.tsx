@@ -84,7 +84,7 @@ export function PreviewStep({ form, onBack, onSave, saving }: PreviewStepProps) 
     setFormRenderData(prepareFormForRender(previewForm, derived, vis, categoryScores, totalScore))
   }, [answers, previewForm]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleAnswerChange = useCallback((questionId: number, value: string, _type: string) => {
+  const handleAnswerChange = useCallback((questionId: number, value: string) => {
     const question = previewForm.categories.flatMap(c => c.questions).find(q => q.id === questionId)
     const score = question ? getQuestionScore(question, value) : 0
     setAnswers(prev => ({ ...prev, [questionId]: { question_id: questionId, answer: value, score, notes: prev[questionId]?.notes || '' } }))

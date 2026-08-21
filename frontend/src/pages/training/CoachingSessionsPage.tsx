@@ -86,7 +86,7 @@ export default function CoachingSessionsPage() {
   const expandedBatches  = useMemo(() => new Set(expandedParam ? expandedParam.split(',').filter(Boolean) : []), [expandedParam])
   const toggleBatch = (batchId: string) => {
     const next = new Set(expandedBatches)
-    next.has(batchId) ? next.delete(batchId) : next.add(batchId)
+    if (next.has(batchId)) { next.delete(batchId) } else { next.add(batchId) }
     set('expanded', [...next].join(','))
   }
 

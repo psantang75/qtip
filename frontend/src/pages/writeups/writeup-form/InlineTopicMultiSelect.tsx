@@ -52,7 +52,7 @@ export function InlineTopicMultiSelect({
   const apply     = () => { onChange(Array.from(draft)); setOpen(false) }
   const cancel    = () => setOpen(false)
   const toggle    = (label: string) => setDraft(prev => {
-    const next = new Set(prev); next.has(label) ? next.delete(label) : next.add(label); return next
+    const next = new Set(prev); if (next.has(label)) { next.delete(label) } else { next.add(label) } return next
   })
 
   const count = selected.length

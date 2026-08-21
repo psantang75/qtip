@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useToast } from '@/hooks/use-toast'
 import departmentService from '@/services/departmentService'
-import userService from '@/services/userService'
 import type { Department } from '@/services/departmentService'
 import { Button } from '@/components/ui/button'
 import { TableErrorState } from '@/components/common/TableErrorState'

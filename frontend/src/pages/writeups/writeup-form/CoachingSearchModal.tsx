@@ -43,7 +43,7 @@ export function CoachingSearchModal({ csrId, onImport, onImportRefs, onClose }: 
     }),
   })
 
-  const toggleResult = (idx: number) => setSelected(prev => { const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next })
+  const toggleResult = (idx: number) => setSelected(prev => { const next = new Set(prev); if (next.has(idx)) { next.delete(idx) } else { next.add(idx) } return next })
 
   const handleImport = () => {
     if (onImportRefs) {
@@ -116,7 +116,7 @@ export function CoachingSearchModal({ csrId, onImport, onImportRefs, onClose }: 
                         <span className="text-[12px] font-medium text-slate-700">{r.coaching_purpose ?? '—'}</span>
                         <span className="text-[11px] text-slate-400">{formatQualityDate(r.session_date)}</span>
                       </div>
-                      {(r.topic_names as any)?.length > 0 && (
+                      {(r.topic_names?.length ?? 0) > 0 && (
                         <p className="text-[11px] text-slate-500 mt-0.5">{Array.isArray(r.topic_names) ? r.topic_names.join(', ') : r.topic_names}</p>
                       )}
                       {r.notes && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{stripHtml(r.notes).slice(0, 100)}</p>}

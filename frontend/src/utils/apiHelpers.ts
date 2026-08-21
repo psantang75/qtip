@@ -11,20 +11,22 @@
  * @returns The data array or defaultValue if not found
  */
 export const getArrayFromResponse = <T>(
-  responseData: any, 
+  responseData: unknown, 
   defaultValue: T[] = []
 ): T[] => {
   if (Array.isArray(responseData)) {
-    return responseData;
+    return responseData as T[];
   } 
-  
-  if (responseData && Array.isArray(responseData.data)) {
-    return responseData.data;
+
+  const obj = responseData as { data?: unknown; forms?: unknown } | null | undefined;
+
+  if (obj && Array.isArray(obj.data)) {
+    return obj.data as T[];
   }
   
   // Check for forms array (used by forms API)
-  if (responseData && Array.isArray(responseData.forms)) {
-    return responseData.forms;
+  if (obj && Array.isArray(obj.forms)) {
+    return obj.forms as T[];
   }
   
   return defaultValue;
@@ -38,20 +40,25 @@ export const getArrayFromResponse = <T>(
  * @returns Object with total pages
  */
 export const getPaginationFromResponse = (
-  responseData: any,
+  responseData: unknown,
   itemsPerPage: number
 ): { totalPages: number } => {
+  const obj = responseData as
+    | { pagination?: { total?: number }; total?: number }
+    | null
+    | undefined;
+
   // Check if pagination exists directly in the response
-  if (responseData?.pagination?.total) {
+  if (obj?.pagination?.total) {
     return {
-      totalPages: Math.ceil(responseData.pagination.total / itemsPerPage)
+      totalPages: Math.ceil(obj.pagination.total / itemsPerPage)
     };
   }
   
   // Check if pagination is in a different format
-  if (responseData?.total) {
+  if (obj?.total) {
     return {
-      totalPages: Math.ceil(responseData.total / itemsPerPage)
+      totalPages: Math.ceil(obj.total / itemsPerPage)
     };
   }
   

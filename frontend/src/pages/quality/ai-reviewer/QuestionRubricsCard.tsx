@@ -77,7 +77,7 @@ export function QuestionRubricsCard({ form }: Props) {
       qc.invalidateQueries({ queryKey: ['ai-reviewer-rubrics', formId] })
       toast({ title: 'Rubric saved' })
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({
         variant: 'destructive',
         title: "Couldn't save rubric",
@@ -91,7 +91,7 @@ export function QuestionRubricsCard({ form }: Props) {
       qc.invalidateQueries({ queryKey: ['ai-reviewer-rubrics', formId] })
       toast({ title: 'Rubric removed' })
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({
         variant: 'destructive',
         title: "Couldn't remove rubric",

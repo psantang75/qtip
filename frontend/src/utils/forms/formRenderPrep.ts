@@ -235,8 +235,8 @@ export const prepareFormForRender = (
   // Zero-weight categories are otherwise hidden for CSR, except for
   // "Overall Feedback" which intentionally has weight 0 but should be shown
   // (with question-level Agent Visible deciding which questions appear).
-  const isOverallFeedbackCat = (c: any) =>
-    String((c as any)?.name || (c as any)?.category_name || '').trim().toLowerCase() === 'overall feedback';
+  const isOverallFeedbackCat = (c: FormCategory) =>
+    String((c as { name?: string }).name || c.category_name || '').trim().toLowerCase() === 'overall feedback';
 
   const visibleCategories = userRole === 3
     ? form.categories.filter(c => (c.weight || 0) > 0 || isOverallFeedbackCat(c))

@@ -116,7 +116,7 @@ export default function BasePromptLibrary() {
       qc.invalidateQueries({ queryKey: ['ai-reviewer-base-prompts'] })
       toast({ title: 'Base prompt archived' })
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({
         variant: 'destructive',
         title: "Couldn't archive base prompt",
@@ -134,7 +134,7 @@ export default function BasePromptLibrary() {
         description: `${next.key} is now the default for ${KIND_LABEL[next.prompt_kind]}.`,
       })
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({
         variant: 'destructive',
         title: "Couldn't set default",
@@ -490,7 +490,7 @@ function BasePromptEditorSheet({ state, onClose, onSaved }: BasePromptEditorShee
       })
       onSaved()
     },
-    onError: (e: any) =>
+    onError: (e) =>
       toast({
         variant: 'destructive',
         title: "Couldn't save base prompt",

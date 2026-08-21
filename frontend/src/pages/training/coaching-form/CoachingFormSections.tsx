@@ -389,7 +389,7 @@ interface S3Props {
   update: <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
 }
 
-export function RequiredActionsSection({ form, errors, resources, quizzes, update }: S3Props) {
+export function RequiredActionsSection({ form, resources, quizzes, update }: S3Props) {
   const [kbSearch,   setKbSearch]   = useState('')
   const [quizSearch, setQuizSearch] = useState('')
 
@@ -595,12 +595,20 @@ export function ListItemMultiSelect({ items, selectedIds, onToggle, placeholder,
 
 // ── Section 5: Internal Notes ─────────────────────────────────────────────────
 
+// This section only touches the internal-notes fields, so it accepts a
+// structural subset of the form. Callers passing the full `CoachingFormState`
+// (coaching form + session detail edit view) remain compatible.
+type S5InternalFields = Pick<
+  CoachingFormState,
+  'internal_notes' | 'behavior_flag_ids' | 'root_cause_ids' | 'support_needed_ids'
+>
+
 interface S5InternalProps {
-  form: CoachingFormState
+  form: S5InternalFields
   flagItems: ListItem[]
   rootCauseItems?: ListItem[]
   supportNeededItems?: ListItem[]
-  update: <K extends keyof CoachingFormState>(k: K, v: CoachingFormState[K]) => void
+  update: <K extends keyof S5InternalFields>(k: K, v: S5InternalFields[K]) => void
 }
 
 export function InternalNotesSection({ form, flagItems, rootCauseItems = [], supportNeededItems = [], update }: S5InternalProps) {
