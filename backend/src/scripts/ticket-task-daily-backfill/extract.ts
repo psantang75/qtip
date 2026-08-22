@@ -21,6 +21,7 @@
 import mysql from 'mysql2/promise';
 import { RowDataPacket } from 'mysql2';
 import pool from '../../config/database';
+import type { SqlParams } from '../../utils/db/sqlParams';
 import { crmDatabaseConfig } from '../../config/environment';
 import {
   buildSystemNoteExclusionSql,
@@ -70,7 +71,7 @@ export class CrmClient {
     for (let attempt = 1; ; attempt++) {
       if (!this.conn) this.conn = await openCrmConnection();
       try {
-        return await this.conn.query<T>(sql, params);
+        return await this.conn.query<T>(sql, params as SqlParams | undefined);
       } catch (err) {
         const code = (err as { code?: string }).code ?? '';
         // mysql2 reports a silently-dropped socket as a codeless plain Error

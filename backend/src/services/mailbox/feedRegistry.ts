@@ -19,6 +19,7 @@
 import pool from '../../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { DATA_TYPES, type DataType } from '../importService';
+import type { SqlParams } from '../../utils/db/sqlParams';
 
 export const FEED_TABLE = 'mailbox_import_feed';
 
@@ -98,7 +99,7 @@ export async function updateFeed(id: number, patch: UpdateFeedInput): Promise<Em
   // Concrete element type (not `unknown[]`) so the array satisfies mysql2's
   // `execute()` values parameter under every @types resolution — the stricter
   // typing surfaced only in the reproducible Docker build, not a local install.
-  const values: (string | number | null)[] = [];
+  const values: SqlParams = [];
 
   if (patch.name !== undefined) { fields.push('display_name = ?'); values.push(patch.name); }
   if (patch.cadenceLabel !== undefined) { fields.push('cadence_label = ?'); values.push(patch.cadenceLabel || null); }

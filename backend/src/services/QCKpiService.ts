@@ -5,16 +5,17 @@ import { countBusinessDays } from '../utils/businessCalendar'
 import { fmtDatetime as fmt, fmtDate } from '../utils/dateHelpers'
 
 import { deptClause, formFilter, CSR_JOIN } from './qcQueryHelpers'
+import type { SqlParams } from '../utils/db/sqlParams'
 
 async function scalar(sql: string, params: unknown[]): Promise<number | null> {
-  const [rows] = await pool.execute<RowDataPacket[]>(sql, params)
+  const [rows] = await pool.execute<RowDataPacket[]>(sql, params as SqlParams)
   const v = rows[0]?.value
   return v === null || v === undefined ? null : parseFloat(String(v))
 }
 
 /** Run a query that returns a single row of named numeric aggregates. */
 async function aggregateRow(sql: string, params: unknown[]): Promise<Record<string, number | null>> {
-  const [rows] = await pool.execute<RowDataPacket[]>(sql, params)
+  const [rows] = await pool.execute<RowDataPacket[]>(sql, params as SqlParams)
   const row = rows[0] ?? {}
   const out: Record<string, number | null> = {}
   for (const [k, v] of Object.entries(row)) {
