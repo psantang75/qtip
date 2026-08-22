@@ -62,4 +62,11 @@ COPY deploy/production_environment_template.env ./.env.example
 
 EXPOSE 5000
 
-CMD ["pm2-runtime", "start", "ecosystem.config.cjs"]
+# `--env production` is REQUIRED: without it PM2 applies each app's base `env`
+# block, and qtip-backend's base block forces NODE_ENV=development — which then
+# overrides the container's real NODE_ENV=production and silently puts the API in
+# dev mode (verbose error/stack leakage, relaxed security, verbose prisma logs).
+# `--env production` selects the `env_production` block instead; workers with no
+# env_production fall back to their base `env` (already production). This image is
+# only ever run on stage/prod, both of which must run in production mode.
+CMD ["pm2-runtime", "start", "ecosystem.config.cjs", "--env", "production"]
