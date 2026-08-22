@@ -1,0 +1,23 @@
+# Docker build context = repo root (deploy/docker-compose.yml sets `context: ..`).
+#
+# CRITICAL: never let host-installed dependencies leak into the image. The
+# Dockerfile does `COPY <ws>/package*.json` -> clean `npm ci` -> `COPY <ws>/ ./`.
+# That second COPY would otherwise overwrite the freshly-pinned node_modules with
+# whatever tree the checkout happens to carry. A stale @types/express-serve-static-core
+# that way retyped req.query/req.params as `string | string[]` and broke `tsc` on
+# prod while stage (clean tree) built fine — the classic "identical lockfile,
+# different result" bug. Excluding node_modules makes the build reproducible.
+**/node_modules
+
+# Build outputs + generated code are produced inside the image, not copied in.
+**/dist
+backend/src/generated
+
+# VCS metadata and local noise the build never needs.
+.git
+.gitignore
+**/*.log
+
+# Never bake env files / secrets into the image (mounted at runtime instead).
+**/.env
+**/.env.*
