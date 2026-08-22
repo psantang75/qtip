@@ -25,7 +25,10 @@ COPY backend/ ./
 # src/generated is git-ignored, so the build context can carry a stale copy from an
 # older schema; regenerating here guarantees the client matches schema.prisma before
 # tsc compiles it. Without this, new models are missing from the shipped client.
-RUN npx prisma generate
+# `prisma.config.ts` eagerly resolves a datasource URL and throws when no DB env is
+# present; generate never connects, so feed it a throwaway URL to satisfy the config
+# while keeping the strict env check intact for real (runtime) migrations.
+RUN DATABASE_URL="mysql://build:build@127.0.0.1:3306/build" npx prisma generate
 # Type gate: the reproducible install above makes this deterministic, so the
 # image build now fails on type errors (belt-and-suspenders with the pre-deploy
 # `npm run typecheck`). Verified clean in this exact image before `|| true` was
