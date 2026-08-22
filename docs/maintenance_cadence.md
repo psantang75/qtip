@@ -274,13 +274,26 @@ These were started as verified pilots; continue them under the cadence above:
   `@typescript-eslint/no-empty-object-type`, `no-case-declarations`,
   `no-irregular-whitespace`. Regressions on any of these now fail lint.
   `_`-prefixed args/vars/caught-errors remain the explicit opt-out for
-  deliberately-unused bindings. **Remaining (still `warn`):** 4
-  `no-useless-catch` — pure-rethrow `try/catch` wrappers around large repository
-  `$transaction` bodies (`EnhancedPerformanceGoalRepository` ×2,
-  `MySQLSubmissionRepository` ×2); unwrapping is a mechanical de-indent whose
-  regression risk outweighs the cosmetic win, so burn them down when those
-  methods are next touched, then promote `no-useless-catch` too. Verified:
-  `tsc` clean, full backend suite 802 passing.
+  deliberately-unused bindings. **Backend burn-down COMPLETE (2026-08-22):** the
+  last 4 `no-useless-catch` pure-rethrow wrappers (`EnhancedPerformanceGoalRepository`
+  ×2, `MySQLSubmissionRepository` ×2) were unwrapped and the rule was promoted
+  `warn` → `error` in `eslint.config.mjs`. Backend lint is now **0/0** with no
+  rules left at `warn`.
+- Frontend lint burn-down — **COMPLETE (2026-08-22).** Cleared the 82-warning
+  backlog to **0/0** across four phases (dead `no-console` disables; `no-useless-catch`;
+  `react-refresh/only-export-components` — split non-component exports into sibling
+  modules, shadcn `ui/*` scoped off via one override; `react-hooks/exhaustive-deps`
+  — `useMemo`-wrapped query fallbacks + genuinely-missing deps). The two burned-down
+  rules were promoted `warn` → `error` in `frontend/eslint.config.js`
+  (`react-refresh/only-export-components`, `react-hooks/exhaustive-deps`) so the
+  husky/lint-staged gate — which only fails on errors — now blocks regressions of
+  the exact debt just paid down. The rare intentional exhaustive-deps case opts out
+  with a scoped `// eslint-disable-next-line`.
+- Pre-commit gate — the lint-staged runner (`scripts/eslint-staged.mjs`) spawns
+  each workspace's ESLint **CLI** with that workspace as its real `cwd` (not the
+  in-process ESLint API, which mis-detects typescript-eslint's `tsconfigRootDir`
+  from the repo root and errors on backend files). Check-only: fails on errors,
+  ignores the (now-empty) warning backlog.
 - Build type-gate — RESOLVED (2026-08-20). The `deploy/Dockerfile` backend stage
   now runs `npm ci --legacy-peer-deps` against a **committed backend-scoped
   lockfile** (`backend/package-lock.json`) and the `tsc` step no longer has

@@ -65,12 +65,9 @@ export default tseslint.config(
       '@typescript-eslint/no-empty-object-type': 'error',
       'no-case-declarations': 'error',
       'no-irregular-whitespace': 'error',
-
-      // ── WARN: remaining pre-existing debt (keeps the gate green) ─────────────
-      // 4 pure-rethrow try/catch wrappers around large repository transaction
-      // bodies; unwrapping is a mechanical de-indent with regression risk that
-      // outweighs the cosmetic win. Burn down when those methods are next touched.
-      'no-useless-catch': 'warn',
+      // Burned down to zero (the 4 pure-rethrow wrappers in the repositories were
+      // unwrapped), so it's promoted from warn to error — regressions now fail lint.
+      'no-useless-catch': 'error',
     },
   },
 );

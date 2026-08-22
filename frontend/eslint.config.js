@@ -36,8 +36,12 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Burned down to zero, so promoted from warn to error to lock the cleanup
+      // in via the pre-commit gate (which only blocks on errors). The rare
+      // intentional case opts out with a scoped `// eslint-disable-next-line`.
+      'react-hooks/exhaustive-deps': 'error',
       'react-refresh/only-export-components': [
-        'warn',
+        'error',
         { allowConstantExport: true },
       ],
 
