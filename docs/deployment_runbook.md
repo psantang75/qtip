@@ -259,6 +259,60 @@ ssh dmadmin@10.90.15.5 'git -C /home/dmadmin/docker-production/qtip-app/code pul
 
 > If a **DB migration** is in the release, run §3.3 **before** this rebuild.
 
+### 3.2a Why "stage passed but prod failed the identical commit" — the hermetic-build rule
+
+stage and prod are the **same environment at *runtime*** (same image, same
+`pm2-runtime` entrypoint), but the **image build was historically NOT hermetic**,
+so an *identical commit with an identical `package-lock.json` could build clean on
+stage and fail on prod*. This burned a whole deploy cycle (2026‑08‑22) — here is
+the mechanism so it is never mistaken for a "flaky build" again.
+
+**Root cause — the build context leaked host `node_modules` into the image.**
+The build context is the box's `code/` checkout (`context: ..` in
+`deploy/docker-compose.yml`). `deploy/Dockerfile` does the right thing —
+`COPY <ws>/package*.json` → clean `npm ci` (installs the exact lockfile tree) —
+but the very next line, `COPY <ws>/ ./`, copied **everything** in the checkout on
+top of that, *including any `node_modules` sitting in the working tree*. So the
+freshly-pinned dependencies were silently overwritten by whatever tree that
+particular box happened to have on disk:
+
+- **prod** had a stale `code/backend/node_modules` from a manual `npm install`
+  run months earlier. It carried `@types/express-serve-static-core@5.1.3`, which
+  retypes `req.query`/`req.params` as `string | string[]` → ~160 `tsc` errors,
+  plus a stricter `mysql2` and an older Prisma.
+- **stage's** working tree had no stale `node_modules`, so its build used the
+  clean `npm ci` result and compiled. Same lockfile, opposite outcome.
+
+The stale Prisma also **masked a second latent bug**: `backend/prisma.config.ts`
+eagerly resolves a datasource URL and *throws* when no DB env is present, but the
+old Prisma ignored `prisma.config.ts`, so the build-time `npx prisma generate`
+(which never connects) appeared to work. The moment the build stopped leaking
+`node_modules`, `prisma generate` correctly loaded the config and failed.
+
+**The durable fixes (already in the repo — do not remove):**
+
+1. **`.dockerignore` at the repo root** excludes `**/node_modules`, `**/dist`,
+   `backend/src/generated`, `.git`, and `.env*`. This makes the build **hermetic**:
+   the image depends only on committed source + the lockfile, never on whatever a
+   box has lying around. This is the real guardrail — every workstation/box now
+   builds bit-for-bit the same image.
+2. **`deploy/Dockerfile` gives `prisma generate` a throwaway `DATABASE_URL`**
+   (`mysql://build:build@127.0.0.1:3306/build`). Generate never connects, so this
+   satisfies `prisma.config.ts` at build time while the **strict env check stays
+   intact for real (runtime) migrations**.
+
+**Invariant to preserve:** the image must build from *committed source + lockfile
+only*. If you ever add a `COPY <dir>/ ./` that could include installed deps or
+generated output, extend `.dockerignore` to exclude it. Never "fix" a build by
+editing files directly on a box (§0b) — that is exactly the host-state drift this
+rule exists to kill.
+
+**One-line diagnosis if a build ever diverges box-to-box again:** compare the
+installed type that broke `tsc` against the lockfile pin, e.g.
+`grep -m1 version <box>/code/backend/node_modules/@types/express-serve-static-core/package.json`
+vs. the `5.1.0` pinned in `backend/package-lock.json`. A mismatch means something
+is leaking into the context — check `.dockerignore` first.
+
 ### 3.3 Apply Prisma migrations (only when the release includes one)
 
 Do the backup (§3.1) first, then decide HOW to apply. **The runtime image does

@@ -59,6 +59,11 @@ ssh dmadmin@10.90.15.5 'git -C /home/dmadmin/docker-production/qtip-app/code pul
   The runtime image often lacks the Prisma CLI, so **probe first** and expect to
   use the SQL fallback — full decision tree + PowerShell-safe commands in
   runbook §3.1–§3.3.
+- **Build fails on ONE box only (same commit/lockfile)?** The build must stay
+  hermetic — the repo `.dockerignore` keeps host `node_modules`/generated code out
+  of the image context. A stale `code/<ws>/node_modules` on a box is the classic
+  cause of "stage passed, prod failed". Never edit files on the box to fix it;
+  root cause + one-line diagnosis in runbook §3.2a.
 
 ## 3. Verify
 
