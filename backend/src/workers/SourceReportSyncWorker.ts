@@ -28,6 +28,10 @@ export interface WindowParams {
   pFromDate: string;
   pToDate: string;
   pMonths: number;
+  // Indexable so the object satisfies mysql2's namedPlaceholders `values` type
+  // (`{ [param: string]: ... }`) directly — avoids a cast at each query call site
+  // and keeps the fresh-install Docker build's stricter @types resolution happy.
+  [param: string]: string | number;
 }
 
 /**
