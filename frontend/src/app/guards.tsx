@@ -2,7 +2,7 @@ import React, { Suspense, useEffect, useRef } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { ROLE_IDS } from '../hooks/useQualityRole'
 import { PageSpinner } from '../components/common/PageSpinner'
 import { ErrorBoundary } from '../components/common/ErrorBoundary'

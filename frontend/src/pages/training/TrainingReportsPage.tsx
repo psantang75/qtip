@@ -119,7 +119,7 @@ export default function TrainingReportsPage() {
     placeholderData: (p: unknown) => p as typeof agentListPage,
   })
 
-  const allAgentItems = agentListPage?.items ?? []
+  const allAgentItems = useMemo(() => agentListPage?.items ?? [], [agentListPage])
 
   const agentOptions = useMemo(() => {
     const names = new Set(allAgentItems.map(r => r.csr_name).filter(Boolean))

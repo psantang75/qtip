@@ -15,7 +15,7 @@ import { ListPagination } from '@/components/common/ListPagination'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { StickyFilterBar, StickyFilterField } from '@/components/common/StickyFilterBar'
 import { InsightsSection } from '@/components/insights'
-import { PERIOD_OPTIONS } from '@/components/insights/InsightsFilterBar'
+import { PERIOD_OPTIONS } from '@/components/insights/insightsFilterOptions'
 
 import {
   getReport,

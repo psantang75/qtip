@@ -167,14 +167,11 @@ for (const file of walk(SRC_DIR)) {
 
 // ── Report ──────────────────────────────────────────────────────────────────
 if (errors.length === 0) {
-  // eslint-disable-next-line no-console
   console.log(`error-messages drift check: clean (${expectedPatterns.length} patterns, ${scanned} files scanned)`)
   process.exit(0)
 }
-// eslint-disable-next-line no-console
 console.error(`error-messages drift check: ${errors.length} issue(s)\n`)
 for (const e of errors) {
-  // eslint-disable-next-line no-console
   console.error(`  • ${e}`)
 }
 process.exit(1)

@@ -2,7 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useUnlockReasons } from '@/hooks/useUnlockReasons'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
-import { Field, fmtScore } from './ReopenedNotice'
+import { Field } from './ReopenedNotice'
+import { fmtScore } from './reopenFormat'
 
 export interface ActiveUnlock {
   id: number

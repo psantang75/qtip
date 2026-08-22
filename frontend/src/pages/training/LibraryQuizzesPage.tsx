@@ -41,7 +41,7 @@ export default function LibraryQuizzesPage() {
     queryFn:  () => trainingService.getQuizLibrary({ limit: 1000 }),
   })
 
-  const allQuizzes = quizData?.items ?? []
+  const allQuizzes = useMemo(() => quizData?.items ?? [], [quizData])
 
   // Base filter (search + status) — used to derive the topic option list
   const baseFiltered = useMemo(() => {

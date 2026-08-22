@@ -10,6 +10,7 @@ import {
   DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { Role, Department } from '@/services/userService'
+import { ROLE_NAMES } from './userFilterConstants'
 
 interface Props {
   search:         string
@@ -26,9 +27,6 @@ interface Props {
 }
 
 const STATUS_LABELS: Record<string, string> = { all: 'All Status', active: 'Active', inactive: 'Inactive' }
-const ROLE_NAMES: Record<number, string>    = { 1: 'Admin', 2: 'QA', 3: 'CSR', 4: 'Trainer', 5: 'Manager', 6: 'Director' }
-
-export { ROLE_NAMES }
 
 export function UserFilterBar({
   search, onSearchChange, roles, departments,

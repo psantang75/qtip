@@ -30,7 +30,8 @@ import {
   WRITE_UP_STATUS_LABELS,
   CLIENT_FETCH_LIMIT,
 } from '@/constants/labels'
-import { ALL_STATUSES, ALL_TYPE_LABELS, CLOSED_LABEL, WriteUpTypeBadge, WarningIdSearch } from './warningListHelpers'
+import { ALL_STATUSES, ALL_TYPE_LABELS, CLOSED_LABEL } from './warningListConstants'
+import { WriteUpTypeBadge, WarningIdSearch } from './warningListHelpers'
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ export default function WriteUpsPage() {
     placeholderData: (prev) => prev,
   })
 
-  const allItems = data?.items ?? []
+  const allItems = useMemo(() => data?.items ?? [], [data])
 
   // Dropdown options from the FULL result set
   const csrOptions = useMemo<GroupedOption[]>(() => {

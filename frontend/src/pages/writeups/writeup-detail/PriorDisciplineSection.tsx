@@ -3,7 +3,8 @@ import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderR
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatQualityDate } from '@/utils/dateFormat'
-import { RichTextDisplay, stripHtml } from '@/components/common/RichTextDisplay'
+import { RichTextDisplay } from '@/components/common/RichTextDisplay'
+import { stripHtml } from '@/utils/htmlText'
 import type { PriorDisciplineRow } from '@/services/writeupService'
 import { Section, type DetailSectionProps } from './layout'
 import {

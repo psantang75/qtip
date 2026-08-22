@@ -4,7 +4,7 @@ import {
   Plus, Pencil, ChevronLeft, ChevronRight,
   ChevronDown, ChevronsUpDown, ChevronUp, Lock, LockOpen,
 } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import userService from '@/services/userService'
 import type { User } from '@/services/userService'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { UserFormSheet } from './users/UserFormSheet'
-import { UserFilterBar, ROLE_NAMES } from './users/UserFilterBar'
+import { UserFilterBar } from './users/UserFilterBar'
+import { ROLE_NAMES } from './users/userFilterConstants'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableEmptyState } from '@/components/common/TableEmptyState'

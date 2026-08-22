@@ -99,7 +99,7 @@ export function useFormListFilters(
       if (created && created > dateRange.end) return false
     }
     return true
-  }), [rawForms, statusFilter, search, selectedFormNames, typeFilter, dateRange])
+  }), [rawForms, statusFilter, search, selectedFormNames, selectedTypes, typeFilter, dateRange])
 
   const hasFilters =
     search !== '' ||

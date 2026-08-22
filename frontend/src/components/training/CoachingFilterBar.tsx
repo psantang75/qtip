@@ -4,16 +4,8 @@ import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { IdSearchInput } from '@/components/common/IdSearchInput'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  COACHING_FORMAT_LABELS,
-  COACHING_STATUS_LABELS,
-  STATUS_LABELS,
-  CLIENT_FETCH_LIMIT,
-} from '@/constants/labels'
-
-const ALL_STATUSES   = Object.keys(COACHING_STATUS_LABELS)
-const STATUS_OPTIONS = ALL_STATUSES.map(s => STATUS_LABELS[s])
-const FORMAT_OPTIONS = Object.values(COACHING_FORMAT_LABELS)
+import { CLIENT_FETCH_LIMIT } from '@/constants/labels'
+import { STATUS_OPTIONS, FORMAT_OPTIONS } from './coachingFilterOptions'
 
 interface CoachingFilterBarProps {
   /** URL filter values — each page reads these from useUrlFilters */
@@ -143,6 +135,3 @@ export function CoachingFilterBar({
     </ListFilterBar>
   )
 }
-
-/** Shared status/format constants for use in page-level filtering logic */
-export { ALL_STATUSES, STATUS_OPTIONS, FORMAT_OPTIONS }

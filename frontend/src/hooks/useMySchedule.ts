@@ -6,7 +6,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import schedulingService, { type ApiShift } from '@/services/schedulingService'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import type { MockPerson, MockShift } from '@/components/scheduling/mockScheduleData'
 import { toBreak } from './useScheduleGrid'
 

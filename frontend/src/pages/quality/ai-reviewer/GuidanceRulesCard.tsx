@@ -11,12 +11,12 @@ import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useIsAdmin } from '@/hooks/useIsAdmin'
+import { GuidanceRulesEditor } from './GuidanceRulesEditor'
 import {
-  GuidanceRulesEditor,
   parseRulesFromText,
   serializeRulesToText,
   type GuidanceRule,
-} from './GuidanceRulesEditor'
+} from './guidanceRulesText'
 import { useAISettingsMutation } from './useAISettingsMutation'
 
 interface Props {

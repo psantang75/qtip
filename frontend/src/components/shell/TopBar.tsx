@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { NAV_CONFIG, getSectionFromPath, getNavItemsForRole } from '@/config/navConfig'
 import { ROLE_DISPLAY } from '@/config/navConfig'
 import { ROLE_IDS } from '@/hooks/useQualityRole'

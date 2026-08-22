@@ -1,6 +1,6 @@
 import { useNavigate, Navigate } from 'react-router-dom'
 import { PlayCircle, ClipboardList } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { useActiveForms } from '@/hooks/useQualityQueries'
 import type { FormSummary } from '@/services/qaService'

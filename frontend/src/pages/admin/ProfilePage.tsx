@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Pencil, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/hooks/use-toast'
 import userService from '@/services/userService'
 import { Button } from '@/components/ui/button'
@@ -86,7 +86,7 @@ export default function ProfilePage() {
         title:    user.title ?? '',
       })
     }
-  }, [user?.id, user?.username, user?.email, user?.title])
+  }, [user, profileForm])
 
   const profileMutation = useMutation({
     mutationFn: (v: ProfileValues) => userService.updateUser(user!.id, {

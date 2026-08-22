@@ -8,7 +8,7 @@ import {
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 
 /** Map a chart-API response (labels + datasets[0].data) to recharts-compatible array */
-export function toChartData(data: ChartData): { name: string; score: number }[] {
+function toChartData(data: ChartData): { name: string; score: number }[] {
   return data?.labels?.map((l, i) => ({ name: l, score: data.datasets?.[0]?.data?.[i] ?? 0 })) ?? []
 }
 

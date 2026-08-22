@@ -3,7 +3,7 @@ import { getErrorMessage } from '@/utils/errorHandling'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useForm, type FieldError } from 'react-hook-form'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { ROLE_IDS } from '@/hooks/useQualityRole'
 import { useToast } from '@/hooks/use-toast'
 import trainingService from '@/services/trainingService'
@@ -126,7 +126,7 @@ export default function CoachingSessionFormPage() {
       attachment_file:        null,
     })
     setExistingFilename(s.attachment_filename ?? undefined)
-  }, [existing, reset])
+  }, [existing, reset, user?.id])
 
   // ── Validation ──────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { ROLE_IDS } from '@/hooks/useQualityRole'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import trainingService, { type CoachingSession } from '@/services/trainingService'
@@ -313,7 +313,7 @@ export default function CoachingSessionDetailPage() {
     }),
   })
 
-  useEffect(() => { if (session) setPendingStatus(session.status) }, [session?.status])
+  useEffect(() => { if (session) setPendingStatus(session.status) }, [session])
 
   // Auto-open editable sections based on status (re-runs on manual status changes)
   useEffect(() => {

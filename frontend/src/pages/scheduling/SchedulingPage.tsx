@@ -110,7 +110,7 @@ export default function SchedulingPage() {
   const to = displayedDates[displayedDates.length - 1]
 
   const grid = useScheduleGrid(from, to)
-  const allPeople = grid.data?.people ?? []
+  const allPeople = useMemo(() => grid.data?.people ?? [], [grid.data])
   const deptOptions = useMemo(
     () => [...new Set(allPeople.map(p => p.department ?? UNASSIGNED))].sort(),
     [allPeople],

@@ -91,7 +91,7 @@ export default function AdminDepartmentsPage() {
   })
 
   // getDepartments always returns PaginatedResponse<Department>
-  const allDepartments: Department[] = deptsRaw?.items ?? []
+  const allDepartments = useMemo<Department[]>(() => deptsRaw?.items ?? [], [deptsRaw])
 
   // Client-side filter + sort (list is small)
   const departments = useMemo(() => {
@@ -137,7 +137,8 @@ export default function AdminDepartmentsPage() {
     defaultValues: { department_name: '', manager_ids: [], parent_id: null },
   })
 
-  const selectedIds = form.watch('manager_ids') ?? []
+  const watchedManagerIds = form.watch('manager_ids')
+  const selectedIds = useMemo(() => watchedManagerIds ?? [], [watchedManagerIds])
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const createMutation = useMutation({

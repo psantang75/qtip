@@ -10,22 +10,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { StickyFilterBar, StickyFilterField } from '@/components/common/StickyFilterBar'
-
-export const PERIOD_OPTIONS = [
-  'Today',
-  'Yesterday',
-  'Current Week',
-  'Prior Week',
-  'Current Month',
-  'Prior Month',
-  'Current Quarter',
-  'Prior Quarter',
-  'Current Year',
-  'Prior Year',
-  'Custom',
-] as const
-
-export type Period = typeof PERIOD_OPTIONS[number]
+import { PERIOD_OPTIONS } from './insightsFilterOptions'
 
 interface InsightsFilterBarProps {
   selectedDepts: string[]

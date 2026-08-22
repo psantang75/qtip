@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { History, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { formatQualityDate } from '@/utils/dateFormat'
-import { stripHtml } from '@/components/common/RichTextDisplay'
+import { stripHtml } from '@/utils/htmlText'
 import { useToast } from '@/hooks/use-toast'
 import writeupService from '@/services/writeupService'
 import type { WriteUpType, WriteUpStatus } from '@/services/writeupService'
@@ -81,13 +81,13 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
   })
   const data = fetchMut.data as unknown as PriorDisciplineHistory | undefined
 
-  const filterByDate = (dateStr?: string | null) => {
+  const filterByDate = useCallback((dateStr?: string | null) => {
     if (!dateStr) return true
     const d = dateStr.slice(0, 10)
     if (dateFrom && d < dateFrom) return false
     if (dateTo   && d > dateTo)   return false
     return true
-  }
+  }, [dateFrom, dateTo])
 
   const writeUps = useMemo(() => {
     const all = data?.write_ups ?? []
@@ -99,7 +99,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
       }
       return true
     })
-  }, [data, dateFrom, dateTo, policyFilters])
+  }, [data, filterByDate, policyFilters])
 
   const coachingSessions = useMemo(() => {
     const all = data?.coaching_sessions ?? []
@@ -111,7 +111,7 @@ export function PriorDisciplineModal({ csrId, selected, onSave, onClose }: Prior
       }
       return true
     })
-  }, [data, dateFrom, dateTo, topicFilters])
+  }, [data, filterByDate, topicFilters])
 
   const toggle = (type: 'write_up' | 'coaching_session', id: number) => {
     const key = `${type}:${id}`

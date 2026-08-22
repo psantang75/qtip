@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getErrorMessage } from '@/utils/errorHandling'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle } from 'lucide-react'
 import { QuizPlayer, QuizReview } from '@/components/training/QuizPlayer'

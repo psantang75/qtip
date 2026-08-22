@@ -71,4 +71,15 @@ export default tseslint.config(
       'no-restricted-syntax': 'off',
     },
   },
+  // shadcn/ui primitives are vendored/auto-generated and intentionally
+  // co-locate their `*Variants` (cva) exports and form hooks alongside the
+  // component — that's the upstream shadcn pattern. Splitting them would mean
+  // editing files we're told to leave untouched (.cursorrules), so the
+  // fast-refresh-only warning is scoped off here rather than restructured.
+  {
+    files: ['src/components/ui/**'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 )

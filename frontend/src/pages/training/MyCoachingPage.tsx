@@ -13,7 +13,8 @@ import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { TableErrorState } from '@/components/common/TableErrorState'
 import { ListPagination } from '@/components/common/ListPagination'
-import { CoachingFilterBar, ALL_STATUSES } from '@/components/training/CoachingFilterBar'
+import { CoachingFilterBar } from '@/components/training/CoachingFilterBar'
+import { ALL_STATUSES } from '@/components/training/coachingFilterOptions'
 import { TopicListTooltip } from '@/components/training/TopicListTooltip'
 import { RowActionButton } from '@/components/common/RowActionButton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -60,7 +61,7 @@ export default function MyCoachingPage() {
     queryFn:  () => trainingService.getMyCoachingSessions({ limit: 1000 }),
   })
 
-  const allSessions = data?.items ?? []
+  const allSessions = useMemo(() => data?.items ?? [], [data])
 
   const topicOptions  = useMemo(() => [...new Set(allSessions.flatMap(s => s.topics))].sort(), [allSessions])
 

@@ -3,7 +3,7 @@ import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 
 import { ROLE_IDS } from '../hooks/useQualityRole'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { getAppAccess } from '../services/appAccessService'
 
 // Shell components — NOT lazy (load immediately)

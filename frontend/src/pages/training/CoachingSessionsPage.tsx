@@ -13,7 +13,8 @@ import { TableEmptyState } from '@/components/common/TableEmptyState'
 import { SortableTableHead } from '@/components/common/SortableTableHead'
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { ListPagination } from '@/components/common/ListPagination'
-import { CoachingFilterBar, ALL_STATUSES } from '@/components/training/CoachingFilterBar'
+import { CoachingFilterBar } from '@/components/training/CoachingFilterBar'
+import { ALL_STATUSES } from '@/components/training/coachingFilterOptions'
 import { TopicListTooltip } from '@/components/training/TopicListTooltip'
 import { RowActionButton } from '@/components/common/RowActionButton'
 import { Button } from '@/components/ui/button'
@@ -48,17 +49,6 @@ export function QuizStatusBadge({ session }: { session: CoachingSession }) {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-
-// ── Date urgency helper ───────────────────────────────────────────────────────
-
-export function dateUrgency(dateStr?: string | null): { label: string; cls: string; overdue?: boolean } | null {
-  if (!dateStr) return null
-  const today = new Date().toISOString().slice(0, 10)
-  const d     = dateStr.slice(0, 10)
-  if (d === today) return { label: 'Today',                      cls: 'text-amber-600 font-semibold' }
-  if (d  < today)  return { label: formatQualityDate(dateStr), cls: 'text-red-600 font-semibold', overdue: true }
-  return               { label: formatQualityDate(dateStr),       cls: 'text-slate-600' }
-}
 
 /** Returns the most actionable upcoming date for a session, with a type label. */
 function nextDue(s: CoachingSession): { date: string | null; type: 'D' | 'F' | null } {
@@ -126,7 +116,7 @@ export default function CoachingSessionsPage() {
     placeholderData: (prev) => prev,
   })
 
-  const allItems = data?.items ?? []
+  const allItems = useMemo(() => data?.items ?? [], [data])
 
   // Dropdown options from the FULL result set
   const coachOptions = useMemo(() => {

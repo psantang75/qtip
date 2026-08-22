@@ -3,7 +3,8 @@ import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderR
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatQualityDate } from '@/utils/dateFormat'
-import { RichTextDisplay, stripHtml } from '@/components/common/RichTextDisplay'
+import { RichTextDisplay } from '@/components/common/RichTextDisplay'
+import { stripHtml } from '@/utils/htmlText'
 import { Section, Sub, InfoRow, NoteBlock, type DetailSectionProps } from './layout'
 import { COACHING_STATUS_LABELS, COACHING_PURPOSE_LABELS as PURPOSE_LABELS } from '@/constants/labels'
 

@@ -5,7 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { StandardTableHeaderRow } from '@/components/common/StandardTableHeaderRow'
 import { Dialog } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { RichTextDisplay, stripHtml } from '@/components/common/RichTextDisplay'
+import { RichTextDisplay } from '@/components/common/RichTextDisplay'
+import { stripHtml } from '@/utils/htmlText'
 import { FormSection } from '@/pages/training/coaching-form/CoachingFormSections'
 import { formatQualityDate } from '@/utils/dateFormat'
 import {

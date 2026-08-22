@@ -4,7 +4,7 @@ import * as LucideIcons from 'lucide-react'
 import type { LucideProps } from 'lucide-react'
 import { ChevronDown } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import {
   getNavItemsForRole,
   getSectionFromPath,

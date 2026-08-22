@@ -1,18 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import authService from '../services/authService';
 import type { User, LoginFormData } from '../services/authService';
-
-interface AuthContextType {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (data: LoginFormData) => Promise<void>;
-  logout: () => Promise<void>;
-  setDevRole: (roleId: number) => void;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import { AuthContext } from './authContextObject';
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -155,14 +145,5 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   );
 };
 
-// Custom hook to use auth context
-function useAuth(): AuthContextType {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
-
-export { AuthProvider, useAuth };
-export default AuthProvider; 
+export { AuthProvider };
+export default AuthProvider;

@@ -105,7 +105,7 @@ export default function SubmissionsPage() {
     refetchOnMount: 'always',
   })
 
-  const allItems = data?.items ?? []
+  const allItems = useMemo(() => data?.items ?? [], [data])
 
   // Dropdown options from the FULL result set (all items in date range)
   const formNameOptions = useMemo(() => {

@@ -1,4 +1,4 @@
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 
 /**
  * Canonical role ID constants — import from here, never hardcode numbers in pages.

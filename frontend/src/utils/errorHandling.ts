@@ -49,7 +49,6 @@ export function isAuthenticationStatus(status: number): boolean {
  */
 export function handleAuthenticationFailure(): void {
   if (!import.meta.env.PROD) {
-    // eslint-disable-next-line no-console
     console.info('[auth] Session expired - redirecting to login');
   }
   localStorage.removeItem('token');
@@ -67,7 +66,6 @@ export function handleAuthenticationFailure(): void {
 export function handleErrorIfAuthentication(error: unknown): boolean {
   if (isAuthenticationError(error)) {
     if (!import.meta.env.PROD) {
-      // eslint-disable-next-line no-console
       console.info('[auth] Session expired - axios interceptor will handle redirect to login');
     }
     // Don't set error messages, let the axios interceptor handle cleanup and redirect
@@ -225,7 +223,6 @@ export function hasErrorResponse(error: unknown): error is { response: { status:
  */
 export function logError(scope: string, ...args: unknown[]): void {
   if (import.meta.env.PROD) return;
-  // eslint-disable-next-line no-console
   console.error(`[${scope}]`, ...args);
 }
 
@@ -237,7 +234,6 @@ export function logError(scope: string, ...args: unknown[]): void {
  */
 export function logWarn(scope: string, ...args: unknown[]): void {
   if (import.meta.env.PROD) return;
-  // eslint-disable-next-line no-console
   console.warn(`[${scope}]`, ...args);
 }
 

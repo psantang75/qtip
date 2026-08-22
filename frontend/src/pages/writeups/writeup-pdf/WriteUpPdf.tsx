@@ -8,7 +8,7 @@ import {
 } from '@/constants/labels'
 import { formatQualityDateLong as fmtDate, formatQualityDateTime as fmtDateTime } from '@/utils/dateFormat'
 import { htmlToPdfNodes } from './htmlToPdf'
-import { stripHtml } from '@/components/common/RichTextDisplay'
+import { stripHtml } from '@/utils/htmlText'
 
 const BLUE = '#00aeef'
 const DARK = '#1e293b'

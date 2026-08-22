@@ -25,78 +25,74 @@ export class EnhancedPerformanceGoalRepository {
    * Create performance goal with enhanced targeting support
    */
   async create(goalData: CreatePerformanceGoalData, created_by: number): Promise<EnhancedPerformanceGoal> {
-    try {
-      logger.info('[ENHANCED PERF GOAL REPO] Creating goal with data:', {
-        ...goalData,
-        user_ids: goalData.user_ids || [],
-        department_ids: goalData.department_ids || []
+    logger.info('[ENHANCED PERF GOAL REPO] Creating goal with data:', {
+      ...goalData,
+      user_ids: goalData.user_ids || [],
+      department_ids: goalData.department_ids || []
+    });
+
+    const goal_id = await prisma.$transaction(async (tx) => {
+      const goal = await tx.performanceGoal.create({
+        data: {
+          goal_type: goalData.goal_type,
+          target_value: goalData.target_value,
+          scope: goalData.scope,
+          start_date: goalData.start_date,
+          end_date: goalData.end_date,
+          target_scope: goalData.target_scope,
+          target_form_id: goalData.target_form_id,
+          target_category_id: goalData.target_category_id,
+          target_question_id: goalData.target_question_id,
+          description: goalData.description,
+          created_by: created_by,
+          is_active: true
+        },
+        select: { id: true }
       });
 
-      const goal_id = await prisma.$transaction(async (tx) => {
-        const goal = await tx.performanceGoal.create({
-          data: {
-            goal_type: goalData.goal_type,
-            target_value: goalData.target_value,
-            scope: goalData.scope,
-            start_date: goalData.start_date,
-            end_date: goalData.end_date,
-            target_scope: goalData.target_scope,
-            target_form_id: goalData.target_form_id,
-            target_category_id: goalData.target_category_id,
-            target_question_id: goalData.target_question_id,
-            description: goalData.description,
-            created_by: created_by,
-            is_active: true
-          },
-          select: { id: true }
+      logger.info('[ENHANCED PERF GOAL REPO] Created goal with ID:', goal.id);
+
+      if (goalData.user_ids && goalData.user_ids.length > 0) {
+        logger.info('[ENHANCED PERF GOAL REPO] Creating user assignments for:', goalData.user_ids);
+        await tx.performanceGoalUser.createMany({
+          data: goalData.user_ids.map(user_id => ({
+            goal_id: goal.id,
+            user_id: user_id,
+            assigned_by: created_by
+          }))
         });
-
-        logger.info('[ENHANCED PERF GOAL REPO] Created goal with ID:', goal.id);
-
-        if (goalData.user_ids && goalData.user_ids.length > 0) {
-          logger.info('[ENHANCED PERF GOAL REPO] Creating user assignments for:', goalData.user_ids);
-          await tx.performanceGoalUser.createMany({
-            data: goalData.user_ids.map(user_id => ({
-              goal_id: goal.id,
-              user_id: user_id,
-              assigned_by: created_by
-            }))
-          });
-          logger.info('[ENHANCED PERF GOAL REPO] User assignments created');
-        }
-
-        if (goalData.department_ids && goalData.department_ids.length > 0) {
-          logger.info('[ENHANCED PERF GOAL REPO] Creating department assignments for:', goalData.department_ids);
-          await tx.performanceGoalDepartment.createMany({
-            data: goalData.department_ids.map(deptId => ({
-              goal_id: goal.id,
-              department_id: deptId,
-              assigned_by: created_by
-            }))
-          });
-          logger.info('[ENHANCED PERF GOAL REPO] Department assignments created');
-        }
-
-        return goal.id;
-      });
-
-      logger.info('[ENHANCED PERF GOAL REPO] Transaction committed successfully');
-
-      const createdGoal = await this.findById(goal_id);
-      if (!createdGoal) {
-        throw new PerformanceGoalServiceError('Failed to retrieve created goal', 'CREATE_ERROR', 500);
+        logger.info('[ENHANCED PERF GOAL REPO] User assignments created');
       }
 
-      logger.info('[ENHANCED PERF GOAL REPO] Retrieved created goal:', {
-        id: createdGoal.id,
-        assigned_users: createdGoal.assigned_users?.length || 0,
-        assigned_departments: createdGoal.assigned_departments?.length || 0
-      });
+      if (goalData.department_ids && goalData.department_ids.length > 0) {
+        logger.info('[ENHANCED PERF GOAL REPO] Creating department assignments for:', goalData.department_ids);
+        await tx.performanceGoalDepartment.createMany({
+          data: goalData.department_ids.map(deptId => ({
+            goal_id: goal.id,
+            department_id: deptId,
+            assigned_by: created_by
+          }))
+        });
+        logger.info('[ENHANCED PERF GOAL REPO] Department assignments created');
+      }
 
-      return createdGoal;
-    } catch (error) {
-      throw error;
+      return goal.id;
+    });
+
+    logger.info('[ENHANCED PERF GOAL REPO] Transaction committed successfully');
+
+    const createdGoal = await this.findById(goal_id);
+    if (!createdGoal) {
+      throw new PerformanceGoalServiceError('Failed to retrieve created goal', 'CREATE_ERROR', 500);
     }
+
+    logger.info('[ENHANCED PERF GOAL REPO] Retrieved created goal:', {
+      id: createdGoal.id,
+      assigned_users: createdGoal.assigned_users?.length || 0,
+      assigned_departments: createdGoal.assigned_departments?.length || 0
+    });
+
+    return createdGoal;
   }
 
   /**
@@ -276,70 +272,66 @@ export class EnhancedPerformanceGoalRepository {
    * Update performance goal with enhanced features
    */
   async update(id: number, updates: UpdatePerformanceGoalData, updatedBy: number): Promise<EnhancedPerformanceGoal | null> {
-    try {
-      await prisma.$transaction(async (tx) => {
-        const setClauses: Prisma.Sql[] = [];
+    await prisma.$transaction(async (tx) => {
+      const setClauses: Prisma.Sql[] = [];
 
-        if (updates.goal_type !== undefined) setClauses.push(Prisma.sql`goal_type = ${updates.goal_type}`);
-        if (updates.target_value !== undefined) setClauses.push(Prisma.sql`target_value = ${updates.target_value}`);
-        if (updates.scope !== undefined) setClauses.push(Prisma.sql`scope = ${updates.scope}`);
-        if (updates.start_date !== undefined) setClauses.push(Prisma.sql`start_date = ${updates.start_date}`);
-        if (updates.end_date !== undefined) setClauses.push(Prisma.sql`end_date = ${updates.end_date}`);
-        if (updates.target_scope !== undefined) setClauses.push(Prisma.sql`target_scope = ${updates.target_scope}`);
-        if (updates.target_form_id !== undefined) setClauses.push(Prisma.sql`target_form_id = ${updates.target_form_id}`);
-        if (updates.target_category_id !== undefined) setClauses.push(Prisma.sql`target_category_id = ${updates.target_category_id}`);
-        if (updates.target_question_id !== undefined) setClauses.push(Prisma.sql`target_question_id = ${updates.target_question_id}`);
-        if (updates.description !== undefined) setClauses.push(Prisma.sql`description = ${updates.description}`);
-        if (updates.is_active !== undefined) setClauses.push(Prisma.sql`is_active = ${updates.is_active ? 1 : 0}`);
+      if (updates.goal_type !== undefined) setClauses.push(Prisma.sql`goal_type = ${updates.goal_type}`);
+      if (updates.target_value !== undefined) setClauses.push(Prisma.sql`target_value = ${updates.target_value}`);
+      if (updates.scope !== undefined) setClauses.push(Prisma.sql`scope = ${updates.scope}`);
+      if (updates.start_date !== undefined) setClauses.push(Prisma.sql`start_date = ${updates.start_date}`);
+      if (updates.end_date !== undefined) setClauses.push(Prisma.sql`end_date = ${updates.end_date}`);
+      if (updates.target_scope !== undefined) setClauses.push(Prisma.sql`target_scope = ${updates.target_scope}`);
+      if (updates.target_form_id !== undefined) setClauses.push(Prisma.sql`target_form_id = ${updates.target_form_id}`);
+      if (updates.target_category_id !== undefined) setClauses.push(Prisma.sql`target_category_id = ${updates.target_category_id}`);
+      if (updates.target_question_id !== undefined) setClauses.push(Prisma.sql`target_question_id = ${updates.target_question_id}`);
+      if (updates.description !== undefined) setClauses.push(Prisma.sql`description = ${updates.description}`);
+      if (updates.is_active !== undefined) setClauses.push(Prisma.sql`is_active = ${updates.is_active ? 1 : 0}`);
 
-        if (setClauses.length > 0) {
-          setClauses.push(Prisma.sql`updated_by = ${updatedBy}`, Prisma.sql`updated_at = NOW()`);
-          await tx.$executeRaw(
-            Prisma.sql`UPDATE performance_goals SET ${Prisma.join(setClauses, ', ')} WHERE id = ${id}`
+      if (setClauses.length > 0) {
+        setClauses.push(Prisma.sql`updated_by = ${updatedBy}`, Prisma.sql`updated_at = NOW()`);
+        await tx.$executeRaw(
+          Prisma.sql`UPDATE performance_goals SET ${Prisma.join(setClauses, ', ')} WHERE id = ${id}`
+        );
+      }
+
+      if (updates.user_ids !== undefined) {
+        await tx.$executeRaw(
+          Prisma.sql`UPDATE performance_goal_users SET is_active = 0 WHERE goal_id = ${id}`
+        );
+
+        if (updates.user_ids.length > 0) {
+          const userValues = Prisma.join(
+            updates.user_ids.map(user_id => Prisma.sql`(${id}, ${user_id}, ${updatedBy})`),
+            ', '
           );
+          await tx.$executeRaw(Prisma.sql`
+            INSERT INTO performance_goal_users (goal_id, user_id, assigned_by)
+            VALUES ${userValues}
+            ON DUPLICATE KEY UPDATE is_active = 1, assigned_by = VALUES(assigned_by), assigned_at = NOW()
+          `);
         }
+      }
 
-        if (updates.user_ids !== undefined) {
-          await tx.$executeRaw(
-            Prisma.sql`UPDATE performance_goal_users SET is_active = 0 WHERE goal_id = ${id}`
+      if (updates.department_ids !== undefined) {
+        await tx.$executeRaw(
+          Prisma.sql`UPDATE performance_goal_departments SET is_active = 0 WHERE goal_id = ${id}`
+        );
+
+        if (updates.department_ids.length > 0) {
+          const deptValues = Prisma.join(
+            updates.department_ids.map(deptId => Prisma.sql`(${id}, ${deptId}, ${updatedBy})`),
+            ', '
           );
-
-          if (updates.user_ids.length > 0) {
-            const userValues = Prisma.join(
-              updates.user_ids.map(user_id => Prisma.sql`(${id}, ${user_id}, ${updatedBy})`),
-              ', '
-            );
-            await tx.$executeRaw(Prisma.sql`
-              INSERT INTO performance_goal_users (goal_id, user_id, assigned_by)
-              VALUES ${userValues}
-              ON DUPLICATE KEY UPDATE is_active = 1, assigned_by = VALUES(assigned_by), assigned_at = NOW()
-            `);
-          }
+          await tx.$executeRaw(Prisma.sql`
+            INSERT INTO performance_goal_departments (goal_id, department_id, assigned_by)
+            VALUES ${deptValues}
+            ON DUPLICATE KEY UPDATE is_active = 1, assigned_by = VALUES(assigned_by), assigned_at = NOW()
+          `);
         }
+      }
+    });
 
-        if (updates.department_ids !== undefined) {
-          await tx.$executeRaw(
-            Prisma.sql`UPDATE performance_goal_departments SET is_active = 0 WHERE goal_id = ${id}`
-          );
-
-          if (updates.department_ids.length > 0) {
-            const deptValues = Prisma.join(
-              updates.department_ids.map(deptId => Prisma.sql`(${id}, ${deptId}, ${updatedBy})`),
-              ', '
-            );
-            await tx.$executeRaw(Prisma.sql`
-              INSERT INTO performance_goal_departments (goal_id, department_id, assigned_by)
-              VALUES ${deptValues}
-              ON DUPLICATE KEY UPDATE is_active = 1, assigned_by = VALUES(assigned_by), assigned_at = NOW()
-            `);
-          }
-        }
-      });
-
-      return await this.findById(id);
-    } catch (error) {
-      throw error;
-    }
+    return await this.findById(id);
   }
 
   /**

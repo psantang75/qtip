@@ -9,21 +9,10 @@
  */
 import { ChevronLeft, ChevronRight, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { monthKeyOf, fromKey } from './campaignMonth'
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
-
-export const monthKeyOf = (year: number, month: number): string =>
-  `${year}-${String(month).padStart(2, '0')}`
-
-const fromKey = (key: string): [number, number] =>
-  [Number(key.slice(0, 4)), Number(key.slice(5, 7))]
-
-/** The month an agent should land on: the first released month from now, else the last. */
-export function nearestPublishedMonth(publishedMonths: string[], fromNow: string): [number, number] | null {
-  if (publishedMonths.length === 0) return null
-  return fromKey(publishedMonths.find(m => m >= fromNow) ?? publishedMonths[publishedMonths.length - 1])
-}
 
 export function CampaignMonthNav({
   year, month, onChange, canSeeDrafts, publishedMonths, isPublished,

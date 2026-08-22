@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { getInsightsAccess } from '@/services/insightsService'
 import type { DataScope } from '@/services/insightsService'
 

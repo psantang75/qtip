@@ -19,8 +19,9 @@ import { cn } from '@/lib/utils'
 import StatusBadge from './StatusBadge'
 import ExpandableRow from './ExpandableRow'
 import {
-  LEVEL_VARIANT, fmtDuration, RollingPointsHeader, LevelHeader, GraceHeader,
+  RollingPointsHeader, LevelHeader, GraceHeader,
 } from './AttendancePolicyTooltips'
+import { LEVEL_VARIANT, fmtDuration } from './attendancePolicy'
 import type {
   AttendanceAgentRow, AttendanceOccurrence, AttendancePointBand, AttendanceWarningLevel,
 } from '@/services/insightsCsrService'

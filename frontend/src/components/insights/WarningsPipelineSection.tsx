@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { InsightsSection, StatRow } from '@/components/insights'
 
 interface PipelineData {
@@ -30,7 +30,7 @@ const PIPELINE_STATUSES = [
 
 export default function WarningsPipelineSection({ pipeline }: Props) {
   const byStatus  = pipeline?.byStatus ?? {}
-  const byType    = pipeline?.byType   ?? {}
+  const byType    = useMemo(() => pipeline?.byType ?? {}, [pipeline])
   const totalType = Object.values(byType).reduce((a, b) => a + b, 0)
 
   const [animateBars, setAnimateBars] = useState(false)

@@ -18,7 +18,7 @@ import { useMemo, useState, useCallback, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { InsightsSection, AttendanceMatrix, StatusBadge } from '@/components/insights'
 import AttendancePointsRoster from '@/components/insights/AttendancePointsRoster'
-import { LEVEL_VARIANT } from '@/components/insights/AttendancePolicyTooltips'
+import { LEVEL_VARIANT } from '@/components/insights/attendancePolicy'
 import ActivityReportShell from '@/components/insights/agentActivity/ActivityReportShell'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
 import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
@@ -69,8 +69,8 @@ export default function CSRAttendancePage() {
       .catch(() => setDetail(prev => ({ ...prev, [userId]: [] })))
   }, [detail, filters.params, queryClient])
 
-  const rows = summaryQ.data?.rows ?? []
-  const levels = summaryQ.data?.warningLevels ?? []
+  const rows = useMemo(() => summaryQ.data?.rows ?? [], [summaryQ.data])
+  const levels = useMemo(() => summaryQ.data?.warningLevels ?? [], [summaryQ.data])
   const complianceThresholds = resolveThresholds('csr_att_compliance', kpiConfig)
 
   const pipeline = useMemo(() => summarisePipeline(rows, levels), [rows, levels])

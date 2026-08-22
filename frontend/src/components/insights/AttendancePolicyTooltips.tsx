@@ -16,23 +16,8 @@ import { Info } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import StatusBadge from './StatusBadge'
+import { LEVEL_VARIANT, fmtDuration } from './attendancePolicy'
 import type { AttendancePointBand, AttendanceWarningLevel } from '@/services/insightsCsrService'
-
-export const LEVEL_VARIANT: Record<string, 'warning' | 'bad'> = {
-  coaching: 'warning',
-  verbal: 'warning',
-  written: 'bad',
-  final: 'bad',
-  separation: 'bad',
-}
-
-/** 'H:MM:SS' from seconds, matching how the policy table is written. */
-export function fmtDuration(seconds: number): string {
-  const s = Math.max(0, Math.round(seconds))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  return `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
-}
 
 /** Bands are grouped by what they measure, worst-case last. */
 const KIND_ORDER: Record<AttendancePointBand['kind'], number> = {

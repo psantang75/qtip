@@ -9,7 +9,7 @@ import { InsightsFilterBar, InsightsSection, StatusDot, SkeletonTable, ErrorCard
 import SortHeaderIcon from '@/components/insights/agentActivity/SortHeaderIcon'
 import { useQCFilters } from '@/hooks/useQCFilters'
 import { useQualityRole } from '@/hooks/useQualityRole'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { getKpiDef } from '@/constants/kpiDefs'
 import { getQCAgents, getFilterOptions, getQCKpis } from '@/services/insightsQCService'
 import type { AgentSummary } from '@/services/insightsQCService'

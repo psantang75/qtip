@@ -35,14 +35,6 @@ function formatOneCondition(
   return `IF "${qLabel}" ${op}${val}`
 }
 
-export function conditionSummaryText(
-  conditions: FormQuestionCondition[],
-  allQuestions: AllQuestionRef[],
-): string {
-  if (!conditions.length) return ''
-  return conditions.map(c => formatOneCondition(c, allQuestions)).join('; ')
-}
-
 export function ConditionSummary({
   conditions,
   allQuestions,

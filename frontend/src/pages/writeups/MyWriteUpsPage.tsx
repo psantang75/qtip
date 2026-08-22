@@ -23,7 +23,8 @@ import { useListSort } from '@/hooks/useListSort'
 import { formatQualityDate } from '@/utils/dateFormat'
 import { cn } from '@/lib/utils'
 import { WRITE_UP_STATUS_LABELS, CLIENT_FETCH_LIMIT } from '@/constants/labels'
-import { ALL_STATUS_LABELS, WriteUpTypeBadge, WarningIdSearch } from './warningListHelpers'
+import { ALL_STATUS_LABELS } from './warningListConstants'
+import { WriteUpTypeBadge, WarningIdSearch } from './warningListHelpers'
 
 export default function MyWriteUpsPage() {
   const navigate = useNavigate()

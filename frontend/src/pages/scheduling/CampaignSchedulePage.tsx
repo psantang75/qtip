@@ -31,7 +31,8 @@ import { t } from '@/lib/t'
 import { useScheduleRole } from '@/hooks/useScheduleRole'
 import { MonthCampaignGrid } from '@/components/scheduling/MonthCampaignGrid'
 import { CampaignScheduleEditorDialog } from '@/components/scheduling/CampaignScheduleEditorDialog'
-import { CampaignMonthNav, monthKeyOf, nearestPublishedMonth } from '@/components/scheduling/CampaignMonthNav'
+import { CampaignMonthNav } from '@/components/scheduling/CampaignMonthNav'
+import { monthKeyOf, nearestPublishedMonth } from '@/components/scheduling/campaignMonth'
 import campaignService from '@/services/campaignService'
 
 export default function CampaignSchedulePage() {

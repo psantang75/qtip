@@ -1,6 +1,6 @@
 import { Building2, ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import { USER_ROLES } from '@/constants/roles'
 import { getKpiDef, getKpiScope } from '@/constants/kpiDefs'
 import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'

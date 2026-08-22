@@ -1,5 +1,6 @@
 import { useUnlockReasons } from '@/hooks/useUnlockReasons'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
+import { fmtScore } from './reopenFormat'
 
 export interface LastReopen {
   id: number
@@ -23,8 +24,6 @@ export function Field({ label, value, className }: { label: string; value: strin
     </div>
   )
 }
-
-export const fmtScore = (n: number | null) => (n == null ? '—' : `${n}%`)
 
 /**
  * Shown once a reopen has finished, so the record carries its own history:

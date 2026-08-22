@@ -9,6 +9,7 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { cn } from '../../lib/utils';
 import { RichTextDisplay } from '../../components/common/RichTextDisplay';
+import { optionCls } from './optionCls';
 import type { QuestionRenderData, CategoryRenderData, FormRenderData } from './formRenderTypes';
 import type { RadioOption } from '../../types/form.types';
 
@@ -51,16 +52,6 @@ interface QuestionProps {
   onAnswerChange: (id: number, value: string, type: string) => void;
   onNotesChange:  (id: number, notes: string) => void;
 }
-
-// ── Shared button style helper ────────────────────────────────────────────────
-
-/** Canonical QTIP "pick one of N" pill classes. Exported so other segmented
- *  pickers (e.g. writeup QA-search answer chips) reuse the exact style rather
- *  than reimplementing it. */
-export const optionCls = (selected: boolean) =>
-  selected
-    ? 'bg-[#00aeef] text-white border-[#00aeef]'
-    : 'bg-white text-slate-600 border-slate-200 hover:border-[#00aeef] hover:text-[#00aeef]';
 
 // ── Yes / No ──────────────────────────────────────────────────────────────────
 

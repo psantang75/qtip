@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { optionCls } from '@/utils/forms/formRendererComponents'
+import { optionCls } from '@/utils/forms/optionCls'
 import { formatQualityDate, priorNinetyDays } from '@/utils/dateFormat'
 import { useToast } from '@/hooks/use-toast'
 import writeupService, { type QaSearchResult } from '@/services/writeupService'

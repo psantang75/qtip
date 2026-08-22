@@ -97,7 +97,7 @@ export default function LibraryResourcesPage() {
   const { data: resData,   isLoading, isError, refetch } = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 1000 }) })
   const { data: topicsData }           = useQuery({ queryKey: ['list-items', 'training_topic'], queryFn: () => listService.getItems('training_topic') })
 
-  const allResources = resData?.items ?? []
+  const allResources = useMemo(() => resData?.items ?? [], [resData])
 
   // Pre-topic filter: base for deriving available topic options (search + status only)
   const baseFiltered = useMemo(() => {

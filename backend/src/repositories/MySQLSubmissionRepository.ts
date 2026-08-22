@@ -148,132 +148,128 @@ export class MySQLSubmissionRepository {
   async createSubmission(
     submissionData: CreateSubmissionDTO & { submitted_by: number; status: SubmissionStatus; submitted_at?: Date | null }
   ): Promise<number> {
-    try {
-      const submission_id = await prisma.$transaction(async (tx) => {
-        // Phase C (C4): derive a case_id from the link payload so the
-        // inbox / calibration code can group multi-source submissions.
-        // Format mirrors the backfill in
-        // 20260507120000_add_submission_case_id: prefer TICKET, then
-        // TASK, then CALL (Genesys conversation id when available, else
-        // the internal calls.id).
-        const derivedCaseId = await deriveCaseId(tx, submissionData);
+    const submission_id = await prisma.$transaction(async (tx) => {
+      // Phase C (C4): derive a case_id from the link payload so the
+      // inbox / calibration code can group multi-source submissions.
+      // Format mirrors the backfill in
+      // 20260507120000_add_submission_case_id: prefer TICKET, then
+      // TASK, then CALL (Genesys conversation id when available, else
+      // the internal calls.id).
+      const derivedCaseId = await deriveCaseId(tx, submissionData);
 
-        const submission = await tx.submission.create({
-          data: {
-            form_id: submissionData.form_id,
-            call_id: submissionData.call_id ?? null,
-            case_id: submissionData.case_id ?? derivedCaseId,
-            ai_provider: submissionData.ai_provider ?? null,
-            submitted_by: submissionData.submitted_by,
-            status: submissionData.status as PrismaSubmissionStatus,
-            submitted_at: submissionData.submitted_at ?? undefined,
-            ai_overall_confidence:
-              submissionData.ai_overall_confidence == null
-                ? null
-                : (submissionData.ai_overall_confidence as any),
-            ai_calibrated_confidence:
-              submissionData.ai_calibrated_confidence == null
-                ? null
-                : (submissionData.ai_calibrated_confidence as any),
-            ai_extras: (submissionData.ai_extras as any) ?? undefined,
-          },
+      const submission = await tx.submission.create({
+        data: {
+          form_id: submissionData.form_id,
+          call_id: submissionData.call_id ?? null,
+          case_id: submissionData.case_id ?? derivedCaseId,
+          ai_provider: submissionData.ai_provider ?? null,
+          submitted_by: submissionData.submitted_by,
+          status: submissionData.status as PrismaSubmissionStatus,
+          submitted_at: submissionData.submitted_at ?? undefined,
+          ai_overall_confidence:
+            submissionData.ai_overall_confidence == null
+              ? null
+              : (submissionData.ai_overall_confidence as any),
+          ai_calibrated_confidence:
+            submissionData.ai_calibrated_confidence == null
+              ? null
+              : (submissionData.ai_calibrated_confidence as any),
+          ai_extras: (submissionData.ai_extras as any) ?? undefined,
+        },
+      });
+
+      if (submissionData.answers && submissionData.answers.length > 0) {
+        await tx.submissionAnswer.createMany({
+          data: submissionData.answers.map((a) => ({
+            submission_id: submission.id,
+            question_id: a.question_id,
+            answer: a.answer ?? null,
+            notes: a.notes ?? null,
+            ai_confidence: a.ai_confidence == null ? null : (a.ai_confidence as any),
+          })),
         });
+      }
 
-        if (submissionData.answers && submissionData.answers.length > 0) {
-          await tx.submissionAnswer.createMany({
-            data: submissionData.answers.map((a) => ({
-              submission_id: submission.id,
-              question_id: a.question_id,
-              answer: a.answer ?? null,
-              notes: a.notes ?? null,
-              ai_confidence: a.ai_confidence == null ? null : (a.ai_confidence as any),
-            })),
-          });
-        }
+      if (submissionData.metadata && submissionData.metadata.length > 0) {
+        await tx.submissionMetadata.createMany({
+          data: submissionData.metadata.map((m) => ({
+            submission_id: submission.id,
+            field_id: Number(m.field_id),
+            value: m.value ?? null,
+          })),
+        });
+      }
 
-        if (submissionData.metadata && submissionData.metadata.length > 0) {
-          await tx.submissionMetadata.createMany({
-            data: submissionData.metadata.map((m) => ({
-              submission_id: submission.id,
-              field_id: Number(m.field_id),
-              value: m.value ?? null,
-            })),
-          });
-        }
+      if (submissionData.call_ids && submissionData.call_ids.length > 0) {
+        for (let i = 0; i < submissionData.call_ids.length; i++) {
+          let call_id = submissionData.call_ids[i];
 
-        if (submissionData.call_ids && submissionData.call_ids.length > 0) {
-          for (let i = 0; i < submissionData.call_ids.length; i++) {
-            let call_id = submissionData.call_ids[i];
+          if (call_id < 0) {
+            const callData = submissionData.call_data?.[i];
+            if (callData) {
+              // Use the CSR resolved from the form metadata by the frontend,
+              // falling back to the submitter (QA reviewer) to satisfy the FK constraint.
+              const csr_id = submissionData.csr_id ?? submissionData.submitted_by;
 
-            if (call_id < 0) {
-              const callData = submissionData.call_data?.[i];
-              if (callData) {
-                // Use the CSR resolved from the form metadata by the frontend,
-                // falling back to the submitter (QA reviewer) to satisfy the FK constraint.
-                const csr_id = submissionData.csr_id ?? submissionData.submitted_by;
-
-                // Upsert: if a call with this conversation ID already exists (e.g. from
-                // a previous failed attempt), reuse it rather than failing on the unique constraint.
-                const upsertedCall = await tx.call.upsert({
-                  where: { call_id: callData.call_id },
-                  create: {
-                    call_id: callData.call_id,
-                    csr_id: csr_id,
-                    department_id: callData.department_id ?? null,
-                    customer_id: null,
-                    call_date: callData.call_date ? new Date(callData.call_date) : new Date(),
-                    duration: callData.duration || 0,
-                    recording_url: callData.recording_url ?? null,
-                    transcript: callData.transcript ?? null,
-                    metadata: callData.metadata ? JSON.stringify(callData.metadata) : null,
-                  },
-                  update: {},
-                });
-
-                call_id = upsertedCall.id;
-              }
-            }
-
-            await tx.submissionCall.upsert({
-              where: { unique_submission_call: { submission_id: submission.id, call_id: call_id } },
-              create: { submission_id: submission.id, call_id: call_id, sort_order: i },
-              update: { sort_order: i },
-            });
-          }
-        }
-
-        // Linked CRM tickets/tasks. Reference-only persistence: we store
-        // {kind, external_id, sort_order} and live-fetch all body data
-        // from the CRM at view time. Upsert keeps double-submits idempotent.
-        if (submissionData.ticket_tasks && submissionData.ticket_tasks.length > 0) {
-          for (let i = 0; i < submissionData.ticket_tasks.length; i++) {
-            const ref = submissionData.ticket_tasks[i];
-            await tx.submissionTicketTask.upsert({
-              where: {
-                unique_submission_ticket_task: {
-                  submission_id: submission.id,
-                  kind: ref.kind,
-                  external_id: BigInt(ref.external_id),
+              // Upsert: if a call with this conversation ID already exists (e.g. from
+              // a previous failed attempt), reuse it rather than failing on the unique constraint.
+              const upsertedCall = await tx.call.upsert({
+                where: { call_id: callData.call_id },
+                create: {
+                  call_id: callData.call_id,
+                  csr_id: csr_id,
+                  department_id: callData.department_id ?? null,
+                  customer_id: null,
+                  call_date: callData.call_date ? new Date(callData.call_date) : new Date(),
+                  duration: callData.duration || 0,
+                  recording_url: callData.recording_url ?? null,
+                  transcript: callData.transcript ?? null,
+                  metadata: callData.metadata ? JSON.stringify(callData.metadata) : null,
                 },
-              },
-              create: {
+                update: {},
+              });
+
+              call_id = upsertedCall.id;
+            }
+          }
+
+          await tx.submissionCall.upsert({
+            where: { unique_submission_call: { submission_id: submission.id, call_id: call_id } },
+            create: { submission_id: submission.id, call_id: call_id, sort_order: i },
+            update: { sort_order: i },
+          });
+        }
+      }
+
+      // Linked CRM tickets/tasks. Reference-only persistence: we store
+      // {kind, external_id, sort_order} and live-fetch all body data
+      // from the CRM at view time. Upsert keeps double-submits idempotent.
+      if (submissionData.ticket_tasks && submissionData.ticket_tasks.length > 0) {
+        for (let i = 0; i < submissionData.ticket_tasks.length; i++) {
+          const ref = submissionData.ticket_tasks[i];
+          await tx.submissionTicketTask.upsert({
+            where: {
+              unique_submission_ticket_task: {
                 submission_id: submission.id,
                 kind: ref.kind,
                 external_id: BigInt(ref.external_id),
-                sort_order: i,
               },
-              update: { sort_order: i },
-            });
-          }
+            },
+            create: {
+              submission_id: submission.id,
+              kind: ref.kind,
+              external_id: BigInt(ref.external_id),
+              sort_order: i,
+            },
+            update: { sort_order: i },
+          });
         }
+      }
 
-        return submission.id;
-      });
+      return submission.id;
+    });
 
-      return submission_id;
-    } catch (error) {
-      throw error;
-    }
+    return submission_id;
   }
 
   async updateSubmissionScore(submission_id: number, total_score: number): Promise<void> {
@@ -338,122 +334,118 @@ export class MySQLSubmissionRepository {
     submission_id: number,
     submissionData: CreateSubmissionDTO & { submitted_by: number; status: SubmissionStatus; submitted_at?: Date | null }
   ): Promise<void> {
-    try {
-      await prisma.$transaction(async (tx) => {
-        await tx.submission.update({
-          where: { id: submission_id },
-          data: {
-            status: submissionData.status as PrismaSubmissionStatus,
-            submitted_at: submissionData.submitted_at ?? undefined,
-            // Only overwrite AI side outputs when the new payload supplies
-            // them; otherwise leave whatever was there. (Lets human edits
-            // to a draft preserve the original AI-emitted timeline/etc.)
-            ...(submissionData.ai_overall_confidence !== undefined
-              ? { ai_overall_confidence: submissionData.ai_overall_confidence as any }
-              : {}),
-            ...(submissionData.ai_calibrated_confidence !== undefined
-              ? { ai_calibrated_confidence: submissionData.ai_calibrated_confidence as any }
-              : {}),
-            ...(submissionData.ai_extras !== undefined
-              ? { ai_extras: submissionData.ai_extras as any }
-              : {}),
-            ...(submissionData.ai_provider !== undefined
-              ? { ai_provider: submissionData.ai_provider ?? null }
-              : {}),
-          },
-        });
-
-        await tx.submissionAnswer.deleteMany({ where: { submission_id: submission_id } });
-
-        if (submissionData.answers && submissionData.answers.length > 0) {
-          await tx.submissionAnswer.createMany({
-            data: submissionData.answers.map((a) => ({
-              submission_id: submission_id,
-              question_id: a.question_id,
-              answer: a.answer ?? null,
-              notes: a.notes ?? null,
-              ai_confidence: a.ai_confidence == null ? null : (a.ai_confidence as any),
-            })),
-          });
-        }
-
-        await tx.submissionMetadata.deleteMany({ where: { submission_id: submission_id } });
-
-        if (submissionData.metadata && submissionData.metadata.length > 0) {
-          await tx.submissionMetadata.createMany({
-            data: submissionData.metadata.map((m) => ({
-              submission_id: submission_id,
-              field_id: Number(m.field_id),
-              value: m.value ?? null,
-            })),
-          });
-        }
-
-        // Replace linked CRM tickets/tasks. Without this, a draft that gets
-        // re-saved for a different ticket (e.g. a second AI Reviewer manual
-        // run that reuses the same DRAFT row found by getExistingDraft) would
-        // keep the stale ticket linkage from the original save while the
-        // answers/metadata reflect the new ticket — producing a draft whose
-        // header points at one ticket and whose review narrative is about
-        // another. Mirror the answers/metadata replace-all semantics.
-        await tx.submissionTicketTask.deleteMany({ where: { submission_id: submission_id } });
-
-        if (submissionData.ticket_tasks && submissionData.ticket_tasks.length > 0) {
-          for (let i = 0; i < submissionData.ticket_tasks.length; i++) {
-            const ref = submissionData.ticket_tasks[i];
-            await tx.submissionTicketTask.create({
-              data: {
-                submission_id: submission_id,
-                kind: ref.kind,
-                external_id: BigInt(ref.external_id),
-                sort_order: i,
-              },
-            });
-          }
-        }
-
-        // Replace linked calls for the same reason. Reuse the same virtual-call
-        // upsert path from createSubmission so PhoneSystem-only conversations
-        // (negative call_id) still resolve to a real calls row.
-        await tx.submissionCall.deleteMany({ where: { submission_id: submission_id } });
-
-        if (submissionData.call_ids && submissionData.call_ids.length > 0) {
-          for (let i = 0; i < submissionData.call_ids.length; i++) {
-            let call_id = submissionData.call_ids[i];
-
-            if (call_id < 0) {
-              const callData = submissionData.call_data?.[i];
-              if (callData) {
-                const csr_id = submissionData.csr_id ?? submissionData.submitted_by;
-                const upsertedCall = await tx.call.upsert({
-                  where: { call_id: callData.call_id },
-                  create: {
-                    call_id: callData.call_id,
-                    csr_id: csr_id,
-                    department_id: callData.department_id ?? null,
-                    customer_id: null,
-                    call_date: callData.call_date ? new Date(callData.call_date) : new Date(),
-                    duration: callData.duration || 0,
-                    recording_url: callData.recording_url ?? null,
-                    transcript: callData.transcript ?? null,
-                    metadata: callData.metadata ? JSON.stringify(callData.metadata) : null,
-                  },
-                  update: {},
-                });
-
-                call_id = upsertedCall.id;
-              }
-            }
-
-            await tx.submissionCall.create({
-              data: { submission_id: submission_id, call_id: call_id, sort_order: i },
-            });
-          }
-        }
+    await prisma.$transaction(async (tx) => {
+      await tx.submission.update({
+        where: { id: submission_id },
+        data: {
+          status: submissionData.status as PrismaSubmissionStatus,
+          submitted_at: submissionData.submitted_at ?? undefined,
+          // Only overwrite AI side outputs when the new payload supplies
+          // them; otherwise leave whatever was there. (Lets human edits
+          // to a draft preserve the original AI-emitted timeline/etc.)
+          ...(submissionData.ai_overall_confidence !== undefined
+            ? { ai_overall_confidence: submissionData.ai_overall_confidence as any }
+            : {}),
+          ...(submissionData.ai_calibrated_confidence !== undefined
+            ? { ai_calibrated_confidence: submissionData.ai_calibrated_confidence as any }
+            : {}),
+          ...(submissionData.ai_extras !== undefined
+            ? { ai_extras: submissionData.ai_extras as any }
+            : {}),
+          ...(submissionData.ai_provider !== undefined
+            ? { ai_provider: submissionData.ai_provider ?? null }
+            : {}),
+        },
       });
-    } catch (error) {
-      throw error;
-    }
+
+      await tx.submissionAnswer.deleteMany({ where: { submission_id: submission_id } });
+
+      if (submissionData.answers && submissionData.answers.length > 0) {
+        await tx.submissionAnswer.createMany({
+          data: submissionData.answers.map((a) => ({
+            submission_id: submission_id,
+            question_id: a.question_id,
+            answer: a.answer ?? null,
+            notes: a.notes ?? null,
+            ai_confidence: a.ai_confidence == null ? null : (a.ai_confidence as any),
+          })),
+        });
+      }
+
+      await tx.submissionMetadata.deleteMany({ where: { submission_id: submission_id } });
+
+      if (submissionData.metadata && submissionData.metadata.length > 0) {
+        await tx.submissionMetadata.createMany({
+          data: submissionData.metadata.map((m) => ({
+            submission_id: submission_id,
+            field_id: Number(m.field_id),
+            value: m.value ?? null,
+          })),
+        });
+      }
+
+      // Replace linked CRM tickets/tasks. Without this, a draft that gets
+      // re-saved for a different ticket (e.g. a second AI Reviewer manual
+      // run that reuses the same DRAFT row found by getExistingDraft) would
+      // keep the stale ticket linkage from the original save while the
+      // answers/metadata reflect the new ticket — producing a draft whose
+      // header points at one ticket and whose review narrative is about
+      // another. Mirror the answers/metadata replace-all semantics.
+      await tx.submissionTicketTask.deleteMany({ where: { submission_id: submission_id } });
+
+      if (submissionData.ticket_tasks && submissionData.ticket_tasks.length > 0) {
+        for (let i = 0; i < submissionData.ticket_tasks.length; i++) {
+          const ref = submissionData.ticket_tasks[i];
+          await tx.submissionTicketTask.create({
+            data: {
+              submission_id: submission_id,
+              kind: ref.kind,
+              external_id: BigInt(ref.external_id),
+              sort_order: i,
+            },
+          });
+        }
+      }
+
+      // Replace linked calls for the same reason. Reuse the same virtual-call
+      // upsert path from createSubmission so PhoneSystem-only conversations
+      // (negative call_id) still resolve to a real calls row.
+      await tx.submissionCall.deleteMany({ where: { submission_id: submission_id } });
+
+      if (submissionData.call_ids && submissionData.call_ids.length > 0) {
+        for (let i = 0; i < submissionData.call_ids.length; i++) {
+          let call_id = submissionData.call_ids[i];
+
+          if (call_id < 0) {
+            const callData = submissionData.call_data?.[i];
+            if (callData) {
+              const csr_id = submissionData.csr_id ?? submissionData.submitted_by;
+              const upsertedCall = await tx.call.upsert({
+                where: { call_id: callData.call_id },
+                create: {
+                  call_id: callData.call_id,
+                  csr_id: csr_id,
+                  department_id: callData.department_id ?? null,
+                  customer_id: null,
+                  call_date: callData.call_date ? new Date(callData.call_date) : new Date(),
+                  duration: callData.duration || 0,
+                  recording_url: callData.recording_url ?? null,
+                  transcript: callData.transcript ?? null,
+                  metadata: callData.metadata ? JSON.stringify(callData.metadata) : null,
+                },
+                update: {},
+              });
+
+              call_id = upsertedCall.id;
+            }
+          }
+
+          await tx.submissionCall.create({
+            data: { submission_id: submission_id, call_id: call_id, sort_order: i },
+          });
+        }
+      }
+    });
   }
 
   async getSubmissionById(submission_id: number): Promise<Submission | null> {
