@@ -443,6 +443,50 @@ export const getTicketProductivity = async (p: AAParams): Promise<TicketProducti
   return response.data
 }
 
+export interface DatasetFreshness {
+  dataLastUpdated:    string | null
+  dataNextUpdate:     string | null
+  updateEveryMinutes: number | null
+}
+
+/**
+ * Freshness stamp for a page whose data is produced by a non-source-report job
+ * (e.g. the rollup-fed Workload productivity). Sourced from the
+ * ie_dataset_monitor registry so the "as of" reflects the real producer.
+ */
+export const getDatasetFreshness = async (dataset: string): Promise<DatasetFreshness> => {
+  const response = await api.get('/insights/agent-activity/freshness', { params: { dataset } })
+  return response.data
+}
+
+// ── Dataset monitoring (admin health dashboard) ──────────────────────────────
+
+export type DatasetHealthStatus = 'OK' | 'WARN' | 'RED' | 'UNKNOWN'
+
+export interface DatasetHealthRow {
+  datasetCode:   string
+  displayName:   string
+  producerKind:  string
+  checkKind:     string
+  status:        DatasetHealthStatus
+  reason:        string
+  lastSuccessAt: string | null
+  expectedBy:    string | null
+  lastRowCount:  number | null
+  baselineCount: number | null
+  statusSince:   string | null
+  evaluatedAt:   string | null
+}
+
+export const getMonitoringHealth = async (): Promise<DatasetHealthRow[]> => {
+  const response = await api.get('/insights/admin/monitoring/health')
+  return response.data
+}
+
+export const runMonitoringNow = async (): Promise<void> => {
+  await api.post('/insights/admin/monitoring/run')
+}
+
 // ── Agent Activity — Touch detail (on-demand Workload validation) ─────────────
 // One CRM event (a noted task action or a ticket note) behind the Workload
 // `touched` count, for one agent on one day. Read live from CRM only on request.

@@ -85,7 +85,7 @@ a one-line pointer, never a second copy that can drift out of sync:
 
 ## Hard constraints (do not violate)
 
-- Never add tables or alter the database without explicit approval. DB reviews are observations only.
+- Ask first before adding a table or altering the database: propose the change (why a table is the best approach, plus the additive/idempotent migration) and get explicit approval before applying. Unprompted DB reviews are observations only — never alter schema off the back of one.
 - PowerShell shell: chain with `;`, never `&&`.
 - Iterate on existing patterns before introducing new ones; if you add a new pattern, remove the old one (no duplicate logic).
 - Refactor files at 200–300 lines. Avoid duplication; search for existing helpers/components first.

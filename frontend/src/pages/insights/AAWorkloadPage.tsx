@@ -4,10 +4,19 @@ import { InsightsSection } from '@/components/insights'
 import ActivityReportShell from '@/components/insights/agentActivity/ActivityReportShell'
 import TicketProductivityTable from '@/components/insights/agentActivity/TicketProductivityTable'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
-import { getTicketProductivity, getTicketsTasks } from '@/services/insightsService'
+import { getTicketProductivity, getTicketsTasks, getDatasetFreshness } from '@/services/insightsService'
 
 export default function AAWorkloadPage() {
   const filters = useActivityFilters()
+
+  // Freshness stamp is sourced from the PRODUCING job (the ticket/task
+  // productivity rollup) via the dataset monitor registry — not the unrelated
+  // ticket_open source-report schedule.
+  const { data: freshness } = useQuery({
+    queryKey: ['insights', 'freshness', 'ticket_task_productivity'],
+    queryFn:  () => getDatasetFreshness('ticket_task_productivity'),
+    staleTime: 60_000,
+  })
 
   const { data: rows, isLoading, isError } = useQuery({
     queryKey: ['aa-workload', filters.params.period, filters.params.start, filters.params.end, filters.params.users, filters.params.departments],
@@ -56,7 +65,12 @@ export default function AAWorkloadPage() {
           <InsightsSection title="Contact Manager">
             <TicketProductivityTable rows={cmRows} agentLabel="Salesperson" area="sales" segment="contact_manager" />
           </InsightsSection>
-          <InsightsSection title="All Other Tickets & Tasks">
+          <InsightsSection
+            title="All Other Tickets & Tasks"
+            lastUpdated={freshness?.dataLastUpdated ?? undefined}
+            nextUpdate={freshness?.dataNextUpdate ?? undefined}
+            updateEveryMinutes={freshness?.updateEveryMinutes ?? undefined}
+          >
             <TicketProductivityTable rows={otherRows} agentLabel="Salesperson" area="sales" segment="other" />
           </InsightsSection>
         </>

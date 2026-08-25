@@ -1617,6 +1617,53 @@ model IeSourceReport {
   @@map("ie_source_report")
 }
 
+// Ingestion monitoring registry (config/thresholds) for the Insights dataset
+// health system. Edited from Admin > Insights > Monitoring; the MonitoringWorker
+// reads the whole active set each cycle and writes ie_dataset_health. Small
+// operational table — not partitioned. See migration create_dataset_monitoring.
+model IeDatasetMonitor {
+  id                     Int      @id @default(autoincrement())
+  dataset_code           String   @unique(map: "uq_dataset_monitor_code") @db.VarChar(50)
+  display_name           String   @db.VarChar(100)
+  producer_kind          String   @db.VarChar(20)
+  producer_ref           String   @db.VarChar(100)
+  check_kind             String   @default("run_recency") @db.VarChar(20)
+  fact_table             String?  @db.VarChar(100)
+  date_column            String?  @db.VarChar(64)
+  date_kind              String?  @db.VarChar(10)
+  expected_by_hour       Int      @default(9) @db.TinyInt
+  cadence_minutes        Int      @default(1440)
+  arrears_days           Int      @default(0) @db.TinyInt
+  business_days_only     Boolean  @default(true)
+  baseline_lookback_days Int      @default(56)
+  warn_pct               Decimal  @default(50.00) @db.Decimal(5, 2)
+  red_pct                Decimal  @default(15.00) @db.Decimal(5, 2)
+  min_expected_rows      Int      @default(0)
+  zero_is_red            Boolean  @default(false)
+  is_active              Boolean  @default(true)
+  created_at             DateTime @default(now()) @db.DateTime(0)
+  updated_at             DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  @@map("ie_dataset_monitor")
+}
+
+// Latest computed health per dataset (upserted each MonitoringWorker cycle).
+// One row per dataset_code; status_since drives transition-only alerts.
+model IeDatasetHealth {
+  dataset_code    String    @id @db.VarChar(50)
+  status          String    @default("OK") @db.VarChar(10)
+  reason          String?   @db.VarChar(255)
+  last_success_at DateTime? @db.DateTime(0)
+  expected_by     DateTime? @db.DateTime(0)
+  last_row_count  Int?
+  baseline_count  Int?
+  status_since    DateTime? @db.DateTime(0)
+  evaluated_at    DateTime  @default(now()) @updatedAt @db.DateTime(0)
+
+  @@index([status], map: "idx_dataset_health_status")
+  @@map("ie_dataset_health")
+}
+
 // ── Enums ──────────────────────────────────────────────────────────────────
 
 enum FormInteractionType {

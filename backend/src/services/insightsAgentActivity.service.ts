@@ -144,6 +144,36 @@ export async function getReportSchedule(reportCode: string): Promise<ReportSched
   };
 }
 
+/**
+ * Freshness stamp for a page whose data is NOT produced by an ie_source_report
+ * (e.g. the rollup-fed ticket/task productivity Workload pages). Sourced from
+ * the ACTUAL producing job via the ie_dataset_monitor registry: `dataLastUpdated`
+ * is the producer worker's last SUCCESS in ie_ingestion_log, cadence is the
+ * dataset's configured cadence, and `dataNextUpdate` is last + cadence. This is
+ * why the Workload stamp reflects the rollup, not the unrelated ticket_open
+ * source-report schedule. Null-safe when the dataset isn't registered/active.
+ */
+export async function getDatasetFreshness(datasetCode: string): Promise<ReportSchedule> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT m.cadence_minutes AS cadence,
+            (SELECT MAX(run_finished_at) FROM ie_ingestion_log
+              WHERE worker_name = m.producer_ref AND status = 'SUCCESS') AS lastRun
+     FROM ie_dataset_monitor m
+     WHERE m.dataset_code = ? AND m.is_active = 1 LIMIT 1`,
+    [datasetCode],
+  );
+  const r = rows[0];
+  if (!r) return { dataLastUpdated: null, dataNextUpdate: null, updateEveryMinutes: null };
+  const cadence = Number(r.cadence);
+  const lastRun = r.lastRun ? new Date(r.lastRun as string) : null;
+  const next = lastRun ? new Date(lastRun.getTime() + cadence * 60_000) : null;
+  return {
+    dataLastUpdated: toIso(lastRun),
+    dataNextUpdate: toIso(next),
+    updateEveryMinutes: Number.isFinite(cadence) ? cadence : null,
+  };
+}
+
 // ── Email Activity (Phase 1) ────────────────────────────────────────────────
 
 export interface EmailActivityFilters {
@@ -981,10 +1011,10 @@ export async function getTicketsPastDue(filters: TicketPastDueFilters): Promise<
  * toLocaleString-with-timeZone pattern as notifications/quietHours.ts) instead
  * of trusting the host timezone.
  */
-const BUSINESS_TZ = 'America/New_York';
+export const BUSINESS_TZ = 'America/New_York';
 
 /** Calendar date (YYYY-MM-DD) and hour-of-day of `now` in the business timezone. */
-function businessNow(now: Date): { date: string; hour: number } {
+export function businessNow(now: Date): { date: string; hour: number } {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: BUSINESS_TZ,
     year: 'numeric', month: '2-digit', day: '2-digit',

@@ -412,11 +412,11 @@ const SEEDS: SeedSpec[] = [
     deep_link_target: 'Admin email templates page (/app/admin/email-templates).' },
 
   { template_key: 'system.ingestion_failed', category: 'System', name: 'Data ingestion failed',
-    description: 'Sent when a data ingestion fails — a SQL source-report run, an email pickup, or a manual upload.',
+    description: 'Sent when a data ingestion is unhealthy — a hard failure (RED) or an anomalous-but-successful volume drop / staleness (WARN). Covers SQL source-reports, rollup captures, email pickup, and manual uploads.',
     cadence: 'IMMEDIATE', is_locked: true,
     recipient_summary: 'Alert Recipients (admins optional)',
     allowed_variables: [
-      'channel', 'channelLabel', 'name', 'code', 'reason', 'source',
+      'channel', 'channelLabel', 'severity', 'severityLabel', 'isWarning', 'name', 'code', 'reason', 'source',
       'occurredAt', 'recipient', 'deepLinkPath',
     ],
     available_roles: ['designated', 'admins'],

@@ -12,6 +12,7 @@
  *     :10 / :40   ie-calendar-sync        ← calendar / schedule dimension
  *     :15 / :45   ie-rollup               ← KPI rollups (drives dashboards)
  *     :20 / :50   ie-source-dispatch      ← DB-driven source-report ingestion
+ *     :25 / :55   ie-monitor              ← dataset health eval + alerts
  *     00:00 UTC (monthly) ie-partition-manager ← partition housekeeping
  *
  * ie-source-dispatch is a fixed 30-min floor only; which reports actually run
@@ -98,6 +99,18 @@ module.exports = {
       name: 'ie-source-dispatch',
       script: './backend/dist/workers/run-source-dispatch.js',
       cron_restart: '20,50 * * * *',
+      watch: false,
+      autorestart: false,
+      env: { NODE_ENV: 'production' }
+    },
+    {
+      // Active monitoring: evaluates every ie_dataset_monitor row for freshness
+      // and volume anomalies, upserts ie_dataset_health, and emails on a status
+      // transition to WARN/RED. Runs at :25/:55 — AFTER ie-rollup (:15/:45) and
+      // ie-source-dispatch (:20/:50) so the cycle's loads have landed first.
+      name: 'ie-monitor',
+      script: './backend/dist/workers/run-monitor.js',
+      cron_restart: '25,55 * * * *',
       watch: false,
       autorestart: false,
       env: { NODE_ENV: 'production' }

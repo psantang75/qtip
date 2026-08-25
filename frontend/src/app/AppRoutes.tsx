@@ -25,6 +25,7 @@ import ListManagementPage   from '../pages/admin/ListManagementPage'
 import InsightsKpiManagementPage  from '../pages/admin/InsightsKpiManagementPage'
 import InsightsPageManagementPage from '../pages/admin/InsightsPageManagementPage'
 import InsightsIngestionLogPage   from '../pages/admin/InsightsIngestionLogPage'
+import InsightsMonitoringPage     from '../pages/admin/InsightsMonitoringPage'
 import InsightsSourceReportsPage   from '../pages/admin/InsightsSourceReportsPage'
 import ManualUploadPage            from '../pages/admin/ManualUploadPage'
 import SystemSettingsPage         from '../pages/admin/SystemSettingsPage'
@@ -201,6 +202,7 @@ export default function AppRoutes(): React.ReactElement {
           <Route path="insights/pages"      element={<InsightsPageManagementPage />} />
           <Route path="insights/calendar"   element={<InsightsCalendarPage />} />
           <Route path="insights/ingestion"  element={<InsightsIngestionLogPage />} />
+          <Route path="insights/monitoring" element={<InsightsMonitoringPage />} />
           <Route path="insights/source-reports" element={<InsightsSourceReportsPage />} />
           <Route path="insights/import"     element={<ManualUploadPage />} />
         </Route>

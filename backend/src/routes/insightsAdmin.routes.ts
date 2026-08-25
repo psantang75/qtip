@@ -19,6 +19,9 @@ import {
   getAttendanceConfig, savePointRules, saveWarningThresholds, recalculateAttendance,
   savePointsStartDate,
 } from '../controllers/insightsAdminAttendance.controller';
+import {
+  getMonitoringHealth, listDatasetMonitors, updateDatasetMonitor, runMonitoringNow,
+} from '../controllers/insightsAdminMonitoring.controller';
 
 const router = express.Router();
 
@@ -63,5 +66,11 @@ router.put('/attendance/rules',        ...auth, savePointRules           as unkn
 router.put('/attendance/thresholds',   ...auth, saveWarningThresholds    as unknown as RequestHandler);
 router.put('/attendance/points-start', ...auth, savePointsStartDate      as unknown as RequestHandler);
 router.post('/attendance/recalculate', ...auth, recalculateAttendance    as unknown as RequestHandler);
+
+// ── Dataset monitoring (health dashboard + threshold registry) ────────────────
+router.get('/monitoring/health',       ...auth, getMonitoringHealth  as unknown as RequestHandler);
+router.get('/monitoring/datasets',     ...auth, listDatasetMonitors  as unknown as RequestHandler);
+router.put('/monitoring/datasets/:id', ...auth, updateDatasetMonitor as unknown as RequestHandler);
+router.post('/monitoring/run',         ...auth, runMonitoringNow     as unknown as RequestHandler);
 
 export default router;

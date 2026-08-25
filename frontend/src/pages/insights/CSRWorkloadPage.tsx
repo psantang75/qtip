@@ -5,9 +5,18 @@ import TicketProductivityTable from '@/components/insights/agentActivity/TicketP
 import TicketsTasksTrend from '@/components/insights/agentActivity/TicketsTasksTrend'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
 import { getCsrTicketProductivity, getCsrTicketsDailyHistory, getCsrTicketsTasks } from '@/services/insightsCsrService'
+import { getDatasetFreshness } from '@/services/insightsService'
 
 export default function CSRWorkloadPage() {
   const filters = useActivityFilters()
+
+  // Freshness stamp is sourced from the PRODUCING job (the ticket/task
+  // productivity rollup) via the dataset monitor registry.
+  const { data: freshness } = useQuery({
+    queryKey: ['insights', 'freshness', 'ticket_task_productivity'],
+    queryFn:  () => getDatasetFreshness('ticket_task_productivity'),
+    staleTime: 60_000,
+  })
 
   const { data: rows, isLoading, isError } = useQuery({
     queryKey: ['csr-workload', filters.params.period, filters.params.start, filters.params.end, filters.params.users, filters.params.departments],
@@ -42,7 +51,12 @@ export default function CSRWorkloadPage() {
         />
       </InsightsSection>
 
-      <InsightsSection title="Workload by Agent">
+      <InsightsSection
+        title="Workload by Agent"
+        lastUpdated={freshness?.dataLastUpdated ?? undefined}
+        nextUpdate={freshness?.dataNextUpdate ?? undefined}
+        updateEveryMinutes={freshness?.updateEveryMinutes ?? undefined}
+      >
         {isLoading ? (
           <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
         ) : isError ? (

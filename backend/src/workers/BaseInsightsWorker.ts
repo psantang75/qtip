@@ -2,6 +2,7 @@ import pool from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import os from 'os';
 import logger from '../config/logger';
+import { notifyIngestionFailure } from '../services/notifications/ingestionAlerts';
 
 export interface WorkerResult {
   rowsExtracted: number;
@@ -62,6 +63,15 @@ export abstract class BaseInsightsWorker {
       if (logId) {
         await this.updateLogEntry(logId, 'FAILED', undefined, error.message).catch(() => {});
       }
+      // Alert on every worker failure (rollup, dimension syncs, monitor…), not
+      // just the source-report dispatcher. notifyIngestionFailure never throws
+      // and dedupes per worker+day, so this can't mask the original error.
+      await notifyIngestionFailure({
+        channel: 'worker',
+        name: this.workerName,
+        code: this.workerName,
+        reason: (error?.message ?? 'worker crashed').slice(0, 200),
+      });
       throw error;
     } finally {
       await this.releaseLock();

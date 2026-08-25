@@ -6,7 +6,7 @@ import {
   getDataFreshness,
   getKpiConfig,
 } from '../controllers/insights.controller';
-import { getAgentActivityStatus, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getProductivityRoster, getProductivityDay, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
+import { getAgentActivityStatus, getDatasetFreshness, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getProductivityRoster, getProductivityDay, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
 import qcRouter from './insightsQC.routes';
 import csrRouter from './insightsCsr.routes';
 
@@ -37,6 +37,13 @@ router.get('/kpi-config',
 router.get('/agent-activity/status',
   authenticate as unknown as RequestHandler,
   getAgentActivityStatus as unknown as RequestHandler
+);
+
+// Freshness stamp for non-source-report pages (e.g. rollup-fed Workload),
+// sourced from the ie_dataset_monitor registry's producing job.
+router.get('/agent-activity/freshness',
+  authenticate as unknown as RequestHandler,
+  getDatasetFreshness as unknown as RequestHandler
 );
 
 router.get('/agent-activity/email',

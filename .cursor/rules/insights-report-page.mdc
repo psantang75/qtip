@@ -1,0 +1,44 @@
+---
+description: Every Insights report page must show a freshness stamp sourced from its producing job, and register its dataset for active monitoring
+globs: frontend/src/pages/insights/**
+alwaysApply: false
+---
+
+# Insights report page — freshness + monitoring guardrail
+
+Every report page under `frontend/src/pages/insights/**` MUST make the data's
+freshness visible and MUST be covered by the active-monitoring system. This
+closes the recurring gap where a new page shipped with no "as of" timestamp and
+no alerting when its feed silently went empty.
+
+## 1. Show a freshness stamp (non-negotiable)
+
+Render `InsightsSection` with `lastUpdated` (plus `nextUpdate` /
+`updateEveryMinutes` for the hover tooltip) on the page's primary data section.
+The stamp MUST come from the **actual producing job**, never a coincidentally-
+related schedule:
+
+- Source-report-fed pages (email/call/leads/margin/tickets): use the
+  `dataLastUpdated` / `dataNextUpdate` / `updateEveryMinutes` fields already
+  returned by the report endpoint (`getReportSchedule` in the backend service).
+- Rollup-fed or otherwise non-source-report pages (e.g. Workload productivity):
+  fetch `getDatasetFreshness('<dataset_code>')` from
+  [frontend/src/services/insightsService.ts](mdc:frontend/src/services/insightsService.ts)
+  — it is sourced from the `ie_dataset_monitor` registry's producer, NOT an
+  unrelated source report. Reference: `AAWorkloadPage.tsx` / `CSRWorkloadPage.tsx`.
+
+Never hardcode or omit the timestamp. Use TanStack Query (never `useEffect` +
+`axios`) for the freshness fetch, with a domain-first key
+(`['insights', 'freshness', '<dataset_code>']`).
+
+## 2. Register the dataset for monitoring
+
+The dataset behind the page MUST have a row in `ie_dataset_monitor` (seeded in
+the `create_dataset_monitoring` migration). The `MonitoringWorker` (`ie-monitor`
+cron) then evaluates freshness + a weekday-aware volume baseline and drives the
+Admin → Insights → **Monitoring** dashboard and WARN/RED email alerts. If you add
+a page for a NEW dataset, add its `ie_dataset_monitor` row (ask first per the
+schema-change rule) so it is actively monitored — a page with no monitor row is
+invisible to alerting.
+
+Backend evaluator + shape: [backend/src/services/insights/datasetMonitor.ts](mdc:backend/src/services/insights/datasetMonitor.ts).

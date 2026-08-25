@@ -10,6 +10,7 @@ import {
   getTicketsPastDue as svcGetTicketsPastDue,
   getTicketsDailyHistory as svcGetTicketsDailyHistory,
   getTicketProductivity as svcGetTicketProductivity,
+  getDatasetFreshness as svcGetDatasetFreshness,
   getLeads as svcGetLeads,
   getMargin as svcGetMargin,
 } from '../services/insightsAgentActivity.service';
@@ -54,6 +55,26 @@ async function resolveAaScope(
  * Returns [] until reports are seeded (Phase 1+). Any authenticated user may
  * read it; it exposes no row-level data, only ingestion metadata.
  */
+/**
+ * GET /api/insights/agent-activity/freshness?dataset=<code>
+ * Freshness stamp for pages fed by a non-source-report producer (e.g. the
+ * rollup-fed Workload productivity). Sourced from the ie_dataset_monitor
+ * registry so the stamp reflects the actual producing job. Any authenticated
+ * user may read it — it exposes only ingestion metadata, no row-level data.
+ */
+export const getDatasetFreshness = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }
+    const dataset = String(req.query.dataset ?? '').trim();
+    if (!dataset) { res.status(400).json({ error: 'dataset query param is required' }); return; }
+    const schedule = await svcGetDatasetFreshness(dataset);
+    res.json(schedule);
+  } catch (error) {
+    logger.error('getDatasetFreshness error:', error);
+    res.status(500).json({ error: 'Failed to load dataset freshness' });
+  }
+};
+
 export const getAgentActivityStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return; }

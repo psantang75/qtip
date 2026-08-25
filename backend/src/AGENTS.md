@@ -29,6 +29,6 @@ Authoritative API contract: [../../.cursor/rules/backend-api-conventions.mdc](..
 - Prisma is the single data-access standard for ALL DB operations (see `.cursorrules`). Do not add new `mysql2` pool queries; prefer Prisma. Legacy raw-pool code is being migrated off.
 - Standard error/response contract: wrap async controllers in `asyncHandler` and throw `AppError` from [utils/errorHandler.ts](utils/errorHandler.ts) rather than hand-rolling `res.status().json()` envelopes.
 - Validate with Zod (`validation/`); log with Winston (`config/logger.ts`); never `console.log` in request paths.
-- Never add tables or alter the DB without explicit approval. Schema change process: [../../docs/database_schema_updates.md](../../docs/database_schema_updates.md).
+- Ask first before adding a table or altering the DB: propose it (why a table beats the alternatives, plus the additive/idempotent migration) and get explicit approval before applying. Schema change process: [../../docs/database_schema_updates.md](../../docs/database_schema_updates.md).
 - Refactor files at 200–300 lines. Business logic belongs in `services/`, not controllers.
 - Code must run in dev/test/prod; no stub/fake-data paths in dev or prod.
