@@ -121,9 +121,34 @@ export function stripRadioFreeTextFlags(form: Form): Form {
   }
 }
 
+/**
+ * Stamp id-less questions with the SAME synthetic negative id the builder's
+ * conditional-logic and rollup pickers use (`-(categoryIndex * 1000 +
+ * questionIndex + 1)`, see `buildAllQuestions` / `buildCategoryQuestions` in
+ * QuestionsStep). The backend create/update path (MySQLFormRepository's
+ * `resolveTargetQuestionId` / `resolveRollupMemberIds`) resolves a condition's
+ * `target_question_id` by matching it against `question.id`, then remaps it
+ * onto the freshly-created row via `questionIdMap`. Brand-new forms have no
+ * `id` on their questions, so without this stamp the negative target can't be
+ * matched and the condition is silently dropped — conditional logic then works
+ * on existing forms (their questions carry real DB ids) but not on new ones.
+ * The id is only a lookup key; createForm never inserts it as a primary key.
+ */
+export function stampSyntheticQuestionIds(form: Form): Form {
+  return {
+    ...form,
+    categories: form.categories.map((c, ci) => ({
+      ...c,
+      questions: (c.questions || []).map((q, qi) =>
+        q.id ? q : { ...q, id: -(ci * 1000 + qi + 1) },
+      ),
+    })),
+  }
+}
+
 /** Final normalization before create/update API (stable option ids + no free-text flags + metadata order). */
 export function normalizeFormBuilderPayload(form: Form): Form {
-  const stripped = stripRadioFreeTextFlags(ensureFormRadioOptionValues(form))
+  const stripped = stampSyntheticQuestionIds(stripRadioFreeTextFlags(ensureFormRadioOptionValues(form)))
   // The agent picker is stored under the canonical 'CSR' tag (the UI shows it
   // as "Agent"). Whatever the admin typed, force it back to 'CSR' so every
   // CSR-keyed backend join (submissions list, review detail, unlock register)

@@ -82,6 +82,15 @@ export default function FormsPage() {
     setLoaded(true)
   }, [loadedForm, loaded, isDuplicate])
 
+  // Re-arm the one-shot `loaded` gate whenever the target form changes so the
+  // sync effect above re-runs for the newly selected form. Without this,
+  // previewing/editing a second form keeps showing the first one (the gate
+  // stays `true` and `setForm` never fires again). Declared before the
+  // fresh-form effect so a brand-new form still ends with `loaded === true`.
+  useEffect(() => {
+    setLoaded(false)
+  }, [formId])
+
   useEffect(() => {
     if (isNew && !formId) {
       setForm(freshForm())
@@ -183,7 +192,7 @@ export default function FormsPage() {
         </div>
 
         <div className="flex-1 min-h-0 px-6 pb-6">
-          <PreviewStep form={form} onBack={prevStep} onSave={saveForm} saving={saving} />
+          <PreviewStep key={formId ?? 'new'} form={form} onBack={prevStep} onSave={saveForm} saving={saving} />
         </div>
       </div>
     )
