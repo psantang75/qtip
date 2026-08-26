@@ -118,6 +118,7 @@ const CSRAttendancePage      = React.lazy(() => import('../pages/insights/CSRAtt
 const CSRTicketsTasksPage    = React.lazy(() => import('../pages/insights/CSRTicketsTasksPage'))
 const CSRWorkloadPage        = React.lazy(() => import('../pages/insights/CSRWorkloadPage'))
 const CSRProductivityPage    = React.lazy(() => import('../pages/insights/CSRProductivityPage'))
+const CompanyServiceCountsPage = React.lazy(() => import('../pages/insights/CompanyServiceCountsPage'))
 
 const NotFoundPage           = React.lazy(() => import('../pages/NotFoundPage'))
 
@@ -407,6 +408,8 @@ export default function AppRoutes(): React.ReactElement {
             <Route path="csr-tickets"    element={<RequireInsightsAccess pageKey="csr_tickets"><PageLoader><CSRTicketsTasksPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-workload" element={<RequireInsightsAccess pageKey="csr_workload"><PageLoader><CSRWorkloadPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-productivity" element={<RequireInsightsAccess pageKey="csr_productivity_report"><PageLoader><CSRProductivityPage /></PageLoader></RequireInsightsAccess>} />
+            {/* Company Reporting (admin-only via ie_page_role_access) */}
+            <Route path="company-service-counts" element={<RequireInsightsAccess pageKey="company_service_counts"><PageLoader><CompanyServiceCountsPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="dashboard" element={<PageLoader><DashboardPage /></PageLoader>} />
             <Route path="team"      element={<PageLoader><TeamDashboardPage /></PageLoader>} />
             <Route path="builder"   element={<PageLoader><ReportBuilderPage /></PageLoader>} />

@@ -719,3 +719,35 @@ export const getProductivityDay = async (
   const response = await api.get(`${productivityBase(area)}/day`, { params: { employeeKey, date } })
   return response.data
 }
+
+// ── Company Reporting — Service Counts (admin-only) ───────────────────────────
+// Thin data feed: the raw monthly per-segment series (started/stopped/react/eom);
+// all breakout + detail math is computed client-side by the report model.
+
+export interface ServiceCountFlow { started: number; stopped: number; react: number; eom: number }
+
+export interface ServiceCountsResponse {
+  /** 'YYYYMM' months, oldest → newest. */
+  months:             string[]
+  /** Index of the latest (prior-day) month; -1 when empty. */
+  currentIndex:       number
+  /** True when the latest month is still in progress (as-of prior day). */
+  isPartial:          boolean
+  /** Per segment_key: flows parallel to `months`. */
+  series:             Record<string, ServiceCountFlow[]>
+  dataLastUpdated:    string | null
+  dataNextUpdate:     string | null
+  updateEveryMinutes: number | null
+}
+
+export const getServiceCounts = async (): Promise<ServiceCountsResponse> => {
+  const response = await api.get('/insights/company-reporting/service-counts')
+  const d = response.data
+  // Flatten the schedule envelope to the freshness fields the page passes to InsightsSection.
+  return {
+    months: d.months, currentIndex: d.currentIndex, isPartial: d.isPartial, series: d.series,
+    dataLastUpdated: d.schedule?.dataLastUpdated ?? null,
+    dataNextUpdate: d.schedule?.dataNextUpdate ?? null,
+    updateEveryMinutes: d.schedule?.updateEveryMinutes ?? null,
+  }
+}

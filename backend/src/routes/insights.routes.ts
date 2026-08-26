@@ -7,6 +7,7 @@ import {
   getKpiConfig,
 } from '../controllers/insights.controller';
 import { getAgentActivityStatus, getDatasetFreshness, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getProductivityRoster, getProductivityDay, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
+import { getServiceCountsReport } from '../controllers/insightsCompanyReporting.controller';
 import qcRouter from './insightsQC.routes';
 import csrRouter from './insightsCsr.routes';
 
@@ -103,6 +104,12 @@ router.get('/agent-activity/leads',
 router.get('/agent-activity/margin',
   authenticate as unknown as RequestHandler,
   getMargin as unknown as RequestHandler
+);
+
+// Company Reporting (admin-only) — Service Counts subscription report.
+router.get('/company-reporting/service-counts',
+  authenticate as unknown as RequestHandler,
+  getServiceCountsReport as unknown as RequestHandler
 );
 
 // QC analytics — authenticate applied per-handler (via qcHandler wrapper)

@@ -109,6 +109,12 @@ export const NAV_CONFIG: SectionConfig[] = [
       // Import Center / Import History still exist in the router but are no
       // longer surfaced in navigation. Agent (role 3) gets no Reports group.
       { label: 'On Demand Reports', path: '/app/insights/on-demand-reports', icon: 'FileSpreadsheet', roles: [1,5], group: 'Reports' },
+      // ── Company Reporting ──
+      // Admin-only, DB-driven like the rest of Insights: `roles` is ignored
+      // because `pageKey` is set — visibility comes from ie_page_role_access via
+      // /api/insights/navigation (seeded admin-only in
+      // 20260825170000_seed_company_reporting_service_counts).
+      { label: 'Service Counts', path: '/app/insights/company-service-counts', icon: 'Radio', roles: [], pageKey: 'company_service_counts', group: 'Company Reporting' },
     ],
   },
 ]
