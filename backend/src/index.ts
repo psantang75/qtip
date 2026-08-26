@@ -409,8 +409,24 @@ const gracefulShutdown = (signal: string) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
+// Synchronously flush a fatal error's full stack to stderr (fd 2) BEFORE we
+// exit. winston transports are async, so on a piped stdout (e.g. `concurrently`
+// in dev) the "💥" line and stack never flush before process.exit() — that's
+// why past dev crashes died silently with no stack. fs.writeSync guarantees the
+// bytes hit fd 2 before we tear the process down, making the culprit visible.
+const dumpFatalSync = (label: string, err: unknown): void => {
+  const e = err as Error;
+  const stack = e?.stack || `${e?.name ?? 'Error'}: ${e?.message ?? String(err)}`;
+  try {
+    fs.writeSync(2, `\n💥 ${label} @ ${new Date().toISOString()}\n${stack}\n`);
+  } catch {
+    // fd 2 unavailable — nothing more we can safely do here.
+  }
+};
+
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err: Error) => {
+  dumpFatalSync('Unhandled Promise Rejection', err);
   appLogger.error(err, 'Unhandled Promise Rejection');
   logger.error('💥 Unhandled Promise Rejection:', err);
   
@@ -425,6 +441,7 @@ process.on('unhandledRejection', (err: Error) => {
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err: Error) => {
+  dumpFatalSync('Uncaught Exception', err);
   appLogger.error(err, 'Uncaught Exception');
   logger.error('💥 Uncaught Exception:', err);
   

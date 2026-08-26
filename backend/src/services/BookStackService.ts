@@ -75,6 +75,26 @@ export interface PingResult {
   error?: string;
 }
 
+/** Promise-based delay used to space out retries (rate-limit backoff). */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * How long to wait before the next retry. Prefers the server's `Retry-After`
+ * header (BookStack sends it on 429, in seconds), capped so a misbehaving
+ * header can't stall the crawl for minutes. Falls back to capped exponential
+ * backoff (0.5s, 1s, 2s, …) for 5xx / network retries where no header exists.
+ */
+function retryDelayMs(res: Response | null, attempt: number): number {
+  const header = res?.headers.get('retry-after');
+  if (header) {
+    const secs = Number(header);
+    if (Number.isFinite(secs) && secs >= 0) return Math.min(secs * 1000, 30_000);
+  }
+  return Math.min(500 * 2 ** (attempt - 1), 8_000);
+}
+
 class BookStackService {
   private get cfg() {
     if (!bookstackConfig) {
@@ -126,9 +146,16 @@ class BookStackService {
         if (!res.ok) {
           const bodySnippet = (await res.text()).slice(0, 500);
           const err = new Error(`BookStack ${res.status} ${res.statusText} on ${path} :: ${bodySnippet}`);
-          // Retry only 5xx; bail immediately on 4xx (auth / permission / not-found).
-          if (res.status >= 500 && attempt < maxAttempts) {
+          // Retry 5xx (transient server) and 429 (rate limit). A full KB
+          // crawl fires ~2 requests/page across hundreds of pages, which
+          // trips BookStack's per-minute limit and 429-storms; honoring
+          // Retry-After here lets the crawl self-throttle and finish
+          // instead of erroring pages. Bail immediately on other 4xx
+          // (auth / permission / not-found — they won't fix themselves).
+          const retryable = res.status >= 500 || res.status === 429;
+          if (retryable && attempt < maxAttempts) {
             lastError = err;
+            await sleep(retryDelayMs(res, attempt));
             continue;
           }
           throw err;
@@ -141,6 +168,7 @@ class BookStackService {
         // AbortError or network blip — retry up to maxAttempts.
         if (attempt < maxAttempts && (error.name === 'AbortError' || (error as any).code === 'ECONNRESET')) {
           lastError = error;
+          await sleep(retryDelayMs(null, attempt));
           continue;
         }
         throw error;

@@ -34,8 +34,28 @@ import {
  *  the boot IIFE. */
 const BOOT_DELAY_MS = 60_000;
 
+/** Fallback cadence when the interval read from `ie_config` fails (transient
+ *  DB blip). Only used to keep the scheduler self-arming; the next tick
+ *  re-reads the real value. Mirrors `getKbIndexIntervalMin()`'s default. */
+const DEFAULT_INTERVAL_MIN = 60;
+
 let timeoutHandle: NodeJS.Timeout | null = null;
 let running = false;
+
+/**
+ * Arm the next tick. The `.catch()` is the crash guard: the tick runs as a
+ * floating promise, and in dev an unhandled rejection calls `process.exit(1)`
+ * (see index.ts). Anything that escapes `scheduleNext` (e.g. a Prisma read)
+ * is logged here instead of taking the whole API process down — same pattern
+ * as DigestScheduler.
+ */
+function armNextTick(delayMs: number): void {
+  timeoutHandle = setTimeout(() => {
+    void scheduleNext('scheduler').catch((err) => {
+      logger.error(`[KB INDEX SCHEDULER] tick chain error: ${(err as Error)?.message ?? String(err)}`);
+    });
+  }, delayMs);
+}
 
 /**
  * Start the scheduler. Idempotent — safe to call multiple times
@@ -56,9 +76,7 @@ export async function startKbIndexScheduler(): Promise<void> {
     `[KB INDEX SCHEDULER] started, tick every ${interval} min, last run ${lastRun?.ran_at ?? 'never'}`
   );
   // First tick on a short delay so HTTP server health is up first.
-  timeoutHandle = setTimeout(() => {
-    void scheduleNext('scheduler');
-  }, BOOT_DELAY_MS);
+  armNextTick(BOOT_DELAY_MS);
 }
 
 /**
@@ -90,12 +108,21 @@ export function stopKbIndexScheduler(): void {
  */
 async function scheduleNext(triggeredBy: 'scheduler' | 'boot'): Promise<void> {
   await executeCrawl(triggeredBy);
-  const interval = await getKbIndexIntervalMin();
+  // Read the current interval, but never let a transient DB error here
+  // escape as an unhandled rejection (which would crash the dev process).
+  // Fall back to the default cadence so the scheduler keeps ticking; the
+  // next tick re-reads the real value.
+  let interval = DEFAULT_INTERVAL_MIN;
+  try {
+    interval = await getKbIndexIntervalMin();
+  } catch (err) {
+    logger.error(
+      `[KB INDEX SCHEDULER] interval read failed, using ${DEFAULT_INTERVAL_MIN}m default: ${(err as Error)?.message ?? String(err)}`
+    );
+  }
   // Re-arm even if executeCrawl threw — the failure is already
   // recorded; we still want to try again on the next tick.
-  timeoutHandle = setTimeout(() => {
-    void scheduleNext('scheduler');
-  }, interval * 60_000);
+  armNextTick(interval * 60_000);
 }
 
 async function executeCrawl(
