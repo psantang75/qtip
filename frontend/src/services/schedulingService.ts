@@ -130,6 +130,11 @@ const schedulingService = {
     const res = await api.get(`/scheduling/grid?from=${from}&to=${to}`)
     return unwrap<ApiGrid>(res.data)
   },
+  /** Business-calendar day types keyed by 'YYYY-MM-DD' (WORKDAY/WEEKEND/HOLIDAY/CLOSURE/ADJUSTMENT). */
+  getCalendarDayTypes: async (from: string, to: string): Promise<Record<string, string>> => {
+    const res = await api.get(`/scheduling/calendar/day-types?from=${from}&to=${to}`)
+    return unwrap<{ dayTypes: Record<string, string> }>(res.data).dayTypes
+  },
   getMySchedule: async (from: string, to: string): Promise<ApiShift[]> => {
     const res = await api.get(`/scheduling/my-schedule?from=${from}&to=${to}`)
     return unwrap<ApiShift[]>(res.data)

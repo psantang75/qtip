@@ -215,3 +215,49 @@ that list; an agent needs their own department on it. Writes are unchanged —
 scoped to the owner — and adding a department requires write scope over *that*
 department too, so a Manager cannot lend a calendar to a department they do not
 manage.
+
+## Phone Queue Tables
+
+Added by migration `20260828120000_add_phone_queues`, extended by
+`20260828163000_queue_slot_overrides`. Six additive tables plus an `app_page` row
+(`sched_queues`) and its Admin/Manager/Director grants. Feature overview:
+[`phone_queues.md`](phone_queues.md).
+
+The solved plan is **not** stored — coverage is recomputed on read from the work
+schedule, exactly as the campaign month is projected. The only stored plan data
+is the manual per-day override.
+
+| Table | Grain | Purpose |
+|-------|-------|---------|
+| `phone_queue` | one per queue, company-wide | The library. `queue_name` (unique), `queue_code` (the operator's label for the matching Genesys queue — nothing joins on it), `color`, `sort_order` (the tie-break when two queues share a fill priority), `is_active`. Retired, never deleted. |
+| `phone_queue_department` | one per (`queue_id`, `department_id`) | A queue a department staffs, and that department's numbers for it: `fill_priority` (ascending — 1 is filled first), `min_agents`, `target_agents`, `max_agents` (NULL = uncapped). The numbers live here because the same queue matters differently to different departments. |
+| `phone_queue_window` | one per time range per assignment | Time-of-day override of those numbers. Does **not** define the time grain — the solver works in fixed 15-minute slots. A slot takes the numbers of whichever window contains its start minute. |
+| `phone_queue_member` | one per (`queue_id`, `user_id`) | Who may staff a queue. `person_priority` ascending (1 pulled in first), `is_home` (default seat), `is_pinned` (never moved), `is_active`. |
+| `phone_queue_policy` | one per department | Rules that are not per-queue: `is_enabled`, `max_queues_per_person`, `require_min_one_per_queue` (the floor rule), `respect_pins`, `fill_strategy`. Same effective shape as `schedule_coverage_threshold`. An unconfigured department reads back defaults rather than NULL. |
+| `phone_queue_assignment_override` | one per (`department_id`, `assignment_date`, `user_id`, `queue_id`, window) | The manual layer, mirroring `campaign_schedule_override`. `action` is `ASSIGN` or `EXCLUDE`; resolved first, as a constraint the solver fills around. `created_by` carries no FK — users are deactivated, not deleted. |
+
+`assignment_date` is a `DATE` and window times are `TIME`; all calendar logic uses
+local-first `YYYY-MM-DD` / `HH:MM` strings per `.cursor/rules/date-handling.mdc`.
+Role grants join `roles.role_name` rather than a hardcoded id, because Director
+is in the permission matrix but has no `roles` row in every environment.
+
+### Override windows + fill strategy
+
+Migration `20260828163000_queue_slot_overrides`, purely additive, guarded with
+`information_schema` checks so it is re-runnable.
+
+- `phone_queue_assignment_override.starts_at` / `.ends_at` — nullable `DATETIME`,
+  both NULL meaning all day. Shaped exactly like a partial-day
+  `schedule_exception` rather than as `TIME` columns, so the existing
+  `combineLocal` / `hmFromDateTime` helpers carry it and the API keeps speaking
+  `HH:MM`. Existing rows get NULL/NULL and keep their meaning, so there is
+  nothing to backfill.
+- The day-grained unique key `uq_phone_queue_override` is **dropped** and replaced
+  by a plain index on the same columns. That key allowed exactly one override per
+  person per queue per day, which is the limitation being removed. MySQL cannot
+  express "no two rows may overlap", so — as with `schedule_exception` — overlap
+  is refused in the service, and writes delete what they overlap before
+  inserting. The narrower `idx_phone_queue_override_dept_date` goes too, being a
+  left prefix of the replacement.
+- `phone_queue_policy.fill_strategy` — `ENUM('PRIORITY','ROUND_ROBIN')` defaulting
+  to `PRIORITY`, so every existing department behaves exactly as it did.

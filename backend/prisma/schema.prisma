@@ -57,6 +57,9 @@ model Department {
   schedule_coverage_windows     ScheduleCoverageWindow[]
   campaign_schedules            CampaignSchedule[]
   campaign_schedule_departments CampaignScheduleDepartment[]
+  phone_queue_departments       PhoneQueueDepartment[]
+  phone_queue_policy            PhoneQueuePolicy?
+  phone_queue_overrides         PhoneQueueAssignmentOverride[]
 
   @@map("departments")
 }
@@ -112,6 +115,8 @@ model User {
   punch_raw                             PunchRaw[]
   schedule_shifts                       ScheduleShift[]
   schedule_exceptions                   ScheduleException[]
+  phone_queue_memberships               PhoneQueueMember[]
+  phone_queue_overrides                 PhoneQueueAssignmentOverride[]
   attendance_daily                      AttendanceDaily[]
   attendance_occurrences                AttendanceOccurrence[]
   quiz_attempts                         QuizAttempt[]
@@ -2800,4 +2805,148 @@ model CampaignScheduleOverride {
   @@unique([schedule_id, occurrence_date, campaign_item_id], map: "uq_campaign_schedule_override")
   @@index([schedule_id, occurrence_date], map: "idx_campaign_schedule_override_schedule_date")
   @@map("campaign_schedule_override")
+}
+
+// ── Phone queues ─────────────────────────────────────────────────────────────
+// A global queue library assigned to departments, where the assignment row owns
+// that department's rules for the queue (fill order, min/target/max). Coverage
+// itself is never stored: it is solved on read from the work schedule, exactly
+// as the campaign month is projected. The only stored plan data is the manual
+// per-day override. QTIP is the plan of record; nothing is pushed to Genesys.
+
+enum PhoneQueueOverrideAction {
+  ASSIGN
+  EXCLUDE
+}
+
+enum PhoneQueueFillStrategy {
+  PRIORITY
+  ROUND_ROBIN
+}
+
+model PhoneQueue {
+  id          Int      @id @default(autoincrement())
+  queue_name  String   @unique(map: "uq_phone_queue_name") @db.VarChar(120)
+  // The operator's label for the matching Genesys queue, so a supervisor knows
+  // what to change. Not an integration key — nothing joins on it.
+  queue_code  String?  @db.VarChar(120)
+  description String?  @db.VarChar(500)
+  color       String   @default("#00aeef") @db.VarChar(20)
+  sort_order  Int      @default(0)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now()) @db.DateTime(0)
+  updated_at  DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  departments PhoneQueueDepartment[]
+  members     PhoneQueueMember[]
+  overrides   PhoneQueueAssignmentOverride[]
+
+  @@map("phone_queue")
+}
+
+model PhoneQueueDepartment {
+  id            Int      @id @default(autoincrement())
+  queue_id      Int
+  department_id Int
+  // Ascending: 1 is filled to its minimum before 2. Ties break on the library
+  // sort_order so the order is total, never arbitrary.
+  fill_priority Int      @default(100)
+  min_agents    Int      @default(1)
+  target_agents Int      @default(1)
+  max_agents    Int?
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.DateTime(0)
+  updated_at    DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  queue      PhoneQueue           @relation(fields: [queue_id], references: [id], onDelete: Cascade)
+  department Department           @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  windows    PhoneQueueWindow[]
+
+  @@unique([queue_id, department_id], map: "uq_phone_queue_department")
+  @@index([department_id, fill_priority], map: "idx_phone_queue_department_dept")
+  @@map("phone_queue_department")
+}
+
+model PhoneQueueWindow {
+  id                  Int      @id @default(autoincrement())
+  queue_department_id Int
+  start_time          DateTime @db.Time(0)
+  end_time            DateTime @db.Time(0)
+  min_agents          Int      @default(1)
+  target_agents       Int      @default(1)
+  max_agents          Int?
+  sort_order          Int      @default(0)
+  created_at          DateTime @default(now()) @db.DateTime(0)
+  updated_at          DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  queue_department PhoneQueueDepartment @relation(fields: [queue_department_id], references: [id], onDelete: Cascade)
+
+  @@index([queue_department_id, sort_order], map: "idx_phone_queue_window_qd")
+  @@map("phone_queue_window")
+}
+
+model PhoneQueueMember {
+  id              Int      @id @default(autoincrement())
+  queue_id        Int
+  user_id         Int
+  is_home         Boolean  @default(false)
+  // Ascending: 1 is pulled into a higher-priority queue before 2.
+  person_priority Int      @default(100)
+  is_pinned       Boolean  @default(false)
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now()) @db.DateTime(0)
+  updated_at      DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  queue PhoneQueue @relation(fields: [queue_id], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([queue_id, user_id], map: "uq_phone_queue_member")
+  @@index([user_id], map: "idx_phone_queue_member_user")
+  @@map("phone_queue_member")
+}
+
+model PhoneQueuePolicy {
+  id                        Int      @id @default(autoincrement())
+  department_id             Int      @unique(map: "uq_phone_queue_policy_dept")
+  is_enabled                Boolean  @default(true)
+  max_queues_per_person     Int      @default(1)
+  // The floor rule: every active queue gets a body before any queue is filled to
+  // its minimum, because a queue with nobody in it does not ring.
+  require_min_one_per_queue Boolean  @default(true)
+  respect_pins              Boolean  @default(true)
+  // Who covers when several people could: person_priority order, or the person
+  // who has served the fewest cover-minutes so far that day.
+  fill_strategy             PhoneQueueFillStrategy @default(PRIORITY)
+  created_at                DateTime @default(now()) @db.DateTime(0)
+  updated_at                DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
+
+  @@map("phone_queue_policy")
+}
+
+model PhoneQueueAssignmentOverride {
+  id              Int                      @id @default(autoincrement())
+  department_id   Int
+  assignment_date DateTime                 @db.Date
+  user_id         Int
+  queue_id        Int
+  action          PhoneQueueOverrideAction
+  // The window this override applies to, modelled exactly like a partial-day
+  // ScheduleException: both null means all day. There is deliberately no unique
+  // key across these — one person can be overridden on the same queue for
+  // several windows in a day, and overlap is refused in the service, which is
+  // how schedule_exception handles the identical problem.
+  starts_at       DateTime?                @db.DateTime(0)
+  ends_at         DateTime?                @db.DateTime(0)
+  created_by      Int?
+  created_at      DateTime                 @default(now()) @db.DateTime(0)
+  updated_at      DateTime                 @default(now()) @updatedAt @db.DateTime(0)
+
+  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  queue      PhoneQueue @relation(fields: [queue_id], references: [id], onDelete: Cascade)
+
+  @@index([department_id, assignment_date, user_id, queue_id], map: "idx_phone_queue_override_person")
+  @@map("phone_queue_assignment_override")
 }

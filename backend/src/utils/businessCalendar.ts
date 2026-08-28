@@ -117,6 +117,41 @@ export function isBlockedForScheduling(dateStr: string, types: Map<string, strin
   return t === 'HOLIDAY' || t === 'CLOSURE';
 }
 
+/** Every 'YYYY-MM-DD' date from `fromStr` to `toStr` inclusive, in order. */
+export function rangeDateStrings(fromStr: string, toStr: string): string[] {
+  const [fy, fm, fd] = fromStr.split('-').map(Number);
+  const [ty, tm, td] = toStr.split('-').map(Number);
+  const cursor = new Date(Date.UTC(fy, fm - 1, fd));
+  const end = new Date(Date.UTC(ty, tm - 1, td));
+  const out: string[] = [];
+  while (cursor <= end) {
+    out.push(toDateString(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return out;
+}
+
+/**
+ * Day-type for every date in a range (every date present), applying the Mon–Fri
+ * default where no row exists so the caller never has to. The range twin of
+ * getMonthDayTypes — the scheduling and phone-queue day/week views read it to
+ * grey non-business days and to skip them when the date arrows move.
+ */
+export async function getRangeDayTypes(fromStr: string, toStr: string): Promise<Record<string, string>> {
+  const all = rangeDateStrings(fromStr, toStr);
+  const stored = await getCalendarDayTypes(all);
+  const out: Record<string, string> = {};
+  for (const ds of all) {
+    const t = stored.get(ds);
+    if (t) out[ds] = t;
+    else {
+      const dow = dowOf(ds);
+      out[ds] = dow >= 1 && dow <= 5 ? 'WORKDAY' : 'WEEKEND';
+    }
+  }
+  return out;
+}
+
 /** Every 'YYYY-MM-DD' date in a calendar month, in order. month is 1-based. */
 export function monthDateStrings(year: number, month: number): string[] {
   const last = new Date(Date.UTC(year, month, 0)).getUTCDate();

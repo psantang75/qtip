@@ -11,6 +11,7 @@ import {
   CoverageThresholdsEditor,
 } from './list-management/SchedulingListEditors'
 import { CampaignListEditor } from './list-management/CampaignListEditor'
+import { PhoneQueueListEditor } from './list-management/PhoneQueueListEditor'
 import {
   AttendancePointBandsEditor,
   AttendanceThresholdsEditor,
@@ -30,6 +31,7 @@ const CUSTOM_EDITORS = {
   sched_activity_type: ActivityTypesEditor,
   sched_coverage: CoverageThresholdsEditor,
   campaign_library: CampaignListEditor,
+  phone_queue_library: PhoneQueueListEditor,
   attendance_bands: AttendancePointBandsEditor,
   attendance_thresholds: AttendanceThresholdsEditor,
 } as const
@@ -90,6 +92,7 @@ const SECTIONS: ListSection[] = [
       { key: 'sched_activity_types',  label: 'Shift Activity Types',       description: 'Break/lunch (and future) segment types available when building shifts and templates.',              tier: 'dynamic', implemented: true, editor: 'sched_activity_type' },
       { key: 'sched_coverage',        label: 'Coverage Thresholds',        description: 'Per-department green/yellow staffing minimums that drive the schedule coverage heatmap.',              tier: 'dynamic', implemented: true, editor: 'sched_coverage' },
       { key: 'campaign_library',      label: 'Call Campaigns',             description: 'Campaign categories (with a color) and campaigns (with a timing rule) projected onto the call-campaign calendar.', tier: 'dynamic', implemented: true, editor: 'campaign_library' },
+      { key: 'phone_queue_library',   label: 'Phone Queues',               description: 'The phone queues that exist company-wide. Each department picks which of them it staffs, and its own minimums, on the Phone Queues page.', tier: 'dynamic', implemented: true, editor: 'phone_queue_library' },
     ],
   },
   {

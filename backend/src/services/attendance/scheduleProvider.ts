@@ -6,8 +6,11 @@
  * Contract (from the attendance plan): getScheduledShift(userId, date) plus a
  * bulk variant, because per-day would be people × 90 queries per page load.
  *
- * Only PUBLISHED shifts are returned — publishing is what creates attendance
+ * PUBLISHED shifts only by default — publishing is what creates attendance
  * denominators, so a stack of DRAFT weeks can never silently mark anyone absent.
+ * A caller that scores nothing may opt into drafts with `{ publishedOnly: false }`
+ * (queue coverage planning does, to preview a week still being built); every
+ * scoring caller must leave the default alone.
  * A full-day excused exception is returned attached to the day; the attendance
  * engine drops such a day from the denominator rather than counting it compliant.
  *
@@ -103,6 +106,16 @@ export function netMinutes(start: string | null, end: string | null, segments: S
 
 const key = (userId: number, dateStr: string) => `${userId}:${dateStr}`;
 
+export interface ScheduledShiftsOptions {
+  /**
+   * Defaults to true — attendance and the time-off import must never see DRAFT
+   * weeks. Queue coverage planning passes false so a manager can preview the
+   * week they are still building; that view is labelled draft in the UI and
+   * scores nothing.
+   */
+  publishedOnly?: boolean;
+}
+
 /**
  * Bulk fetch. Keyed `${userId}:${YYYY-MM-DD}` using local date components.
  * Fetches shifts+segments and exceptions grouped in memory rather than per-shift.
@@ -111,6 +124,7 @@ export async function getScheduledShifts(
   userIds: number[],
   from: Date,
   to: Date,
+  opts: ScheduledShiftsOptions = {},
 ): Promise<Map<string, ScheduledDay>> {
   const out = new Map<string, ScheduledDay>();
   if (userIds.length === 0) return out;
@@ -118,7 +132,7 @@ export async function getScheduledShifts(
   const fromStr = dateStrFromDate(new Date(Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())));
   const toStr = dateStrFromDate(new Date(Date.UTC(to.getFullYear(), to.getMonth(), to.getDate())));
 
-  const shifts = await fetchShiftsInRange(userIds, fromStr, toStr, true);
+  const shifts = await fetchShiftsInRange(userIds, fromStr, toStr, opts.publishedOnly ?? true);
 
   const exceptions = await prisma.scheduleException.findMany({
     where: { user_id: { in: userIds }, exception_date: { gte: dateOnlyValue(fromStr), lte: dateOnlyValue(toStr) } },

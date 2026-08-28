@@ -57,7 +57,7 @@ the linked docs are the deeper reference.
 - Forms & scoring engine: [.cursor/rules/forms-scoring.mdc](.cursor/rules/forms-scoring.mdc).
 - Submissions & disputes (QA workflow): [.cursor/rules/submissions-disputes.mdc](.cursor/rules/submissions-disputes.mdc).
 - Write-ups (disciplinary): [.cursor/rules/writeups.mdc](.cursor/rules/writeups.mdc).
-- Scheduling / campaigns / attendance: [.cursor/rules/scheduling-attendance.mdc](.cursor/rules/scheduling-attendance.mdc).
+- Scheduling / campaigns / phone queues / attendance: [.cursor/rules/scheduling-attendance.mdc](.cursor/rules/scheduling-attendance.mdc); queue coverage reference: [docs/phone_queues.md](docs/phone_queues.md).
 - Training / coaching / LMS: [.cursor/rules/training-coaching.mdc](.cursor/rules/training-coaching.mdc).
 - AI reviewer: [.cursor/rules/ai-reviewer.mdc](.cursor/rules/ai-reviewer.mdc).
 - Insights data warehouse (registry-driven ingestion, partitioning, workers): [.cursor/rules/insights-data-warehouse.mdc](.cursor/rules/insights-data-warehouse.mdc).

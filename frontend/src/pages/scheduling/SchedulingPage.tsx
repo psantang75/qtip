@@ -44,6 +44,8 @@ import {
   addDays, parseLocal, startOfWeek, toLocalIso,
   type MockBreak, type MockException, type MockTemplate, type TemplateDay,
 } from '@/components/scheduling/mockScheduleData'
+import { nextWorkday } from '@/components/scheduling/businessDays'
+import { useBusinessDayTypes } from '@/hooks/useBusinessDayTypes'
 import { minutesOf, rangeStatus, type CoverageWindow } from '@/components/scheduling/scheduleTime'
 import { useScheduleGrid } from '@/hooks/useScheduleGrid'
 import { useScheduleTemplates, adaptTemplate } from '@/hooks/useScheduleTemplates'
@@ -110,6 +112,9 @@ export default function SchedulingPage() {
   const to = displayedDates[displayedDates.length - 1]
 
   const grid = useScheduleGrid(from, to)
+  // Padded so the day-view arrows can look past the current window for the next
+  // working day (weekend/holiday/closure are skipped).
+  const dayTypes = useBusinessDayTypes(addDays(from, -7), addDays(to, 7)).data
   const allPeople = useMemo(() => grid.data?.people ?? [], [grid.data])
   const deptOptions = useMemo(
     () => [...new Set(allPeople.map(p => p.department ?? UNASSIGNED))].sort(),
@@ -289,7 +294,9 @@ export default function SchedulingPage() {
 
   const step = view === 'day' ? 1 : view === 'week' ? 7 : 14
   const shift = (dir: 1 | -1) => {
-    if (view === 'day') setDay(d => addDays(d, dir * step))
+    // Day view steps to the next business day per the calendar — weekends,
+    // holidays and closures carry no schedule.
+    if (view === 'day') setDay(d => nextWorkday(dayTypes, d, dir))
     else setAnchor(a => addDays(a, dir * step))
   }
   const goToday = () => { setDay(today); setAnchor(startOfWeek(today)) }

@@ -34,6 +34,9 @@ engine needs.
   `sched_calendar` EDIT.
 - **Coverage threshold** — per-department green/yellow staffing minimums
   (`schedule_coverage_threshold`) that drive the day-view coverage heatmap.
+- **Phone queue coverage** — who should be staffing which phone queue, solved on
+  read from this schedule. It is a consumer of scheduling, not part of it: see
+  [`phone_queues.md`](phone_queues.md).
 
 ## Draft / Publish / Lock lifecycle
 
@@ -188,6 +191,7 @@ after Performance Warnings):
 |----------|-------|-------|---------|----------|-----------|
 | `sched_calendar` | `/app/scheduling/calendar` (editor) · `/app/scheduling/my-schedule` (OWN) | EDIT | EDIT (own reports) | ALL | OWN |
 | `sched_exceptions` | `/app/scheduling/exceptions` · `/app/scheduling/time-off-import` (review, ALL only) | EDIT | EDIT | ALL | — |
+| `sched_queues` | `/app/scheduling/queues` — see [`phone_queues.md`](phone_queues.md) | EDIT | EDIT | ALL | — |
 
 Admin-managed lists (exception types, activity types, coverage thresholds) live
 under **Admin → List Management → Scheduling** (ADMIN-gated route, re-checked on
@@ -207,7 +211,8 @@ never `Date` instants — per `.cursor/rules/date-handling.mdc`.
 | Scope + write authorization | `backend/src/services/scheduling/schedule.permissions.ts` |
 | Templates / shifts / apply-copy / exceptions / list types | `backend/src/services/scheduling/schedule.*.service.ts` |
 | Paychex time-off derivation (pure classifier + data/ownership) | `backend/src/services/scheduling/timeOff.classify.ts`, `timeOff.derive.service.ts` |
-| KPI read provider | `backend/src/services/attendance/scheduleProvider.ts` |
+| KPI read provider — also the sole availability source for phone queues | `backend/src/services/attendance/scheduleProvider.ts` |
+| Phone queue coverage (consumer of the above) | [`phone_queues.md`](phone_queues.md), `backend/src/services/queues/*` |
 | Controllers / routes | `backend/src/controllers/scheduling/*`, `backend/src/routes/scheduling.routes.ts` |
 | Frontend service + hooks | `frontend/src/services/schedulingService.ts`, `frontend/src/hooks/useSchedule*.ts`, `useExceptionTypes.ts` |
 | Exception entry (drawer + bulk) | `frontend/src/components/scheduling/ExceptionEditor.tsx`, `ShiftEditorSheet.tsx`, `BulkExceptionDialog.tsx` |

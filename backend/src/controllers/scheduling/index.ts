@@ -5,3 +5,4 @@ export * from './shift.controller';
 export * from './template.controller';
 export * from './exception.controller';
 export * from './listType.controller';
+export * from './calendar.controller';

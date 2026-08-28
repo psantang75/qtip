@@ -97,6 +97,11 @@ changes; Cursor auto-attaches the scoped rules when you edit matching files):
 - [`trainer_feedback_review.md`](./trainer_feedback_review.md)
 - [`trainer_reports.md`](./trainer_reports.md)
 
+## Scheduling & phone queues
+
+- [`scheduling.md`](./scheduling.md) — shifts, templates, exceptions, Paychex time off
+- [`phone_queues.md`](./phone_queues.md) — queue coverage planning, solved from the schedule
+
 ## Analytics & reports
 
 - [`analytics_builder.md`](./analytics_builder.md)

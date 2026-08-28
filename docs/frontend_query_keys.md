@@ -75,6 +75,11 @@ export const csrQueryKeys = {
 }
 ```
 
+`services/phoneQueueQueryKeys.ts` is a worked example: its keys nest under
+`department(id)` so saving one department's configuration invalidates its
+queues, policy, roster and coverage in a single call without touching another
+department's cache.
+
 ## 5. Global cache reset
 
 `CacheResetGuard` in `app/guards.tsx` calls `queryClient.clear()` whenever

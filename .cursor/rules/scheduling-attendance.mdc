@@ -1,13 +1,14 @@
 ---
-description: Scheduling, campaigns & attendance subsystem map — grid/templates, campaigns, points engine
-globs: backend/src/services/scheduling/**,backend/src/services/attendance/**,backend/src/services/campaigns/**,backend/src/controllers/scheduling/**,backend/src/controllers/campaigns/**,backend/src/routes/scheduling.routes.ts,backend/src/routes/campaign.routes.ts,backend/src/validation/schedule.validation.ts,backend/src/validation/campaign.validation.ts,backend/src/validation/attendance.validation.ts,frontend/src/pages/scheduling/**,frontend/src/components/scheduling/**,frontend/src/pages/admin/list-management/AttendanceListEditors.tsx,frontend/src/pages/admin/list-management/SchedulingListEditors.tsx,frontend/src/pages/admin/list-management/CoverageThresholdsEditor.tsx,frontend/src/pages/admin/list-management/CampaignListEditor.tsx
+description: Scheduling, campaigns, phone queues & attendance subsystem map — grid/templates, campaigns, queue coverage, points engine
+globs: backend/src/services/scheduling/**,backend/src/services/attendance/**,backend/src/services/campaigns/**,backend/src/services/queues/**,backend/src/controllers/scheduling/**,backend/src/controllers/campaigns/**,backend/src/controllers/queues/**,backend/src/routes/scheduling.routes.ts,backend/src/routes/campaign.routes.ts,backend/src/routes/phoneQueue.routes.ts,backend/src/validation/schedule.validation.ts,backend/src/validation/campaign.validation.ts,backend/src/validation/attendance.validation.ts,backend/src/validation/queue.validation.ts,frontend/src/pages/scheduling/**,frontend/src/components/scheduling/**,frontend/src/pages/admin/list-management/AttendanceListEditors.tsx,frontend/src/pages/admin/list-management/SchedulingListEditors.tsx,frontend/src/pages/admin/list-management/CoverageThresholdsEditor.tsx,frontend/src/pages/admin/list-management/CampaignListEditor.tsx,frontend/src/pages/admin/list-management/PhoneQueueListEditor.tsx
 alwaysApply: false
 ---
 
-# Scheduling, Campaigns & Attendance
+# Scheduling, Campaigns, Phone Queues & Attendance
 
-Three related domains: shift scheduling (grid/templates/exceptions), call-
-campaign scheduling, and the attendance points engine. Follows
+Four related domains: shift scheduling (grid/templates/exceptions), call-
+campaign scheduling, phone queue coverage, and the attendance points engine.
+Follows
 [.cursor/rules/backend-api-conventions.mdc](mdc:.cursor/rules/backend-api-conventions.mdc)
 and, for dates, [.cursor/rules/date-handling.mdc](mdc:.cursor/rules/date-handling.mdc).
 
@@ -26,12 +27,30 @@ Services are split by concern under three folders (add to the matching slice):
   `attendance.notify.ts`, and the `punchProvider.ts` / `scheduleProvider.ts` adapters.
 - `services/campaigns/` — campaign library, schedules, month/day overrides, publish
   (mounted under the scheduling API prefix).
+- `services/queues/` — phone queue coverage. The plan is solved on read, never
+  stored, and availability comes ONLY from
+  `services/attendance/scheduleProvider.ts#getScheduledShifts` — never query
+  shifts or exceptions here, or queue coverage will drift from schedule coverage.
+  Full reference: [docs/phone_queues.md](mdc:docs/phone_queues.md).
 - Controllers: `controllers/scheduling/*` and `controllers/campaigns/*` (with a
   `respond.ts` error mapper — route errors through it, mirroring write-ups).
+  `controllers/queues/*` is the exception: it is newer and uses
+  `asyncHandler` + `AppError`, the canonical envelope. Do NOT add `respond.ts`
+  there, and do not copy `respond.ts` into any new slice.
 - Routes: `routes/scheduling.routes.ts` (`/api/scheduling`), `routes/campaign.routes.ts`
-  (`/api/scheduling/campaigns`). Attendance policy CRUD + CSR reports are exposed via
+  (`/api/scheduling/campaigns`), `routes/phoneQueue.routes.ts`
+  (`/api/scheduling/queues`). Both nested prefixes must stay mounted BEFORE
+  `/api/scheduling` in `index.ts` or the scheduling router swallows them.
+  Attendance policy CRUD + CSR reports are exposed via
   the Insights controllers (`insightsAdminAttendance.controller.ts`,
   `insightsCsr.controller.ts`), NOT a standalone attendance route.
+
+## `getScheduledShifts` defaults to PUBLISHED — leave it alone
+
+It takes an optional `{ publishedOnly }`. The default `true` is what stops a
+stack of draft weeks marking anyone absent. Only a caller that scores nothing
+(queue coverage preview) may pass `false`. Guarded by
+`services/attendance/__tests__/scheduleProvider.publishedOnly.test.ts`.
 
 ## Attendance analytics = read-only
 
@@ -43,11 +62,17 @@ do not turn analytical SQL into per-row Prisma calls.
 ## Frontend map
 
 - `pages/scheduling/` — `SchedulingPage` (manager grid), `MySchedulePage`,
-  `SchedulingExceptionsPage`, `CampaignSchedulePage`, `TimeOffImportReviewPage`.
+  `SchedulingExceptionsPage`, `CampaignSchedulePage`, `TimeOffImportReviewPage`,
+  `QueueCoveragePage`.
 - `components/scheduling/` — grid/cells, shift/template editors, exception editors,
-  coverage bars, campaign grid components. Hooks in `hooks/useScheduleGrid.ts` etc.;
-  API in `services/schedulingService.ts` / `campaignService.ts`.
+  coverage bars, campaign grid components, `Queue*` coverage components. Hooks in
+  `hooks/useScheduleGrid.ts` etc.; API in `services/schedulingService.ts` /
+  `campaignService.ts` / `phoneQueueService.ts`.
+- `CoverageBars` / `DeptCoverageRow` compute coverage on the CLIENT from
+  mock-data types. Queue components deliberately do not reuse that computation —
+  they render server-solved numbers and borrow only `COVERAGE_CLS` from
+  `scheduleTime.ts`. Two solvers would eventually disagree.
 - Admin list editors (attendance point bands / thresholds, exception & activity
-  types, coverage thresholds, campaign library) live in
+  types, coverage thresholds, campaign library, phone queue library) live in
   `pages/admin/list-management/*` and are wired from `ListManagementPage.tsx`
   via `CUSTOM_EDITORS`. Obey [.cursor/rules/ui-design.mdc](mdc:.cursor/rules/ui-design.mdc).

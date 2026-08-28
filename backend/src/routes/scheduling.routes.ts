@@ -23,6 +23,7 @@ import {
   getExceptionTypes, postExceptionType, putExceptionType, patchExceptionTypeActive, postReorderExceptionTypes,
   getActivityTypes, postActivityType, putActivityType, patchActivityTypeActive, postReorderActivityTypes,
   getCoverageThresholds, putCoverageThreshold, removeCoverageThreshold, putCoverageWindows,
+  getCalendarDayTypes,
 } from '../controllers/scheduling';
 
 const router = Router();
@@ -34,6 +35,12 @@ const calEdit    = authorizePage('sched_calendar', 'edit')    as unknown as Requ
 const excViewAll = authorizePage('sched_exceptions', 'viewAll') as unknown as RequestHandler;
 const excEdit    = authorizePage('sched_exceptions', 'edit')    as unknown as RequestHandler;
 const admin      = authorizeAdmin as unknown as RequestHandler;
+
+// ── Business calendar (read for any authenticated user) ──────────────────────
+// Company-wide, non-sensitive day types. No page guard: the phone-queue views
+// (sched_queues, not sched_calendar) read it too, to grey non-business days and
+// skip them when the date arrows move.
+router.get('/calendar/day-types', validateSchema(GridQuerySchema), getCalendarDayTypes as unknown as RequestHandler);
 
 // ── Lists (read for any viewer, write admin-only) ────────────────────────────
 router.get('/activity-types',   calView, getActivityTypes as unknown as RequestHandler);
