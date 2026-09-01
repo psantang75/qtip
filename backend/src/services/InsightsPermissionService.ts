@@ -1,6 +1,7 @@
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import { getDescendantDepartmentKeys, getAncestorDepartmentKeys } from '../utils/departmentHierarchy';
+import { getManagedDepartmentIds } from './manager/manager.access';
 
 export interface InsightsAccessResult {
   canAccess: boolean;
@@ -26,20 +27,77 @@ const NO_ACCESS: InsightsAccessResult = {
 
 export class InsightsPermissionService {
   /**
-   * The viewing user's own department_key plus all of its ancestors. A
-   * department-level page grant on department `G` applies to this user when
-   * `G` is in this set — i.e. a grant on a parent department cascades down to
-   * every descendant. Empty when the user has no conformed (current) employee
-   * row or no department.
+   * The warehouse department_keys a viewer "belongs to" for Insights access.
+   * This is the union of:
+   *   - their profile department (`users.department_id` → `ie_dim_employee`),
+   *     which is optional and reserved for future use, and
+   *   - every department they manage on the Departments tab
+   *     (`department_managers`), which is how a Manager's authority is expressed.
+   *
+   * A Manager typically has NO profile department and instead oversees the
+   * departments assigned to them, so this set is what drives both the page gate
+   * and DEPARTMENT/DIVISION data scope. Empty only when the user neither has a
+   * profile department nor manages any department.
    */
-  private async userDeptAncestorSet(userId: number): Promise<Set<number>> {
+  private async userBaseDepartmentKeys(userId: number): Promise<number[]> {
+    const keys = new Set<number>();
+
     const [empRows] = await pool.execute<RowDataPacket[]>(
       'SELECT department_key FROM ie_dim_employee WHERE user_id = ? AND is_current = 1',
       [userId],
     );
-    const deptKey = empRows.length > 0 ? (empRows[0].department_key as number | null) : null;
-    if (deptKey == null) return new Set();
-    return new Set(await getAncestorDepartmentKeys(deptKey));
+    const profileKey = empRows.length > 0 ? (empRows[0].department_key as number | null) : null;
+    if (profileKey != null) keys.add(profileKey);
+
+    for (const managedKey of await this.managedDepartmentKeys(userId)) keys.add(managedKey);
+
+    return [...keys];
+  }
+
+  /**
+   * Warehouse department_keys for the departments this user manages on the
+   * Departments tab. Reuses `getManagedDepartmentIds` (the single source of
+   * truth for `department_managers` ownership, shared with Quality/Training) and
+   * maps the operational department ids to their current warehouse keys.
+   */
+  private async managedDepartmentKeys(userId: number): Promise<number[]> {
+    const deptIds = await getManagedDepartmentIds(userId);
+    if (deptIds.length === 0) return [];
+    const placeholders = deptIds.map(() => '?').join(',');
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT department_key FROM ie_dim_department
+       WHERE department_id IN (${placeholders}) AND is_current = 1`,
+      deptIds,
+    );
+    return rows.map((r) => r.department_key as number);
+  }
+
+  /**
+   * The viewer's base departments plus all of their ancestors. A
+   * department-level page grant on department `G` applies to this user when
+   * `G` is in this set — i.e. a grant on a parent department cascades down to
+   * every descendant. Empty when the user has no base department (no profile
+   * department and no managed departments).
+   */
+  private async userDeptAncestorSet(userId: number): Promise<Set<number>> {
+    const baseKeys = await this.userBaseDepartmentKeys(userId);
+    const ancestors = new Set<number>();
+    for (const key of baseKeys) {
+      for (const a of await getAncestorDepartmentKeys(key)) ancestors.add(a);
+    }
+    return ancestors;
+  }
+
+  /**
+   * DIVISION scope materialization: every base department plus all of its
+   * descendants, de-duplicated. Shared by the single-page and batch paths.
+   */
+  private async divisionKeysFor(baseKeys: number[]): Promise<number[]> {
+    const keys = new Set<number>();
+    for (const key of baseKeys) {
+      for (const d of await getDescendantDepartmentKeys(key)) keys.add(d);
+    }
+    return [...keys];
   }
 
   /**
@@ -162,18 +220,19 @@ export class InsightsPermissionService {
       decisions.set(pageKey, { pageId, scope });
     }
 
-    // Materialize the employee row + descendant departments once, then fan
-    // them out to the per-page results.
+    // Materialize the employee row (for SELF), the base department set (profile
+    // + managed departments, for DEPARTMENT/DIVISION), and the DIVISION
+    // descendant set once, then fan them out to the per-page results. Base keys
+    // and division keys are computed lazily so a SELF-only page skips the work.
     let employeeKey: number | null = null;
-    let deptKey: number | null = null;
+    let baseKeys: number[] | null = null;
     let divisionKeys: number[] | null = null;
     if (needsEmployee) {
       const [empRows] = await pool.execute<RowDataPacket[]>(
-        'SELECT employee_key, department_key FROM ie_dim_employee WHERE user_id = ? AND is_current = 1',
+        'SELECT employee_key FROM ie_dim_employee WHERE user_id = ? AND is_current = 1',
         [userId],
       );
       employeeKey = empRows.length > 0 ? (empRows[0].employee_key as number) : null;
-      deptKey = empRows.length > 0 ? (empRows[0].department_key as number | null) : null;
     }
 
     for (const [pageKey, { pageId, scope }] of decisions) {
@@ -185,24 +244,25 @@ export class InsightsPermissionService {
         result.set(pageKey, { canAccess: true, dataScope: 'SELF', departmentKeys: [], employeeKey, pageId });
         continue;
       }
+      if (baseKeys === null) baseKeys = await this.userBaseDepartmentKeys(userId);
       if (scope === 'DEPARTMENT') {
         result.set(pageKey, {
           canAccess: true,
           dataScope: 'DEPARTMENT',
-          departmentKeys: deptKey != null ? [deptKey] : [],
+          departmentKeys: baseKeys,
           employeeKey: null,
           pageId,
         });
         continue;
       }
-      // DIVISION — descendant lookup is one query per dept root, but every
+      // DIVISION — descendant lookup runs once per dept root, but every
       // DIVISION-scoped page for the same user resolves to the same set, so
-      // we fetch it once and reuse.
-      if (deptKey == null) {
+      // we compute it once and reuse.
+      if (baseKeys.length === 0) {
         result.set(pageKey, { canAccess: true, dataScope: 'DIVISION', departmentKeys: [], employeeKey: null, pageId });
         continue;
       }
-      if (divisionKeys === null) divisionKeys = await getDescendantDepartmentKeys(deptKey);
+      if (divisionKeys === null) divisionKeys = await this.divisionKeysFor(baseKeys);
       result.set(pageKey, {
         canAccess: true,
         dataScope: 'DIVISION',
@@ -320,33 +380,32 @@ export class InsightsPermissionService {
       return { canAccess: true, dataScope: 'ALL', departmentKeys: [], employeeKey: null, pageId };
     }
 
-    const [empRows] = await pool.execute<RowDataPacket[]>(
-      'SELECT employee_key, department_key FROM ie_dim_employee WHERE user_id = ? AND is_current = 1',
-      [userId]
-    );
-
-    const employeeKey = empRows.length > 0 ? (empRows[0].employee_key as number) : null;
-    const deptKey = empRows.length > 0 ? (empRows[0].department_key as number | null) : null;
-
     if (scope === 'SELF') {
+      const [empRows] = await pool.execute<RowDataPacket[]>(
+        'SELECT employee_key FROM ie_dim_employee WHERE user_id = ? AND is_current = 1',
+        [userId]
+      );
+      const employeeKey = empRows.length > 0 ? (empRows[0].employee_key as number) : null;
       return { canAccess: true, dataScope: 'SELF', departmentKeys: [], employeeKey, pageId };
     }
+
+    const baseKeys = await this.userBaseDepartmentKeys(userId);
 
     if (scope === 'DEPARTMENT') {
       return {
         canAccess: true,
         dataScope: 'DEPARTMENT',
-        departmentKeys: deptKey != null ? [deptKey] : [],
+        departmentKeys: baseKeys,
         employeeKey: null,
         pageId,
       };
     }
 
     if (scope === 'DIVISION') {
-      if (deptKey == null) {
+      if (baseKeys.length === 0) {
         return { canAccess: true, dataScope: 'DIVISION', departmentKeys: [], employeeKey: null, pageId };
       }
-      const keys = await getDescendantDepartmentKeys(deptKey);
+      const keys = await this.divisionKeysFor(baseKeys);
       return { canAccess: true, dataScope: 'DIVISION', departmentKeys: keys, employeeKey: null, pageId };
     }
 

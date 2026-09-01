@@ -68,7 +68,7 @@ function qcHandler(
         return
       }
       const deptFilter = await resolveDeptFilter(
-        req.user.user_id, access, req.query.departments as string | undefined,
+        access, req.query.departments as string | undefined,
       )
       const ranges = periodRanges(req)
       const data   = await fn(deptFilter, ranges, req, access)
@@ -184,7 +184,7 @@ export const getFilterOptions = async (req: Request, res: Response): Promise<voi
     if (!access) { res.status(403).json({ error: 'Access denied' }); return }
 
     const deptFilter = await resolveDeptFilter(
-      req.user.user_id, access, req.query.departments as string | undefined,
+      access, req.query.departments as string | undefined,
     )
     const ranges = periodRanges(req)
     const formNames = req.query.forms

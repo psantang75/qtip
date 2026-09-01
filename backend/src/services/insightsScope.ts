@@ -10,13 +10,13 @@
  * import it from qcQueryHelpers, and rewriting all of them to gain nothing but a
  * new path is churn. New Insights code should import both from here.
  *
- * KNOWN GAP (deferred by decision, affects every Insights page equally, not just
- * attendance): DEPARTMENT scope returns only the viewer's own department_id and
- * does NOT cascade to child departments, nor does it consult department_managers.
- * A manager whose users.department_id is NULL therefore resolves to an EMPTY
- * filter, which produces no SQL and so fails OPEN. The Page Access grants in use
- * today give Manager the ALL scope, which sidesteps it. See
- * utils/departmentHierarchy.ts for the descendant helpers a fix would use.
+ * DEPARTMENT/DIVISION scope is driven by the department set the permission
+ * service already resolved (`access.departmentKeys`): the viewer's profile
+ * department PLUS every department they manage on the Departments tab
+ * (`department_managers`), expanded to descendants for DIVISION. A manager whose
+ * users.department_id is NULL is therefore scoped to the departments assigned to
+ * them rather than resolving to an empty (fail-open) filter. See
+ * InsightsPermissionService.userBaseDepartmentKeys for how the set is built.
  */
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
@@ -35,7 +35,6 @@ export type { SqlFragment } from './qcQueryHelpers';
  * either ids or department names.
  */
 export async function resolveDeptFilter(
-  userId: number,
   access: InsightsAccessResult,
   reqDepts?: string,
 ): Promise<number[]> {
@@ -54,10 +53,18 @@ export async function resolveDeptFilter(
     return [];
   }
   if (access.dataScope === 'SELF') return [];
+  // DEPARTMENT / DIVISION: the permission service already resolved the exact set
+  // of warehouse department_keys this viewer may see (profile department + the
+  // departments they manage on the Departments tab, expanded to descendants for
+  // DIVISION). Map those keys back to operational department ids for the query
+  // filter. An empty set means the viewer has neither a profile department nor a
+  // managed department, so there is nothing to scope to.
+  if (access.departmentKeys.length === 0) return [];
+  const ph = access.departmentKeys.map(() => '?').join(',');
   const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT department_id FROM users WHERE id = ?',
-    [userId],
+    `SELECT department_id FROM ie_dim_department
+     WHERE department_key IN (${ph}) AND is_current = 1`,
+    access.departmentKeys,
   );
-  const deptId = rows[0]?.department_id as number | null;
-  return deptId ? [deptId] : [];
+  return rows.map((r) => r.department_id as number);
 }

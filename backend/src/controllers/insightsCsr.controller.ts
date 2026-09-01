@@ -95,7 +95,7 @@ function csrHandler(fn: (ctx: CsrContext, req: Request) => Promise<unknown>) {
         return;
       }
       const deptFilter = await resolveDeptFilter(
-        req.user.user_id, access, req.query.departments as string | undefined,
+        access, req.query.departments as string | undefined,
       );
       const { asOf, clamped } = await resolveAsOf(req);
       const data = await fn(
