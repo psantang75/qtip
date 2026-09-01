@@ -21,6 +21,14 @@ function yesterdayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** A YYYY-MM-DD `n` days before the given YYYY-MM-DD, using LOCAL components. */
+function isoMinusDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() - n)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+
 /**
  * On-demand validation for the Workload "touched" metric. Pick one agent + one
  * day and read the underlying CRM task actions / ticket notes live, so a manager
@@ -37,11 +45,18 @@ export default function WorkloadTouchValidationPage() {
   // Agent options come from the (cheap, warehouse-backed) Workload roster for the
   // selected area, deduped to one entry per employee. Loading this list does NOT
   // touch the CRM — only the touch-detail run does.
+  //
+  // The roster window is a trailing 90 days ENDING at the selected day, not the
+  // calendar month: the page defaults to validating "yesterday", which on the 1st
+  // of a month is last month, and the daily roll-up for a new month has not landed
+  // yet — so a `current_month` roster is empty at every month boundary. Anchoring
+  // to the chosen day keeps the list populated and lets it follow the date picker.
+  const rosterStart = useMemo(() => isoMinusDays(date, 90), [date])
   const { data: roster, isLoading: rosterLoading } = useQuery({
-    queryKey: ['touch-agents', area],
+    queryKey: ['touch-agents', area, rosterStart, date],
     queryFn: () => (area === 'csr'
-      ? getCsrTicketProductivity({ period: 'current_month' })
-      : getTicketProductivity({ period: 'current_month' })),
+      ? getCsrTicketProductivity({ period: 'custom', start: rosterStart, end: date })
+      : getTicketProductivity({ period: 'custom', start: rosterStart, end: date })),
     staleTime: 5 * 60 * 1000,
   })
 
