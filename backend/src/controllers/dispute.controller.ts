@@ -19,6 +19,16 @@ import {
   AppError,
   ErrorType,
 } from '../utils/errorHandler';
+import { stripHtmlToPlaintext } from '../utils/htmlText';
+
+// The dispute reason is authored in the TipTap rich-text editor, so the stored
+// value is HTML. The 1000-character limit is a plain-text business rule, not a
+// storage constraint (the column is TEXT), so it must be measured against the
+// visible text — otherwise markup (<p>, <strong>, list items, entities) counts
+// toward the cap and a normal-length reason is rejected. See stripHtmlToPlaintext.
+// 5000 visible chars (~1 page) is generous for a substantive dispute; the column
+// is TEXT so this is a business rule, not a storage limit.
+const MAX_REASON_PLAINTEXT_LENGTH = 5000;
 
 // These handlers throw `AppError` (rendered by the global error middleware as
 // the canonical envelope) instead of the legacy `res.status(n).json({ message })`
@@ -154,8 +164,8 @@ export const submitDispute = asyncHandler(async (req: Request, res: Response): P
       throw createValidationError('Audit already has an active dispute');
     }
 
-    if (reason.length > 1000) {
-      throw createValidationError('Dispute reason must be less than 1000 characters');
+    if (stripHtmlToPlaintext(reason).length > MAX_REASON_PLAINTEXT_LENGTH) {
+      throw createValidationError(`Dispute reason must be less than ${MAX_REASON_PLAINTEXT_LENGTH} characters`);
     }
 
     const attachmentUrl = attachment ? `/uploads/disputes/${attachment.filename}` : null;
@@ -420,8 +430,8 @@ export const updateDispute = asyncHandler(async (req: Request, res: Response): P
       throw createValidationError('Valid dispute ID is required');
     }
 
-    if (reason && reason.length > 1000) {
-      throw createValidationError('Dispute reason must be less than 1000 characters');
+    if (reason && stripHtmlToPlaintext(reason).length > MAX_REASON_PLAINTEXT_LENGTH) {
+      throw createValidationError(`Dispute reason must be less than ${MAX_REASON_PLAINTEXT_LENGTH} characters`);
     }
 
     const disputeRows = await prisma.dispute.findFirst({

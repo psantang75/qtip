@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { getErrorMessage } from '@/utils/errorHandling'
+import { htmlToPlainText } from '@/utils/htmlText'
 import { AlertTriangle, X } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import qaService from '@/services/qaService'
@@ -26,14 +27,19 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
       qc.invalidateQueries({ queryKey: ['agent-dispute-history'] })
       onSuccess()
     },
-    onError: () => toast({
+    onError: (err) => toast({
       variant: 'destructive',
       title: "Couldn't submit dispute",
-      description: "Try again. Your reason hasn't been lost.",
+      description: getErrorMessage(err, "Try again. Your reason hasn't been lost."),
     }),
   })
 
   const minLen = 10
+  const maxLen = 5000
+  // The editor stores HTML; the limit is a plain-text rule, so count the
+  // visible text (must mirror the backend's stripHtmlToPlaintext check).
+  const plainLen = htmlToPlainText(reason).trim().length
+  const overBy   = plainLen - maxLen
   return (
     <Section title="Dispute" badge={<AlertTriangle className="h-4 w-4 text-slate-500 shrink-0" />}>
       <div className="space-y-3">
@@ -41,10 +47,14 @@ export function DisputeForm({ submissionId, onSuccess }: { submissionId: number;
           placeholder="Explain why you believe this score is incorrect…"
           className="text-[13px]" />
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-slate-400">
-            {reason.trim().length < minLen ? `${minLen - reason.trim().length} more characters needed` : ''}
+          <span className={overBy > 0 ? 'text-[11px] text-danger' : 'text-[11px] text-slate-400'}>
+            {plainLen < minLen
+              ? `${minLen - plainLen} more characters needed`
+              : overBy > 0
+                ? `${overBy} character${overBy === 1 ? '' : 's'} over the ${maxLen} limit`
+                : ''}
           </span>
-          <Button size="sm" onClick={() => mutate()} disabled={isPending || reason.trim().length < minLen}
+          <Button size="sm" onClick={() => mutate()} disabled={isPending || plainLen < minLen || overBy > 0}
             className="bg-primary hover:bg-primary/90 text-white">
             {isPending ? 'Submitting…' : 'Submit Dispute'}
           </Button>
@@ -90,6 +100,11 @@ export function EditDisputeForm({
       }),
   })
 
+  // Same plain-text limit as the create form / backend (reason is HTML).
+  const maxLen   = 5000
+  const plainLen = htmlToPlainText(reason).trim().length
+  const overBy   = plainLen - maxLen
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError(null)
     const f = e.target.files?.[0]
@@ -128,12 +143,17 @@ export function EditDisputeForm({
           {(error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Couldn't update dispute. Try again."}
         </p>
       )}
-      <div className="flex gap-2 justify-end pt-1">
-        <Button variant="outline" size="sm" onClick={onCancel} disabled={isPending}>Cancel</Button>
-        <Button size="sm" onClick={() => mutate()} disabled={isPending || !reason.trim()}
-          className="bg-primary hover:bg-primary/90 text-white">
-          {isPending ? 'Saving…' : 'Save Changes'}
-        </Button>
+      <div className="flex items-center justify-between pt-1">
+        <span className={overBy > 0 ? 'text-[11px] text-danger' : 'text-[11px] text-slate-400'}>
+          {overBy > 0 ? `${overBy} character${overBy === 1 ? '' : 's'} over the ${maxLen} limit` : ''}
+        </span>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={isPending}>Cancel</Button>
+          <Button size="sm" onClick={() => mutate()} disabled={isPending || !reason.trim() || overBy > 0}
+            className="bg-primary hover:bg-primary/90 text-white">
+            {isPending ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </div>
       </div>
     </div>
   )
