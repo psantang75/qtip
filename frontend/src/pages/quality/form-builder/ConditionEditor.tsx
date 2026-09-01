@@ -3,23 +3,41 @@ import { Plus } from 'lucide-react'
 import type { FormQuestionCondition, ConditionType } from '@/types/form.types'
 import { Button } from '@/components/ui/button'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import type { AllQuestionRef } from './questionCardTypes'
 
-export function ConditionEditor({ lGroups, setLGroups, categoryQuestions, needsValue }: {
+/**
+ * Group eligible source questions by category, preserving the order they
+ * appear in the form (sourceQuestions is built by `buildAllQuestions`, which
+ * flatMaps over `form.categories`, so first-seen order == sidebar order).
+ */
+function groupByCategory(questions: AllQuestionRef[]): { catName: string; questions: AllQuestionRef[] }[] {
+  const groups: { catName: string; questions: AllQuestionRef[] }[] = []
+  for (const q of questions) {
+    let group = groups.find(g => g.catName === q.catName)
+    if (!group) { group = { catName: q.catName, questions: [] }; groups.push(group) }
+    group.questions.push(q)
+  }
+  return groups
+}
+
+export function ConditionEditor({ lGroups, setLGroups, sourceQuestions, currentQuestionId, needsValue }: {
   lGroups: FormQuestionCondition[][]
   setLGroups: React.Dispatch<React.SetStateAction<FormQuestionCondition[][]>>
-  categoryQuestions: AllQuestionRef[]
+  sourceQuestions: AllQuestionRef[]
+  currentQuestionId: number | undefined
   needsValue: (ct: ConditionType) => boolean
 }) {
-  const eligibleQuestions = categoryQuestions
+  const eligibleQuestions = sourceQuestions
     .filter(q => ['YES_NO', 'SCALE', 'RADIO'].includes(q.type))
+    .filter(q => currentQuestionId === undefined || q.id !== currentQuestionId)
+  const eligibleGroups = groupByCategory(eligibleQuestions)
 
   return (
     <div className="border border-slate-300 bg-slate-50 rounded-lg p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Conditions (this category)</p>
+        <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Conditions</p>
         <p className="text-[10px] text-slate-400">AND within groups · OR between groups</p>
       </div>
 
@@ -30,7 +48,7 @@ export function ConditionEditor({ lGroups, setLGroups, categoryQuestions, needsV
           gIdx={gIdx}
           totalGroups={lGroups.length}
           eligibleQuestions={eligibleQuestions}
-          categoryQuestions={categoryQuestions}
+          eligibleGroups={eligibleGroups}
           setLGroups={setLGroups}
           needsValue={needsValue}
         />
@@ -44,12 +62,12 @@ export function ConditionEditor({ lGroups, setLGroups, categoryQuestions, needsV
   )
 }
 
-function ConditionGroup({ group, gIdx, totalGroups, eligibleQuestions, categoryQuestions, setLGroups, needsValue }: {
+function ConditionGroup({ group, gIdx, totalGroups, eligibleQuestions, eligibleGroups, setLGroups, needsValue }: {
   group: FormQuestionCondition[]
   gIdx: number
   totalGroups: number
   eligibleQuestions: AllQuestionRef[]
-  categoryQuestions: AllQuestionRef[]
+  eligibleGroups: { catName: string; questions: AllQuestionRef[] }[]
   setLGroups: React.Dispatch<React.SetStateAction<FormQuestionCondition[][]>>
   needsValue: (ct: ConditionType) => boolean
 }) {
@@ -75,7 +93,7 @@ function ConditionGroup({ group, gIdx, totalGroups, eligibleQuestions, categoryQ
         </div>
 
         {group.map((cond, ci) => {
-          const selectedQ = categoryQuestions.find(q => q.id === cond.target_question_id)
+          const selectedQ = eligibleQuestions.find(q => q.id === cond.target_question_id)
           const valueOptions = buildValueOptions(selectedQ)
 
           const updateCond = (patch: Partial<FormQuestionCondition>) =>
@@ -100,13 +118,18 @@ function ConditionGroup({ group, gIdx, totalGroups, eligibleQuestions, categoryQ
                       <SelectValue placeholder="Select question…" />
                     </SelectTrigger>
                     <SelectContent className="max-w-[480px]">
-                      {eligibleQuestions.map(eq => (
-                        <SelectItem key={eq.id} value={String(eq.id)} className="text-xs py-2">
-                          {eq.text}
-                        </SelectItem>
+                      {eligibleGroups.map(cat => (
+                        <SelectGroup key={cat.catName}>
+                          <SelectLabel className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{cat.catName}</SelectLabel>
+                          {cat.questions.map(eq => (
+                            <SelectItem key={eq.id} value={String(eq.id)} className="text-xs py-2">
+                              {eq.text}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
                       ))}
                       {eligibleQuestions.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-slate-400">No eligible questions in this category</div>
+                        <div className="px-3 py-2 text-xs text-slate-400">No eligible questions in this form</div>
                       )}
                     </SelectContent>
                   </Select>

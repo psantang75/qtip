@@ -298,6 +298,7 @@ export function QuestionCard({ q, qi, catIdx, form, onChange, allQuestions, cate
           qi={qi}
           state={{ lText, lType, lRequired, lVisible, lNa, lYes, lNo, lNaVal, lScaleMin, lScaleMax, lRadio, newOptText, newOptScore, lCond, lGroups, lCritical, lRole, lRollupRule, lRollupMembers, err }}
           actions={{ setLText, setLType, setLRequired, setLVisible, setLNa, setLYes, setLNo, setLNaVal, setLScaleMin, setLScaleMax, setLRadio, setNewOptText, setNewOptScore, setLCond, setLGroups, setLCritical, setLRole, setLRollupRule, setLRollupMembers, setErr, addOpt, saveEdit, onCancelEdit: () => onCancelEdit(qi) }}
+          allQuestions={allQuestions}
           categoryQuestions={categoryQuestions}
           gateIds={gateIds}
           currentQuestionId={q.id}

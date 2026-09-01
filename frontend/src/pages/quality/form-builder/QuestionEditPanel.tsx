@@ -45,19 +45,24 @@ export interface EditActions {
   addOpt: () => void; saveEdit: () => void; onCancelEdit: () => void
 }
 
-export function QuestionEditPanel({ qi, state, actions, categoryQuestions, gateIds, currentQuestionId }: {
+export function QuestionEditPanel({ qi, state, actions, allQuestions, categoryQuestions, gateIds, currentQuestionId }: {
   qi: number
   state: EditState; actions: EditActions
   /**
+   * Every question in the form (form-wide). Feeds the Conditional Logic
+   * editor so a question can gate on any other question, including an
+   * initial "interaction type" gate that lives in a different category.
+   */
+  allQuestions: AllQuestionRef[]
+  /**
    * Questions that live in the SAME category as the one being edited.
-   * Used for both the Conditional Logic editor and the Roll-up member
-   * picker. Mirrors how ConditionEditor scopes its target list, so
-   * authors only ever pick from questions visually next to this one.
+   * Used by the Roll-up member picker so authors only pick from questions
+   * visually next to this one (roll-ups stay category-scoped by design).
    */
   categoryQuestions: AllQuestionRef[]
   /** Question IDs referenced as a gate by another question's condition. */
   gateIds: Set<number>
-  /** Numeric ID of the question being edited (so members can't include self). */
+  /** Numeric ID of the question being edited (so members/conditions can't include self). */
   currentQuestionId: number | undefined
 }) {
   const { lText, lType, lRequired, lVisible, lNa, lYes, lNo, lNaVal, lScaleMin, lScaleMax, lRadio, newOptText, newOptScore, lCond, lGroups, lCritical, lRole, lRollupRule, lRollupMembers, err } = state
@@ -115,7 +120,7 @@ export function QuestionEditPanel({ qi, state, actions, categoryQuestions, gateI
             Conditional Logic — only show this question when conditions are met
           </label>
         </div>
-        {lCond && <ConditionEditor lGroups={lGroups} setLGroups={setLGroups} categoryQuestions={categoryQuestions} needsValue={needsValue} />}
+        {lCond && <ConditionEditor lGroups={lGroups} setLGroups={setLGroups} sourceQuestions={allQuestions} currentQuestionId={currentQuestionId} needsValue={needsValue} />}
       </div>
 
       {lType === 'YES_NO' && (
@@ -253,10 +258,9 @@ function RollupSection({
   lRollupMembers: number[]
   setLRollupMembers: (v: number[]) => void
   /**
-   * Restricted to the SAME category as the rollup question. Matches the
-   * Conditional Logic editor's scoping rule (ConditionEditor.tsx) so
-   * authors never have to scroll through unrelated questions when
-   * picking members.
+   * Restricted to the SAME category as the rollup question, so authors
+   * never have to scroll through unrelated questions when picking members.
+   * (Conditional Logic, by contrast, can gate on any question form-wide.)
    */
   categoryQuestions: AllQuestionRef[]
   gateIds: Set<number>

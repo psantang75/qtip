@@ -90,14 +90,17 @@ function computeDependentCounts(questions: FormQuestion[], allQuestions: AllQues
   return counts
 }
 
-function computeConditionalChildren(questions: FormQuestion[], catIdx: number, categoryQRefs: AllQuestionRef[]): Set<number> {
-  const catQIds = new Set(categoryQRefs.map(q => q.id))
+function computeConditionalChildren(questions: FormQuestion[], allQuestions: AllQuestionRef[]): Set<number> {
+  // Form-wide id set: a question reads as a "conditional child" (indented in
+  // the list) when it gates on ANY question in the form, not just this
+  // category. Mirrors the Conditional Logic editor now being form-wide.
+  const allQIds = new Set(allQuestions.map(q => q.id))
   const children = new Set<number>()
   questions.forEach((q, qi) => {
     const conds = q.conditions ?? []
-    const hasCondInCat = conds.some(c => c.target_question_id && catQIds.has(c.target_question_id))
-    const legacyInCat = !conds.length && q.conditional_question_id && catQIds.has(q.conditional_question_id)
-    if (q.is_conditional && (hasCondInCat || legacyInCat)) {
+    const hasCond = conds.some(c => c.target_question_id && allQIds.has(c.target_question_id))
+    const legacyCond = !conds.length && q.conditional_question_id && allQIds.has(q.conditional_question_id)
+    if (q.is_conditional && (hasCond || legacyCond)) {
       children.add(qi)
     }
   })
@@ -124,8 +127,8 @@ export function QuestionsStep({ form, onChange }: { form: Form; onChange: (f: Fo
   const gateIds = useMemo(() => computeGateIds(allFormQuestions), [allFormQuestions])
 
   const conditionalChildren = useMemo(
-    () => cat ? computeConditionalChildren(cat.questions, activeCatIdx, categoryQuestions) : new Set<number>(),
-    [cat, activeCatIdx, categoryQuestions],
+    () => cat ? computeConditionalChildren(cat.questions, allQuestions) : new Set<number>(),
+    [cat, allQuestions],
   )
 
   const toggleEdit = (qi: number) => {
