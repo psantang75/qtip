@@ -8,7 +8,7 @@
  * the 7th, 14th, 21st, 28th.
  */
 import { describe, it, expect } from 'vitest';
-import { resolveOccurrences, applyOverrides } from '../campaign.projection.service';
+import { resolveOccurrences, applyOverrides, toDs } from '../campaign.projection.service';
 
 // August 2026 Mon–Fri workdays.
 const AUG_BD = [
@@ -99,5 +99,20 @@ describe('applyOverrides', () => {
     const g = gen();
     applyOverrides(g, [{ occurrence_date: '2026-08-03', campaign_item_id: 10, action: 'REMOVE' }]);
     expect([...g.get('2026-08-03')!]).toEqual([10, 20]);
+  });
+});
+
+describe('toDs (override date normalization)', () => {
+  // Overrides are stored at UTC midnight; reading them back must return the SAME
+  // calendar day regardless of the server timezone. Local getters would return
+  // the previous day in negative-offset (US) zones, landing a toggle on the
+  // wrong date — the day popover then appears to do nothing.
+  it('recovers the stored day from a UTC-midnight Date', () => {
+    expect(toDs(new Date('2026-09-15T00:00:00Z'))).toBe('2026-09-15');
+  });
+
+  it('round-trips the exact date the write persisted', () => {
+    const date = '2026-09-15';
+    expect(toDs(new Date(`${date}T00:00:00Z`))).toBe(date);
   });
 });

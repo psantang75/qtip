@@ -176,10 +176,13 @@ export function applyOverrides(
   return out;
 }
 
-const toDs = (d: Date): string => {
-  const y = d.getFullYear();
-  return `${y}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+/**
+ * Overrides are stored at UTC midnight (`${date}T00:00:00Z`) in a `@db.Date`
+ * column, so read them back in UTC too. Using local getters here shifts the day
+ * back one in negative-offset timezones (US), landing the toggle on the wrong
+ * date — see .cursor/rules/date-handling.mdc.
+ */
+export const toDs = (d: Date): string => d.toISOString().slice(0, 10);
 
 /**
  * Build the generated-by-date set for a schedule/month. Only enabled items with
