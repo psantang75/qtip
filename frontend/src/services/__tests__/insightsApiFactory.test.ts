@@ -14,7 +14,10 @@ vi.mock('../authService', () => ({ api: { get } }))
 
 import { createInsightsApi } from '../insightsQCService'
 
-const lastPath = () => get.mock.calls[get.mock.calls.length - 1][0]
+// The mock is declared arg-less (keeps ESLint happy — no unused param), but
+// vitest still records the arguments callers pass at runtime. Cast the recorded
+// call to a value tuple so tsc lets us read the url positional.
+const lastPath = () => (get.mock.calls[get.mock.calls.length - 1] as unknown[])[0] as string
 
 const P = { period: 'current_month' }
 
