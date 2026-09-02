@@ -91,7 +91,12 @@ export default function SubmissionDetailPage() {
   const qc        = useQueryClient()
   const { toast } = useToast()
 
-  const backLabel = (location.state as { from?: string } | null)?.from ?? 'Submissions'
+  const navState  = location.state as { from?: string; accessMode?: string | null } | null
+  const backLabel = navState?.from ?? 'Submissions'
+  // Internal-form audits are gated by the form audience, not team/self scope, so
+  // they load through the audience-gated `/qa/completed/:id` handler regardless
+  // of role — the manager/agent detail endpoints would 404 them.
+  const isInternalDetail = navState?.accessMode === 'INTERNAL'
   const { roleId, isAdmin, isAgent, isManager, canResolveDispute } = useQualityRole()
 
   // ── UI state ──────────────────────────────────────────────────────────────
@@ -111,10 +116,12 @@ export default function SubmissionDetailPage() {
 
   // ── Data fetch ────────────────────────────────────────────────────────────
   const { data: detail, isLoading, isError } = useQuery<SubmissionDetailWithForm | null>({
-    queryKey: ['submission-detail', id, roleId],
+    queryKey: ['submission-detail', id, roleId, isInternalDetail],
     queryFn: async () => {
       if (!id) return null
-      const submission = isAgent
+      const submission = isInternalDetail
+        ? await qaService.getSubmissionDetail(Number(id))
+        : isAgent
         ? await qaService.getCSRAuditDetail(Number(id))
         : isManager
         ? await qaService.getTeamAuditDetail(Number(id))

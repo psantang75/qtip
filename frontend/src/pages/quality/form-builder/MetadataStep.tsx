@@ -21,6 +21,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import listService from '@/services/listService'
+import { FormStatusControl } from './FormStatusControl'
 
 const FALLBACK_FORM_TYPES = [
   { value: 'CALL',      label: 'Call'      },
@@ -225,13 +226,7 @@ export function MetadataStep({ form, onChange }: { form: Form; onChange: (f: For
         </div>
       </div>
 
-      <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-2.5">
-        <div>
-          <Label className="cursor-pointer text-sm font-medium text-slate-800">Active</Label>
-          <p className="text-[11px] text-slate-500">When off, this form is hidden from new audits but existing submissions are preserved.</p>
-        </div>
-        <Switch checked={form.is_active} onCheckedChange={v => onChange({ ...form, is_active: v })} />
-      </div>
+      <FormStatusControl form={form} onChange={onChange} />
 
       {/* ── AI Reviewer on/off (all management lives in Quality > AI Reviewer) ── */}
       <div className="rounded-xl border border-slate-200 bg-white">

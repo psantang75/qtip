@@ -105,7 +105,36 @@ export default function SubmissionsPage() {
     refetchOnMount: 'always',
   })
 
-  const allItems = useMemo(() => data?.items ?? [], [data])
+  // Internal-form audits surface in the same list for their permitted audience
+  // (admin + designated roles/users). The endpoint fails closed — a caller with
+  // no permitted Internal forms gets [] — so it is safe for every non-agent
+  // viewer. Agents never reach the quality_submissions surface, so we skip it.
+  const { data: internalData } = useQuery({
+    queryKey: ['submissions-internal', roleId, dateFrom, dateTo],
+    queryFn: () => qaService.getInternalSubmissions({
+      page: 1, limit: CLIENT_FETCH_LIMIT,
+      date_start: dateFrom || undefined, date_end: dateTo || undefined,
+    }),
+    enabled: roleId > 0 && !isAgent,
+    placeholderData: (prev) => prev,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
+
+  // Merge normal + Internal audits (dedupe by id — the two scopes never overlap,
+  // but guard anyway) so filters, sorting and pagination see one list. Each list
+  // arrives date-desc on its own, but appending Internal after all normal rows
+  // pushes recent Internal audits to the last page in the default (unsorted)
+  // view — so re-sort the merged set by review date to keep global order.
+  const allItems = useMemo(() => {
+    const base = data?.items ?? []
+    const internal = internalData?.items ?? []
+    if (!internal.length) return base
+    const seen = new Set(base.map((r: Submission) => r.id))
+    const t = (v?: string) => { const n = v ? Date.parse(v) : NaN; return Number.isNaN(n) ? 0 : n }
+    return [...base, ...internal.filter((r: Submission) => !seen.has(r.id))]
+      .sort((a, b) => t(b.created_at) - t(a.created_at))
+  }, [data, internalData])
 
   // Dropdown options from the FULL result set (all items in date range)
   const formNameOptions = useMemo(() => {
@@ -241,7 +270,7 @@ export default function SubmissionsPage() {
                     row.status === 'DRAFT' && !isAgent
                       ? navigate(`/app/quality/audit?resumeDraft=${row.id}`)
                       : navigate(`/app/quality/submissions/${row.id}`, {
-                          state: { from: pageTitle, fromPath: '/app/quality/submissions' },
+                          state: { from: pageTitle, fromPath: '/app/quality/submissions', accessMode: row.access_mode ?? null },
                         })
                   return (
                   <TableRow key={row.id} className="cursor-pointer hover:bg-slate-50/50"
@@ -273,7 +302,16 @@ export default function SubmissionsPage() {
                         )}
                       </span>
                     </TableCell>
-                    <TableCell className="text-[13px] text-slate-600">{row.form_name}</TableCell>
+                    <TableCell className="text-[13px] text-slate-600">
+                      <span className="inline-flex items-center gap-1.5">
+                        {row.form_name}
+                        {row.access_mode === 'INTERNAL' && (
+                          <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-violet-700">
+                            Internal
+                          </span>
+                        )}
+                      </span>
+                    </TableCell>
                     {!isAgent    && <TableCell className="text-[13px] text-slate-600">{row.csr_name ?? '—'}</TableCell>}
                     <TableCell className="text-[13px] text-slate-600 pl-6">{fmtDate(row.created_at)}</TableCell>
                     <TableCell className="text-[13px] text-slate-600 pl-6">{row.interaction_date ? fmtDate(row.interaction_date) : <span className="text-slate-400">—</span>}</TableCell>

@@ -9,6 +9,7 @@
 
 import prisma from '../../config/prisma'
 import { Prisma } from '../../generated/prisma/client'
+import { accessScopeSql } from '../../utils/formScope'
 import type { CompletedSubmissionsParams, CompletedSubmissionsResult } from './qa.types'
 
 // DRAFT included so AI Reviewer drafts (Calibrating mode) and any
@@ -19,11 +20,30 @@ const ALLOWED_STATUSES = new Set(['FINALIZED', 'DISPUTED', 'SUBMITTED', 'DRAFT']
 
 export async function listCompletedSubmissions(params: CompletedSubmissionsParams): Promise<CompletedSubmissionsResult> {
   const { page, limit, formId, dateStart, dateEnd, status, search, submittedBy } = params
+  const accessScope = params.accessScope ?? 'STANDARD'
+  const permittedInternalFormIds = params.permittedInternalFormIds ?? []
   const offset = (page - 1) * limit
+
+  // INTERNAL scope with no permitted forms can never match a row — short-circuit
+  // rather than emit an invalid `IN ()`. Keeps the audience gate fail-closed.
+  if (accessScope === 'INTERNAL' && permittedInternalFormIds.length === 0) {
+    return { data: [], pagination: { total: 0, page, limit, totalPages: 0 } }
+  }
 
   const conditions: Prisma.Sql[] = [
     Prisma.sql`s.status IN ('FINALIZED', 'DISPUTED', 'SUBMITTED', 'DRAFT')`,
+    // STANDARD lists normal audits (access_mode IS NULL); INTERNAL lists
+    // Internal-form audits (access_mode = 'INTERNAL'). Internal audits are
+    // otherwise excluded from the normal Quality workflow "as if they never
+    // existed" and only surface for their permitted audience.
+    accessScopeSql(accessScope, 's'),
   ]
+
+  // Internal scope is additionally fenced to the forms the requester is
+  // permitted to see (admin = all; others = audience match).
+  if (accessScope === 'INTERNAL') {
+    conditions.push(Prisma.sql`s.form_id IN (${Prisma.join(permittedInternalFormIds)})`)
+  }
 
   // Author self-scope: QA viewers see only audits they submitted.
   if (submittedBy) conditions.push(Prisma.sql`s.submitted_by = ${submittedBy}`)
@@ -75,11 +95,13 @@ export async function listCompletedSubmissions(params: CompletedSubmissionsParam
     ai_overall_confidence: number | null
     reopen_count: number
     unlock_open: string
+    access_mode: string | null
   }[]>(
     Prisma.sql`
       SELECT
         s.id,
         s.form_id,
+        s.access_mode,
         f.form_name,
         auditor.username AS auditor_name,
         COALESCE(csr.username, 'No CSR assigned') AS csr_name,

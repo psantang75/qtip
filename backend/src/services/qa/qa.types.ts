@@ -48,6 +48,18 @@ export interface CompletedSubmissionsParams {
    * Manager / Trainer pass `undefined` and see everyone's.
    */
   submittedBy?: number
+  /**
+   * Which capture scope to list. `STANDARD` (default) returns normal audits
+   * (`access_mode IS NULL`); `INTERNAL` returns Internal-form audits
+   * (`access_mode = 'INTERNAL'`) restricted to `permittedInternalFormIds`.
+   */
+  accessScope?: 'STANDARD' | 'INTERNAL'
+  /**
+   * The Internal form ids the requester is permitted to see (from
+   * `resolvePermittedInternalForms`). Only consulted when
+   * `accessScope === 'INTERNAL'`; an empty set yields an empty result.
+   */
+  permittedInternalFormIds?: number[]
 }
 
 export interface CompletedSubmissionsResult {

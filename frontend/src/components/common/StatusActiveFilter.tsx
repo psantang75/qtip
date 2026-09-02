@@ -1,7 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
-export type StatusActiveValue = 'all' | 'active' | 'inactive'
+export type StatusActiveValue = 'all' | 'active' | 'inactive' | 'internal'
 
 interface StatusActiveFilterProps {
   value: StatusActiveValue
@@ -10,6 +10,9 @@ interface StatusActiveFilterProps {
   allLabel?: string
   /** Tailwind width class for the trigger. Defaults to w-[145px]. */
   widthClass?: string
+  /** Add an "Internal" option (hidden research forms). Off by default so the
+   *  shared quiz/resource filters are unaffected. */
+  includeInternal?: boolean
 }
 
 /**
@@ -24,6 +27,7 @@ export function StatusActiveFilter({
   onChange,
   allLabel = 'All Status',
   widthClass = 'w-[145px]',
+  includeInternal = false,
 }: StatusActiveFilterProps) {
   return (
     <Select value={value} onValueChange={v => onChange(v as StatusActiveValue)}>
@@ -34,6 +38,7 @@ export function StatusActiveFilter({
         <SelectItem value="all">{allLabel}</SelectItem>
         <SelectItem value="active">Active</SelectItem>
         <SelectItem value="inactive">Inactive</SelectItem>
+        {includeInternal && <SelectItem value="internal">Internal</SelectItem>}
       </SelectContent>
     </Select>
   )

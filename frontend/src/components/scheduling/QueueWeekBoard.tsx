@@ -36,7 +36,7 @@ function weekRoster(days: ApiWeekDay[]): Array<{ userId: number; username: strin
   const seen = new Set<number>()
   const out: Array<{ userId: number; username: string }> = []
   for (const d of days) {
-    for (const p of d.people) {
+    for (const p of d.people ?? []) {
       if (p.shift && !seen.has(p.userId)) { seen.add(p.userId); out.push({ userId: p.userId, username: p.username }) }
     }
   }
@@ -49,7 +49,7 @@ function DayBar({ day, userId, colorOf }: {
   userId: number
   colorOf: Map<number, string>
 }) {
-  const row = day.people.find(p => p.userId === userId)
+  const row = (day.people ?? []).find(p => p.userId === userId)
   if (!day.hasSchedule || !row || !row.shift) return null
   const runs = mergeRuns(personCells(row, day.slots))
   return (
@@ -156,7 +156,7 @@ export function QueueWeekBoard({ week, dayTypes, onPickDay }: {
             </div>
             {days.map(d => {
               const off = !isWorkday(dayTypes, d.date)
-              const cell = d.cells.find(c => c.queueId === q.queueId)
+              const cell = (d.cells ?? []).find(c => c.queueId === q.queueId)
               if (off || !d.hasSchedule || !cell) {
                 return <div key={d.date} className="min-w-0 flex-1 px-0.5"><div className={cn('rounded', ROW_H, off ? 'bg-slate-100' : 'bg-slate-50')} /></div>
               }

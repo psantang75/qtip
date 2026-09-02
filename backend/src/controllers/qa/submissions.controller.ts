@@ -20,6 +20,7 @@ import {
   finalizeSubmission as finalizeSubmissionService,
 } from '../../services/qa'
 import { parsePagination } from '../../validation/common'
+import { resolvePermittedInternalForms } from '../../utils/formScope'
 import { respondWithError } from './respond'
 
 export const getCompletedSubmissions = async (req: Request, res: Response): Promise<void> => {
@@ -60,6 +61,52 @@ export const getCompletedSubmissions = async (req: Request, res: Response): Prom
   }
 }
 
+/**
+ * Internal-form audits for the Submissions surface. Unlike `getCompletedSubmissions`
+ * (which lists normal audits only), this returns audits captured under an
+ * Internal form, restricted to the forms the requester is permitted to see:
+ * admin sees all, everyone else sees Internal forms whose audience includes
+ * their role or grants their user id. A requester permitted no Internal forms
+ * gets an empty list (fail-closed), so the endpoint is safe to call for any
+ * viewer of the Submissions page. There is no author self-scope here — the
+ * audience, not authorship, governs Internal visibility.
+ */
+export const getInternalCompletedSubmissions = async (req: Request, res: Response): Promise<void> => {
+  const userId = req.user?.user_id
+  try {
+    serviceLogger.operation('QA', 'getInternalCompletedSubmissions', userId)
+
+    const cfg    = getQAPagination()
+    const { page, limit } = parsePagination(req.query, { defaultLimit: cfg.defaultLimit, maxLimit: cfg.maxLimit })
+    const formId = req.query.form_id ? parseInt(req.query.form_id as string) : undefined
+    const rawStatus = req.query.status as string | undefined
+    const status  = rawStatus === 'FINALIZED' || rawStatus === 'DISPUTED' || rawStatus === 'SUBMITTED'
+      ? rawStatus
+      : undefined
+
+    const { ids } = await resolvePermittedInternalForms(req.user?.role, userId)
+
+    const result = await listCompletedSubmissions({
+      page,
+      limit,
+      formId:    Number.isFinite(formId) ? formId : undefined,
+      dateStart: (req.query.date_start as string) || undefined,
+      dateEnd:   (req.query.date_end   as string) || undefined,
+      status,
+      search:    (req.query.search as string) || undefined,
+      accessScope: 'INTERNAL',
+      permittedInternalFormIds: ids,
+    })
+
+    res.status(200).json(result)
+  } catch (error) {
+    respondWithError(res, 'getInternalCompletedSubmissions', error, {
+      message: 'Failed to retrieve internal submissions',
+      code:    'QA_INTERNAL_SUBMISSIONS_FETCH_ERROR',
+    })
+  }
+}
+
 export const getSubmissionDetails = async (req: Request, res: Response): Promise<void> => {
   const userId = req.user?.user_id
   const submissionId = parseInt(req.params.id)
@@ -73,9 +120,14 @@ export const getSubmissionDetails = async (req: Request, res: Response): Promise
       return
     }
 
-    // QA is author-scoped: they can only open audits they submitted.
+    // QA is author-scoped: they can only open audits they submitted. Internal
+    // audits ignore author scope and gate on the form audience instead (handled
+    // in the service), so a permitted non-author designate can still open them.
     const restrictToSubmittedBy = req.user?.role === 'QA' ? userId : undefined
-    const detail = await getSubmissionDetail(submissionId, includeFullForm, restrictToSubmittedBy)
+    const detail = await getSubmissionDetail(submissionId, includeFullForm, restrictToSubmittedBy, {
+      requesterRole: req.user?.role,
+      requesterUserId: userId,
+    })
     res.status(200).json(detail)
   } catch (error) {
     respondWithError(res, 'getSubmissionDetails', error, {

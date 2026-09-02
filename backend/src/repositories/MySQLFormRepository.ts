@@ -10,8 +10,28 @@ import type {
   Prisma,
 } from '../generated/prisma/client';
 import logger from '../config/logger';
+import { INTERNAL_MODE, parseAccessRoles, parseAccessUsers, userToken, normalizeRole, canAccessInternalFormCurrent } from '../utils/formScope';
 
 const safeParam = <T>(value: T | undefined): T | null => (value === undefined ? null : value);
+
+/**
+ * Sanitize the Internal-mode fields for persistence. When the form is in
+ * Internal mode we store `access_mode='INTERNAL'` and a single validated
+ * audience array in `access_roles` that packs both role keys AND individual-user
+ * tokens (`user:<id>`); otherwise both are cleared (undefined leaves the JSON
+ * column NULL on the freshly-created version row). Single source of truth for
+ * what lands in the DB from the create/update payloads.
+ */
+function buildInternalFieldData(formData: CreateFormDTO): { access_mode: string | null; access_roles?: string[] } {
+  if (formData.access_mode === INTERNAL_MODE) {
+    // 'admin' is implicit; drop it from storage to keep the list canonical.
+    const roles = parseAccessRoles(formData.access_roles).filter((r) => r !== 'admin');
+    const userIds = parseAccessUsers((formData as { access_users?: unknown }).access_users);
+    const audience = Array.from(new Set([...roles, ...userIds.map(userToken)]));
+    return { access_mode: INTERNAL_MODE, access_roles: audience };
+  }
+  return { access_mode: null, access_roles: undefined };
+}
 
 /** Canonical title for the auto-managed AI Reviewer feedback question. */
 export const AI_REVIEWER_FEEDBACK_QUESTION_TEXT = 'AI Reviewer Feedback';
@@ -122,6 +142,7 @@ export class MySQLFormRepository {
           interaction_type: formData.interaction_type as FormInteractionType,
           created_by: formData.created_by,
           is_active: formData.is_active !== undefined ? formData.is_active : true,
+          ...buildInternalFieldData(formData),
           user_version: formData.user_version ?? null,
           user_version_date: formData.user_version_date ? new Date(formData.user_version_date) : null,
           critical_cap_percent: (formData.critical_cap_percent ?? 79.0) as any,
@@ -132,6 +153,11 @@ export class MySQLFormRepository {
           ai_sample_low_score_always: formData.ai_enabled === true ? formData.ai_sample_low_score_always !== false : false,
         },
       });
+
+      // A brand-new form starts its own version family: the group id is its own
+      // row id (auto-increment, so only known after the insert). Every later
+      // version inherits this value in updateForm().
+      await tx.form.update({ where: { id: form.id }, data: { form_group_id: form.id } });
 
       const questionIdMap = new Map<string, number>();
 
@@ -361,11 +387,35 @@ export class MySQLFormRepository {
     return target_question_id;
   }
 
-  async getForms(isActive?: boolean, page?: number, limit?: number): Promise<{ forms: FormWithCategories[]; pagination?: any }> {
+  async getForms(isActive?: boolean, page?: number, limit?: number, role?: string, userId?: number): Promise<{ forms: FormWithCategories[]; pagination?: any }> {
     // isActive === true  → only active forms
     // isActive === false → only inactive forms
     // isActive === undefined → all forms
-    const where: Prisma.FormWhereInput = isActive === true ? { is_active: true } : isActive === false ? { is_active: false } : {};
+    const activeWhere: Prisma.FormWhereInput = isActive === true ? { is_active: true } : isActive === false ? { is_active: false } : {};
+
+    // Internal-mode scope: normal forms are visible to everyone; Internal forms
+    // only to their configured audience — either by role OR by an individual-user
+    // grant (admin always). A missing role sees normal forms only — Internal
+    // forms never leak into an unscoped picker.
+    //
+    // The audience is matched ONLY against the ACTIVE version of an Internal
+    // form. Superseded versions keep their OLD access_roles, so without the
+    // is_active guard a grant removed on the new version would still match a
+    // stale row and leak the form back into the picker. This mirrors the
+    // current-governance rule in resolvePermittedInternalForms.
+    const roleKey = normalizeRole(role);
+    const internalAudienceOr: Prisma.FormWhereInput[] = [
+      { access_mode: INTERNAL_MODE, is_active: true, access_roles: { array_contains: roleKey } },
+    ];
+    if (userId != null) {
+      internalAudienceOr.push({ access_mode: INTERNAL_MODE, is_active: true, access_roles: { array_contains: userToken(userId) } });
+    }
+    const accessWhere: Prisma.FormWhereInput =
+      roleKey === 'admin'
+        ? {}
+        : { OR: [{ access_mode: null }, ...internalAudienceOr] };
+
+    const where: Prisma.FormWhereInput = { AND: [activeWhere, accessWhere] };
 
     const take = limit ? Math.min(Math.max(parseInt(String(limit)) || 50, 1), 1000) : undefined;
     const skip = page && take ? (Math.max(parseInt(String(page)) || 1, 1) - 1) * take : undefined;
@@ -386,6 +436,10 @@ export class MySQLFormRepository {
       created_by: row.created_by,
       created_at: row.created_at,
       is_active: row.is_active,
+      form_group_id: ((row as any).form_group_id ?? null) as number | null,
+      access_mode: ((row as any).access_mode ?? null) as string | null,
+      access_roles: parseAccessRoles((row as any).access_roles),
+      access_users: parseAccessUsers((row as any).access_roles),
       ai_enabled: (row as any).ai_enabled === true,
       ai_review_guidance: ((row as any).ai_review_guidance ?? null) as string | null,
       ai_submit_as_draft: (row as any).ai_submit_as_draft === true,
@@ -397,13 +451,31 @@ export class MySQLFormRepository {
     return { forms };
   }
 
-  async getFormById(form_id: number, includeInactive = false): Promise<FormWithCategories | null> {
+  async getFormById(
+    form_id: number,
+    includeInactive = false,
+    requesterRole?: string,
+    requesterUserId?: number,
+  ): Promise<FormWithCategories | null> {
     const form = await prisma.form.findFirst({
       where: { id: form_id, ...(includeInactive ? {} : { is_active: true }) },
       include: { creator: { select: { username: true } } },
     });
 
     if (!form) return null;
+
+    // Internal-mode forms are audience-gated: a requester outside the audience
+    // must not be able to load the form by ID — hiding the form itself, not just
+    // its results. Treated as "not found" so we never reveal that a hidden
+    // research form exists. Internal service calls (update/deactivate) pass no
+    // requester context and are unaffected — they are already gated by the
+    // `quality_forms` edit permission.
+    if (
+      requesterRole !== undefined &&
+      !(await canAccessInternalFormCurrent(requesterRole, form, requesterUserId ?? null))
+    ) {
+      return null;
+    }
 
     const categories = await prisma.formCategory.findMany({
       where: { form_id: form_id },
@@ -487,6 +559,10 @@ export class MySQLFormRepository {
       created_by: form.created_by,
       created_at: form.created_at,
       is_active: form.is_active,
+      form_group_id: ((form as any).form_group_id ?? null) as number | null,
+      access_mode: ((form as any).access_mode ?? null) as string | null,
+      access_roles: parseAccessRoles((form as any).access_roles),
+      access_users: parseAccessUsers((form as any).access_roles),
       ai_enabled: (form as any).ai_enabled === true,
       ai_review_guidance: ((form as any).ai_review_guidance ?? null) as string | null,
       ai_submit_as_draft: (form as any).ai_submit_as_draft === true,
@@ -550,9 +626,33 @@ export class MySQLFormRepository {
         ? formData.ai_enabled === true
         : ((currentForm as any)?.ai_enabled === true);
 
+    // Internal-mode inheritance: an explicit access_mode in the payload wins;
+    // otherwise carry the prior version's mode/audience forward so editing an
+    // Internal form's other settings keeps it an Internal form.
+    const internalFieldData = buildInternalFieldData(
+      formData.access_mode !== undefined
+        ? formData
+        : ({
+            access_mode: (currentForm as any)?.access_mode ?? null,
+            access_roles: parseAccessRoles((currentForm as any)?.access_roles),
+            access_users: parseAccessUsers((currentForm as any)?.access_roles),
+          } as CreateFormDTO),
+    );
+
+    // Version-family identity: the new version inherits the family's
+    // form_group_id so all versions share one stable id even across renames.
+    // Fall back to the prior row's own id for any legacy row that predates the
+    // backfill (form_group_id NULL); a truly missing currentForm leaves it null
+    // and the new row seeds its own group below.
+    const groupId: number | null =
+      (currentForm as any)?.form_group_id ?? (currentForm as any)?.id ?? null;
+
     const newFormId = await prisma.$transaction(async (tx) => {
+      // Deactivate every prior version of THIS family by its stable group id,
+      // not by form_name (a renamed version would otherwise be missed, leaving
+      // two active versions).
       await tx.form.updateMany({
-        where: { form_name: currentFormName },
+        where: groupId != null ? { form_group_id: groupId } : { form_name: currentFormName },
         data: { is_active: false },
       });
 
@@ -563,10 +663,14 @@ export class MySQLFormRepository {
           version: newVersion,
           created_by: formData.created_by,
           is_active: formData.is_active !== undefined ? formData.is_active : true,
+          ...internalFieldData,
           // Versioning lineage: every new save points back to the form it
           // superseded so we can walk parent_form_id to recover prior
           // rubrics/calibration history if a future bug orphans rows again.
           parent_form_id: form_id,
+          // Stable family id shared by every version (see schema doc). Left
+          // undefined only when the prior row had none; seeded to self below.
+          form_group_id: groupId ?? undefined,
           user_version: formData.user_version ?? null,
           user_version_date: formData.user_version_date ? new Date(formData.user_version_date) : null,
           // Inheritance rule for every AI form-level column: UI override
@@ -845,6 +949,12 @@ export class MySQLFormRepository {
             },
           });
         }
+      }
+
+      // Legacy fallback: the prior row had no group id (pre-backfill), so this
+      // new version becomes the anchor of its own family.
+      if (groupId == null) {
+        await tx.form.update({ where: { id: form.id }, data: { form_group_id: form.id } });
       }
 
       return form.id;

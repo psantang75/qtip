@@ -72,7 +72,8 @@
   },
   "dependencies": {
     "pm2": "^6.0.8",
-    "qtip-system": "file:"
+    "qtip-system": "file:",
+    "winston": "^3.19.0"
   },
   "engines": {
     "node": ">=18.0.0",

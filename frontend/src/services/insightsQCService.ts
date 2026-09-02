@@ -112,23 +112,6 @@ export interface DeptWarningsRow { dept: string; writeups: number; closed: numbe
 
 export interface FilterOptions { departments: string[]; forms: string[] }
 
-// ── API functions ─────────────────────────────────────────────────────────────
-
-export const getFilterOptions = async (p: QCParams): Promise<FilterOptions> =>
-  (await api.get('/insights/qc/filter-options', { params: p })).data
-
-export const getQCKpis = async (p: QCParams & { userId?: string }): Promise<QCKpiResponse> =>
-  (await api.get('/insights/qc/kpis', { params: p })).data
-
-export const getQCTrends = async (p: QCParams & { kpis?: string; userId?: string }): Promise<TrendRow[]> =>
-  (await api.get('/insights/qc/trends', { params: p })).data
-
-export const getQCAgents = async (p: QCParams): Promise<AgentSummary[]> =>
-  (await api.get('/insights/qc/agents', { params: p })).data
-
-export const getQCAgentProfile = async (userId: number, p: QCParams): Promise<AgentProfile> =>
-  (await api.get(`/insights/qc/agent/${userId}`, { params: p })).data
-
 // Combined initial-load bundle for the Agent Profile page. Used as
 // placeholderData for the per-section queries so the page renders in one
 // round trip; subsequent filter changes still hit the per-section endpoints
@@ -141,91 +124,132 @@ export interface QCAgentFullResponse {
   categoryScores:  CategoryScore[]
   missedQuestions: MissedQuestion[]
 }
-export const getQCAgentFull = async (
-  userId: number,
-  p: QCParams & { kpis?: string },
-): Promise<QCAgentFullResponse> =>
-  (await api.get(`/insights/qc/agent/${userId}/full`, { params: p })).data
 
-export const getScoreDistribution = async (p: QCParams): Promise<ScoreBucket[]> =>
-  (await api.get('/insights/qc/quality/score-distribution', { params: p })).data
+// ── API factory ───────────────────────────────────────────────────────────────
+//
+// Every dashboard function is bound to a base path so the SAME page components
+// can serve both the standard Quality/Coaching (`/insights/qc`) surface and the
+// Internal Research (`/insights/ir`, INTERNAL scope) surface with no duplication.
+// `useInsightsApi()` (hooks/useInsightsScope) resolves the base from context.
+export function createInsightsApi(base = '/insights/qc') {
+  return {
+    getFilterOptions: async (p: QCParams): Promise<FilterOptions> =>
+      (await api.get(`${base}/filter-options`, { params: p })).data,
 
-export const getCategoryScores = async (p: QCParams & { form?: number; userId?: string }): Promise<CategoryScore[]> =>
-  (await api.get('/insights/qc/quality/categories', { params: p })).data
+    getQCKpis: async (p: QCParams & { userId?: string }): Promise<QCKpiResponse> =>
+      (await api.get(`${base}/kpis`, { params: p })).data,
 
-export const getMissedQuestions = async (p: QCParams): Promise<MissedQuestion[]> =>
-  (await api.get('/insights/qc/quality/missed-questions', { params: p })).data
+    getQCTrends: async (p: QCParams & { kpis?: string; userId?: string }): Promise<TrendRow[]> =>
+      (await api.get(`${base}/trends`, { params: p })).data,
 
-export const getQualityDeptComparison = async (p: QCParams): Promise<DeptQualityRow[]> =>
-  (await api.get('/insights/qc/quality/dept-comparison', { params: p })).data
+    getQCAgents: async (p: QCParams): Promise<AgentSummary[]> =>
+      (await api.get(`${base}/agents`, { params: p })).data,
 
-export const getQAFormsCompleted = async (p: QCParams): Promise<QAFormCompletedRow[]> =>
-  (await api.get('/insights/qc/quality/qa-forms-completed', { params: p })).data
+    getQCAgentProfile: async (userId: number, p: QCParams): Promise<AgentProfile> =>
+      (await api.get(`${base}/agent/${userId}`, { params: p })).data,
 
-export const getFormScores = async (p: QCParams & { userId?: string }): Promise<FormScore[]> =>
-  (await api.get('/insights/qc/quality/forms', { params: p })).data
+    getQCAgentFull: async (userId: number, p: QCParams & { kpis?: string }): Promise<QCAgentFullResponse> =>
+      (await api.get(`${base}/agent/${userId}/full`, { params: p })).data,
 
-// Individual finalized audits scoring under 90%, for the Quality page's
-// "QA Forms Below 90%" table. Honors the dept/form/period filters.
-export const getLowScoringAudits = async (p: QCParams): Promise<LowScoringAudit[]> =>
-  (await api.get('/insights/qc/quality/low-scores', { params: p })).data
+    getScoreDistribution: async (p: QCParams): Promise<ScoreBucket[]> =>
+      (await api.get(`${base}/quality/score-distribution`, { params: p })).data,
 
-// Per-agent breakdown for a single form. Used by the Quality page's expandable
-// Average Score by Form rows; lazy-fetched only when a row is opened.
-export const getFormAgentBreakdown = async (
-  formId: number,
-  p: QCParams,
-): Promise<FormAgentRow[]> =>
-  (await api.get(`/insights/qc/quality/forms/${formId}/agents`, { params: p })).data
+    getCategoryScores: async (p: QCParams & { form?: number; userId?: string }): Promise<CategoryScore[]> =>
+      (await api.get(`${base}/quality/categories`, { params: p })).data,
 
-// Per-agent breakdown for a single (form, category). Used by the Quality
-// page's expandable Category Performance rows; lazy-fetched on row open.
-// Pass categoryId (preferred — every CategoryScore row carries one) so the
-// backend doesn't have to resolve a name lookup.
-export const getCategoryAgentBreakdown = async (
-  formId: number,
-  categoryId: number,
-  p: QCParams,
-): Promise<CategoryAgentRow[]> =>
-  (await api.get('/insights/qc/quality/category-agents', {
-    params: { ...p, formId, categoryId },
-  })).data
+    getMissedQuestions: async (p: QCParams): Promise<MissedQuestion[]> =>
+      (await api.get(`${base}/quality/missed-questions`, { params: p })).data,
 
-export const getCoachingTopics = async (p: QCParams): Promise<CoachingTopic[]> =>
-  (await api.get('/insights/qc/coaching/topics', { params: p })).data
+    getQualityDeptComparison: async (p: QCParams): Promise<DeptQualityRow[]> =>
+      (await api.get(`${base}/quality/dept-comparison`, { params: p })).data,
 
-export const getRepeatOffenders = async (p: QCParams): Promise<RepeatOffender[]> =>
-  (await api.get('/insights/qc/coaching/repeat-offenders', { params: p })).data
+    getQAFormsCompleted: async (p: QCParams): Promise<QAFormCompletedRow[]> =>
+      (await api.get(`${base}/quality/qa-forms-completed`, { params: p })).data,
 
-export const getCoachingTopicAgents = async (p: QCParams & { topic: string }): Promise<CoachingTopicAgent[]> =>
-  (await api.get('/insights/qc/coaching/topic-agents', { params: p })).data
+    getFormScores: async (p: QCParams & { userId?: string }): Promise<FormScore[]> =>
+      (await api.get(`${base}/quality/forms`, { params: p })).data,
 
-export const getAgentsFailedQuizzes = async (p: QCParams): Promise<AgentFailedQuizzes[]> =>
-  (await api.get('/insights/qc/coaching/failed-quiz-agents', { params: p })).data
+    getLowScoringAudits: async (p: QCParams): Promise<LowScoringAudit[]> =>
+      (await api.get(`${base}/quality/low-scores`, { params: p })).data,
 
-export const getQuizBreakdown = async (p: QCParams): Promise<QuizBreakdown[]> =>
-  (await api.get('/insights/qc/coaching/quizzes', { params: p })).data
+    getFormAgentBreakdown: async (formId: number, p: QCParams): Promise<FormAgentRow[]> =>
+      (await api.get(`${base}/quality/forms/${formId}/agents`, { params: p })).data,
 
-export const getSessionsByStatus = async (p: QCParams): Promise<SessionStatusGroup[]> =>
-  (await api.get('/insights/qc/coaching/sessions-by-status', { params: p })).data
+    getCategoryAgentBreakdown: async (formId: number, categoryId: number, p: QCParams): Promise<CategoryAgentRow[]> =>
+      (await api.get(`${base}/quality/category-agents`, { params: { ...p, formId, categoryId } })).data,
 
-export const getCoachingDeptComparison = async (p: QCParams): Promise<DeptCoachingRow[]> =>
-  (await api.get('/insights/qc/coaching/dept-comparison', { params: p })).data
+    getCoachingTopics: async (p: QCParams): Promise<CoachingTopic[]> =>
+      (await api.get(`${base}/coaching/topics`, { params: p })).data,
 
-export const getWriteUpPipeline = async (p: QCParams): Promise<WriteUpPipeline> =>
-  (await api.get('/insights/qc/warnings/pipeline', { params: p })).data
+    getRepeatOffenders: async (p: QCParams): Promise<RepeatOffender[]> =>
+      (await api.get(`${base}/coaching/repeat-offenders`, { params: p })).data,
 
-export const getActiveWriteUps = async (p: QCParams): Promise<ActiveWriteUp[]> =>
-  (await api.get('/insights/qc/warnings/active', { params: p })).data
+    getCoachingTopicAgents: async (p: QCParams & { topic: string }): Promise<CoachingTopicAgent[]> =>
+      (await api.get(`${base}/coaching/topic-agents`, { params: p })).data,
 
-export const getEscalationData = async (p: QCParams): Promise<EscalationData> =>
-  (await api.get('/insights/qc/warnings/escalation', { params: p })).data
+    getAgentsFailedQuizzes: async (p: QCParams): Promise<AgentFailedQuizzes[]> =>
+      (await api.get(`${base}/coaching/failed-quiz-agents`, { params: p })).data,
 
-export const getRepeatWarningAgents = async (p: QCParams): Promise<RepeatWarningAgent[]> =>
-  (await api.get('/insights/qc/warnings/repeat-agents', { params: p })).data
+    getQuizBreakdown: async (p: QCParams): Promise<QuizBreakdown[]> =>
+      (await api.get(`${base}/coaching/quizzes`, { params: p })).data,
 
-export const getPolicyViolations = async (p: QCParams): Promise<PolicyViolation[]> =>
-  (await api.get('/insights/qc/warnings/policies', { params: p })).data
+    getSessionsByStatus: async (p: QCParams): Promise<SessionStatusGroup[]> =>
+      (await api.get(`${base}/coaching/sessions-by-status`, { params: p })).data,
 
-export const getWarningsDeptComparison = async (p: QCParams): Promise<DeptWarningsRow[]> =>
-  (await api.get('/insights/qc/warnings/dept-comparison', { params: p })).data
+    getCoachingDeptComparison: async (p: QCParams): Promise<DeptCoachingRow[]> =>
+      (await api.get(`${base}/coaching/dept-comparison`, { params: p })).data,
+
+    getWriteUpPipeline: async (p: QCParams): Promise<WriteUpPipeline> =>
+      (await api.get(`${base}/warnings/pipeline`, { params: p })).data,
+
+    getActiveWriteUps: async (p: QCParams): Promise<ActiveWriteUp[]> =>
+      (await api.get(`${base}/warnings/active`, { params: p })).data,
+
+    getEscalationData: async (p: QCParams): Promise<EscalationData> =>
+      (await api.get(`${base}/warnings/escalation`, { params: p })).data,
+
+    getRepeatWarningAgents: async (p: QCParams): Promise<RepeatWarningAgent[]> =>
+      (await api.get(`${base}/warnings/repeat-agents`, { params: p })).data,
+
+    getPolicyViolations: async (p: QCParams): Promise<PolicyViolation[]> =>
+      (await api.get(`${base}/warnings/policies`, { params: p })).data,
+
+    getWarningsDeptComparison: async (p: QCParams): Promise<DeptWarningsRow[]> =>
+      (await api.get(`${base}/warnings/dept-comparison`, { params: p })).data,
+  }
+}
+
+export type InsightsApi = ReturnType<typeof createInsightsApi>
+
+// ── Backward-compatible named exports (bound to the standard QC base) ──────────
+// QC-only pages (Coaching / Warnings) keep importing these directly.
+const qcApi = createInsightsApi('/insights/qc')
+
+export const getFilterOptions          = qcApi.getFilterOptions
+export const getQCKpis                 = qcApi.getQCKpis
+export const getQCTrends               = qcApi.getQCTrends
+export const getQCAgents               = qcApi.getQCAgents
+export const getQCAgentProfile         = qcApi.getQCAgentProfile
+export const getQCAgentFull            = qcApi.getQCAgentFull
+export const getScoreDistribution      = qcApi.getScoreDistribution
+export const getCategoryScores         = qcApi.getCategoryScores
+export const getMissedQuestions        = qcApi.getMissedQuestions
+export const getQualityDeptComparison  = qcApi.getQualityDeptComparison
+export const getQAFormsCompleted       = qcApi.getQAFormsCompleted
+export const getFormScores             = qcApi.getFormScores
+export const getLowScoringAudits       = qcApi.getLowScoringAudits
+export const getFormAgentBreakdown     = qcApi.getFormAgentBreakdown
+export const getCategoryAgentBreakdown = qcApi.getCategoryAgentBreakdown
+export const getCoachingTopics         = qcApi.getCoachingTopics
+export const getRepeatOffenders        = qcApi.getRepeatOffenders
+export const getCoachingTopicAgents    = qcApi.getCoachingTopicAgents
+export const getAgentsFailedQuizzes    = qcApi.getAgentsFailedQuizzes
+export const getQuizBreakdown          = qcApi.getQuizBreakdown
+export const getSessionsByStatus       = qcApi.getSessionsByStatus
+export const getCoachingDeptComparison = qcApi.getCoachingDeptComparison
+export const getWriteUpPipeline        = qcApi.getWriteUpPipeline
+export const getActiveWriteUps         = qcApi.getActiveWriteUps
+export const getEscalationData         = qcApi.getEscalationData
+export const getRepeatWarningAgents    = qcApi.getRepeatWarningAgents
+export const getPolicyViolations       = qcApi.getPolicyViolations
+export const getWarningsDeptComparison = qcApi.getWarningsDeptComparison

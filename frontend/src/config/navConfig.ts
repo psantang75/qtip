@@ -115,6 +115,14 @@ export const NAV_CONFIG: SectionConfig[] = [
       // /api/insights/navigation (seeded admin-only in
       // 20260825170000_seed_company_reporting_service_counts).
       { label: 'Service Counts', path: '/app/insights/company-service-counts', icon: 'Radio', roles: [], pageKey: 'company_service_counts', group: 'Company Reporting' },
+
+      // Internal Research (Internal forms) — reuses the QC Overview / Quality /
+      // Agent Performance dashboards in INTERNAL scope. `pageKey` gates visibility
+      // via ie_page_role_access (/api/insights/navigation); the whole group only
+      // appears for users granted at least one ir_* page AND (enforced server-
+      // side) permitted to at least one Internal form.
+      { label: 'Quality',           path: '/app/insights/ir-quality',  icon: 'Target',       roles: [], pageKey: 'ir_quality',  group: 'Internal Research' },
+      { label: 'Agent Performance', path: '/app/insights/ir-agents',   icon: 'Users',        roles: [], pageKey: 'ir_agents',   group: 'Internal Research' },
     ],
   },
 ]

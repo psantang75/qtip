@@ -3,6 +3,7 @@ import { authenticate, authorizePage } from '../middleware/auth';
 import type { RequestHandler } from 'express';
 import {
   getCompletedSubmissions,
+  getInternalCompletedSubmissions,
   getSubmissionDetails,
   exportSubmission,
   finalizeSubmission,
@@ -87,6 +88,10 @@ router.get('/csr-activity',                submissionsRead,  getQACSRActivity);
 
 // Editor submission listings (used by the Submissions page).
 router.get('/completed',                   submissionsRead,  validateSchema(QaCompletedListQuerySchema), getCompletedSubmissions);
+// Internal-form audits for the Submissions page — declared before `/completed/:id`
+// so "internal" is not captured as a submission id. Audience gating lives in the
+// handler (admin sees all; others see only their permitted Internal forms).
+router.get('/completed/internal',          submissionsRead,  validateSchema(QaCompletedListQuerySchema), getInternalCompletedSubmissions);
 router.get('/completed/:id',               submissionsRead,  getSubmissionDetails);
 router.get('/completed/:id/export',        submissionsRead,  exportSubmission);
 

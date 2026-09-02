@@ -53,6 +53,7 @@ export class CSRRepository {
           WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED')
           AND fmf.field_name = 'CSR'
           AND sm.value = ${csrIdStr}
+          AND s.access_mode IS NULL
         `),
 
         prisma.$queryRaw<{ thisWeek: number; thisMonth: number }[]>(Prisma.sql`
@@ -133,11 +134,11 @@ export class CSRRepository {
         FROM users u
         JOIN roles r ON u.role_id = r.id
         LEFT JOIN departments d ON u.department_id = d.id
-        LEFT JOIN (SELECT CAST(sm.value AS UNSIGNED) as csr_id, COUNT(s.id) as audits FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED') AND fmf.field_name = 'CSR' AND sm.value = ${csrIdStr} GROUP BY sm.value) audit_counts ON u.id = audit_counts.csr_id
+        LEFT JOIN (SELECT CAST(sm.value AS UNSIGNED) as csr_id, COUNT(s.id) as audits FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED') AND fmf.field_name = 'CSR' AND sm.value = ${csrIdStr} AND s.access_mode IS NULL GROUP BY sm.value) audit_counts ON u.id = audit_counts.csr_id
         LEFT JOIN (SELECT CAST(sm.value AS UNSIGNED) as csr_id, COUNT(disp.id) as disputes FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id JOIN disputes disp ON disp.submission_id = s.id WHERE fmf.field_name = 'CSR' AND sm.value = ${csrIdStr} AND disp.status = 'OPEN' GROUP BY sm.value) dispute_counts ON u.id = dispute_counts.csr_id
-        LEFT JOIN (SELECT CAST(sm.value AS UNSIGNED) as csr_id, COUNT(s.id) as audits_week FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED') AND fmf.field_name = 'CSR' AND sm.value = ${csrIdStr} AND s.submitted_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK) GROUP BY sm.value) audit_counts_week ON u.id = audit_counts_week.csr_id
+        LEFT JOIN (SELECT CAST(sm.value AS UNSIGNED) as csr_id, COUNT(s.id) as audits_week FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED') AND fmf.field_name = 'CSR' AND sm.value = ${csrIdStr} AND s.submitted_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK) AND s.access_mode IS NULL GROUP BY sm.value) audit_counts_week ON u.id = audit_counts_week.csr_id
         LEFT JOIN (SELECT CAST(sm.value AS UNSIGNED) as csr_id, COUNT(disp.id) as disputes_week FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id JOIN disputes disp ON disp.submission_id = s.id WHERE fmf.field_name = 'CSR' AND sm.value = ${csrIdStr} AND disp.created_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK) AND disp.status = 'OPEN' GROUP BY sm.value) dispute_counts_week ON u.id = dispute_counts_week.csr_id
-        LEFT JOIN (SELECT CAST(sm.value AS UNSIGNED) as csr_id, COUNT(s.id) as audits_month FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED') AND fmf.field_name = 'CSR' AND sm.value = ${csrIdStr} AND s.submitted_at >= DATE_FORMAT(NOW(), '%Y-%m-01') GROUP BY sm.value) audit_counts_month ON u.id = audit_counts_month.csr_id
+        LEFT JOIN (SELECT CAST(sm.value AS UNSIGNED) as csr_id, COUNT(s.id) as audits_month FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED') AND fmf.field_name = 'CSR' AND sm.value = ${csrIdStr} AND s.submitted_at >= DATE_FORMAT(NOW(), '%Y-%m-01') AND s.access_mode IS NULL GROUP BY sm.value) audit_counts_month ON u.id = audit_counts_month.csr_id
         LEFT JOIN (SELECT CAST(sm.value AS UNSIGNED) as csr_id, COUNT(disp.id) as disputes_month FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id JOIN disputes disp ON disp.submission_id = s.id WHERE fmf.field_name = 'CSR' AND sm.value = ${csrIdStr} AND disp.created_at >= DATE_FORMAT(NOW(), '%Y-%m-01') AND disp.status = 'OPEN' GROUP BY sm.value) dispute_counts_month ON u.id = dispute_counts_month.csr_id
         LEFT JOIN (SELECT cs.csr_id, COUNT(cs.id) as coachingScheduled FROM coaching_sessions cs WHERE cs.status = 'SCHEDULED' AND cs.csr_id = ${csr_id} GROUP BY cs.csr_id) coaching_scheduled ON u.id = coaching_scheduled.csr_id
         LEFT JOIN (SELECT cs.csr_id, COUNT(cs.id) as coachingCompleted FROM coaching_sessions cs WHERE cs.status = 'COMPLETED' AND cs.csr_id = ${csr_id} GROUP BY cs.csr_id) coaching_completed ON u.id = coaching_completed.csr_id
@@ -198,6 +199,7 @@ export class CSRRepository {
         JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
         WHERE fmf.field_name = 'CSR' AND sm.value = ${csrIdStr} AND s.status = 'FINALIZED'
         AND s.submitted_at > DATE_SUB(NOW(), INTERVAL 90 DAY)
+        AND s.access_mode IS NULL
       `);
 
       const stats = {

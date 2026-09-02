@@ -111,7 +111,7 @@ export function PreviewStep({ form, onBack, onSave, saving }: PreviewStepProps) 
       <div className="shrink-0 bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between mb-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900">{form.form_name}</h2>
-          <p className="text-xs text-slate-500 mt-0.5">v{form.version ?? 1} · {form.interaction_type} · {form.is_active ? 'Active' : 'Inactive'}</p>
+          <p className="text-xs text-slate-500 mt-0.5">v{form.version ?? 1} · {form.interaction_type} · {form.access_mode === 'INTERNAL' ? 'Internal' : form.is_active ? 'Active' : 'Inactive'}</p>
         </div>
         <div className="flex items-center gap-2">
           {onBack && (

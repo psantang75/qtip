@@ -176,6 +176,26 @@ export interface BaseForm {
   created_by?: number;
   created_at?: Date;
   is_active: boolean;
+  /**
+   * Non-public lifecycle mode. `null`/omitted = normal form governed by
+   * `is_active` (Active/Inactive). `'INTERNAL'` = hidden-capture "Internal" form
+   * for internal management research: excluded from every agent/CSR and standard
+   * Quality surface and surfaced only in the Insights "Internal Research"
+   * section. A string (not an enum) so future modes need no migration.
+   */
+  access_mode?: string | null;
+  /**
+   * When `access_mode` is set, the role keys (e.g. ["qa","manager"]) allowed to
+   * audit with this form AND view its captured results. `admin` is always
+   * allowed implicitly. Ignored for normal forms.
+   */
+  access_roles?: string[] | null;
+  /**
+   * Individual users (by id) additionally allowed to audit with this Internal form
+   * and view its results — lets you target one specific manager rather than the
+   * whole role. Persisted server-side alongside roles; ignored for normal forms.
+   */
+  access_users?: number[] | null;
   parent_form_id?: number;
   user_version?: number;
   user_version_date?: string;

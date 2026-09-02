@@ -9,6 +9,7 @@ import {
 import { getAgentActivityStatus, getDatasetFreshness, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getProductivityRoster, getProductivityDay, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
 import { getServiceCountsReport } from '../controllers/insightsCompanyReporting.controller';
 import qcRouter from './insightsQC.routes';
+import irRouter from './insightsIR.routes';
 import csrRouter from './insightsCsr.routes';
 
 const router = express.Router();
@@ -114,6 +115,9 @@ router.get('/company-reporting/service-counts',
 
 // QC analytics — authenticate applied per-handler (via qcHandler wrapper)
 router.use('/qc', authenticate as unknown as RequestHandler, qcRouter as unknown as RequestHandler);
+
+// Internal Research (Internal forms) — QC dashboards reused in INTERNAL scope.
+router.use('/ir', authenticate as unknown as RequestHandler, irRouter as unknown as RequestHandler);
 
 // Agent Activity - CSR (attendance points and schedule compliance)
 router.use('/csr', authenticate as unknown as RequestHandler, csrRouter as unknown as RequestHandler);

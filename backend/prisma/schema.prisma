@@ -164,7 +164,30 @@ model Form {
   created_by        Int
   created_at        DateTime            @default(now()) @db.DateTime(0)
   is_active         Boolean             @default(true) @db.TinyInt
+  /// Non-public form lifecycle mode. NULL = normal form governed by
+  /// `is_active` (Active/Inactive). 'INTERNAL' = hidden-capture form used for
+  /// internal management research / testing a new form: it is excluded from
+  /// every agent/CSR and standard Quality surface (as if it never existed)
+  /// and surfaced only in the "Internal Research" Insights section. The
+  /// column is a string (not an enum) so future modes (e.g. 'PILOT') need
+  /// no migration.
+  access_mode       String?             @db.VarChar(24)
+  /// When `access_mode` is set, the JSON array of role names (e.g.
+  /// ["qa","manager"]) allowed to audit with this form AND view its
+  /// captured results. `admin` is always allowed implicitly. NULL for
+  /// normal forms.
+  access_roles      Json?
   parent_form_id    Int?
+  /// Stable identity of a form ACROSS all its versions. Every version of the
+  /// same logical form shares one `form_group_id` (the id of the family's
+  /// first version). `form_name`, `version`, and `parent_form_id` are all
+  /// unreliable as a family key — a form can be renamed between versions,
+  /// legacy rows have NULL `parent_form_id`, and version numbers are not
+  /// monotonic per family — so this denormalised, backfilled column is the
+  /// single source of truth for "which form is this, regardless of version".
+  /// Used to deactivate prior versions on save and to resolve the current
+  /// audience for Internal forms. New versions inherit the parent's value.
+  form_group_id     Int?
   user_version      Int?
   user_version_date DateTime?           @db.Date
   critical_cap_percent Decimal           @default(79.00) @db.Decimal(5, 2)
@@ -208,6 +231,8 @@ model Form {
 
   @@index([interaction_type])
   @@index([ai_base_prompt_id], map: "idx_forms_ai_base_prompt")
+  @@index([access_mode], map: "idx_forms_access_mode")
+  @@index([form_group_id], map: "idx_forms_group")
   @@map("forms")
 }
 
@@ -747,6 +772,14 @@ model Submission {
   submitted_at DateTime         @default(now()) @db.DateTime(0)
   total_score  Decimal?         @db.Decimal(5, 2)
   status       SubmissionStatus @default(DRAFT)
+  /// Snapshot of the form's `access_mode` at the moment this submission was
+  /// created. NULL = normal audit (visible on all standard surfaces).
+  /// 'INTERNAL' = captured under an Internal form; excluded from every
+  /// agent/CSR and standard Quality/AI surface and shown only in Internal
+  /// Research. Snapshotting here (instead of deriving from the form's CURRENT
+  /// mode) keeps historical visibility correct when a form's status later
+  /// changes — e.g. an Internal form made Active only exposes NEW audits.
+  access_mode  String?          @db.VarChar(24)
   critical_fail_count Int       @default(0)
   score_capped Boolean          @default(false) @db.TinyInt
   ai_overall_confidence    Decimal? @db.Decimal(3, 2)
@@ -772,6 +805,7 @@ model Submission {
   @@index([status, submitted_at], map: "idx_submissions_status_date")
   @@index([form_id, status, submitted_at], map: "idx_submissions_form_status_date")
   @@index([case_id], map: "idx_submissions_case_id")
+  @@index([access_mode], map: "idx_submissions_access_mode")
   @@map("submissions")
 }
 

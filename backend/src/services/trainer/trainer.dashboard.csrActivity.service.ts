@@ -49,7 +49,7 @@ export async function getTrainerCSRActivity(): Promise<TrainerCSRActivityRow[]> 
       SELECT CAST(sm.value AS UNSIGNED) AS csr_id, COUNT(s.id) AS audits
       FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
       JOIN users active_csr ON active_csr.id = CAST(sm.value AS UNSIGNED) JOIN roles active_role ON active_csr.role_id = active_role.id
-      WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED') AND fmf.field_name = 'CSR' AND active_role.role_name = 'CSR' AND active_csr.is_active = 1
+      WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED') AND fmf.field_name = 'CSR' AND active_role.role_name = 'CSR' AND active_csr.is_active = 1 AND s.access_mode IS NULL
       GROUP BY sm.value
     ) audit_counts ON u.id = audit_counts.csr_id
     LEFT JOIN (
@@ -64,7 +64,7 @@ export async function getTrainerCSRActivity(): Promise<TrainerCSRActivityRow[]> 
       FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
       JOIN users active_csr ON active_csr.id = CAST(sm.value AS UNSIGNED) JOIN roles active_role ON active_csr.role_id = active_role.id
       WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED') AND fmf.field_name = 'CSR' AND active_role.role_name = 'CSR' AND active_csr.is_active = 1
-        AND s.submitted_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK)
+        AND s.submitted_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK) AND s.access_mode IS NULL
       GROUP BY sm.value
     ) audit_counts_week ON u.id = audit_counts_week.csr_id
     LEFT JOIN (
@@ -79,7 +79,7 @@ export async function getTrainerCSRActivity(): Promise<TrainerCSRActivityRow[]> 
       FROM submissions s JOIN submission_metadata sm ON s.id = sm.submission_id JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
       JOIN users active_csr ON active_csr.id = CAST(sm.value AS UNSIGNED) JOIN roles active_role ON active_csr.role_id = active_role.id
       WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED') AND fmf.field_name = 'CSR' AND active_role.role_name = 'CSR' AND active_csr.is_active = 1
-        AND s.submitted_at >= DATE_SUB(NOW(), INTERVAL 1 MONTH)
+        AND s.submitted_at >= DATE_SUB(NOW(), INTERVAL 1 MONTH) AND s.access_mode IS NULL
       GROUP BY sm.value
     ) audit_counts_month ON u.id = audit_counts_month.csr_id
     LEFT JOIN (

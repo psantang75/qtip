@@ -45,6 +45,8 @@ export async function listTrainerCompletedSubmissions(
 
   const sqlConditions: Prisma.Sql[] = [
     Prisma.sql`(s.status = 'FINALIZED' OR s.status = 'DISPUTED' OR s.status = 'SUBMITTED')`,
+    // Internal-form audits belong to Internal Research only.
+    Prisma.sql`s.access_mode IS NULL`,
   ]
   if (formId)    sqlConditions.push(Prisma.sql`s.form_id      = ${formId}`)
   if (dateStart) sqlConditions.push(Prisma.sql`s.submitted_at >= ${dateStart + ' 00:00:00'}`)

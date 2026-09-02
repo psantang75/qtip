@@ -128,6 +128,8 @@ export interface Submission {
   reopen_count?: number
   /** 1 while an admin reopen is still awaiting correction. */
   unlock_open?: number
+  /** 'INTERNAL' = hidden Internal-research audit; null/omitted = normal audit. */
+  access_mode?: string | null
 }
 
 export interface AnswerRow {
@@ -233,6 +235,8 @@ export interface FormSummary {
   form_name: string
   interaction_type?: string
   is_active: boolean
+  /** 'INTERNAL' = hidden-capture research form; null/omitted = normal form. */
+  access_mode?: string | null
   version?: number
   created_at: string
   category_count?: number
@@ -328,6 +332,34 @@ const qaService = {
     if (params.date_start)    q.set('date_start', params.date_start)
     if (params.date_end)      q.set('date_end', params.date_end)
     return api.get(`/qa/completed?${q}`).then(r => {
+      const d = r.data
+      const raw = d?.items ?? d?.data ?? []
+      return {
+        items: raw.map(normalizeSubmission),
+        total: d?.total ?? d?.totalItems ?? d?.pagination?.total ?? 0,
+        page:  d?.page ?? d?.currentPage ?? d?.pagination?.page ?? 1,
+        totalPages: d?.totalPages ?? d?.pagination?.totalPages ?? 1,
+      } as PaginatedResult<Submission>
+    })
+  },
+
+  // Internal-form audits for the Submissions page. Returns only the Internal
+  // forms the caller is permitted (admin = all; others = audience match), so it
+  // is safe to call for any non-agent viewer — a non-permitted caller gets [].
+  getInternalSubmissions: (params: {
+    page?: number; limit?: number; search?: string
+    status?: string; form_id?: number
+    date_start?: string; date_end?: string
+  }) => {
+    const q = new URLSearchParams()
+    if (params.page)       q.set('page', String(params.page))
+    if (params.limit)      q.set('limit', String(params.limit))
+    if (params.search)     q.set('search', params.search)
+    if (params.status)     q.set('status', params.status)
+    if (params.form_id)    q.set('form_id', String(params.form_id))
+    if (params.date_start) q.set('date_start', params.date_start)
+    if (params.date_end)   q.set('date_end', params.date_end)
+    return api.get(`/qa/completed/internal?${q}`).then(r => {
       const d = r.data
       const raw = d?.items ?? d?.data ?? []
       return {

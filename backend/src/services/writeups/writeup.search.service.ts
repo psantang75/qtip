@@ -43,6 +43,8 @@ export async function searchQaRecords(params: SearchQaRecordsParams): Promise<an
 
   const conditions: Prisma.Sql[] = [
     Prisma.sql`(CAST(csr_meta.value AS UNSIGNED) = ${params.csrId} OR c.csr_id = ${params.csrId})`,
+    // Internal-form audits are not linkable to disciplinary write-ups.
+    Prisma.sql`s.access_mode IS NULL`,
   ]
 
   if (params.formId)      conditions.push(Prisma.sql`s.form_id = ${params.formId}`)

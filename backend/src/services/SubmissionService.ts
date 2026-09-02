@@ -18,6 +18,7 @@ import { deriveRollupAnswers, type RollupQuestionShape, type RollupAnswerShape }
 import prisma from '../config/prisma';
 import logger from '../config/logger';
 import { notifySubmissionGraded } from './qa/qa.submissions.notify';
+import { finalizeSubmission } from './qa/qa.submissions.finalize.service';
 import { isManagerOfSubmissionAgent } from './manager/manager.access';
 
 /**
@@ -309,6 +310,13 @@ export class SubmissionService implements ISubmissionService {
       // it happens. Reviewer kind drives cadence (human=immediate, AI=digest).
       await notifySubmissionGraded(submission_id, qa_id);
 
+      // Internal (hidden-capture) audits carry no agent lifecycle — the CSR
+      // never sees, acknowledges, or disputes them (notifySubmissionGraded is a
+      // no-op for them), so they would otherwise sit at SUBMITTED forever and
+      // stay invisible to Insights / reporting (which count FINALIZED). Submit
+      // IS their terminal state, so finalize immediately.
+      await this.finalizeIfInternal(submission_id, qa_id);
+
       return {
         submission_id,
         total_score: scoreResult.total_score,
@@ -325,6 +333,23 @@ export class SubmissionService implements ISubmissionService {
         500
       );
     }
+  }
+
+  /**
+   * Finalize a just-submitted audit iff it is Internal (hidden-capture).
+   * Internal audits are invisible to the reviewed CSR, so they never get the
+   * acknowledge / dispute step that promotes a standard audit to FINALIZED.
+   * Reuses the shared finalizeSubmission service (status flip + audit-trail
+   * entry). Reads the snapshotted `access_mode` on the submission so it stays
+   * correct even if the form's mode later changes. No-op for standard audits.
+   */
+  private async finalizeIfInternal(submissionId: number, userId: number): Promise<void> {
+    const row = await prisma.submission.findUnique({
+      where: { id: submissionId },
+      select: { access_mode: true },
+    });
+    if (!row?.access_mode) return;
+    await finalizeSubmission(submissionId, userId);
   }
 
   /**
@@ -597,6 +622,10 @@ export class SubmissionService implements ISubmissionService {
     // A human promoting an AI draft = the review is now done by a human;
     // notify the CSR immediately (reviewer kind resolves to qa).
     await notifySubmissionGraded(submission_id, human_user_id);
+
+    // Internal audits have no agent lifecycle — finalize on promote so they
+    // reach Insights / reporting (see submitAudit for the full rationale).
+    await this.finalizeIfInternal(submission_id, human_user_id);
 
     return {
       submission_id,

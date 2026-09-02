@@ -448,6 +448,7 @@ export class EnhancedPerformanceGoalRepository {
           SELECT AVG(s.total_score) as avg_score
           FROM submissions s
           WHERE s.status = 'SUBMITTED'
+            AND s.access_mode IS NULL
             AND s.total_score IS NOT NULL
             AND DATE(s.submitted_at) BETWEEN ${dateRange.start} AND ${dateRange.end}
         `);
@@ -460,6 +461,7 @@ export class EnhancedPerformanceGoalRepository {
           FROM submissions s
           WHERE s.form_id = ${goal.target_form_id}
             AND s.status = 'SUBMITTED'
+            AND s.access_mode IS NULL
             AND s.total_score IS NOT NULL
             AND DATE(s.submitted_at) BETWEEN ${dateRange.start} AND ${dateRange.end}
         `);
@@ -476,6 +478,7 @@ export class EnhancedPerformanceGoalRepository {
           JOIN form_categories fc ON f.id = fc.form_id
           WHERE fc.id = ${goal.target_category_id}
             AND s.status = 'SUBMITTED'
+            AND s.access_mode IS NULL
             AND s.total_score IS NOT NULL
             AND DATE(s.submitted_at) BETWEEN ${dateRange.start} AND ${dateRange.end}
         `);
@@ -498,6 +501,7 @@ export class EnhancedPerformanceGoalRepository {
           JOIN submissions s ON sa.submission_id = s.id
           WHERE fq.id = ${goal.target_question_id}
             AND s.status = 'SUBMITTED'
+            AND s.access_mode IS NULL
             AND DATE(s.submitted_at) BETWEEN ${dateRange.start} AND ${dateRange.end}
         `);
         return rows[0]?.avg_score || 0;

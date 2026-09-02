@@ -39,6 +39,7 @@ export async function getManagerDashboardStats(userId: number): Promise<ManagerD
         AND r.role_name = 'CSR'
         AND u.is_active = 1
         AND u.department_id IN (${placeholders})
+        AND s.access_mode IS NULL
     `, ...departmentIds),
     prisma.$queryRawUnsafe<Array<{ thisWeek: bigint | number; thisMonth: bigint | number }>>(`
       SELECT
@@ -128,6 +129,7 @@ export async function getManagerCSRActivity(
       WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED')
         AND fmf.field_name = 'CSR' AND active_role.role_name = 'CSR'
         AND active_csr.is_active = 1 AND active_csr.department_id IN (${placeholders})
+        AND s.access_mode IS NULL
       GROUP BY sm.value
     ) audit_counts ON u.id = audit_counts.csr_id
     LEFT JOIN (
@@ -153,6 +155,7 @@ export async function getManagerCSRActivity(
         AND fmf.field_name = 'CSR' AND active_role.role_name = 'CSR'
         AND active_csr.is_active = 1 AND active_csr.department_id IN (${placeholders})
         AND s.submitted_at >= DATE_SUB(NOW(), INTERVAL 1 WEEK)
+        AND s.access_mode IS NULL
       GROUP BY sm.value
     ) audit_counts_week ON u.id = audit_counts_week.csr_id
     LEFT JOIN (
@@ -179,6 +182,7 @@ export async function getManagerCSRActivity(
         AND fmf.field_name = 'CSR' AND active_role.role_name = 'CSR'
         AND active_csr.is_active = 1 AND active_csr.department_id IN (${placeholders})
         AND s.submitted_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
+        AND s.access_mode IS NULL
       GROUP BY sm.value
     ) audit_counts_month ON u.id = audit_counts_month.csr_id
     LEFT JOIN (

@@ -94,7 +94,10 @@ export class CSRService {
         // Agents only ever see a review once it is submitted or beyond. A DRAFT
         // (a QA in-progress draft, or a review an admin reopened for correction)
         // is withdrawn from the reviewee until it is re-submitted.
-        Prisma.sql`s.status IN ('SUBMITTED', 'DISPUTED', 'FINALIZED')`
+        Prisma.sql`s.status IN ('SUBMITTED', 'DISPUTED', 'FINALIZED')`,
+        // Internal-form audits are captured for internal research only and are
+        // invisible to the reviewee — as if they never existed.
+        Prisma.sql`s.access_mode IS NULL`
       ];
       
       if (filters.formName) {
@@ -235,6 +238,8 @@ export class CSRService {
             -- A DRAFT (in-progress or reopened-for-correction) is not readable
             -- by the reviewee; it 404s here just like a review they don't own.
             AND s.status IN ('SUBMITTED', 'DISPUTED', 'FINALIZED')
+            -- Internal-form audits are never readable by the reviewee.
+            AND s.access_mode IS NULL
         `
       );
       

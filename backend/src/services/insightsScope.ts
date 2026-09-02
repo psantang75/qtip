@@ -26,6 +26,16 @@ export { deptClause } from './qcQueryHelpers';
 export type { SqlFragment } from './qcQueryHelpers';
 
 /**
+ * Impossible department id/key used to fail a scope CLOSED. Department ids and
+ * warehouse keys are positive auto-increments, so `... IN (-1)` never matches a
+ * real row — a DEPARTMENT/DIVISION viewer with no resolved departments sees
+ * nothing instead of everything. Mirrors the SELF-scope `employeeKey ?? -1`
+ * sentinel in the Agent Activity controller so the whole Insights layer scopes
+ * empty grants the same way.
+ */
+export const NO_MATCH_DEPARTMENT_ID = -1;
+
+/**
  * The department ids a viewer's query must be restricted to. An EMPTY array means
  * "no department restriction" — callers pass it to deptClause, which then emits
  * no SQL. SELF scope also returns empty, because it is filtered by user_id at the
@@ -57,14 +67,24 @@ export async function resolveDeptFilter(
   // of warehouse department_keys this viewer may see (profile department + the
   // departments they manage on the Departments tab, expanded to descendants for
   // DIVISION). Map those keys back to operational department ids for the query
-  // filter. An empty set means the viewer has neither a profile department nor a
-  // managed department, so there is nothing to scope to.
-  if (access.departmentKeys.length === 0) return [];
+  // filter.
+  //
+  // Fail CLOSED, not open: a DEPARTMENT/DIVISION viewer with no resolved
+  // departments (no profile department AND no managed department) is entitled to
+  // NOTHING, not everything. Returning [] here would make deptClause emit no
+  // WHERE clause and leak every department's data. Return the impossible-id
+  // sentinel so deptClause emits `IN (-1)` and the viewer sees no rows — the same
+  // fail-closed convention SELF scope already uses (see resolveAaScope's
+  // `employeeKey ?? -1`).
+  if (access.departmentKeys.length === 0) return [NO_MATCH_DEPARTMENT_ID];
   const ph = access.departmentKeys.map(() => '?').join(',');
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT department_id FROM ie_dim_department
      WHERE department_key IN (${ph}) AND is_current = 1`,
     access.departmentKeys,
   );
-  return rows.map((r) => r.department_id as number);
+  const ids = rows.map((r) => r.department_id as number);
+  // A non-empty key set that maps to zero operational ids (stale/retired
+  // departments) must also fail closed rather than fall back to "all".
+  return ids.length > 0 ? ids : [NO_MATCH_DEPARTMENT_ID];
 }

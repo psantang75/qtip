@@ -80,6 +80,7 @@ export function FormBuilderList() {
         <StatusActiveFilter
           value={statusFilter as StatusActiveValue}
           onChange={v => { setStatusFilter(v); setPage(1) }}
+          includeInternal
         />
       </ListFilterBar>
 
@@ -128,7 +129,7 @@ export function FormBuilderList() {
                       )}
                     </span>
                   </TableCell>
-                  <TableCell><StatusBadge status={f.is_active ? 'ACTIVE' : 'INACTIVE'} /></TableCell>
+                  <TableCell><StatusBadge status={f.access_mode === 'INTERNAL' ? 'INTERNAL' : f.is_active ? 'ACTIVE' : 'INACTIVE'} /></TableCell>
                   <TableCell className="text-[13px] text-slate-600">{f.interaction_type ?? '—'}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">v{f.version ?? 1}</TableCell>
                   <TableCell className="text-[13px] text-slate-500">

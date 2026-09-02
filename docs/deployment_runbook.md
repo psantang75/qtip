@@ -240,9 +240,17 @@ Dump the `qtip-db` container to the box's backups dir. The DB name and root
 password already live in the container's env, so reference them in-place rather
 than hardcoding secrets:
 
-```bash
-ssh dmadmin@10.90.15.5 'docker exec qtip-db sh -c '\''mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'\'' | gzip > /home/dmadmin/docker-production/qtip-app/backups/pre-deploy-$(date +%Y%m%d_%H%M%S).sql.gz'
+```powershell
+ssh dmadmin@10.90.15.5 'docker exec qtip-db sh -c ''mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'' | gzip > /home/dmadmin/docker-production/qtip-app/backups/pre-deploy-$(date +%Y%m%d_%H%M%S).sql.gz'
 ```
+
+> **PowerShell-safe quoting (this is what silently produces a broken backup):**
+> the inner `sh -c` argument is wrapped in **doubled single quotes** (`''…''`),
+> NOT bash's `'\''`. On a Windows/PowerShell workstation `'\''` is mangled before
+> ssh ever sees it, `$MYSQL_DATABASE` arrives empty, and `mysqldump` writes only
+> its usage text into the `.gz` — a ~130-byte "backup" that looks like it
+> succeeded. Always confirm the size (`ls -lh …/pre-deploy-*.sql.gz | tail -1`)
+> is tens of MB before trusting it.
 
 On **stage** the DB container is `qtip-db-stage` and the path is under
 `/home/dmadmin/docker-staging/qtip-app/backups/` — swap both. Keep the printed
@@ -315,45 +323,61 @@ is leaking into the context — check `.dockerignore` first.
 
 ### 3.3 Apply Prisma migrations (only when the release includes one)
 
-Do the backup (§3.1) first, then decide HOW to apply. **The runtime image does
-not reliably ship the Prisma CLI**, so always PROBE before assuming
-`migrate deploy` will work.
+Do the backup (§3.1) first, then apply. **The Prisma CLI IS shipped in the
+runtime image** — `prisma` is a production dependency (`backend/package.json`)
+and the image copies the full `backend/node_modules`, so
+`/app/backend/node_modules/.bin/prisma` is present and works (verified:
+`prisma 7.9.1`). The runtime image does NOT copy `backend/prisma/` or
+`prisma.config.ts`, which is why the commands below mount them.
 
-> **Reality check (learned the hard way):** `npx prisma …` inside the container
-> has hung on an interactive "Ok to install prisma?" prompt, and a
-> non-interactive probe reported the CLI absent. So treat the **SQL fallback
-> (Step 2B) as the primary, reliable path** and `migrate deploy` (Step 2A) as the
-> nice-to-have for when the CLI happens to be present. This repo also
-> hand-authors its migration SQL (partitioned + PK-less warehouse tables Prisma
-> can't model) — see [`database_schema_updates.md`](./database_schema_updates.md).
+> **Root cause of the old "the CLI hangs / is absent" myth — it was a quoting
+> bug, not a missing CLI.** The previous commands ran
+> `sh -c "npx --no-install prisma …"` with **double quotes**. On a
+> Windows/PowerShell workstation those double quotes are stripped before ssh
+> forwards the string, so the container actually ran `sh -c npx` — bare `npx`
+> with no package name — which sits forever waiting on stdin. It looked like the
+> CLI was missing or prompting to install; it was neither. The fix is
+> mechanical: wrap the `sh -c` argument in **doubled single quotes** (`''…''`)
+> and call the **direct binary** `./node_modules/.bin/prisma` instead of `npx`.
+> With that, `migrate deploy` (Step 2A) is the reliable primary path; the SQL
+> fallback (Step 2B) remains for hand-authored warehouse SQL Prisma can't model
+> (partitioned / PK-less tables — see
+> [`database_schema_updates.md`](./database_schema_updates.md)).
 
 All commands below are written **PowerShell-safe** for a Windows workstation:
 the whole remote command is single-quoted and any literal inner single quote is
 doubled (`''`). Examples show **stage**; swap host/paths/DB-container for prod
 (`10.90.15.5`, `…/docker-production/…`, `qtip-db`) and only after stage verifies.
 
-#### Step 1 — Probe (read-only; decides the path)
+#### Step 1 — Probe (read-only; shows exactly what is pending)
 
-`-T` disables the TTY so it can't sit on a prompt; `--no-install` makes a missing
-CLI fail fast instead of trying to install. Mount only `prisma/` +
-`prisma.config.ts` — never the whole `code/backend`, which would shadow the
-image's `node_modules` and re-trigger the install hang:
+`-T` disables the TTY. Call the direct binary `./node_modules/.bin/prisma` (not
+`npx`) and wrap the whole `sh -c` argument in **doubled single quotes** so
+PowerShell doesn't strip it (see the root-cause note above). Mount only
+`prisma/` + `prisma.config.ts` — never the whole `code/backend`, which would
+shadow the image's `node_modules`:
 
 ```powershell
-ssh dmadmin@10.90.15.6 'cd /home/dmadmin/docker-staging/qtip-app; docker compose run --rm -T --no-deps -w /app/backend -v "$PWD/code/backend/prisma:/app/backend/prisma" -v "$PWD/code/backend/prisma.config.ts:/app/backend/prisma.config.ts" qtip-app sh -c "npx --no-install prisma migrate status --schema prisma/schema.prisma"'
+ssh dmadmin@10.90.15.6 'cd /home/dmadmin/docker-staging/qtip-app; docker compose run --rm -T --no-deps -w /app/backend -v "$PWD/code/backend/prisma:/app/backend/prisma" -v "$PWD/code/backend/prisma.config.ts:/app/backend/prisma.config.ts" qtip-app sh -c ''./node_modules/.bin/prisma migrate status --schema prisma/schema.prisma'''
 ```
 
-- Prints your migration as the only **pending** one → CLI is present, use **Step 2A**.
-- Errors that prisma is **absent / wants to install** → use **Step 2B** (the common case).
+It loads `prisma.config.ts`, connects to the env's DB, and lists any
+**not-yet-applied** migrations. Your release's migration listed as pending →
+apply it with **Step 2A** (`migrate deploy`), the reliable primary path. Use the
+SQL fallback (**Step 2B**) only for hand-authored warehouse SQL Prisma can't
+model.
 
-#### Step 2A — CLI present: `migrate deploy`
+#### Step 2A — primary path: `migrate deploy`
 
-Same overlay as the probe. Migrations connect with the app's own `DB_*` vars via
-`prisma.config.ts` (no separate `DATABASE_URL` to drift, which kills the
-recurring `P1000: Authentication failed`):
+Same overlay and quoting as the probe (direct binary + doubled single quotes).
+Migrations connect with the app's own `DB_*` vars via `prisma.config.ts` (no
+separate `DATABASE_URL` to drift, which kills the recurring
+`P1000: Authentication failed`). `migrate deploy` applies every pending
+migration in order AND records the `_prisma_migrations` bookkeeping row itself,
+so — unlike the SQL fallback — there is no separate checksum/insert step:
 
 ```powershell
-ssh dmadmin@10.90.15.6 'cd /home/dmadmin/docker-staging/qtip-app; docker compose run --rm -T --no-deps -w /app/backend -v "$PWD/code/backend/prisma:/app/backend/prisma" -v "$PWD/code/backend/prisma.config.ts:/app/backend/prisma.config.ts" qtip-app sh -c "npx --no-install prisma migrate deploy --schema prisma/schema.prisma"'
+ssh dmadmin@10.90.15.6 'cd /home/dmadmin/docker-staging/qtip-app; docker compose run --rm -T --no-deps -w /app/backend -v "$PWD/code/backend/prisma:/app/backend/prisma" -v "$PWD/code/backend/prisma.config.ts:/app/backend/prisma.config.ts" qtip-app sh -c ''./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma'''
 ```
 
 #### Step 2B — CLI absent (primary path): apply the SQL, then record it
@@ -470,17 +494,16 @@ of deploy. All commands as `dmadmin` on the box (prod paths shown).
 1. **Roll the code back** to the previous commit and rebuild — recreating the
    container atomically stops the bad workers/API and boots the old ones:
 
-   ```bash
-   ssh dmadmin@10.90.15.5 'cd /home/dmadmin/docker-production/qtip-app; \
-     git -C code reset --hard <previous-commit>; docker compose up -d --build'
+   ```powershell
+   ssh dmadmin@10.90.15.5 'cd /home/dmadmin/docker-production/qtip-app; git -C code reset --hard <previous-commit>; docker compose up -d --build'
    ```
 
    (`<previous-commit>` is the prior `production` tip — e.g. what `code/`
    pointed at before the pull; find it with `git -C code reflog`.)
 2. **Restore the DB** only if the release migrated it — otherwise skip:
 
-   ```bash
-   ssh dmadmin@10.90.15.5 'gunzip -c <backup-path-from-§3.1> | docker exec -i qtip-db sh -c '\''mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'\'''
+   ```powershell
+   ssh dmadmin@10.90.15.5 'gunzip -c <backup-path-from-§3.1> | docker exec -i qtip-db sh -c ''mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'''
    ```
 
    - If the migration in §3.3 was schema-only and safe to skip, you can instead

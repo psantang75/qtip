@@ -8,6 +8,7 @@ import { PageSpinner } from '../components/common/PageSpinner'
 import { ErrorBoundary } from '../components/common/ErrorBoundary'
 import { getInsightsAccess, getInsightsNavigation } from '../services/insightsService'
 import { getAppAccess, type AppAccessLevel } from '../services/appAccessService'
+import { NAV_CONFIG } from '../config/navConfig'
 
 /**
  * Route guards, redirects, and the lazy-page loader.
@@ -219,7 +220,17 @@ export function InsightsIndexRedirect(): React.ReactElement | null {
     )
   }
 
-  const firstPage = data?.flatMap(c => c.pages)[0]
+  // Only land on pages that still have a frontend route. The DB navigation can
+  // list a page_key we've since retired from the router (e.g. ir_overview after
+  // the Internal Research Overview was removed); redirecting there would dead-end.
+  // Mirror the sidebar, which already filters DB keys against navConfig.
+  const validKeys = new Set(
+    (NAV_CONFIG.find(s => s.id === 'insights')?.items ?? [])
+      .map(i => i.pageKey)
+      .filter((k): k is string => !!k),
+  )
+  const pages = data?.flatMap(c => c.pages) ?? []
+  const firstPage = pages.find(p => validKeys.has(p.page_key)) ?? pages[0]
   if (!firstPage) return <Navigate to="/app" replace />
   return <Navigate to={firstPage.route_path} replace />
 }

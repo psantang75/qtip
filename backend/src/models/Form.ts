@@ -72,7 +72,34 @@ export interface Form {
   created_by?: number;  // Optional for form creation
   created_at?: Date;  // Optional for form creation
   is_active: boolean;
+  /**
+   * Non-public form lifecycle mode. NULL/undefined = normal form governed by
+   * `is_active` (Active/Inactive). 'INTERNAL' = hidden-capture form for internal
+   * research: excluded from every agent/CSR and standard Quality surface and
+   * surfaced only in the "Internal Research" Insights section. String (not
+   * enum) so future modes need no migration.
+   */
+  access_mode?: string | null;
+  /**
+   * When `access_mode` is set, the role keys (lowercase, e.g. ["qa","manager"])
+   * allowed to audit with this form AND view its results. `admin` is always
+   * allowed implicitly. NULL/undefined for normal forms.
+   */
+  access_roles?: string[] | null;
+  /**
+   * Individual users (by id) additionally allowed to audit with this Internal form
+   * and view its results, independent of `access_roles`. Lets you target "one
+   * manager" instead of every manager. Persisted alongside roles in the single
+   * `access_roles` JSON column as `user:<id>` tokens; surfaced separately here.
+   */
+  access_users?: number[] | null;
   parent_form_id?: number;
+  /**
+   * Stable identity shared by every version of the same logical form (the id of
+   * the family's first version). Assigned automatically on create/update; not
+   * client-supplied. See `forms.form_group_id` in the Prisma schema.
+   */
+  form_group_id?: number | null;
   user_version?: number;
   user_version_date?: string;
   critical_cap_percent?: number;
@@ -247,6 +274,10 @@ export interface CreateFormDTO {
   interaction_type: interaction_type;
   created_by: number;
   is_active?: boolean;
+  access_mode?: string | null;
+  access_roles?: string[] | null;
+  /** Individual-user grants for an Internal form; see Form.access_users. */
+  access_users?: number[] | null;
   user_version?: number;
   user_version_date?: string;
   critical_cap_percent?: number;

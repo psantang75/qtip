@@ -3,6 +3,7 @@ import { InsightsSection, TrendChart, StatRow, ExpandableRow } from '@/component
 import type { CategoryScore, FormScore, KpiValues, AgentProfile, MissedQuestion } from '@/services/insightsQCService'
 import { scoreColor, fmtN, type TrendPoint } from './agentProfileHelpers'
 import { resolveThresholds, type KpiConfig } from '@/hooks/useKpiConfig'
+import { useInsightsScope } from '@/hooks/useInsightsScope'
 
 interface Props {
   qaTrend: TrendPoint[]
@@ -31,6 +32,11 @@ export default function AgentQualitySection({
   recentAudits,
   missedQuestions,
 }: Props) {
+  // Internal Research is quality-only: no QA-score trend, dispute, or timeliness
+  // reporting (those audits are hidden from the reviewed agent). QC keeps them.
+  const { scope } = useInsightsScope()
+  const isQc = scope === 'qc'
+
   // Group this agent's recent reviews by form so each expandable form row
   // can show its own per-review history (matches the past Forms Performance
   // drill-down). Built once per render — recentAudits is already resident.
@@ -69,7 +75,7 @@ export default function AgentQualitySection({
     <>
       <div className="text-sm font-bold text-slate-800 pb-1.5 border-b-2 border-primary">Quality</div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {isQc && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <InsightsSection title="QA Score Trend" infoKpiCodes={['qa_score_trend']}>
           {qaTrend.length > 0
             ? <TrendChart data={qaTrend} color="#00aeef" goalValue={qaGoal} height={120} metricLabel="%" />
@@ -94,9 +100,9 @@ export default function AgentQualitySection({
             )
           })}
         </InsightsSection>
-      </div>
+      </div>}
 
-      <InsightsSection title="Timeliness">
+      {isQc && <InsightsSection title="Timeliness">
         {([
           ['Avg Time to Audit',           'time_to_audit',                cur.time_to_audit,                prv.time_to_audit],
           ['Avg Dispute Resolution Time', 'avg_dispute_resolution_time',  cur.avg_dispute_resolution_time,  prv.avg_dispute_resolution_time],
@@ -111,7 +117,7 @@ export default function AgentQualitySection({
             />
           )
         })}
-      </InsightsSection>
+      </InsightsSection>}
 
       {/* Average Score by Form — expandable per-review drill-down for this
           agent. Matches the previous Forms Performance layout and the

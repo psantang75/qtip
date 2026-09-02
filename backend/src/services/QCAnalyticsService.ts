@@ -2,7 +2,8 @@ import pool from '../config/database'
 import { RowDataPacket } from 'mysql2'
 import type { PeriodRanges } from '../utils/periodUtils'
 import { fmtDatetime as fmt } from '../utils/dateHelpers'
-import { deptClause } from './qcQueryHelpers'
+import { deptClause, formFilter } from './qcQueryHelpers'
+import { accessScopeClause, type AccessScope } from '../utils/formScope'
 
 export interface AgentSummary {
   userId: number; name: string; dept: string
@@ -28,6 +29,8 @@ export class QCAnalyticsService {
     deptFilter: number[],
     ranges: PeriodRanges,
     forUserId: number | null = null,
+    accessScope: AccessScope = 'STANDARD',
+    formNames: string[] = [],
   ): Promise<AgentSummary[]> {
     const s  = fmt(ranges.current.start)
     const e  = fmt(ranges.current.end)
@@ -38,6 +41,10 @@ export class QCAnalyticsService {
     const dc = deptClause(deptFilter, 'u')
     const userClause = forUserId !== null ? 'AND u.id = ?' : ''
     const userParams = forUserId !== null ? [forUserId] : []
+    // Internal scope: STANDARD excludes internal audits; INTERNAL (Internal
+    // Research) includes only internal audits, restricted to the permitted forms.
+    const acc = accessScopeClause(accessScope, 'sub')
+    const ff = formFilter(formNames, 'sub')
 
     // Run the agent roster query and one aggregate-per-table query in parallel.
     // Per-table grouped queries keep row counts bounded by the size of each
@@ -70,9 +77,10 @@ export class QCAnalyticsService {
          JOIN submission_metadata sm_csr ON sm_csr.submission_id = sub.id
          JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
          LEFT JOIN score_snapshots ss ON ss.submission_id = sub.id
-         WHERE sub.status = 'FINALIZED' AND sub.submitted_at BETWEEN ? AND ?
+         ${ff.join}
+         WHERE sub.status = 'FINALIZED' AND sub.submitted_at BETWEEN ? AND ? ${acc} ${ff.where}
          GROUP BY CAST(sm_csr.value AS UNSIGNED)`,
-        [s, e],
+        [s, e, ...ff.params],
       ),
       pool.execute<RowDataPacket[]>(
         `SELECT CAST(sm_csr.value AS UNSIGNED) AS userId,
@@ -81,9 +89,10 @@ export class QCAnalyticsService {
          JOIN submission_metadata sm_csr ON sm_csr.submission_id = sub.id
          JOIN form_metadata_fields fmf_csr ON sm_csr.field_id = fmf_csr.id AND fmf_csr.field_name = 'CSR'
          LEFT JOIN score_snapshots ss ON ss.submission_id = sub.id
-         WHERE sub.status = 'FINALIZED' AND sub.submitted_at BETWEEN ? AND ?
+         ${ff.join}
+         WHERE sub.status = 'FINALIZED' AND sub.submitted_at BETWEEN ? AND ? ${acc} ${ff.where}
          GROUP BY CAST(sm_csr.value AS UNSIGNED)`,
-        [ps, pe],
+        [ps, pe, ...ff.params],
       ),
       pool.execute<RowDataPacket[]>(
         `SELECT cs.csr_id AS userId, COUNT(*) AS cnt
@@ -131,9 +140,16 @@ export class QCAnalyticsService {
     })
   }
 
-  async getAgentProfile(userId: number, ranges: PeriodRanges): Promise<AgentProfile> {
+  async getAgentProfile(
+    userId: number,
+    ranges: PeriodRanges,
+    accessScope: AccessScope = 'STANDARD',
+    formNames: string[] = [],
+  ): Promise<AgentProfile> {
     const s = fmt(ranges.current.start)
     const e = fmt(ranges.current.end)
+    const accS = accessScopeClause(accessScope, 's')
+    const ffS = formFilter(formNames, 's')
 
     const trendStart = new Date(ranges.current.end)
     trendStart.setMonth(trendStart.getMonth() - 6)
@@ -160,8 +176,8 @@ export class QCAnalyticsService {
          LEFT JOIN calls c ON s.call_id = c.id
          JOIN forms f ON s.form_id = f.id
          WHERE CAST(sm_csr.value AS UNSIGNED) = ? AND s.status = 'FINALIZED'
-           AND s.submitted_at BETWEEN ? AND ?
-         ORDER BY s.submitted_at DESC`, [userId, ts, e],
+           AND s.submitted_at BETWEEN ? AND ? ${accS} ${ffS.where}
+         ORDER BY s.submitted_at DESC`, [userId, ts, e, ...ffS.params],
       ),
       pool.execute<RowDataPacket[]>(
         `SELECT cs.id, DATE_FORMAT(cs.session_date,'%Y-%m-%d') AS date,

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle } from 'lucide-react'
 import { ExpandableRow, InsightsSection } from '@/components/insights'
+import { useInsightsScope } from '@/hooks/useInsightsScope'
 import type { MissedQuestion } from '@/services/insightsQCService'
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 
 export default function QCMissedQuestions({ questions }: Props) {
   const navigate  = useNavigate()
+  const { routeBase } = useInsightsScope()
   const [expanded, setExpanded] = useState<number | null>(null)
 
   if (questions.length === 0) {
@@ -68,7 +70,7 @@ export default function QCMissedQuestions({ questions }: Props) {
                           key={agent.userId}
                           className="border-b border-slate-100 last:border-0 hover:bg-slate-100 cursor-pointer"
                           onClick={() =>
-                            navigate(`/app/insights/qc-agents?agent=${agent.userId}`)
+                            navigate(`${routeBase}agents?agent=${agent.userId}`)
                           }
                         >
                           <td className="py-1.5 text-primary hover:underline">{agent.name}</td>

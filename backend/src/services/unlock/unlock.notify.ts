@@ -30,9 +30,13 @@ export async function notifyRecordUnlocked(
   try {
     const submission = await prisma.submission.findUnique({
       where: { id: result.submission_id },
-      select: { id: true, total_score: true, submitted_by: true, form: true },
+      select: { id: true, total_score: true, submitted_by: true, form: true, access_mode: true },
     });
     if (!submission) return;
+    // Internal-form audits are never seen by the agent, so a reopen has no
+    // transparency obligation and fires no notifications. The unlock itself
+    // still applies — only the email is suppressed.
+    if (submission.access_mode) return;
 
     const [actor, originalQa] = await Promise.all([
       prisma.user.findUnique({ where: { id: actorId }, select: { id: true, username: true } }),

@@ -157,6 +157,16 @@ export class MySQLSubmissionRepository {
       // the internal calls.id).
       const derivedCaseId = await deriveCaseId(tx, submissionData);
 
+      // Snapshot the form's access_mode onto the submission at creation. This
+      // fixes the submission's visibility for life (an Internal submission stays
+      // hidden from agents/standard surfaces even if the form is later made
+      // Active), and lets every consumer filter on `s.access_mode` without a
+      // forms join. See backend/src/utils/formScope.ts.
+      const parentForm = await tx.form.findUnique({
+        where: { id: submissionData.form_id },
+        select: { access_mode: true },
+      });
+
       const submission = await tx.submission.create({
         data: {
           form_id: submissionData.form_id,
@@ -165,6 +175,7 @@ export class MySQLSubmissionRepository {
           ai_provider: submissionData.ai_provider ?? null,
           submitted_by: submissionData.submitted_by,
           status: submissionData.status as PrismaSubmissionStatus,
+          access_mode: parentForm?.access_mode ?? null,
           submitted_at: submissionData.submitted_at ?? undefined,
           ai_overall_confidence:
             submissionData.ai_overall_confidence == null

@@ -3,6 +3,7 @@ import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import { InsightsPermissionService } from '../services/InsightsPermissionService';
 import { getInsightsRoleId } from '../utils/insightsRoleMap';
+import { resolvePermittedInternalForms } from '../utils/formScope';
 import logger from '../config/logger';
 
 const permissionService = new InsightsPermissionService();
@@ -23,13 +24,19 @@ export const getInsightsNavigation = async (req: Request, res: Response): Promis
     // queries total) instead of the N+1 loop the route used to run. See
     // `InsightsPermissionService.resolveAccessForAllPages` for the
     // batched query plan.
-    const [pages, accessMap] = await Promise.all([
+    const [pages, accessMap, permittedInternal] = await Promise.all([
       pool.execute<RowDataPacket[]>(
         'SELECT id, page_key, page_name, category, route_path, icon, sort_order FROM ie_page WHERE is_active = 1 ORDER BY category, sort_order',
       ),
       permissionService.resolveAccessForAllPages(userId, roleId),
+      resolvePermittedInternalForms(req.user.role, userId),
     ]);
     const [pageRows] = pages;
+
+    // Internal Research pages (ir_*) are additionally gated by the per-form
+    // audience: the whole section stays hidden unless the user is permitted at
+    // least one Internal form, even if they hold the coarse ie_page role grant.
+    const hideInternalResearch = permittedInternal.names.length === 0;
 
     const accessible: Array<{
       page_key: string; page_name: string; category: string;
@@ -37,6 +44,7 @@ export const getInsightsNavigation = async (req: Request, res: Response): Promis
     }> = [];
 
     for (const page of pageRows) {
+      if (hideInternalResearch && String(page.page_key).startsWith('ir_')) continue;
       const access = accessMap.get(page.page_key as string);
       if (access?.canAccess) {
         accessible.push({

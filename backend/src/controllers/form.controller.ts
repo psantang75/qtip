@@ -25,7 +25,10 @@ export const getForms = async (req: Request, res: Response) => {
     const page = req.query.page ? parseInt(req.query.page as string) : undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
 
-    const result = await formService.getForms(isActive, page, limit);
+    // Requester role + id scope Internal forms: they only appear in pickers for
+    // their configured audience — by role OR an individual-user grant (admin
+    // always). Normal forms are unaffected.
+    const result = await formService.getForms(isActive, page, limit, req.user?.role, req.user?.user_id);
     
     logger.info('[FORM CONTROLLER] Service returned:', {
       formCount: result.forms.length,
@@ -71,7 +74,11 @@ export const getFormById = async (req: Request, res: Response) => {
     
     logger.info(`[FORM CONTROLLER] Fetching form ${form_id} (includeInactive: ${includeInactive})`);
     
-    const form = await formService.getFormById(form_id, includeInactive);
+    // Pass requester role + id so Internal-mode forms are audience-gated:
+    // a user outside the audience gets a 404, keeping the form itself hidden.
+    // Default the role to '' (never undefined) so the gate always runs on this
+    // public read path — undefined is reserved for trusted internal calls.
+    const form = await formService.getFormById(form_id, includeInactive, req.user?.role ?? '', req.user?.user_id);
     
     logger.info('[FORM CONTROLLER] Form retrieved successfully:', {
       form_id: form.id,

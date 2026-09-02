@@ -1,0 +1,12 @@
+{
+  "watch": ["src"],
+  "ext": "ts,json",
+  "ignore": [
+    "src/generated/**",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ],
+  "delay": 1500,
+  "exec": "ts-node src/index.ts"
+}

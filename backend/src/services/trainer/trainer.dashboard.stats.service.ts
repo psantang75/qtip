@@ -29,6 +29,7 @@ export async function getTrainerDashboardStats(): Promise<TrainerDashboardStats>
         AND fmf.field_name = 'CSR'
         AND r.role_name    = 'CSR'
         AND u.is_active    = 1
+        AND s.access_mode IS NULL
     `),
     prisma.$queryRaw<{ thisWeek: bigint; thisMonth: bigint }[]>(Prisma.sql`
       SELECT

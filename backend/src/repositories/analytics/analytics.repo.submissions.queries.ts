@@ -73,6 +73,7 @@ export function selectQuestionLevelRows(args: BranchQueryArgs): Promise<any[]> {
       LEFT JOIN users csr_user ON sm.value IS NOT NULL AND CAST(sm.value AS UNSIGNED) = csr_user.id
     WHERE s.submitted_at BETWEEN ${startDate} AND ${endDateWithTime}
       AND s.status IN ('SUBMITTED', 'FINALIZED')
+      AND s.access_mode IS NULL
       AND fc.weight > 0
       ${scoreFilter}
       ${extraWhere}
@@ -122,6 +123,7 @@ export function selectQuestionBreakdownRows(args: BranchQueryArgs): Promise<any[
       LEFT JOIN users csr_user ON sm.value IS NOT NULL AND CAST(sm.value AS UNSIGNED) = csr_user.id
     WHERE s.submitted_at BETWEEN ${startDate} AND ${endDateWithTime}
       AND s.status IN ('SUBMITTED', 'FINALIZED')
+      AND s.access_mode IS NULL
       AND fc.weight > 0
       AND fq.question_type != 'SUB_CATEGORY'
       AND fq.question_type != 'TEXT'
@@ -222,6 +224,7 @@ export function selectCategoryLevelRows(args: BranchQueryArgs): Promise<any[]> {
     ${CATEGORY_SCORE_FROM}
     WHERE s.submitted_at BETWEEN ${startDate} AND ${endDateWithTime}
       AND s.status IN ('SUBMITTED', 'FINALIZED')
+      AND s.access_mode IS NULL
       AND fc.weight > 0
       ${scoreFilter}
       ${extraWhere}
@@ -236,6 +239,7 @@ export function selectFormCategoryBreakdownRows(args: BranchQueryArgs): Promise<
     ${CATEGORY_SCORE_FROM}
     WHERE s.submitted_at BETWEEN ${startDate} AND ${endDateWithTime}
       AND s.status IN ('SUBMITTED', 'FINALIZED')
+      AND s.access_mode IS NULL
       AND fc.weight > 0
       ${scoreFilter}
       ${extraWhere}
@@ -262,6 +266,7 @@ export function selectFormLevelRows(args: BranchQueryArgs): Promise<any[]> {
       LEFT JOIN users csr_user ON sm.value IS NOT NULL AND CAST(sm.value AS UNSIGNED) = csr_user.id
     WHERE s.submitted_at BETWEEN ${startDate} AND ${endDateWithTime}
       AND s.status IN ('SUBMITTED', 'FINALIZED')
+      AND s.access_mode IS NULL
       AND s.form_id IN (
         SELECT DISTINCT fc.form_id FROM form_categories fc WHERE fc.weight > 0
       )
@@ -300,6 +305,7 @@ export function selectDefaultRows(args: BranchQueryArgs): Promise<any[]> {
       LEFT JOIN departments d ON csr_user.department_id = d.id
     WHERE s.submitted_at BETWEEN ${startDate} AND ${endDateWithTime}
       AND s.status IN ('SUBMITTED', 'FINALIZED')
+      AND s.access_mode IS NULL
       AND s.form_id IN (
         SELECT DISTINCT fc.form_id FROM form_categories fc WHERE fc.weight > 0
       )

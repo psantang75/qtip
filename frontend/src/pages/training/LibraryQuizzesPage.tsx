@@ -17,13 +17,13 @@ import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { RowActionButton } from '@/components/common/RowActionButton'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { StatusActiveFilter } from '@/components/common/StatusActiveFilter'
+import { StatusActiveFilter, type StatusActiveValue } from '@/components/common/StatusActiveFilter'
 import { useToast } from '@/hooks/use-toast'
 import { useListSort } from '@/hooks/useListSort'
 import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
 import { TopicListTooltip } from '@/components/training/TopicListTooltip'
 
-type StatusFilter = 'all' | 'active' | 'inactive'
+type StatusFilter = StatusActiveValue
 
 export default function LibraryQuizzesPage() {
   const navigate        = useNavigate()

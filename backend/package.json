@@ -6,7 +6,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
+    "dev": "nodemon",
     "build": "tsc && npm run copy:assets",
     "build:clean": "rimraf dist && npm run build",
     "copy:assets": "node scripts/copy_email_templates.js && node scripts/copy_worker_sql.js",
@@ -93,6 +93,7 @@
     "@types/swagger-ui-express": "^4.1.8",
     "eslint": "^9.39.5",
     "globals": "^17.11.0",
+    "nodemon": "^3.1.14",
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2",

@@ -10,6 +10,14 @@ interface RawForm {
   interaction_type?: string
   created_at?: string
   is_active?: boolean
+  access_mode?: string | null
+}
+
+/** Derive the mutually-exclusive status of a form: Internal (hidden research)
+ *  takes precedence over the is_active Active/Inactive split. */
+function formStatusOf(f: RawForm): 'active' | 'inactive' | 'internal' {
+  if (f.access_mode === 'INTERNAL') return 'internal'
+  return f.is_active ? 'active' : 'inactive'
 }
 
 interface UseFormListFiltersOptions {
@@ -36,8 +44,7 @@ export function useFormListFilters(
     const types = new Set(
       rawForms
         .filter(f => {
-          if (statusFilter === 'active'   && !f.is_active) return false
-          if (statusFilter === 'inactive' &&  f.is_active) return false
+          if (statusFilter !== 'all' && formStatusOf(f) !== statusFilter) return false
           if (selectedFormNames.length > 0 && !selectedFormNames.includes(f.form_name ?? '')) return false
           if (dateRange.start) {
             const created = f.created_at ? f.created_at.split('T')[0] : ''
@@ -61,8 +68,7 @@ export function useFormListFilters(
     const names = new Set(
       rawForms
         .filter(f => {
-          if (statusFilter === 'active'   && !f.is_active) return false
-          if (statusFilter === 'inactive' &&  f.is_active) return false
+          if (statusFilter !== 'all' && formStatusOf(f) !== statusFilter) return false
           if (selectedTypes.length > 0 && !selectedTypes.includes(f.interaction_type ?? '')) return false
           else if (selectedTypes.length === 0 && typeFilter !== 'all' && f.interaction_type !== typeFilter) return false
           if (dateRange.start) {
@@ -82,8 +88,7 @@ export function useFormListFilters(
   }, [rawForms, statusFilter, selectedTypes, typeFilter, dateRange])
 
   const filtered = useMemo(() => rawForms.filter(f => {
-    if (statusFilter === 'active'   && !f.is_active) return false
-    if (statusFilter === 'inactive' &&  f.is_active) return false
+    if (statusFilter !== 'all' && formStatusOf(f) !== statusFilter) return false
     // Text search (ReviewFormsPage) and multi-select (FormBuilderList) are independent
     if (search && !f.form_name?.toLowerCase().includes(search.toLowerCase())) return false
     if (selectedFormNames.length > 0 && !selectedFormNames.includes(f.form_name ?? '')) return false

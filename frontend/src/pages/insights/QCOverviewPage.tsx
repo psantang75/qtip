@@ -9,7 +9,7 @@ import {
 import { useQCFilters } from '@/hooks/useQCFilters'
 import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
 import type { KpiConfig } from '@/hooks/useKpiConfig'
-import { getQCKpis, getQCTrends, getQCAgents, getFilterOptions } from '@/services/insightsQCService'
+import { useInsightsApi, useScopedKey, useInsightsScope } from '@/hooks/useInsightsScope'
 import type { AgentSummary } from '@/services/insightsQCService'
 
 // ── Local helpers ─────────────────────────────────────────────────────────────
@@ -50,6 +50,7 @@ function KpiSection({
 
 function AgentTable({ agents, highlight, qaGoal, qaWarn }: { agents: AgentSummary[]; highlight: 'red' | 'green'; qaGoal: number; qaWarn: number }) {
   const navigate = useNavigate()
+  const { routeBase } = useInsightsScope()
   const hoverCls = highlight === 'red' ? 'hover:bg-red-50' : 'hover:bg-emerald-50'
   // Fixed widths for the four metric columns keep QA / Trend / Coaching /
   // Warnings visually aligned across the top-5 and bottom-5 tables.
@@ -81,7 +82,7 @@ function AgentTable({ agents, highlight, qaGoal, qaWarn }: { agents: AgentSummar
           <tr
             key={a.userId}
             className={`border-b border-slate-100 last:border-0 ${hoverCls} cursor-pointer`}
-            onClick={() => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
+            onClick={() => navigate(`${routeBase}agents?agent=${a.userId}`)}
           >
             <td className="py-2 pr-2 text-slate-400">{i + 1}</td>
             <td className="py-2 pr-2 font-medium text-slate-800 truncate">{a.name}</td>
@@ -108,27 +109,32 @@ export default function QCOverviewPage() {
           customStart, setCustomStart, customEnd, setCustomEnd,
           resetFilters, params } = useQCFilters()
 
+  const api = useInsightsApi()
+  const k = useScopedKey()
+  const { scope, routeBase } = useInsightsScope()
+  const isQc = scope === 'qc'
+
   const apiParams = useMemo(() => ({ ...params }), [params])
 
   const { data: kpiConfig } = useKpiConfig()
 
   const { data: filterOpts } = useQuery({
-    queryKey: ['qc-filter-opts', apiParams],
-    queryFn:  () => getFilterOptions(apiParams),
+    queryKey: k('filter-opts', apiParams),
+    queryFn:  () => api.getFilterOptions(apiParams),
   })
   const deptOptions = filterOpts?.departments ?? []
 
   const { data: kpiData, isLoading, isError, refetch } = useQuery({
-    queryKey: ['qc-kpis', apiParams],
-    queryFn:  () => getQCKpis(apiParams),
+    queryKey: k('kpis', apiParams),
+    queryFn:  () => api.getQCKpis(apiParams),
   })
   const { data: trendData } = useQuery({
-    queryKey: ['qc-trends', apiParams],
-    queryFn:  () => getQCTrends({ ...apiParams, kpis: 'avg_qa_score,coaching_completion_rate' }),
+    queryKey: k('trends', apiParams),
+    queryFn:  () => api.getQCTrends({ ...apiParams, kpis: 'avg_qa_score,coaching_completion_rate' }),
   })
   const { data: agentsData = [] } = useQuery({
-    queryKey: ['qc-agents', apiParams],
-    queryFn:  () => getQCAgents(apiParams),
+    queryKey: k('agents', apiParams),
+    queryFn:  () => api.getQCAgents(apiParams),
   })
 
   const cur       = kpiData?.current   ?? {}
@@ -166,43 +172,43 @@ export default function QCOverviewPage() {
       {isError   && <ErrorCard onRetry={refetch} />}
       {!isLoading && !isError && <div className="space-y-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Quality &amp; Coaching Overview</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{isQc ? 'Quality & Coaching Overview' : 'Internal Research Overview'}</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {deptLabel} · {periodLabel} ·{' '}
-            <span className="text-slate-400">Pace targets managed in Insights Engine Settings → KPI Thresholds</span>
+            {deptLabel} · {periodLabel}
+            {isQc && <> · <span className="text-slate-400">Pace targets managed in Insights Engine Settings → KPI Thresholds</span></>}
           </p>
         </div>
 
         <KpiSection icon={<Target size={15} className="text-primary" />} label="Quality — click to drill down"
-          path="/app/insights/qc-quality" cols={5}
+          path={`${routeBase}quality`} cols={5}
           codes={['audits_assigned','audits_completed','audit_completion_rate','avg_qa_score','critical_fail_rate']}
           cur={cur} prv={prv} kpiConfig={kpiConfig}
         />
 
-        <KpiSection icon={<BookOpen size={15} className="text-primary" />} label="Coaching — click to drill down"
-          path="/app/insights/qc-coaching" cols={4}
+        {isQc && <KpiSection icon={<BookOpen size={15} className="text-primary" />} label="Coaching — click to drill down"
+          path={`${routeBase}coaching`} cols={4}
           codes={['coaching_sessions_assigned','coaching_sessions_completed','coaching_completion_rate','quiz_pass_rate']}
           cur={cur} prv={prv} kpiConfig={kpiConfig}
-        />
+        />}
 
-        <KpiSection icon={<AlertTriangle size={15} className="text-primary" />} label="Performance Warnings — click to drill down"
-          path="/app/insights/qc-warnings" cols={3}
+        {isQc && <KpiSection icon={<AlertTriangle size={15} className="text-primary" />} label="Performance Warnings — click to drill down"
+          path={`${routeBase}warnings`} cols={3}
           codes={['total_writeups_issued','escalation_rate','repeat_offender_rate']}
           cur={cur} prv={prv} kpiConfig={kpiConfig}
-        />
+        />}
 
         {/* Trend charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className={`grid grid-cols-1 ${isQc ? 'lg:grid-cols-2' : ''} gap-4`}>
           <InsightsSection title="6-Month QA Score Trend">
             <TrendChart data={qaTrends} color="#00aeef"
               goalValue={qaGoal}
               height={110} metricLabel="%" />
           </InsightsSection>
-          <InsightsSection title="6-Month Coaching Completion Trend">
+          {isQc && <InsightsSection title="6-Month Coaching Completion Trend">
             <TrendChart data={coTrends} color="#00aeef"
               goalValue={resolveThresholds('coaching_completion_rate', kpiConfig).goal ?? 92}
               height={110} metricLabel="%" />
-          </InsightsSection>
+          </InsightsSection>}
         </div>
 
         {/* Agent leaderboard */}
@@ -224,7 +230,7 @@ export default function QCOverviewPage() {
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 text-right">
-            <Link to="/app/insights/qc-agents" className="text-xs text-primary hover:underline">
+            <Link to={`${routeBase}agents`} className="text-xs text-primary hover:underline">
               View full agent leaderboard →
             </Link>
           </div>

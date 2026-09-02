@@ -34,6 +34,7 @@ const prevFormFixture = {
   created_by: 1,
   is_active: true,
   parent_form_id: null as ValueOrNull<number>,
+  form_group_id: 99000,
   user_version: null,
   user_version_date: null,
   critical_cap_percent: 60.0,
@@ -135,6 +136,7 @@ function makeTx() {
   return {
     form: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      update: vi.fn().mockResolvedValue({}),
       create: vi.fn(async ({ data }: any) => {
         captured.form.push(data);
         return { ...data, id: NEW_FORM_ID };
@@ -289,6 +291,8 @@ describe('MySQLFormRepository.updateForm — AI overlay preservation', () => {
     expect(captured.form).toHaveLength(1);
     const f = captured.form[0];
     expect(f.parent_form_id).toBe(PREV_FORM_ID);
+    // The new version inherits the family's stable group id, not a new one.
+    expect(f.form_group_id).toBe(99000);
     expect(Number(f.critical_cap_percent)).toBe(60.0);
     expect(f.ai_review_guidance).toBe('<<inherited guidance>>');
     expect(f.ai_max_attached_sources).toBe(4);

@@ -19,6 +19,7 @@ const STATUS_MAP: Record<string, StatusConfig> = {
   // Shared statuses (forms, coaching, write-ups)
   ACTIVE:              { label: 'Active',             classes: 'bg-emerald-100 text-emerald-800' },
   INACTIVE:            { label: 'Inactive',           classes: 'bg-slate-100   text-slate-500'   },
+  INTERNAL:            { label: 'Internal',           classes: 'bg-sky-100     text-sky-800'     },
   DRAFT:               { label: 'Draft',              classes: 'bg-slate-100   text-slate-600'   },
   SCHEDULED:           { label: 'Scheduled',          classes: 'bg-indigo-100  text-indigo-800'  },
   COMPLETED:           { label: 'Completed',          classes: 'bg-emerald-100 text-emerald-800' },

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { InsightsFilterBar, InsightsSection, KpiTile, StatusBadge } from '@/components/insights'
 import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
-import { getQCAgentFull } from '@/services/insightsQCService'
+import { useInsightsApi, useScopedKey, useInsightsScope } from '@/hooks/useInsightsScope'
 import type { AgentSummary, QCParams } from '@/services/insightsQCService'
 import { scoreColor } from '@/components/insights/agentProfileHelpers'
 import AgentQualitySection from '@/components/insights/AgentQualitySection'
@@ -22,6 +22,10 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
   period, setPeriod, customStart, setCustomStart, customEnd, setCustomEnd, showBackButton = true }: Props) {
 
   const [showAllCats, setShowAllCats]  = useState(false)
+  const api = useInsightsApi()
+  const k = useScopedKey()
+  const { scope } = useInsightsScope()
+  const isQc = scope === 'qc'
   const { data: kpiConfig } = useKpiConfig()
   const qaThresh = resolveThresholds('avg_qa_score', kpiConfig)
   const qaGoal = qaThresh.goal ?? 90
@@ -37,8 +41,8 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
   // directly. See backend/src/controllers/insightsQC.controller.ts → getQCAgentFull.
   const bundleParams = useMemo(() => ({ ...apiParams, kpis: 'avg_qa_score' }), [apiParams])
   const { data: bundle } = useQuery({
-    queryKey: ['qc-agent-full', agent.userId, bundleParams],
-    queryFn: () => getQCAgentFull(agent.userId, bundleParams),
+    queryKey: k('agent-full', agent.userId, bundleParams),
+    queryFn: () => api.getQCAgentFull(agent.userId, bundleParams),
   })
 
   const cur             = bundle?.kpis.current ?? {}
@@ -92,9 +96,13 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
           <p className="text-sm text-slate-500">{agent.dept} · {period}</p>
         </div>
 
-        {/* KPI Tiles — all bound to the unified KPI service for this agent */}
+        {/* KPI Tiles — all bound to the unified KPI service for this agent.
+            Internal Research is quality-only (no disputes/coaching/warnings). */}
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-          {['avg_qa_score','audits_completed','critical_fail_rate','dispute_rate','coaching_sessions_completed','total_writeups_issued'].map(code => (
+          {(isQc
+            ? ['avg_qa_score','audits_completed','critical_fail_rate','dispute_rate','coaching_sessions_completed','total_writeups_issued']
+            : ['avg_qa_score','audits_completed','critical_fail_rate','avg_criticals_per_audit']
+          ).map(code => (
             <KpiTile
               key={code}
               kpiCode={code}
@@ -114,12 +122,12 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
           missedQuestions={missedQuestions}
         />
 
-        <AgentCoachingSection
+        {isQc && <AgentCoachingSection
           coachingSessions={profile?.coachingSessions ?? []}
           topicCounts={topicCounts}
-        />
+        />}
 
-        <InsightsSection title="Quiz Performance">
+        {isQc && <InsightsSection title="Quiz Performance">
           <div className="grid grid-cols-3 gap-3 mb-4">
             {['quiz_pass_rate','avg_quiz_score','avg_attempts_to_pass'].map(code => (
               <KpiTile
@@ -153,9 +161,9 @@ export default function QCAgentProfile({ agent, apiParams, onBack, selectedForms
               </table>
             )
           }
-        </InsightsSection>
+        </InsightsSection>}
 
-        <AgentWarningsSection wus={wus} />
+        {isQc && <AgentWarningsSection wus={wus} />}
       </div>
     </div>
   )

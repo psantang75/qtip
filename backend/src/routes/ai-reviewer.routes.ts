@@ -196,7 +196,9 @@ router.get('/inbox', async (_req: Request, res: Response) => {
   try {
     // ── Drafts (Calibrating mode) ────────────────────────────────────────
     const drafts = await prisma.submission.findMany({
-      where: { submitted_by: aiUserId, status: 'DRAFT' },
+      // access_mode: null excludes Internal-form captures from the human QA loop
+      // — internal data is management-only and never enters the AI calibration inbox.
+      where: { submitted_by: aiUserId, status: 'DRAFT', access_mode: null },
       include: {
         form: { select: { id: true, form_name: true, critical_cap_percent: true } },
         submission_ticket_tasks: { where: { kind: 'TICKET' }, select: { external_id: true } },
@@ -225,6 +227,7 @@ router.get('/inbox', async (_req: Request, res: Response) => {
       where: {
         submitted_by: aiUserId,
         status: 'SUBMITTED',
+        access_mode: null,
         form: { ai_enabled: true, ai_submit_as_draft: false },
       },
       include: {
@@ -874,6 +877,12 @@ router.post('/calibration-overlay/:submissionId', async (req: Request, res: Resp
     });
     if (!aiSubmission) {
       return res.status(404).json({ error: 'AI submission not found' });
+    }
+    if (aiSubmission.access_mode) {
+      return res.status(409).json({
+        error: 'Internal-form captures are excluded from the AI calibration loop.',
+        code: 'INTERNAL_EXCLUDED',
+      });
     }
     if (aiSubmission.status !== 'SUBMITTED') {
       return res.status(409).json({

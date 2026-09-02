@@ -46,6 +46,7 @@ export async function getQAStats(qaUserId: number): Promise<CachedStats> {
       AND r.role_name    = 'CSR'
       AND u.is_active    = 1
       AND s.submitted_by = ${qaUserId}
+      AND s.access_mode IS NULL
   `)
 
   const disputes = await prisma.$queryRaw<{ thisWeek: bigint; thisMonth: bigint }[]>(Prisma.sql`
@@ -104,6 +105,7 @@ export async function getQACSRActivity(qaUserId: number): Promise<QACSRActivityR
     WHERE s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED')
       AND fmf.field_name = 'CSR'
       AND s.submitted_by = ${qaUserId}
+      AND s.access_mode IS NULL
     GROUP BY u.id
   `)
 

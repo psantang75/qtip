@@ -43,6 +43,7 @@ import {
   RoleRedirect,
   TrainingIndexRedirect,
 } from './guards'
+import { InsightsScopeProvider } from '@/hooks/InsightsScopeProvider'
 
 /**
  * Route tree for the application.
@@ -399,11 +400,15 @@ export default function AppRoutes(): React.ReactElement {
           {/* Insights */}
           <Route path="/app/insights">
             <Route index element={<InsightsIndexRedirect />} />
-            <Route path="qc-overview" element={<RequireInsightsAccess pageKey="qc_overview"><PageLoader><QCOverviewPage /></PageLoader></RequireInsightsAccess>} />
-            <Route path="qc-quality"  element={<RequireInsightsAccess pageKey="qc_quality"><PageLoader><QCQualityPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="qc-overview" element={<RequireInsightsAccess pageKey="qc_overview"><PageLoader><InsightsScopeProvider scope="qc"><QCOverviewPage /></InsightsScopeProvider></PageLoader></RequireInsightsAccess>} />
+            <Route path="qc-quality"  element={<RequireInsightsAccess pageKey="qc_quality"><PageLoader><InsightsScopeProvider scope="qc"><QCQualityPage /></InsightsScopeProvider></PageLoader></RequireInsightsAccess>} />
             <Route path="qc-coaching" element={<RequireInsightsAccess pageKey="qc_coaching"><PageLoader><QCCoachingPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="qc-warnings" element={<RequireInsightsAccess pageKey="qc_warnings"><PageLoader><QCWarningsPage /></PageLoader></RequireInsightsAccess>} />
-            <Route path="qc-agents"   element={<RequireInsightsAccess pageKey="qc_agents"><PageLoader><QCAgentsPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="qc-agents"   element={<RequireInsightsAccess pageKey="qc_agents"><PageLoader><InsightsScopeProvider scope="qc"><QCAgentsPage /></InsightsScopeProvider></PageLoader></RequireInsightsAccess>} />
+            {/* Internal Research (Internal forms) — QC dashboards reused in INTERNAL scope.
+                No Overview page: Internal Research starts at Quality. */}
+            <Route path="ir-quality"  element={<RequireInsightsAccess pageKey="ir_quality"><PageLoader><InsightsScopeProvider scope="ir"><QCQualityPage /></InsightsScopeProvider></PageLoader></RequireInsightsAccess>} />
+            <Route path="ir-agents"   element={<RequireInsightsAccess pageKey="ir_agents"><PageLoader><InsightsScopeProvider scope="ir"><QCAgentsPage /></InsightsScopeProvider></PageLoader></RequireInsightsAccess>} />
             {/* Agent Activity - Sales */}
             <Route path="aa-call"     element={<RequireInsightsAccess pageKey="aa_sales_call"><PageLoader><AACallActivityPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="aa-leads"    element={<RequireInsightsAccess pageKey="aa_sales_leads"><PageLoader><AALeadsPage /></PageLoader></RequireInsightsAccess>} />

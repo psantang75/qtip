@@ -15,7 +15,6 @@
  */
 import prisma from '../../config/prisma'
 import { getManagedDepartmentIds } from './manager.access'
-import { ManagerServiceError } from './manager.types'
 
 export interface ListAuditsParams {
   userId: number
@@ -89,13 +88,13 @@ export async function listManagerTeamAudits(
   const { userId, page, limit, filters } = params
   const offset = (page - 1) * limit
 
+  // A manager with no assigned departments simply has no team to audit — return
+  // an empty page rather than a 403. This matches getManagedDepartmentIds' documented
+  // contract and the dashboard / csr-activity handlers, which treat an empty
+  // department scope as "no rows", not an error.
   const departmentIds = await getManagedDepartmentIds(userId)
   if (departmentIds.length === 0) {
-    throw new ManagerServiceError(
-      'No departments assigned to this manager',
-      403,
-      'NO_DEPARTMENTS',
-    )
+    return { audits: [], totalCount: 0, page, limit }
   }
 
   const csrMetadataResult = await prisma.$queryRawUnsafe<CsrMetadataRow[]>(
@@ -139,6 +138,7 @@ export async function listManagerTeamAudits(
      JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
      JOIN users qa ON s.submitted_by = qa.id
      WHERE fmf.field_name = 'CSR' AND sm.value IN (${csrIds.map(() => '?').join(',')})
+       AND s.access_mode IS NULL
      ORDER BY s.submitted_at DESC`,
     ...csrIds,
   )

@@ -11,11 +11,7 @@ import {
 } from '@/components/insights'
 import { useQCFilters } from '@/hooks/useQCFilters'
 import { useKpiConfig, resolveThresholds } from '@/hooks/useKpiConfig'
-import {
-  getQCKpis, getQCTrends, getScoreDistribution, getCategoryScores,
-  getMissedQuestions, getQualityDeptComparison, getQAFormsCompleted, getFormScores, getFilterOptions,
-  getFormAgentBreakdown, getCategoryAgentBreakdown, getLowScoringAudits,
-} from '@/services/insightsQCService'
+import { useInsightsApi, useScopedKey, useInsightsScope } from '@/hooks/useInsightsScope'
 import type { CategoryScore, FormScore, QCParams, QAFormCompletedRow, LowScoringAudit, FormAgentRow, DeptQualityRow } from '@/services/insightsQCService'
 import { scoreColor, fmtN } from '@/components/insights/agentProfileHelpers'
 import { formatQualityDate } from '@/utils/dateFormat'
@@ -48,11 +44,14 @@ function FormScoresSection({ formScores, params, qaGoal, qaWarn }: {
   qaWarn:     number
 }) {
   const navigate = useNavigate()
+  const api = useInsightsApi()
+  const k = useScopedKey()
+  const { routeBase } = useInsightsScope()
   const [expanded, setExpanded] = useState<number | null>(null)
 
   const { data: agentRows = [], isFetching } = useQuery({
-    queryKey: ['qc-form-agents', expanded, params],
-    queryFn:  () => getFormAgentBreakdown(expanded as number, params),
+    queryKey: k('form-agents', expanded, params),
+    queryFn:  () => api.getFormAgentBreakdown(expanded as number, params),
     enabled:  expanded !== null,
   })
 
@@ -119,7 +118,7 @@ function FormScoresSection({ formScores, params, qaGoal, qaWarn }: {
                     data={agentRows}
                     initialSorting={[]}
                     minWidth="min-w-0"
-                    onRowClick={(a) => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
+                    onRowClick={(a) => navigate(`${routeBase}agents?agent=${a.userId}`)}
                   />
                 </div>
               )
@@ -141,6 +140,7 @@ function LowScoresSection({ audits, qaThresh }: {
   qaThresh: ReturnType<typeof resolveThresholds>
 }) {
   const navigate = useNavigate()
+  const { routeBase } = useInsightsScope()
 
   const columns = useMemo<ColumnDef<LowScoringAudit, unknown>[]>(() => [
     {
@@ -188,7 +188,7 @@ function LowScoresSection({ audits, qaThresh }: {
             initialSorting={[]}
             minWidth="min-w-0"
             paginated
-            onRowClick={(a) => navigate(`/app/insights/qc-agents?agent=${a.csrUserId}`)}
+            onRowClick={(a) => navigate(`${routeBase}agents?agent=${a.csrUserId}`)}
           />
         )
       }
@@ -207,6 +207,9 @@ function CategoryPerformanceSection({ catData, params, qaGoal, qaWarn }: {
   qaWarn:  number
 }) {
   const navigate = useNavigate()
+  const api = useInsightsApi()
+  const k = useScopedKey()
+  const { routeBase } = useInsightsScope()
   const [showAll, setShowAll] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [expandedCat, setExpandedCat] = useState<string | null>(null)
@@ -238,8 +241,8 @@ function CategoryPerformanceSection({ catData, params, qaGoal, qaWarn }: {
   }, [expandedCat, catData])
 
   const { data: agentRows = [], isFetching } = useQuery({
-    queryKey: ['qc-cat-agents', expandedCat, params],
-    queryFn:  () => getCategoryAgentBreakdown(expandedCatRow!.formId, expandedCatRow!.categoryId, params),
+    queryKey: k('cat-agents', expandedCat, params),
+    queryFn:  () => api.getCategoryAgentBreakdown(expandedCatRow!.formId, expandedCatRow!.categoryId, params),
     enabled:  expandedCat !== null && !!expandedCatRow && !!expandedCatRow.formId && !!expandedCatRow.categoryId,
   })
 
@@ -301,7 +304,7 @@ function CategoryPerformanceSection({ catData, params, qaGoal, qaWarn }: {
                                   {agentRows.map(a => (
                                     <div
                                       key={a.userId}
-                                      onClick={() => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
+                                      onClick={() => navigate(`${routeBase}agents?agent=${a.userId}`)}
                                       className="flex items-center text-xs py-1.5 border-b border-slate-100 last:border-0 hover:bg-slate-100 cursor-pointer"
                                     >
                                       <span className="flex-1 min-w-0 truncate text-primary hover:underline">{a.name}</span>
@@ -399,22 +402,30 @@ export default function QCQualityPage() {
           customStart, setCustomStart, customEnd, setCustomEnd,
           forms, setForms, resetFilters, params } = useQCFilters()
 
+  const api = useInsightsApi()
+  const k = useScopedKey()
+  const { scope } = useInsightsScope()
+  // Internal Research has no assignment/pacing and no dispute workflow, so it
+  // drops the assigned/completion-rate KPIs and the Dispute/Timeliness panels —
+  // keeping its KPI set identical to the IR agent-detail page.
+  const isQc = scope === 'qc'
+
   // Cross-filtered dropdown options: dept options filtered by selected forms, form options filtered by selected depts
   const { data: filterOpts } = useQuery({
-    queryKey: ['qc-filter-opts', params],
-    queryFn:  () => getFilterOptions(params),
+    queryKey: k('filter-opts', params),
+    queryFn:  () => api.getFilterOptions(params),
   })
   const deptOptions = filterOpts?.departments ?? []
   const formOptions = filterOpts?.forms ?? []
 
   // All data queries use the same params (dept + form + period)
-  const { data: kpiData, isLoading, isError, refetch } = useQuery({ queryKey: ['qc-kpis', params], queryFn: () => getQCKpis(params) })
-  const { data: trendData } = useQuery({ queryKey: ['qc-trends-qa', params], queryFn: () => getQCTrends({ ...params, kpis: 'avg_qa_score' }) })
-  const { data: distData = [] } = useQuery({ queryKey: ['qc-dist', params], queryFn: () => getScoreDistribution(params) })
-  const { data: catData  = [] } = useQuery({ queryKey: ['qc-cats', params], queryFn: () => getCategoryScores(params) })
-  const { data: missData = [] } = useQuery({ queryKey: ['qc-miss', params], queryFn: () => getMissedQuestions(params) })
-  const { data: deptComp = [] } = useQuery({ queryKey: ['qc-dept-cmp', params], queryFn: () => getQualityDeptComparison(params) })
-  const { data: qaForms = [] } = useQuery({ queryKey: ['qc-qa-forms', params], queryFn: () => getQAFormsCompleted(params) })
+  const { data: kpiData, isLoading, isError, refetch } = useQuery({ queryKey: k('kpis', params), queryFn: () => api.getQCKpis(params) })
+  const { data: trendData } = useQuery({ queryKey: k('trends-qa', params), queryFn: () => api.getQCTrends({ ...params, kpis: 'avg_qa_score' }) })
+  const { data: distData = [] } = useQuery({ queryKey: k('dist', params), queryFn: () => api.getScoreDistribution(params) })
+  const { data: catData  = [] } = useQuery({ queryKey: k('cats', params), queryFn: () => api.getCategoryScores(params) })
+  const { data: missData = [] } = useQuery({ queryKey: k('miss', params), queryFn: () => api.getMissedQuestions(params) })
+  const { data: deptComp = [] } = useQuery({ queryKey: k('dept-cmp', params), queryFn: () => api.getQualityDeptComparison(params) })
+  const { data: qaForms = [] } = useQuery({ queryKey: k('qa-forms', params), queryFn: () => api.getQAFormsCompleted(params) })
   // Group the flat QA-forms rows into (QA person → form) blocks so we can render
   // a subtotal row per QA-person/form, mirroring the Tickets & Tasks report.
   // Rows arrive pre-sorted by qa → form → agent, so contiguous grouping is safe.
@@ -439,8 +450,8 @@ export default function QCQualityPage() {
     }
     return groups
   }, [qaForms])
-  const { data: formScores = [] } = useQuery({ queryKey: ['qc-forms', params], queryFn: () => getFormScores(params) })
-  const { data: lowScores = [] } = useQuery({ queryKey: ['qc-low-scores', params], queryFn: () => getLowScoringAudits(params) })
+  const { data: formScores = [] } = useQuery({ queryKey: k('forms', params), queryFn: () => api.getFormScores(params) })
+  const { data: lowScores = [] } = useQuery({ queryKey: k('low-scores', params), queryFn: () => api.getLowScoringAudits(params) })
   const { data: kpiConfig } = useKpiConfig()
 
   const cur       = kpiData?.current   ?? {}
@@ -480,7 +491,10 @@ export default function QCQualityPage() {
 
         {/* KPI Row 1 */}
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-          {['avg_qa_score','audits_assigned','audits_completed','audit_completion_rate','critical_fail_rate','avg_criticals_per_audit'].map(code => (
+          {(isQc
+            ? ['avg_qa_score','audits_assigned','audits_completed','audit_completion_rate','critical_fail_rate','avg_criticals_per_audit']
+            : ['avg_qa_score','audits_completed','critical_fail_rate','avg_criticals_per_audit']
+          ).map(code => (
             <KpiTile
               key={code}
               kpiCode={code}
@@ -508,8 +522,10 @@ export default function QCQualityPage() {
           </InsightsSection>
         </div>
 
-        {/* Dispute Analysis + Timeliness */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Dispute Analysis + Timeliness — QC only. Internal Research audits are
+            hidden from the reviewed agent, so there is no dispute or acknowledgment
+            timeliness to report. */}
+        {isQc && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <InsightsSection title="Dispute Analysis">
             {([
               ['Dispute Rate',          'dispute_rate',           cur.dispute_rate,           prv.dispute_rate,           '%'],
@@ -543,7 +559,7 @@ export default function QCQualityPage() {
               )
             })}
           </InsightsSection>
-        </div>
+        </div>}
 
         {/* Average Score by Form — expandable per-agent drill-down */}
         <FormScoresSection

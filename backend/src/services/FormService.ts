@@ -33,7 +33,7 @@ export class FormServiceError extends Error {
  */
 export interface IFormService {
   createForm(formData: CreateFormDTO, created_by: number): Promise<{ form_id: number; message: string }>;
-  getForms(isActive?: boolean, page?: number, limit?: number): Promise<{
+  getForms(isActive?: boolean, page?: number, limit?: number, role?: string, userId?: number): Promise<{
     forms: FormWithCategories[];
     pagination?: {
       total: number;
@@ -42,7 +42,7 @@ export interface IFormService {
       totalPages: number;
     };
   }>;
-  getFormById(form_id: number, includeInactive?: boolean): Promise<FormWithCategories>;
+  getFormById(form_id: number, includeInactive?: boolean, requesterRole?: string, requesterUserId?: number): Promise<FormWithCategories>;
   updateForm(form_id: number, formData: CreateFormDTO, updatedBy: number): Promise<{ form_id: number; message: string }>;
   deactivateForm(form_id: number, updatedBy: number): Promise<{ message: string }>;
   validateFormStructure(formData: CreateFormDTO): Promise<void>;
@@ -87,7 +87,7 @@ export class FormService implements IFormService {
   /**
    * Get all forms with optional filtering and pagination
    */
-  async getForms(isActive?: boolean, page?: number, limit?: number): Promise<{
+  async getForms(isActive?: boolean, page?: number, limit?: number, role?: string, userId?: number): Promise<{
     forms: FormWithCategories[];
     pagination?: {
       total: number;
@@ -97,7 +97,7 @@ export class FormService implements IFormService {
     };
   }> {
     try {
-      const result = await this.formRepository.getForms(isActive, page, limit);
+      const result = await this.formRepository.getForms(isActive, page, limit, role, userId);
       
       return {
         forms: result.forms,
@@ -115,7 +115,12 @@ export class FormService implements IFormService {
   /**
    * Get form by ID with complete structure
    */
-  async getFormById(form_id: number, includeInactive: boolean = false): Promise<FormWithCategories> {
+  async getFormById(
+    form_id: number,
+    includeInactive: boolean = false,
+    requesterRole?: string,
+    requesterUserId?: number,
+  ): Promise<FormWithCategories> {
     try {
       if (!form_id || form_id <= 0) {
         throw new FormServiceError(
@@ -125,7 +130,7 @@ export class FormService implements IFormService {
         );
       }
 
-      const form = await this.formRepository.getFormById(form_id, includeInactive);
+      const form = await this.formRepository.getFormById(form_id, includeInactive, requesterRole, requesterUserId);
       
       if (!form) {
         throw new FormServiceError(

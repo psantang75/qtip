@@ -5,6 +5,7 @@ import { countBusinessDays } from '../utils/businessCalendar'
 import { fmtDatetime as fmt, fmtDate } from '../utils/dateHelpers'
 
 import { deptClause, formFilter, CSR_JOIN } from './qcQueryHelpers'
+import { accessScopeClause, type AccessScope } from '../utils/formScope'
 import type { SqlParams } from '../utils/db/sqlParams'
 
 async function scalar(sql: string, params: unknown[]): Promise<number | null> {
@@ -57,11 +58,22 @@ export class QCKpiService {
     range: DateRange,
     userId?: number,
     formNames: string[] = [],
+    accessScope: AccessScope = 'STANDARD',
   ): Promise<{ kpis: Record<string, number | null>; meta: KpiMeta }> {
     const s = fmt(range.start)
     const e = fmt(range.end)
     const dc = deptClause(deptFilter)
     const dp = dc.params
+    // Internal scope: STANDARD excludes internal audits from every
+    // submission-rooted KPI; INTERNAL (Internal Research) includes only internal
+    // audits.
+    const acc = accessScopeClause(accessScope, 's')
+    // Internal Research is quality-only: coaching, quiz, and write-up tables
+    // have no form association and therefore no internal/standard notion. Running
+    // them under INTERNAL scope would surface org-wide non-internal numbers on
+    // the Internal Research dashboards, so they are skipped entirely (returned as
+    // empty) and their derived KPIs resolve to null.
+    const isInternal = accessScope === 'INTERNAL'
     // Form filter is only meaningful for Quality queries (rooted at submissions
     // / disputes). Coaching, quiz, and discipline tables have no form_id link
     // so the form filter is intentionally NOT applied to them — same reason
@@ -112,7 +124,7 @@ export class QCKpiService {
          LEFT JOIN score_snapshots ss ON ss.submission_id = s.id
          ${CSR_JOIN}
          ${ff.join}
-         WHERE s.status = 'FINALIZED' AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${ff.where} ${userSql}`,
+         WHERE s.status = 'FINALIZED' AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${ff.where} ${userSql} ${acc}`,
         qpFinalized,
       ),
       // Block B: auditsCompleted, criticalMissedCount, avgCriticalsPerAudit.
@@ -128,7 +140,7 @@ export class QCKpiService {
          FROM submissions s
          ${CSR_JOIN}
          ${ff.join}
-         WHERE s.status = 'FINALIZED' AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${ff.where} ${userSql}`,
+         WHERE s.status = 'FINALIZED' AND s.submitted_at BETWEEN ? AND ? ${dc.sql} ${ff.where} ${userSql} ${acc}`,
         qpFinalized,
       ),
       // Block C: dispCount, upheld, resolved, adjusted, avgResTime.
@@ -143,7 +155,7 @@ export class QCKpiService {
          JOIN submissions s ON d.submission_id = s.id
          ${CSR_JOIN}
          ${ff.join}
-         WHERE d.created_at BETWEEN ? AND ? ${dc.sql} ${ff.where} ${userSql}`,
+         WHERE d.created_at BETWEEN ? AND ? ${dc.sql} ${ff.where} ${userSql} ${acc}`,
         qpFinalized,
       ),
       // Block D: timeToAudit (lag from interaction date to QA submission).
@@ -155,12 +167,15 @@ export class QCKpiService {
          JOIN submission_metadata sm_int ON sm_int.submission_id = s.id
          JOIN form_metadata_fields fmf_int ON sm_int.field_id = fmf_int.id AND fmf_int.field_name = 'Interaction Date'
          WHERE s.status = 'FINALIZED' AND s.submitted_at BETWEEN ? AND ?
-           AND sm_int.date_value IS NOT NULL ${dc.sql} ${ff.where} ${userSql}`,
+           AND sm_int.date_value IS NOT NULL ${dc.sql} ${ff.where} ${userSql} ${acc}`,
         qpFinalized,
       ),
       // Block E: every coaching session status slice in one pass.
       // session_date = the date the session was held (reliable anchor for all filters).
-      aggregateRow(
+      isInternal ? Promise.resolve({
+        sessCompleted: 0, sessClosed: 0, sessScheduled: 0, sessTotal: 0,
+        sessDelivered: 0, avgDaysClose: null, followupDue: 0, followupOnTime: 0,
+      }) : aggregateRow(
         `SELECT
            COALESCE(SUM(CASE WHEN cs.status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS sessCompleted,
            COALESCE(SUM(CASE WHEN cs.status = 'CLOSED'    THEN 1 ELSE 0 END), 0) AS sessClosed,
@@ -181,7 +196,7 @@ export class QCKpiService {
         qpDate,
       ),
       // Block G: quizTotal, quizPassed, avgQuizScore.
-      aggregateRow(
+      isInternal ? Promise.resolve({ quizTotal: 0, quizPassed: 0, avgQuizScore: null }) : aggregateRow(
         `SELECT
            COUNT(*) AS quizTotal,
            COALESCE(SUM(CASE WHEN qa.passed = 1 THEN 1 ELSE 0 END), 0) AS quizPassed,
@@ -194,7 +209,7 @@ export class QCKpiService {
       // Block H: avgAttempts — keeps its own derived table because the
       // GROUP BY changes the granularity (per quiz × user) and would corrupt
       // the other aggregates if folded into Block G.
-      scalar(
+      isInternal ? Promise.resolve(null) : scalar(
         `SELECT AVG(t.min_att) AS value FROM (
            SELECT qa.quiz_id, qa.user_id, MIN(qa.attempt_number) AS min_att
            FROM quiz_attempts qa
@@ -204,7 +219,7 @@ export class QCKpiService {
         qpDate,
       ),
       // Block I: wuCount (= wuTotal in old code), wuClosed, wuWithWu.
-      aggregateRow(
+      isInternal ? Promise.resolve({ wuCount: 0, wuWithWu: 0, wuClosed: 0 }) : aggregateRow(
         `SELECT
            COUNT(*) AS wuCount,
            COUNT(DISTINCT wu.csr_id) AS wuWithWu,
@@ -215,12 +230,12 @@ export class QCKpiService {
         qpDate,
       ),
       // Block J: activeUsers — trivial standalone count, not date-bounded.
-      scalar(`SELECT COUNT(*) AS value FROM users WHERE role_id = 3 AND is_active = 1`, []),
+      isInternal ? Promise.resolve(null) : scalar(`SELECT COUNT(*) AS value FROM users WHERE role_id = 3 AND is_active = 1`, []),
       // Block K: escalation_rate numerator. Write-ups in the period that
       // escalated the agent to a higher tier (vs their most recent tier in
       // the trailing 12mo). Mirrors the Step-Up cards on the Warnings page.
       // Correlated subquery — must stay separate from Block I.
-      scalar(
+      isInternal ? Promise.resolve(null) : scalar(
         `SELECT SUM(CASE
                       WHEN (curr.document_type = 'WRITTEN_WARNING' AND curr.prev_tier = 'VERBAL_WARNING')
                         OR (curr.document_type = 'FINAL_WARNING'   AND curr.prev_tier IN ('VERBAL_WARNING','WRITTEN_WARNING'))
@@ -241,7 +256,7 @@ export class QCKpiService {
       // Block L: repeat_offender_rate numerator — distinct agents with ≥2
       // write-ups whose created_at is in the period. Mirrors the Repeat
       // Warning Agents table. Different grain than Block I (HAVING).
-      scalar(
+      isInternal ? Promise.resolve(null) : scalar(
         `SELECT COUNT(*) AS value FROM (
            SELECT wu.csr_id FROM write_ups wu
            JOIN users csr ON wu.csr_id = csr.id
@@ -253,7 +268,7 @@ export class QCKpiService {
       // Block M: active agents in the selected departments. Drives the coaching
       // Session Goal (1 session per agent per week). Honors the Department
       // filter (dc.sql) and the optional user filter; not date-bounded.
-      scalar(
+      isInternal ? Promise.resolve(null) : scalar(
         `SELECT COUNT(*) AS value FROM users csr
          WHERE csr.role_id = 3 AND csr.is_active = 1 ${dc.sql} ${userSql}`,
         [...dp, ...userParams],
@@ -348,10 +363,11 @@ export class QCKpiService {
     ranges: PeriodRanges,
     formNames: string[] = [],
     userId?: number,
+    accessScope: AccessScope = 'STANDARD',
   ): Promise<{ current: Record<string, number | null>; prior: Record<string, number | null>; meta: KpiMeta; priorMeta: KpiMeta }> {
     const [currentResult, priorResult] = await Promise.all([
-      this.computeKpisForRange(deptFilter, ranges.current, userId, formNames),
-      this.computeKpisForRange(deptFilter, ranges.prior,   userId, formNames),
+      this.computeKpisForRange(deptFilter, ranges.current, userId, formNames, accessScope),
+      this.computeKpisForRange(deptFilter, ranges.prior,   userId, formNames, accessScope),
     ])
     const current = currentResult.kpis
     const prior   = priorResult.kpis
@@ -367,12 +383,13 @@ export class QCKpiService {
     endDate: Date,
     userId?: number,
     formNames: string[] = [],
+    accessScope: AccessScope = 'STANDARD',
   ): Promise<Array<Record<string, number | string | null>>> {
     let anchor = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
     for (let probe = 0; probe < 3; probe++) {
       const mStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
       const mEnd   = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0, 23, 59, 59, 999)
-      const { kpis } = await this.computeKpisForRange(deptFilter, { start: mStart, end: mEnd }, userId, formNames)
+      const { kpis } = await this.computeKpisForRange(deptFilter, { start: mStart, end: mEnd }, userId, formNames, accessScope)
       const hasData = kpiCodes.some(c => kpis[c] !== null)
       if (hasData) break
       anchor = new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1)
@@ -389,7 +406,7 @@ export class QCKpiService {
     })
 
     const monthResults = await Promise.all(
-      monthRanges.map(r => this.computeKpisForRange(deptFilter, r, userId, formNames)),
+      monthRanges.map(r => this.computeKpisForRange(deptFilter, r, userId, formNames, accessScope)),
     )
 
     return monthRanges.map(({ start }, idx) => {

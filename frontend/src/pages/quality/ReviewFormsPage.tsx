@@ -109,7 +109,7 @@ export default function ReviewFormsPage() {
                   onClick={() => navigate(`/app/quality/audit?formId=${f.id}`)}
                 >
                   <TableCell className="text-[13px] text-slate-600">{f.form_name}</TableCell>
-                  <TableCell><StatusBadge status={f.is_active ? 'ACTIVE' : 'INACTIVE'} /></TableCell>
+                  <TableCell><StatusBadge status={f.access_mode === 'INTERNAL' ? 'INTERNAL' : f.is_active ? 'ACTIVE' : 'INACTIVE'} /></TableCell>
                   <TableCell className="text-[13px] text-slate-600">{f.interaction_type ?? '—'}</TableCell>
                   <TableCell className="text-[13px] text-slate-600">v{f.version ?? 1}</TableCell>
                   <TableCell className="text-[13px] text-slate-500">

@@ -11,7 +11,7 @@ import { useQCFilters } from '@/hooks/useQCFilters'
 import { useQualityRole } from '@/hooks/useQualityRole'
 import { useAuth } from '@/hooks/useAuth'
 import { getKpiDef } from '@/constants/kpiDefs'
-import { getQCAgents, getFilterOptions, getQCKpis } from '@/services/insightsQCService'
+import { useInsightsApi, useScopedKey, useInsightsScope } from '@/hooks/useInsightsScope'
 import type { AgentSummary } from '@/services/insightsQCService'
 import { useToast } from '@/hooks/use-toast'
 import QCAgentProfile from './QCAgentProfile'
@@ -59,6 +59,10 @@ const COLUMNS = [
     },
   }),
 ]
+
+// Coaching Sessions + Warnings are QC-only: Internal Research has no coaching
+// or disciplinary lifecycle, so those columns are dropped in IR scope.
+const IR_HIDDEN_COLUMNS = new Set(['coaching', 'writeups'])
 
 export default function QCAgentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -143,13 +147,22 @@ function AdminAgentsList({
   customStart, setCustomStart, customEnd, setCustomEnd,
   forms, setForms, resetFilters, toast,
 }: AdminAgentsListProps) {
-  const { data: filterOpts } = useQuery({ queryKey: ['qc-filter-opts', apiParams], queryFn: () => getFilterOptions(apiParams) })
+  const api = useInsightsApi()
+  const k = useScopedKey()
+  const { scope } = useInsightsScope()
+  const columns = useMemo(
+    () => scope === 'qc'
+      ? COLUMNS
+      : COLUMNS.filter(c => !IR_HIDDEN_COLUMNS.has((c as { accessorKey?: string }).accessorKey ?? '')),
+    [scope],
+  )
+  const { data: filterOpts } = useQuery({ queryKey: k('filter-opts', apiParams), queryFn: () => api.getFilterOptions(apiParams) })
   const deptOptions = filterOpts?.departments ?? []
   const formOptions = filterOpts?.forms ?? []
-  const { data: agents = [], isLoading, isError, refetch } = useQuery({ queryKey: ['qc-agents', apiParams], queryFn: () => getQCAgents(apiParams) })
+  const { data: agents = [], isLoading, isError, refetch } = useQuery({ queryKey: k('agents', apiParams), queryFn: () => api.getQCAgents(apiParams) })
   // Reuse the standard QC KPI call purely for the business-days / prior-range
   // basis shown in the filter bar (same meta every other Insights page uses).
-  const { data: kpiData } = useQuery({ queryKey: ['qc-kpis', apiParams], queryFn: () => getQCKpis(apiParams) })
+  const { data: kpiData } = useQuery({ queryKey: k('kpis', apiParams), queryFn: () => api.getQCKpis(apiParams) })
   const meta      = kpiData?.meta
   const priorMeta = kpiData?.priorMeta
 
@@ -189,7 +202,7 @@ function AdminAgentsList({
   }
 
   const table = useReactTable({
-    data: agents, columns: COLUMNS,
+    data: agents, columns,
     state: { sorting }, onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(),
   })
@@ -266,7 +279,7 @@ function AdminAgentsList({
                 </tr>
               ))}
               {agents.length === 0 && (
-                <tr><td colSpan={7} className="py-8 text-center text-sm text-slate-400">No agents match the selected filters.</td></tr>
+                <tr><td colSpan={columns.length} className="py-8 text-center text-sm text-slate-400">No agents match the selected filters.</td></tr>
               )}
             </tbody>
           </table>

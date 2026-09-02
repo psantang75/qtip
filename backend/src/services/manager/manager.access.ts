@@ -77,6 +77,7 @@ export async function isManagerOfSubmissionAgent(
     JOIN department_managers dm ON dept.id = dm.department_id
     WHERE s.id = ${submissionId}
       AND fmf.field_name = 'CSR'
+      AND s.access_mode IS NULL
       AND dm.manager_id = ${managerId}
       AND dm.is_active = 1
       AND dept.is_active = 1

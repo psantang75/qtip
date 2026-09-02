@@ -17,6 +17,7 @@ import { dbLogger } from '../../config/logger'
 import { QAServiceError } from './qa.types'
 import { attachPhoneSystemRecordings } from '../callRecordingEnrichment'
 import { getLastReopenForSubmission, type LastReopen } from '../unlock/unlock.query.service'
+import { canAccessInternalForm, isInternalForm } from '../../utils/formScope'
 
  
 
@@ -77,6 +78,7 @@ export async function getSubmissionDetail(
   submissionId: number,
   includeFullForm: boolean,
   restrictToSubmittedBy?: number,
+  requester?: { requesterRole?: string | null; requesterUserId?: number | null },
 ): Promise<SubmissionDetail> {
   let submission: any
   try {
@@ -91,19 +93,28 @@ export async function getSubmissionDetail(
     )
   }
 
-  // QA author self-scope: when restricted, a submission authored by another
-  // reviewer returns the same 404 a missing row would — no info leak about
-  // whether a submission exists for someone else.
-  if (
-    !submission ||
-    (restrictToSubmittedBy != null && Number(submission.submitted_by) !== restrictToSubmittedBy)
-  ) {
-    throw new QAServiceError(
+  const notFound = () =>
+    new QAServiceError(
       'Submission not found or not a finalized/disputed submission',
       404,
       'SUBMISSION_NOT_FOUND',
       'NOT_FOUND',
     )
+
+  if (!submission) throw notFound()
+
+  if (isInternalForm(submission)) {
+    // Internal audits gate on the form audience, not authorship — a permitted
+    // designate (admin, an audience role, or an individually granted user) may
+    // open one they did not author. Anyone else gets the same 404 a missing
+    // row would, so the audit's existence never leaks.
+    if (!canAccessInternalForm(requester?.requesterRole, submission, requester?.requesterUserId)) {
+      throw notFound()
+    }
+  } else if (restrictToSubmittedBy != null && Number(submission.submitted_by) !== restrictToSubmittedBy) {
+    // QA author self-scope for normal audits — no info leak about whether a
+    // submission exists for someone else.
+    throw notFound()
   }
 
   const [metadata, calls, ticket_tasks, answers, disputes, scoreBreakdown, activeUnlock, lastReopen] = await Promise.all([
@@ -170,10 +181,22 @@ async function loadSubmission(submissionId: number): Promise<any | null> {
   const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
     SELECT
       s.id, s.form_id, s.submitted_by, s.submitted_at, s.total_score, s.status,
-      s.critical_fail_count, s.score_capped,
+      s.critical_fail_count, s.score_capped, s.access_mode,
       s.ai_overall_confidence, s.ai_extras, s.reopen_count,
       f.form_name, f.version, f.user_version, f.user_version_date,
       f.interaction_type, f.critical_cap_percent,
+      -- Whether this audit IS internal is frozen at capture (s.access_mode).
+      -- But the AUDIENCE must reflect the form family's CURRENT governance, not
+      -- the (possibly stale) version this audit was captured under — removing a
+      -- role/user on a new version must immediately revoke access to existing
+      -- internal audits. Pick the family's active version, else its highest
+      -- version, mirroring resolvePermittedInternalForms.
+      COALESCE((
+        SELECT cur.access_roles FROM forms cur
+        WHERE cur.form_group_id = f.form_group_id
+        ORDER BY cur.is_active DESC, cur.version DESC
+        LIMIT 1
+      ), f.access_roles) AS access_roles,
       reviewer.username AS reviewer_name,
       (
         SELECT u.username

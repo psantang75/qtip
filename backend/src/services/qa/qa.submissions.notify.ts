@@ -32,6 +32,9 @@ export async function notifySubmissionGraded(
       },
     })
     if (!submission) return
+    // Internal-form audits are invisible to the reviewee and carry no agent
+    // notifications — the whole class is "as if it never existed".
+    if (submission.access_mode) return
 
     const csrIdRaw = await prisma.$queryRaw<Array<{ csr_id: string | number }>>(Prisma.sql`
       SELECT sm.value as csr_id

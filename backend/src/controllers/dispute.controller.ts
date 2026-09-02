@@ -62,6 +62,7 @@ export const getAuditDetails = asyncHandler(async (req: Request, res: Response):
       JOIN submission_metadata sm ON s.id = sm.submission_id
       JOIN form_metadata_fields fmf ON sm.field_id = fmf.id AND fmf.field_name = 'CSR'
       WHERE s.id = ${parseInt(submission_id)} AND sm.value = ${user_id.toString()}
+        AND s.access_mode IS NULL
     `;
 
     if (submissionRows.length === 0) {
@@ -150,6 +151,9 @@ export const submitDispute = asyncHandler(async (req: Request, res: Response): P
       JOIN submission_metadata sm ON s.id = sm.submission_id
       JOIN form_metadata_fields fmf ON sm.field_id = fmf.id
       WHERE s.id = ${submission_id} AND fmf.field_name = 'CSR' AND sm.value = ${user_id.toString()}
+        -- Internal-form audits are invisible to the reviewee and carry no dispute
+        -- workflow; they never match here so a dispute cannot be opened.
+        AND s.access_mode IS NULL
     `;
 
     if (submissionRows.length === 0) {

@@ -160,15 +160,15 @@ describe('updateDispute — validation envelope (with file cleanup preserved)', 
     expect(err.message).toBe('Valid dispute ID is required');
   });
 
-  it('400 when reason exceeds 1000 characters', async () => {
+  it('400 when reason exceeds 5000 characters', async () => {
     const err = await runExpectError(updateDispute, {
       params: { disputeId: '3' },
-      body: { reason: 'a'.repeat(1001) },
+      body: { reason: 'a'.repeat(5001) },
       file: undefined,
       user: { user_id: 5 },
     });
     expect(err.statusCode).toBe(400);
-    expect(err.message).toBe('Dispute reason must be less than 1000 characters');
+    expect(err.message).toBe('Dispute reason must be less than 5000 characters');
   });
 });
 

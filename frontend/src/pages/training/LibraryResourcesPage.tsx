@@ -19,7 +19,7 @@ import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
 import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect'
 import { RowActionButton } from '@/components/common/RowActionButton'
 import { Button } from '@/components/ui/button'
-import { StatusActiveFilter } from '@/components/common/StatusActiveFilter'
+import { StatusActiveFilter, type StatusActiveValue } from '@/components/common/StatusActiveFilter'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -57,7 +57,7 @@ function ResourceTypeBadge({ type }: { type: ResourceType }) {
 
 // ── Form types ────────────────────────────────────────────────────────────────
 
-type StatusFilter = 'all' | 'active' | 'inactive'
+type StatusFilter = StatusActiveValue
 
 interface ResourceForm {
   title: string

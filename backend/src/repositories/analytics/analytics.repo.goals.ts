@@ -89,6 +89,7 @@ export async function getAverageQAScoreRepo(
         INNER JOIN users u ON s.submitted_by = u.id
       WHERE s.submitted_at BETWEEN ${filters.start_date} AND ${endDateWithTime}
         AND s.status IN ('SUBMITTED', 'FINALIZED')
+        AND s.access_mode IS NULL
         AND s.total_score IS NOT NULL
         ${extraWhere}
     `)
@@ -118,6 +119,7 @@ export async function getAuditRateRepo(
         INNER JOIN users u ON s.submitted_by = u.id
       WHERE s.submitted_at BETWEEN ${filters.start_date} AND ${endDateWithTime}
         AND s.status IN ('SUBMITTED', 'FINALIZED')
+        AND s.access_mode IS NULL
         ${extraWhere}
     `)
 
@@ -149,6 +151,7 @@ export async function getDisputeRateRepo(
         LEFT JOIN disputes d ON s.id = d.submission_id
       WHERE s.submitted_at BETWEEN ${filters.start_date} AND ${endDateWithTime}
         AND s.status IN ('SUBMITTED', 'FINALIZED', 'DISPUTED')
+        AND s.access_mode IS NULL
         ${extraWhere}
     `)
 

@@ -14,6 +14,7 @@ import {
   getLeads as svcGetLeads,
   getMargin as svcGetMargin,
 } from '../services/insightsAgentActivity.service';
+import { NO_MATCH_DEPARTMENT_ID } from '../services/insightsScope';
 import { getTicketTouchDetail as svcGetTicketTouchDetail } from '../services/insightsTouchDetail.service';
 import { getProductivityDay as svcGetProductivityDay } from '../services/insightsProductivityDay.service';
 import { getProductivityRoster as svcGetProductivityRoster } from '../services/insightsProductivityRoster.service';
@@ -39,9 +40,15 @@ async function resolveAaScope(
   if (!access.canAccess) { res.status(403).json({ error: 'Access denied' }); return null; }
   const selfEmployeeKey = access.dataScope === 'SELF' ? (access.employeeKey ?? -1) : null;
   // Per-viewer narrowing: DEPARTMENT/DIVISION restrict to the viewer's own
-  // department subtree. ALL and SELF carry no viewer department list.
+  // department subtree. ALL and SELF carry no viewer department list. A
+  // DEPARTMENT/DIVISION viewer with no resolved departments must see NOTHING,
+  // so fall back to the impossible-id sentinel (fail closed) rather than an
+  // empty list, which the roster/day services would treat as "no narrowing" and
+  // leak the whole population — the same reasoning as the SELF `?? -1` above.
   const departmentKeys =
-    access.dataScope === 'DEPARTMENT' || access.dataScope === 'DIVISION' ? access.departmentKeys : [];
+    access.dataScope === 'DEPARTMENT' || access.dataScope === 'DIVISION'
+      ? (access.departmentKeys.length > 0 ? access.departmentKeys : [NO_MATCH_DEPARTMENT_ID])
+      : [];
   // Report population: the departments configured on the page (Insights → Page
   // Management). Empty = not configured → the service falls back to its built-in
   // area/subtree split.
