@@ -61,8 +61,9 @@ const COLUMNS = [
 ]
 
 // Coaching Sessions + Warnings are QC-only: Internal Research has no coaching
-// or disciplinary lifecycle, so those columns are dropped in IR scope.
-const IR_HIDDEN_COLUMNS = new Set(['coaching', 'writeups'])
+// or disciplinary lifecycle, so those columns are dropped in IR scope. Trend
+// (period-over-period QA delta) is also dropped for Internal Research.
+const IR_HIDDEN_COLUMNS = new Set(['coaching', 'writeups', 'trend'])
 
 export default function QCAgentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()

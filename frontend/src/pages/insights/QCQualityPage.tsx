@@ -420,7 +420,7 @@ export default function QCQualityPage() {
 
   // All data queries use the same params (dept + form + period)
   const { data: kpiData, isLoading, isError, refetch } = useQuery({ queryKey: k('kpis', params), queryFn: () => api.getQCKpis(params) })
-  const { data: trendData } = useQuery({ queryKey: k('trends-qa', params), queryFn: () => api.getQCTrends({ ...params, kpis: 'avg_qa_score' }) })
+  const { data: trendData } = useQuery({ queryKey: k('trends-qa', params), queryFn: () => api.getQCTrends({ ...params, kpis: 'avg_qa_score' }), enabled: isQc })
   const { data: distData = [] } = useQuery({ queryKey: k('dist', params), queryFn: () => api.getScoreDistribution(params) })
   const { data: catData  = [] } = useQuery({ queryKey: k('cats', params), queryFn: () => api.getCategoryScores(params) })
   const { data: missData = [] } = useQuery({ queryKey: k('miss', params), queryFn: () => api.getMissedQuestions(params) })
@@ -489,8 +489,9 @@ export default function QCQualityPage() {
           <p className="text-sm text-slate-500 mt-0.5">Detailed quality analytics — scores, disputes, categories, and missed questions.</p>
         </div>
 
-        {/* KPI Row 1 */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+        {/* KPI Row 1 — QC has 6 tiles; Internal Research has 4, spread full
+            width so each card is wider. */}
+        <div className={`grid gap-3 ${isQc ? 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-6' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
           {(isQc
             ? ['avg_qa_score','audits_assigned','audits_completed','audit_completion_rate','critical_fail_rate','avg_criticals_per_audit']
             : ['avg_qa_score','audits_completed','critical_fail_rate','avg_criticals_per_audit']
@@ -506,14 +507,18 @@ export default function QCQualityPage() {
           ))}
         </div>
 
-        {/* Trend + Distribution charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <InsightsSection
-            title="QA Score Trend"
-            infoKpiCodes={['qa_score_trend']}
-          >
-            <TrendChart data={qaTrends} color="#00aeef" goalValue={auditGoal} height={120} metricLabel="%" />
-          </InsightsSection>
+        {/* Trend + Distribution charts. Internal Research drops the QA Score
+            Trend (period-over-period comparison isn't shown for IR), leaving
+            Score Distribution full width. */}
+        <div className={`grid grid-cols-1 gap-4 ${isQc ? 'lg:grid-cols-2' : ''}`}>
+          {isQc && (
+            <InsightsSection
+              title="QA Score Trend"
+              infoKpiCodes={['qa_score_trend']}
+            >
+              <TrendChart data={qaTrends} color="#00aeef" goalValue={auditGoal} height={120} metricLabel="%" />
+            </InsightsSection>
+          )}
           <InsightsSection
             title="Score Distribution"
             infoKpiCodes={['avg_qa_score']}

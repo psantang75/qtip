@@ -210,13 +210,15 @@ export async function getMissedQuestions(
   const fc = formClause(formNames)
   const acc = accessScopeClause(accessScope, 's')
   const accSub = accessScopeClause(accessScope, 'sub')
-  // Agent Profile drill-down scopes the whole report to a single auditee. In
-  // that mode we drop the minimum-sample floor so any missed question can
-  // surface, but still cap at the top 10 by miss rate; the org-wide Quality
-  // view keeps the >=5 floor + top 10 to stay signal-dense across all agents.
+  // Agent Profile drill-down scopes the whole report to a single auditee, and
+  // Internal Research runs on low audit volume. In both cases we drop the
+  // minimum-sample floor so any missed question can surface (still capped at the
+  // top 10 by miss rate). The org-wide STANDARD (QC) view keeps the >=5 floor +
+  // top 10 to stay signal-dense across its high audit volume.
+  const relaxFloor = userId != null || accessScope === 'INTERNAL'
   const userSql    = userId != null ? 'AND csr.id = ?' : ''
   const userParams: (string | number)[] = userId != null ? [userId] : []
-  const havingSql  = userId != null ? 'HAVING missed > 0' : 'HAVING total >= 5 AND missed > 0'
+  const havingSql  = relaxFloor ? 'HAVING missed > 0' : 'HAVING total >= 5 AND missed > 0'
   const limitSql   = 'LIMIT 10'
 
   const [rows] = await pool.execute<RowDataPacket[]>(
