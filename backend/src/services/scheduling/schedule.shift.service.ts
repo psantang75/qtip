@@ -116,12 +116,17 @@ export async function readMySchedule(viewerId: number, from: string, to: string)
 }
 
 function segmentCreate(dateStr: string, segments: ShiftInput['segments']) {
-  return (segments ?? []).map((s, i) => ({
-    activity_type_id: s.activity_type_id,
-    start_at: combineLocal(dateStr, s.start),
-    end_at: combineLocal(dateStr, s.end),
-    sort_order: i,
-  }));
+  // Persist in clock order so breaks/lunches always read back sorted by start
+  // time, regardless of the order they were added in the editor.
+  return (segments ?? [])
+    .slice()
+    .sort((a, b) => a.start.localeCompare(b.start))
+    .map((s, i) => ({
+      activity_type_id: s.activity_type_id,
+      start_at: combineLocal(dateStr, s.start),
+      end_at: combineLocal(dateStr, s.end),
+      sort_order: i,
+    }));
 }
 
 /** Create or replace a single shift (and its segments) for one person/day. */

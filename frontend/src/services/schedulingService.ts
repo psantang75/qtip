@@ -77,7 +77,7 @@ export interface ApiCoverageThreshold {
   windows: ApiCoverageWindow[]
 }
 
-export interface ApiTemplateSegment { id: number; activity_type_id: number; start_time: string; end_time: string; sort_order: number }
+export interface ApiTemplateSegment { id: number; activity_type_id: number; start_time: string; end_time: string; sort_order: number; activity_type?: { label: string } | null }
 export interface ApiTemplateDay { id: number; day_of_week: number; is_day_off: boolean; start_time: string | null; end_time: string | null; segments: ApiTemplateSegment[] }
 export interface ApiTemplate { id: number; template_name: string; description: string | null; is_active: boolean; days: ApiTemplateDay[] }
 

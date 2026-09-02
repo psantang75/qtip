@@ -7,6 +7,7 @@
 import { useQuery } from '@tanstack/react-query'
 import schedulingService, { type ApiTemplate } from '@/services/schedulingService'
 import type { MockTemplate, TemplateDay, MockBreak } from '@/components/scheduling/mockScheduleData'
+import { toBreak } from '@/hooks/useScheduleGrid'
 
 const OFF: TemplateDay = { working: false, start: '08:00', end: '17:00', breaks: [] }
 // Prisma Time columns come back as an epoch-anchored Date, so JSON gives an ISO
@@ -21,11 +22,11 @@ export function adaptTemplate(t: ApiTemplate): MockTemplate {
       days[d.day_of_week] = { ...OFF }
       continue
     }
-    const breaks: MockBreak[] = d.segments.map((s) => ({
-      kind: 'BREAK',
-      start: hm(s.start_time),
-      end: hm(s.end_time),
-    }))
+    // Derive break vs lunch from the segment's activity label (same as the grid),
+    // never assume BREAK — that corrupted lunch-only templates on edit.
+    const breaks: MockBreak[] = d.segments.map((s) =>
+      toBreak(s.activity_type?.label ?? '', hm(s.start_time), hm(s.end_time)),
+    )
     days[d.day_of_week] = { working: true, start: hm(d.start_time), end: hm(d.end_time), breaks }
   }
   return { id: t.id, name: t.template_name, description: t.description ?? '', isActive: t.is_active, days }

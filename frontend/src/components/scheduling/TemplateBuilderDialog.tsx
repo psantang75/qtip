@@ -36,6 +36,10 @@ const STANDARD: TemplateDay = {
   ],
 }
 
+/** Breaks/lunches always list in clock order, however they were added. */
+const sortBreaks = (breaks: MockBreak[]): MockBreak[] =>
+  [...breaks].sort((a, b) => a.start.localeCompare(b.start))
+
 function summarise(d: TemplateDay): string {
   if (!d.working) return 'Off'
   const parts = [`${fmtCompact(d.start)}\u2013${fmtCompact(d.end)}`]
@@ -69,7 +73,7 @@ export function TemplateBuilderDialog({ open, onOpenChange, template, readOnly, 
     if (!open) return
     setName(template?.name ?? '')
     setDays(template
-      ? template.days.map(d => ({ ...d, breaks: [...d.breaks] }))
+      ? template.days.map(d => ({ ...d, breaks: sortBreaks(d.breaks) }))
       : DAYS.map((_, i) => (WEEKDAY_IDX.includes(i) ? { ...STANDARD } : { ...OFF })))
     setEditing(readOnly ? null : 1)
   }, [open, template, readOnly])
@@ -199,10 +203,10 @@ export function TemplateBuilderDialog({ open, onOpenChange, template, readOnly, 
 
                   {day.breaks.length < 3 && (
                     <div className="flex gap-2 pt-1">
-                      <Button variant="outline" size="sm" onClick={() => patch(i, { breaks: [...day.breaks, { kind: 'BREAK', start: '10:00', end: '10:15' }] })}>
+                      <Button variant="outline" size="sm" onClick={() => patch(i, { breaks: sortBreaks([...day.breaks, { kind: 'BREAK', start: '10:00', end: '10:15' }]) })}>
                         <Plus className="mr-1 h-3.5 w-3.5" /> Break
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => patch(i, { breaks: [...day.breaks, { kind: 'LUNCH', start: '12:00', end: '12:30' }] })}>
+                      <Button variant="outline" size="sm" onClick={() => patch(i, { breaks: sortBreaks([...day.breaks, { kind: 'LUNCH', start: '12:00', end: '12:30' }]) })}>
                         <Plus className="mr-1 h-3.5 w-3.5" /> Lunch
                       </Button>
                     </div>

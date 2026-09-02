@@ -34,11 +34,18 @@ function timeValue(hm: string): Date {
   return new Date(Date.UTC(1970, 0, 1, h, m, 0));
 }
 
+// Templates are read back into an editor that must distinguish break vs lunch,
+// so the segment's activity_type label rides along (mirrors the shift read).
+const segmentInclude = {
+  include: { activity_type: true },
+  orderBy: { sort_order: 'asc' },
+} as const;
+
 export function listTemplates(includeInactive = false) {
   return prisma.scheduleTemplate.findMany({
     where: includeInactive ? {} : { is_active: true },
     include: {
-      days: { include: { segments: { orderBy: { sort_order: 'asc' } } }, orderBy: { day_of_week: 'asc' } },
+      days: { include: { segments: segmentInclude }, orderBy: { day_of_week: 'asc' } },
     },
     orderBy: { template_name: 'asc' },
   });
@@ -48,7 +55,7 @@ export async function getTemplate(id: number) {
   const tpl = await prisma.scheduleTemplate.findUnique({
     where: { id },
     include: {
-      days: { include: { segments: { orderBy: { sort_order: 'asc' } } }, orderBy: { day_of_week: 'asc' } },
+      days: { include: { segments: segmentInclude }, orderBy: { day_of_week: 'asc' } },
     },
   });
   if (!tpl) throw new ScheduleServiceError('Template not found', 404, 'NOT_FOUND');
@@ -78,12 +85,17 @@ function dayCreateData(days: TemplateDayInput[]) {
     start_time: d.is_day_off || !d.start ? null : timeValue(d.start),
     end_time: d.is_day_off || !d.end ? null : timeValue(d.end),
     segments: {
-      create: (d.is_day_off ? [] : d.segments ?? []).map((s, i) => ({
-        activity_type_id: s.activity_type_id,
-        start_time: timeValue(s.start),
-        end_time: timeValue(s.end),
-        sort_order: i,
-      })),
+      // Persist in clock order so breaks/lunches always read back sorted by
+      // start time, regardless of the order they were added in the builder.
+      create: (d.is_day_off ? [] : d.segments ?? [])
+        .slice()
+        .sort((a, b) => a.start.localeCompare(b.start))
+        .map((s, i) => ({
+          activity_type_id: s.activity_type_id,
+          start_time: timeValue(s.start),
+          end_time: timeValue(s.end),
+          sort_order: i,
+        })),
     },
   }));
 }
