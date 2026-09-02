@@ -770,16 +770,25 @@ export interface TicketTaskFilters {
   area?: 'sales' | 'csr';
 }
 
-/** Overdue = a real due date that has already passed. Shared by the count and the detail list. */
-const PAST_DUE_PREDICATE = 'f.next_contact IS NOT NULL AND DATE(f.next_contact) < CURDATE()';
+/**
+ * Overdue = a real due date that has already passed. Shared by the count and the
+ * detail list. Compared against a bound `?` = today in the BUSINESS timezone
+ * (ET), NOT MySQL CURDATE(): the primary session is pinned to UTC, so CURDATE()
+ * returns the UTC date and would mis-bucket every "due today" item as past due
+ * between ~8pm ET and midnight (once UTC has rolled to tomorrow). Each caller
+ * binds `businessNow(new Date()).date` for the `?`.
+ */
+const PAST_DUE_PREDICATE = 'f.next_contact IS NOT NULL AND DATE(f.next_contact) < ?';
 
 /**
  * Bucket expressions shared by the live report and the daily snapshot capture.
  * Bucket = next_contact (the task/ticket DueOn) vs today. NULL due date -> no
- * bucket (matches the legacy proc's PastDueCurrent CASE with no ELSE).
+ * bucket (matches the legacy proc's PastDueCurrent CASE with no ELSE). Each
+ * expression carries a single `?` bound to the business-timezone (ET) today —
+ * see PAST_DUE_PREDICATE for why this is a param, not CURDATE().
  */
-const TICKET_CUR_EXPR = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) > CURDATE())`;
-const TICKET_DUE_EXPR = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) = CURDATE())`;
+const TICKET_CUR_EXPR = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) > ?)`;
+const TICKET_DUE_EXPR = `SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) = ?)`;
 const TICKET_PAST_EXPR = `SUM(${PAST_DUE_PREDICATE})`;
 
 /**
@@ -831,8 +840,9 @@ export interface TicketsTasksResult {
  * Tickets & Tasks report data: the current open-work-item snapshot, counted by
  * (agent, classification) into Current / Due Today / Past Due buckets. This is a
  * SNAPSHOT report, so there is NO period filter — it always reflects the latest
- * ingested snapshot. Buckets are derived here from next_contact vs CURDATE() so
- * they stay accurate between snapshot runs. CSR-role guard as on every AA report;
+ * ingested snapshot. Buckets are derived here from next_contact vs the
+ * business-timezone (ET) today so they stay accurate between snapshot runs.
+ * CSR-role guard as on every AA report;
  * the department guard follows `filters.area` — the Sales Department - All subtree
  * for the Sales section, its complement for the CSR section — matched by the
  * conformed assignee. Degrades to empty if the fact table isn't loaded yet.
@@ -860,6 +870,10 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
   const whereSql = `WHERE ${where.join(' AND ')}`;
   const baseWhereSql = `WHERE ${baseWhere.join(' AND ')}`;
 
+  // ET "today" for the three SELECT-clause bucket predicates (Current/Due/Past).
+  // These `?` precede the WHERE params in the statement, so bind them first.
+  const etToday = businessNow(new Date()).date;
+
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT f.agent_name AS agent, dpt.department_name AS department, f.classification AS classification,
             ${TICKET_CUR_EXPR} AS cur, ${TICKET_DUE_EXPR} AS dueToday, ${TICKET_PAST_EXPR} AS pastDue
@@ -870,7 +884,7 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
      GROUP BY f.agent_name, dpt.department_name, f.classification
      HAVING cur > 0 OR dueToday > 0 OR pastDue > 0
      ORDER BY dpt.department_name, f.agent_name, f.classification`,
-    params,
+    [etToday, etToday, etToday, ...params],
   );
 
   const [userRows] = await pool.query<RowDataPacket[]>(
@@ -972,7 +986,8 @@ export async function getTicketsPastDue(filters: TicketPastDueFilters): Promise<
 
   const { EMP_JOIN, DEPT_JOIN, baseWhere, baseParams } = ticketTaskBase(filters.area, filters.selfEmployeeKey);
   const where = [...baseWhere, 'f.agent_name = ?', 'f.classification = ?', PAST_DUE_PREDICATE];
-  const params = [...baseParams, filters.agent, filters.classification];
+  // Final `?` is PAST_DUE_PREDICATE's business-timezone (ET) today.
+  const params = [...baseParams, filters.agent, filters.classification, businessNow(new Date()).date];
 
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT f.process_type, f.ticket_id, f.task_id, f.customer_name,
@@ -1043,9 +1058,9 @@ export interface DailyCaptureResult {
  * Guards, in order:
  *  - both tables must exist (degrade to no-op before migrations/first load);
  *  - before the capture hour (ET) -> wait;
- *  - the bucket expressions compare against CURDATE() on the UTC-pinned
- *    primary session, so skip if the UTC date has rolled past the ET date
- *    (>= ~8pm ET) — a late catch-up run must never bucket against tomorrow;
+ *  - the bucket expressions bucket against `etDate` (business-timezone today),
+ *    so the UTC-rollover guard below is belt-and-suspenders — it keeps a late
+ *    catch-up run from writing a snapshot stamped with tomorrow's UTC date;
  *  - already captured today -> no-op.
  */
 export async function captureDailyTicketTotals(now: Date = new Date()): Promise<DailyCaptureResult> {
@@ -1081,7 +1096,9 @@ export async function captureDailyTicketTotals(now: Date = new Date()): Promise<
        WHERE ${baseWhere.join(' AND ')}
        GROUP BY f.employee_key, f.agent_name, dpt.department_name
        HAVING cur > 0 OR due_today > 0 OR past_due > 0`,
-      [etDate, area, ...baseParams],
+      // etDate twice-over: the INSERT's snapshot_date + area, then the three
+      // bucket predicates (Current/Due/Past) all keyed to ET today.
+      [etDate, area, etDate, etDate, etDate, ...baseParams],
     );
     rows += result.affectedRows ?? 0;
   }
