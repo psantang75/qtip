@@ -130,6 +130,7 @@ export function ScheduleDayTimeline({ people, date, onEditShift, selected, onSel
             {members.map(person => {
               const shift = person.shifts.find(s => s.date === date)
               const exceptions = person.exceptions.filter(e => e.date === date)
+              const adherenceExceptions = person.adherenceExceptions.filter(e => e.date === date)
               const fullDay = exceptions.find(e => e.isFullDay)
 
               return (
@@ -149,6 +150,22 @@ export function ScheduleDayTimeline({ people, date, onEditShift, selected, onSel
                     {!shift && (
                       <div className="mt-0.5 flex items-center gap-1 text-[10px] font-medium text-warning">
                         <CalendarOff className="h-3 w-3" /> Not scheduled
+                      </div>
+                    )}
+                    {adherenceExceptions.length > 0 && (
+                      <div className="mt-0.5 flex flex-wrap gap-1">
+                        {adherenceExceptions.map((e, i) => (
+                          <span
+                            key={i}
+                            title={`${e.segmentKind === 'LUNCH' ? 'Lunch' : 'Break'} ${e.seq} \u00b7 ${e.typeLabel}`}
+                            className={cn(
+                              'rounded px-1 py-0.5 text-[9px] font-semibold',
+                              e.excused ? 'bg-warning/20 text-warning' : 'bg-destructive/15 text-destructive',
+                            )}
+                          >
+                            {e.segmentKind === 'LUNCH' ? 'Lunch' : 'Break'} {e.seq}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>

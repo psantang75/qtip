@@ -26,6 +26,7 @@ import { getPunchCoverage, getPunchDays } from './punchProvider';
 import type { PunchWindow } from './punchProvider';
 import { loadPointRules } from './attendance.config';
 import { getPointsStartDate } from './attendance.settings';
+import { getPunchExemptUserIds } from './punchExempt.settings';
 import {
   matchBand,
   exceedsLateBands,
@@ -350,6 +351,41 @@ export async function recomputeRange(
   return run;
 }
 
+function rangeScope(fromStr: string, toStr: string, explicitUserIds?: number[]) {
+  return {
+    work_date: { gte: dateOnlyValue(fromStr), lte: dateOnlyValue(toStr) },
+    ...(explicitUserIds ? { user_id: { in: explicitUserIds } } : {}),
+  };
+}
+
+async function wipeAttendanceRange(
+  fromStr: string,
+  toStr: string,
+  explicitUserIds?: number[],
+): Promise<void> {
+  const scope = rangeScope(fromStr, toStr, explicitUserIds);
+  await prisma.$transaction(async (tx) => {
+    await tx.attendanceOccurrence.deleteMany({ where: scope });
+    await tx.attendanceDaily.deleteMany({ where: scope });
+  });
+}
+
+async function replaceAttendanceRange(
+  fromStr: string,
+  toStr: string,
+  explicitUserIds: number[] | undefined,
+  dailyRows: DailyRow[],
+  occurrenceRows: OccurrenceRow[],
+): Promise<void> {
+  const scope = rangeScope(fromStr, toStr, explicitUserIds);
+  await prisma.$transaction(async (tx) => {
+    await tx.attendanceOccurrence.deleteMany({ where: scope });
+    await tx.attendanceDaily.deleteMany({ where: scope });
+    if (dailyRows.length > 0) await tx.attendanceDaily.createMany({ data: dailyRows });
+    if (occurrenceRows.length > 0) await tx.attendanceOccurrence.createMany({ data: occurrenceRows });
+  });
+}
+
 async function runRecompute(
   fromStr: string,
   toStr: string,
@@ -401,12 +437,19 @@ async function runRecompute(
   // scheduled days still sitting after that date are stale schedule rows, not
   // absences. An ACTIVE user runs to the global watermark so a genuine absence
   // in the most recent week still counts.
+  const exemptIds = await getPunchExemptUserIds();
   const users = await prisma.user.findMany({
     where: { id: { in: coveredUserIds }, role_id: CSR_ROLE_ID },
     select: { id: true, is_active: true },
   });
-  const userIds = users.map((u) => u.id);
-  if (userIds.length === 0) return { ...empty, usersWithoutPunchData };
+  // Scheduled-but-never-clocks-in people are dropped here so they never earn a
+  // daily/occurrence row. The wipe below still runs when that empties the set,
+  // otherwise turning the flag on would leave their old points in place.
+  const userIds = users.map((u) => u.id).filter((id) => !exemptIds.has(id));
+  if (userIds.length === 0) {
+    await wipeAttendanceRange(fromStr, effectiveTo, explicitUserIds);
+    return { ...empty, usersWithoutPunchData };
+  }
 
   const spanEnd = new Map<number, string>();
   for (const u of users) {
@@ -462,23 +505,11 @@ async function runRecompute(
     occurrenceRows.push(...scored.occurrences);
   }
 
-  const fromDate = dateOnlyValue(fromStr);
-  const toDate = dateOnlyValue(effectiveTo);
-
   // The delete scope must NOT be the set of users we just scored, or rows for a
   // user who has since dropped out of the punch feed would survive forever and
   // recompute would stop being idempotent. Recomputing a range makes that range
   // authoritative; a targeted recompute narrows only by the caller's user list.
-  await prisma.$transaction(async (tx) => {
-    const scope = {
-      work_date: { gte: fromDate, lte: toDate },
-      ...(explicitUserIds ? { user_id: { in: explicitUserIds } } : {}),
-    };
-    await tx.attendanceOccurrence.deleteMany({ where: scope });
-    await tx.attendanceDaily.deleteMany({ where: scope });
-    if (dailyRows.length > 0) await tx.attendanceDaily.createMany({ data: dailyRows });
-    if (occurrenceRows.length > 0) await tx.attendanceOccurrence.createMany({ data: occurrenceRows });
-  });
+  await replaceAttendanceRange(fromStr, effectiveTo, explicitUserIds, dailyRows, occurrenceRows);
 
   logger.info(
     `attendance recompute ${fromStr}..${effectiveTo}: ${dailyRows.length} days, ` +

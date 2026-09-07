@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { GenericListEditor } from './list-management/GenericListEditor'
 import {
   ExceptionTypesEditor,
+  AdherenceExceptionTypesEditor,
   ActivityTypesEditor,
   CoverageThresholdsEditor,
 } from './list-management/SchedulingListEditors'
@@ -16,6 +17,10 @@ import {
   AttendancePointBandsEditor,
   AttendanceThresholdsEditor,
 } from './list-management/AttendanceListEditors'
+import {
+  AdherencePointBandsEditor,
+  AdherenceThresholdsEditor,
+} from './list-management/AdherenceListEditors'
 
 // ── List catalogue ────────────────────────────────────────────────────────────
 
@@ -34,6 +39,9 @@ const CUSTOM_EDITORS = {
   phone_queue_library: PhoneQueueListEditor,
   attendance_bands: AttendancePointBandsEditor,
   attendance_thresholds: AttendanceThresholdsEditor,
+  adherence_bands: AdherencePointBandsEditor,
+  adherence_thresholds: AdherenceThresholdsEditor,
+  adherence_exception_type: AdherenceExceptionTypesEditor,
 } as const
 
 interface ManagedList {
@@ -101,6 +109,15 @@ const SECTIONS: ListSection[] = [
     lists: [
       { key: 'attendance_bands',      label: 'Point Bands',          description: 'How much a late arrival, an early departure or an absence is worth. Drives the rolling 90-day point totals on the Attendance report.', tier: 'dynamic', implemented: true, editor: 'attendance_bands' },
       { key: 'attendance_thresholds', label: 'Discipline Thresholds', description: 'Point totals at which Coaching, Verbal, Written, Final and Separation are recommended.', tier: 'dynamic', implemented: true, editor: 'attendance_thresholds' },
+    ],
+  },
+  {
+    id: 'adherence',
+    label: 'Adherence',
+    lists: [
+      { key: 'adherence_bands',      label: 'Point Bands',          description: 'How much a long break/lunch, a wrong start time, a missed segment, or the phone not matching the punch is worth. Drives the rolling 90-day totals on the Adherence report.', tier: 'dynamic', implemented: true, editor: 'adherence_bands' },
+      { key: 'adherence_thresholds', label: 'Discipline Thresholds', description: 'Point totals at which Coaching, Verbal, Written, Final and Termination Review are recommended.', tier: 'dynamic', implemented: true, editor: 'adherence_thresholds' },
+      { key: 'adherence_exception_types', label: 'Adherence Exception Types', description: 'Approved reasons (excused/unexcused) selectable when logging an adherence exception against a break or lunch. Excused forgives that segment\u2019s points; unexcused is recorded only.', tier: 'dynamic', implemented: true, editor: 'adherence_exception_type' },
     ],
   },
   {

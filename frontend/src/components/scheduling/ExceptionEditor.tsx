@@ -74,7 +74,7 @@ export function ExceptionEditor({ value, onChange, date, shift }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label>Exceptions</Label>
+        <Label>Schedule Exceptions</Label>
         {!adding && (
           <Button
             variant="ghost" size="sm"

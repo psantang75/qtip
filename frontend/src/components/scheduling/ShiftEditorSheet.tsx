@@ -7,6 +7,9 @@
  * Exceptions are diffed rather than replaced — Save reports which were added and
  * which were removed, because the API creates and deletes them one at a time and
  * an untouched row must not be rewritten (that would drop its paychex_reference).
+ *
+ * Adherence exceptions are entered here too, right below the attendance ones, and
+ * are diffed the same way. The flat Adherence Exceptions page is review-only.
  */
 import { useEffect, useState } from 'react'
 import { Plus, Trash2, Coffee, UtensilsCrossed } from 'lucide-react'
@@ -18,10 +21,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import type { MockBreak, MockException, MockShift } from './mockScheduleData'
+import type { MockAdherenceException, MockBreak, MockException, MockShift } from './mockScheduleData'
 import { parseLocal } from './mockScheduleData'
 import { fmtHours, minutesOf, paidMinutes } from './scheduleTime'
 import { ExceptionEditor } from './ExceptionEditor'
+import { AdherenceExceptionEditor } from './AdherenceExceptionEditor'
 
 const MAX_BREAKS = 3
 
@@ -32,6 +36,7 @@ interface Props {
   date?: string
   shift?: MockShift
   exceptions?: MockException[]
+  adherenceExceptions?: MockAdherenceException[]
   /** Commit handler. When absent the sheet is read-only. */
   onSave?: (payload: {
     start: string
@@ -41,28 +46,40 @@ interface Props {
     shiftChanged: boolean
     exceptionAdds: MockException[]
     exceptionRemoveIds: number[]
+    adherenceAdds: MockAdherenceException[]
+    adherenceRemoveIds: number[]
   }) => Promise<void> | void
   onDelete?: () => Promise<void> | void
   saving?: boolean
 }
 
 export function ShiftEditorSheet({
-  open, onOpenChange, personName, date, shift, exceptions = [], onSave, onDelete, saving,
+  open, onOpenChange, personName, date, shift, exceptions = [], adherenceExceptions = [],
+  onSave, onDelete, saving,
 }: Props) {
   const [start, setStart] = useState('08:00')
   const [end, setEnd] = useState('17:00')
   const [breaks, setBreaks] = useState<MockBreak[]>([])
   const [exs, setExs] = useState<MockException[]>([])
+  const [adhExs, setAdhExs] = useState<MockAdherenceException[]>([])
 
   // Reload the form whenever the sheet is opened on a different day.
   useEffect(() => {
     if (!open) return
     setStart(shift?.start ?? '08:00')
     setEnd(shift?.end ?? '17:00')
-    setBreaks(shift?.breaks ?? [])
+    setBreaks((shift?.breaks ?? []).map(b => ({ ...b })))
     setExs(exceptions)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, shift, date])
+
+  // Adherence rows arrive from their own async query, which can resolve AFTER the
+  // sheet has already opened — reseed when they land so the section is populated
+  // on the first open, not only after a close/reopen.
+  useEffect(() => {
+    if (!open) return
+    setAdhExs(adherenceExceptions)
+  }, [open, adherenceExceptions])
 
   const draft: MockShift = { date: date ?? '', start, end, breaks, status: shift?.status ?? 'DRAFT' }
   const spanValid = minutesOf(end) > minutesOf(start)
@@ -122,6 +139,7 @@ export function ShiftEditorSheet({
 
             {breaks.map((b, i) => {
               const bad = minutesOf(b.start) < minutesOf(start) || minutesOf(b.end) > minutesOf(end)
+              const label = b.kind === 'LUNCH' ? 'Lunch' : 'Break'
               return (
                 <div
                   key={i}
@@ -134,7 +152,7 @@ export function ShiftEditorSheet({
                     {b.kind === 'LUNCH'
                       ? <UtensilsCrossed className="h-3.5 w-3.5 text-warning" />
                       : <Coffee className="h-3.5 w-3.5 text-warning" />}
-                    {b.kind === 'LUNCH' ? 'Lunch' : 'Break'}
+                    {label}
                   </div>
                   <Input
                     type="time"
@@ -196,6 +214,10 @@ export function ShiftEditorSheet({
           <div className="border-t border-slate-200 pt-5">
             <ExceptionEditor value={exs} onChange={setExs} date={date ?? ''} shift={shift} />
           </div>
+
+          <div className="border-t border-slate-200 pt-5">
+            <AdherenceExceptionEditor value={adhExs} onChange={setAdhExs} shift={shift} />
+          </div>
         </div>
 
         <SheetFooter className="mt-8 gap-2">
@@ -219,19 +241,26 @@ export function ShiftEditorSheet({
                 // Only touch the shift when it actually changed. An untouched
                 // published/elapsed shift is locked server-side, so re-saving it
                 // would 423 and block logging an exception against it.
+                const plainBreaks: MockBreak[] = breaks.map(b => ({ kind: b.kind, start: b.start, end: b.end }))
                 const breaksEqual = (a: MockBreak[], b: MockBreak[]) =>
                   a.length === b.length &&
                   a.every((x, i) => x.kind === b[i].kind && x.start === b[i].start && x.end === b[i].end)
                 const shiftChanged = !shift
                   || start !== shift.start
                   || end !== shift.end
-                  || !breaksEqual(breaks, shift.breaks)
+                  || !breaksEqual(plainBreaks, shift.breaks)
+
+                const keptAdhIds = new Set(adhExs.map(e => e.id).filter((id): id is number => !!id))
                 await onSave({
-                  start, end, breaks, shiftChanged,
+                  start, end, breaks: plainBreaks, shiftChanged,
                   exceptionAdds: exs.filter(e => !e.id),
                   exceptionRemoveIds: exceptions
                     .map(e => e.id)
                     .filter((id): id is number => !!id && !keptIds.has(id)),
+                  adherenceAdds: adhExs.filter(e => !e.id),
+                  adherenceRemoveIds: adherenceExceptions
+                    .map(e => e.id)
+                    .filter((id): id is number => !!id && !keptAdhIds.has(id)),
                 })
               }
               onOpenChange(false)

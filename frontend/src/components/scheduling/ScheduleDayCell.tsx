@@ -11,7 +11,7 @@
  */
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { MockException, MockShift } from './mockScheduleData'
+import type { MockAdherenceException, MockException, MockShift } from './mockScheduleData'
 import {
   axisTicks, fmtCompact, fmtFull, fmtHours, minutesOf, paidMinutes, pctOf,
   SEGMENT_CLS, shiftSegments, type DayAxis,
@@ -93,11 +93,15 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
+/** Compact segment tag for a listed adherence exception, e.g. "Break 2". */
+const adhSeg = (e: MockAdherenceException) => `${e.segmentKind === 'LUNCH' ? 'Lunch' : 'Break'} ${e.seq}`
+
 interface CellProps {
   personName: string
   dateLabel: string
   shift?: MockShift
   exceptions: MockException[]
+  adherenceExceptions?: MockAdherenceException[]
   isWeekend: boolean
   holidayName?: string
   variant?: 'week' | 'period'
@@ -109,7 +113,7 @@ interface CellProps {
 }
 
 export function ScheduleDayCell({
-  personName, dateLabel, shift, exceptions, isWeekend, holidayName,
+  personName, dateLabel, shift, exceptions, adherenceExceptions = [], isWeekend, holidayName,
   variant = 'period', axis, onClick, readOnly,
 }: CellProps) {
   const isWeek = variant === 'week'
@@ -147,17 +151,21 @@ export function ScheduleDayCell({
   }
 
   const isDraft = shift.status === 'DRAFT'
-  const worst = exceptions.find(e => !e.excused) ?? exceptions[0]
   const ordered = [...shift.breaks].sort((a, b) => minutesOf(a.start) - minutesOf(b.start))
+
+  // Any exception on the day — attendance or adherence — colors the cell. The
+  // worst one wins: unexcused (red) over excused (amber), so a mix never fights.
+  const anyException = exceptions.length > 0 || adherenceExceptions.length > 0
+  const anyUnexcused = exceptions.some(e => !e.excused) || adherenceExceptions.some(e => !e.excused)
 
   const cellClass = cn(
     'h-full w-full px-1.5 py-1.5 text-left',
     !readOnly && 'transition-colors hover:bg-primary/5',
     minH,
     isDraft && 'bg-[repeating-linear-gradient(135deg,transparent,transparent_5px,rgba(148,163,184,0.09)_5px,rgba(148,163,184,0.09)_10px)]',
-    worst && (worst.excused
-      ? 'border-l-2 border-l-warning bg-warning/[0.06]'
-      : 'border-l-2 border-l-destructive bg-destructive/[0.06]'),
+    anyException && (anyUnexcused
+      ? 'border-l-2 border-l-destructive bg-destructive/[0.06]'
+      : 'border-l-2 border-l-warning bg-warning/[0.06]'),
   )
 
   const cellInner = (
@@ -192,12 +200,30 @@ export function ScheduleDayCell({
         </div>
       )}
 
-      {worst && (
-        <div className={cn(
-          'mt-0.5 truncate text-[10px] font-medium leading-tight',
-          worst.excused ? 'text-warning' : 'text-destructive',
-        )}>
-          {worst.isFullDay ? worst.typeLabel : `${fmtCompact(worst.start!)}\u2013${fmtCompact(worst.end!)}`}
+      {anyException && (
+        <div className="mt-0.5 space-y-0.5">
+          {exceptions.map((e, i) => (
+            <div
+              key={`s${i}`}
+              className={cn(
+                'truncate text-[10px] font-medium leading-tight',
+                e.excused ? 'text-warning' : 'text-destructive',
+              )}
+            >
+              {e.isFullDay ? e.typeLabel : `${fmtCompact(e.start!)}\u2013${fmtCompact(e.end!)}`}
+            </div>
+          ))}
+          {adherenceExceptions.map((e, i) => (
+            <div
+              key={`a${i}`}
+              className={cn(
+                'truncate text-[10px] font-medium leading-tight',
+                e.excused ? 'text-warning' : 'text-destructive',
+              )}
+            >
+              {adhSeg(e)} &middot; {e.typeLabel}
+            </div>
+          ))}
         </div>
       )}
     </>
@@ -251,6 +277,22 @@ export function ScheduleDayCell({
                 ? 'Excused \u2014 does not count against the employee.'
                 : 'Not excused \u2014 counts against the employee.'}
             </div>
+          </div>
+        )}
+
+        {adherenceExceptions.length > 0 && (
+          <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Adherence</div>
+            {adherenceExceptions.map((e, i) => (
+              <div key={i} className="flex items-baseline justify-between gap-4">
+                <span className={cn('text-[11px] font-semibold', e.excused ? 'text-warning' : 'text-destructive')}>
+                  {e.typeLabel}
+                </span>
+                <span className="whitespace-nowrap text-[11px] text-slate-500">
+                  {adhSeg(e)}{e.excused ? ' \u00b7 excused' : ' \u00b7 recorded'}
+                </span>
+              </div>
+            ))}
           </div>
         )}
 

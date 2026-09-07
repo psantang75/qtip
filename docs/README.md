@@ -26,7 +26,7 @@ changes; Cursor auto-attaches the scoped rules when you edit matching files):
 
 ## Project basics
 
-- [`project_overview.md`](./project_overview.md) — system objective, roles, architecture
+- [`project_overview.md`](./project_overview.md) — single-page system map (subsystems → routes/pages → external systems → deep-dive docs)
 - [`design.md`](./design.md) — design decisions
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — backend + frontend architecture
 - [`CHANGELOG.md`](./CHANGELOG.md) — change log
@@ -107,6 +107,8 @@ changes; Cursor auto-attaches the scoped rules when you edit matching files):
 - [`analytics_builder.md`](./analytics_builder.md)
 - [`analytics_comparison_summary.md`](./analytics_comparison_summary.md)
 - [`performance_goals.md`](./performance_goals.md)
+- [`insights_csr_attendance.md`](./insights_csr_attendance.md) — rolling 90-day attendance points + schedule compliance
+- [`insights_csr_adherence.md`](./insights_csr_adherence.md) — rolling 90-day break/lunch/phone adherence points
 
 ## Admin / system
 

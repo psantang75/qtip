@@ -226,9 +226,17 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   const schedStart = sched ? toMin(sched.start) : null
   const schedEnd = sched ? toMin(sched.end) : null
 
+  // An agent who never joins a phone queue (e.g. an admin who does not take
+  // calls) has no routing status at all — Genesys only records their presence.
+  // Fall back to the presence stream so the Status row and Phone Status card
+  // still show what they were doing (Available / Break / Meal / Away), drawn as
+  // off-queue reasons. Queue agents (any routing at all) are unaffected.
+  const usePresenceStatus = routing.length === 0 && presence.length > 0
+  const statusSpans = usePresenceStatus ? presence : routing
+
   // The axis spans everything on screen — including the planned shift — so no
   // row can overflow the shared time window.
-  const raw = [...routing, ...(day?.clock ?? [])]
+  const raw = [...statusSpans, ...(day?.clock ?? [])]
   const allStarts = raw.map(s => toMin(s.start))
   const allEnds = raw.map(s => toMin(s.end))
   if (schedStart !== null) allStarts.push(schedStart)
@@ -279,14 +287,21 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   const clockSegments = (day?.clock ?? []).map(s => place<ClockStatus>(s))
 
   // Off-queue runs are labelled with whichever presence span covers their
-  // midpoint, so the timeline can name the reason without a second row.
-  const statusSegments: StatusSegment[] = routing.map(s => {
-    const seg = place<RoutingStatus>(s)
-    if (isOnQueue(seg.status)) return { ...seg, reason: null }
-    const mid = (seg.startMin + seg.endMin) / 2
-    const hit = presence.find(p => toMin(p.start) <= mid && toMin(p.end) >= mid)
-    return { ...seg, reason: hit?.status ?? null }
-  })
+  // midpoint, so the timeline can name the reason without a second row. In the
+  // presence-only fallback each presence span is itself an off-queue run whose
+  // reason is the presence status, so it colours by the same reason vocabulary.
+  const statusSegments: StatusSegment[] = usePresenceStatus
+    ? presence.map(p => ({
+        ...place<RoutingStatus>({ start: p.start, end: p.end, status: 'OFF_QUEUE' }),
+        reason: p.status,
+      }))
+    : routing.map(s => {
+        const seg = place<RoutingStatus>(s)
+        if (isOnQueue(seg.status)) return { ...seg, reason: null }
+        const mid = (seg.startMin + seg.endMin) / 2
+        const hit = presence.find(p => toMin(p.start) <= mid && toMin(p.end) >= mid)
+        return { ...seg, reason: hit?.status ?? null }
+      })
 
   const statusBlocks: StatusBlock[] = toBlocks(statusSegments).map(b => ({
     startMin: b.startMin, leftPct: b.leftPct, widthPct: b.widthPct,

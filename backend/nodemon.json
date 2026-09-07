@@ -7,6 +7,6 @@
     "**/*.test.ts",
     "**/*.spec.ts"
   ],
-  "delay": 1500,
+  "delay": 2500,
   "exec": "ts-node src/index.ts"
 }

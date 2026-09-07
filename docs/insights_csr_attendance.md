@@ -167,6 +167,11 @@ missing data. Four guards, all of which the current data exercises:
    absence last week still counts.
 4. **A user with no punch history at all is not scored.** Nothing is knowable
    about them.
+5. **A user flagged "Does not punch"** (Admin → Users) is not scored. Use this
+   for CSRs who appear on the published schedule but never clock in, so they
+   do not accumulate absence/miss points and therefore never get a threshold
+   email. Stored in `ie_config` as `user.<id>.does_not_punch`. Saving the flag
+   rescores that person immediately.
 
 The recompute log reports each skip count, and `POST /recalculate` returns them.
 

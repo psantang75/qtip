@@ -53,6 +53,9 @@ export function adaptGrid(grid: ApiGrid): { people: MockPerson[]; departments: s
     department: u.department_name,
     shifts: shiftsByUser.get(u.id) ?? [],
     exceptions: exByUser.get(u.id) ?? [],
+    // Adherence exceptions come from their own range query and are merged in by
+    // the page — the grid endpoint does not carry them.
+    adherenceExceptions: [],
   }))
 
   const departments = Array.from(

@@ -34,7 +34,7 @@ function adaptMySchedule(shifts: ApiShift[], name: string): MyScheduleData {
     })
   }
   return {
-    person: { id: 0, name, department: null, shifts: mockShifts, exceptions: [] },
+    person: { id: 0, name, department: null, shifts: mockShifts, exceptions: [], adherenceExceptions: [] },
     published: shifts.length > 0,
   }
 }

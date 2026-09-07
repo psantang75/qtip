@@ -20,6 +20,10 @@ import {
   savePointsStartDate,
 } from '../controllers/insightsAdminAttendance.controller';
 import {
+  getAdherenceConfig, saveAdherenceRules, saveAdherenceThresholds,
+  saveAdherenceSettings, recalculateAdherence,
+} from '../controllers/insightsAdminAdherence.controller';
+import {
   getMonitoringHealth, listDatasetMonitors, updateDatasetMonitor, runMonitoringNow,
 } from '../controllers/insightsAdminMonitoring.controller';
 
@@ -66,6 +70,15 @@ router.put('/attendance/rules',        ...auth, savePointRules           as unkn
 router.put('/attendance/thresholds',   ...auth, saveWarningThresholds    as unknown as RequestHandler);
 router.put('/attendance/points-start', ...auth, savePointsStartDate      as unknown as RequestHandler);
 router.post('/attendance/recalculate', ...auth, recalculateAttendance    as unknown as RequestHandler);
+
+// ── Adherence points (break/lunch/phone) ──────────────────────────────────────
+// Edited in Admin -> List Management -> Adherence; same effective-dated model as
+// attendance. Settings carry the report-only switch and phone before/after grace.
+router.get('/adherence/config',       ...auth, getAdherenceConfig      as unknown as RequestHandler);
+router.put('/adherence/rules',        ...auth, saveAdherenceRules      as unknown as RequestHandler);
+router.put('/adherence/thresholds',   ...auth, saveAdherenceThresholds as unknown as RequestHandler);
+router.put('/adherence/settings',     ...auth, saveAdherenceSettings   as unknown as RequestHandler);
+router.post('/adherence/recalculate', ...auth, recalculateAdherence    as unknown as RequestHandler);
 
 // ── Dataset monitoring (health dashboard + threshold registry) ────────────────
 router.get('/monitoring/health',       ...auth, getMonitoringHealth  as unknown as RequestHandler);

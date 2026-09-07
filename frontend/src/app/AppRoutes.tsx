@@ -88,6 +88,7 @@ const MyWriteUpDetailPage  = React.lazy(() => import('../pages/writeups/MyWriteU
 const SchedulingPage           = React.lazy(() => import('../pages/scheduling/SchedulingPage'))
 const MySchedulePage           = React.lazy(() => import('../pages/scheduling/MySchedulePage'))
 const SchedulingExceptionsPage = React.lazy(() => import('../pages/scheduling/SchedulingExceptionsPage'))
+const AdherenceExceptionsPage  = React.lazy(() => import('../pages/scheduling/AdherenceExceptionsPage'))
 const TimeOffImportReviewPage  = React.lazy(() => import('../pages/scheduling/TimeOffImportReviewPage'))
 const CampaignSchedulePage     = React.lazy(() => import('../pages/scheduling/CampaignSchedulePage'))
 const QueueCoveragePage        = React.lazy(() => import('../pages/scheduling/QueueCoveragePage'))
@@ -117,6 +118,7 @@ const WorkloadTouchValidationPage = React.lazy(() => import('../pages/insights/W
 const AAEmailActivityPage    = React.lazy(() => import('../pages/insights/AAEmailActivityPage'))
 const CSRCallActivityPage    = React.lazy(() => import('../pages/insights/CSRCallActivityPage'))
 const CSRAttendancePage      = React.lazy(() => import('../pages/insights/CSRAttendancePage'))
+const CSRAdherencePage       = React.lazy(() => import('../pages/insights/CSRAdherencePage'))
 const CSRTicketsTasksPage    = React.lazy(() => import('../pages/insights/CSRTicketsTasksPage'))
 const CSRWorkloadPage        = React.lazy(() => import('../pages/insights/CSRWorkloadPage'))
 const CSRProductivityPage    = React.lazy(() => import('../pages/insights/CSRProductivityPage'))
@@ -370,6 +372,14 @@ export default function AppRoutes(): React.ReactElement {
               }
             />
             <Route
+              path="adherence-exceptions"
+              element={
+                <RequirePageAccess pageKey="sched_adherence_exceptions" minLevel="viewAll" fallback="/app/scheduling/calendar">
+                  <PageLoader><AdherenceExceptionsPage /></PageLoader>
+                </RequirePageAccess>
+              }
+            />
+            <Route
               path="time-off-import"
               element={
                 <RequirePageAccess pageKey="sched_exceptions" minLevel="viewAll" fallback="/app/scheduling/calendar">
@@ -421,6 +431,7 @@ export default function AppRoutes(): React.ReactElement {
             {/* Agent Activity - CSR */}
             <Route path="csr-call"       element={<RequireInsightsAccess pageKey="csr_call"><PageLoader><CSRCallActivityPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-attendance" element={<RequireInsightsAccess pageKey="csr_attendance"><PageLoader><CSRAttendancePage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="csr-adherence" element={<RequireInsightsAccess pageKey="csr_adherence"><PageLoader><CSRAdherencePage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-tickets"    element={<RequireInsightsAccess pageKey="csr_tickets"><PageLoader><CSRTicketsTasksPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-workload" element={<RequireInsightsAccess pageKey="csr_workload"><PageLoader><CSRWorkloadPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-productivity" element={<RequireInsightsAccess pageKey="csr_productivity_report"><PageLoader><CSRProductivityPage /></PageLoader></RequireInsightsAccess>} />

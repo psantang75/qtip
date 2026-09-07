@@ -64,7 +64,29 @@ const clockOnly: AgentDay = {
   outbound: { dials: 0, connected: 0, voicemail: 0, noAnswer: 0 }, tickets: [],
 }
 
-const days = [day, clockOnly]
+// An admin who does not take calls: Genesys records presence but never any
+// routing status, so the Status row and Phone Status card must fall back to the
+// presence stream (drawn as off-queue reasons) instead of going blank.
+const adminNoQueue: AgentDay = {
+  schedule: null,
+  clock: [
+    { start: '09:00', end: '12:00', status: 'Working' },
+    { start: '12:00', end: '12:30', status: 'Meal' },
+    { start: '12:30', end: '16:00', status: 'Working' },
+  ],
+  routing: [],
+  presence: [
+    { start: '09:00', end: '11:00', status: 'Available' },
+    { start: '11:00', end: '11:15', status: 'Break' },
+    { start: '11:15', end: '12:00', status: 'Available' },
+    { start: '12:00', end: '12:30', status: 'Meal' },
+    { start: '12:30', end: '16:00', status: 'Available' },
+  ],
+  calls: [],
+  outbound: { dials: 0, connected: 0, voicemail: 0, noAnswer: 0 }, tickets: [],
+}
+
+const days = [day, clockOnly, adminNoQueue]
 
 describe('time accounting', () => {
   it('partitions paid time exactly', () => {
@@ -91,6 +113,35 @@ describe('time accounting', () => {
   it('derives occupancy from engaged over on-queue time', () => {
     const m = buildDayModel(day)
     expect(m.occupancyPct).toBe(Math.round((m.engagedMin / m.onQueueMin) * 100))
+  })
+})
+
+describe('presence-only fallback (no phone queue)', () => {
+  it('renders a Status timeline from presence when there is no routing', () => {
+    const m = buildDayModel(adminNoQueue)
+    expect(m.hasData).toBe(true)
+    expect(m.statusSegments).toHaveLength(adminNoQueue.presence.length)
+    // Every segment is an off-queue run carrying its presence status as the reason.
+    expect(m.statusSegments.every(s => s.status === 'OFF_QUEUE')).toBe(true)
+    expect(m.statusSegments.map(s => s.reason)).toEqual(
+      adminNoQueue.presence.map(p => p.status),
+    )
+    expect(m.statusBlocks.length).toBeGreaterThan(0)
+    expect(m.offQueueSummary.some(r => r.status === 'Available')).toBe(true)
+  })
+
+  it('reports no queue engagement for an agent who never joins a queue', () => {
+    const m = buildDayModel(adminNoQueue)
+    expect(m.onQueueMin).toBe(0)
+    expect(m.engagedMin).toBe(0)
+    expect(m.occupancyPct).toBe(0)
+    expect(m.utilizationPct).toBe(0)
+  })
+
+  it('leaves the routing path untouched when any routing exists', () => {
+    // The primary `day` fixture has routing, so it must NOT use the fallback.
+    const m = buildDayModel(day)
+    expect(m.statusSegments.some(s => s.status !== 'OFF_QUEUE')).toBe(true)
   })
 })
 

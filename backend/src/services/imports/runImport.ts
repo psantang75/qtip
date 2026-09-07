@@ -29,6 +29,8 @@ import {
 import { recomputeRange } from '../attendance/attendance.engine';
 import { getPunchWatermark } from '../attendance/punchProvider';
 import { queueThresholdCrossings } from '../attendance/attendance.notify';
+import { recomputeRange as recomputeAdherenceRange } from '../adherence/adherence.engine';
+import { queueThresholdCrossings as queueAdherenceCrossings } from '../adherence/adherence.notify';
 import { addDays } from '../scheduling/schedule.dates';
 import { deriveTimeOffExceptions } from '../scheduling/timeOff.derive.service';
 import { notifyIngestionFailure } from '../notifications/ingestionAlerts';
@@ -59,6 +61,11 @@ export interface AttendanceRescore {
   exceptionsDerived: number;
 }
 
+export interface AdherenceRescore {
+  daysScored: number;
+  occurrences: number;
+}
+
 /** Where a file came from, when it was not a person clicking Upload. */
 export interface ImportSource {
   kind: 'mailbox';
@@ -68,6 +75,7 @@ export interface ImportSource {
 
 export interface RunImportResult extends ImportResult {
   attendance?: AttendanceRescore;
+  adherence?: AdherenceRescore;
 }
 
 export function isDataType(value: unknown): value is DataType {
@@ -103,6 +111,26 @@ async function rescoreAfterPunchImport(): Promise<AttendanceRescore | undefined>
     };
   } catch (err) {
     logger.error('[IMPORT] attendance rescore after punch import failed:', err);
+    return undefined;
+  }
+}
+
+/**
+ * Rescore break/lunch/phone adherence over the same rolling window after a punch
+ * import, then queue any new discipline crossings (silently a no-op while points
+ * are still in the report-only phase). Kept separate from the attendance rescore
+ * so a failure in one domain never takes down the other or the import itself.
+ */
+async function rescoreAdherenceAfterPunchImport(): Promise<AdherenceRescore | undefined> {
+  try {
+    const watermark = await getPunchWatermark();
+    if (!watermark) return undefined;
+    const from = addDays(watermark, -(RESCORE_WINDOW_DAYS - 1));
+    const result = await recomputeAdherenceRange(from, watermark);
+    await queueAdherenceCrossings(result.to);
+    return { daysScored: result.daysScored, occurrences: result.occurrences };
+  } catch (err) {
+    logger.error('[IMPORT] adherence rescore after punch import failed:', err);
     return undefined;
   }
 }
@@ -171,6 +199,7 @@ export async function runImport(
   // inside importService: that service is a generic multi-type importer, and
   // teaching it about attendance would couple two unrelated domains.
   const attendance = dataType === 'punch_data' ? await rescoreAfterPunchImport() : undefined;
+  const adherence = dataType === 'punch_data' ? await rescoreAdherenceAfterPunchImport() : undefined;
 
-  return { ...result, ...(attendance ? { attendance } : {}) };
+  return { ...result, ...(attendance ? { attendance } : {}), ...(adherence ? { adherence } : {}) };
 }

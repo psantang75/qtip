@@ -397,6 +397,22 @@ const SEEDS: SeedSpec[] = [
     deep_link_target: 'CSR attendance page (/app/insights/csr-attendance). '
       + 'Admins land on the same page, where the roster is not self-scoped.' },
 
+  // ── Adherence ──────────────────────────────────────────────────────
+  { template_key: 'adherence_threshold_reached', category: 'Attendance',
+    name: 'Adherence — point threshold reached',
+    description: 'Sent when a CSR\'s rolling 90-day break/lunch adherence points reach a discipline rung. '
+      + 'Fires once per rung per person, and only after adherence points are switched on '
+      + '(before that, occurrences are report-only and never notify).',
+    cadence: 'IMMEDIATE', is_locked: false,
+    recipient_summary: 'The CSR who reached the threshold + named alert recipients',
+    allowed_variables: ['recipient', 'items', 'itemCount', 'hasMore', 'deepLinkPath'],
+    available_roles: ['agent', 'admins', 'designated'],
+    default_recipient_roles: ['agent', 'designated'],
+    fixed_roles: ['agent'],
+    digest_eligible: false,
+    deep_link_target: 'CSR adherence page (/app/insights/csr-adherence). '
+      + 'Admins land on the same page, where the roster is not self-scoped.' },
+
   // ── System ─────────────────────────────────────────────────────────
   { template_key: 'system.circuit_tripped', category: 'System', name: 'Email circuit-breaker tripped',
     description: 'Sent to admins when the global email rate limit is exceeded.',

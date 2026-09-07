@@ -41,6 +41,7 @@ const MAX_ITEMS_PER_DIGEST = 50;
 const DEEP_LINKS: Record<string, string> = {
   'digest.manager_weekly': '/app/insights/team',
   attendance_threshold_reached: '/app/insights/csr-attendance',
+  adherence_threshold_reached: '/app/insights/csr-adherence',
 };
 
 let intervalHandle: NodeJS.Timeout | null = null;

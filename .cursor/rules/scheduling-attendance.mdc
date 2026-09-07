@@ -25,6 +25,16 @@ Services are split by concern under three folders (add to the matching slice):
   math — single source of truth; do not duplicate elsewhere), `attendance.config.ts` /
   `attendance.settings.ts`, `attendance.rollup.service.ts`, `attendance.analytics.service.ts`,
   `attendance.notify.ts`, and the `punchProvider.ts` / `scheduleProvider.ts` adapters.
+- `services/adherence/` — the intraday sibling of attendance (break/lunch duration
+  + start-time + phone-vs-punch matching). Same engine/rules/config/settings/
+  rollup/notify split; reuses attendance's `scheduleProvider`/`punchProvider` for
+  the plan/actuals and adds `breakPunchProvider.ts` (break/meal punches) +
+  `phonePresenceProvider.ts` (Genesys presence). Keep the two domains separate — do
+  not fold adherence math into `attendance.rules.ts`.
+  Per-user **Does not punch** (`punchExempt.settings.ts`, Admin → Users) skips
+  scoring in both engines so a scheduled-but-never-clocks-in CSR cannot earn
+  points or threshold emails.
+  Full reference: [docs/insights_csr_adherence.md](mdc:docs/insights_csr_adherence.md).
 - `services/campaigns/` — campaign library, schedules, month/day overrides, publish
   (mounted under the scheduling API prefix).
 - `services/queues/` — phone queue coverage. The plan is solved on read, never

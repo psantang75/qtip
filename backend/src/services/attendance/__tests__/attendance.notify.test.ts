@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   userFindUnique: vi.fn(),
   loadWarningThresholds: vi.fn(),
   resolveRecipients: vi.fn(),
+  isPunchExempt: vi.fn(),
 }));
 
 vi.mock('../../../config/prisma', () => ({
@@ -42,6 +43,10 @@ vi.mock('../../notifications/RoleResolver', () => ({
   resolveRecipients: mocks.resolveRecipients,
 }));
 
+vi.mock('../punchExempt.settings', () => ({
+  isPunchExempt: mocks.isPunchExempt,
+}));
+
 import { queueThresholdCrossings, ATTENDANCE_LEVEL_TEMPLATE } from '../attendance.notify';
 
 const THRESHOLDS = [
@@ -61,6 +66,7 @@ beforeEach(() => {
   mocks.queueFindUnique.mockResolvedValue(null as any);
   mocks.queueCreate.mockResolvedValue({} as any);
   mocks.resolveRecipients.mockResolvedValue([AGENT_RECIPIENT, ADMIN_RECIPIENT] as any);
+  mocks.isPunchExempt.mockResolvedValue(false);
 });
 
 describe('queueThresholdCrossings', () => {
@@ -144,6 +150,14 @@ describe('queueThresholdCrossings', () => {
 
     expect(await queueThresholdCrossings('2026-08-03')).toBe(0);
     expect(mocks.queueCreate).not.toHaveBeenCalled();
+  });
+
+  it('queues nothing for a CSR flagged as does-not-punch', async () => {
+    mocks.isPunchExempt.mockResolvedValue(true);
+
+    expect(await queueThresholdCrossings('2026-08-03')).toBe(0);
+    expect(mocks.queueCreate).not.toHaveBeenCalled();
+    expect(mocks.resolveRecipients).not.toHaveBeenCalled();
   });
 
   it('never throws into the caller, because a failed alert must not fail an import', async () => {

@@ -14,6 +14,8 @@ export interface User {
   manager_id?: number | null;
   title?: string | null;
   is_active: boolean;
+  /** Scheduled but does not clock in — attendance/adherence points are not calculated. */
+  does_not_punch?: boolean;
   is_locked?: boolean;
   last_login?: string | null;
   created_at: string;
@@ -37,6 +39,7 @@ export interface UserCreateDTO {
   role_id: number;
   department_id: number | null;
   title?: string;
+  does_not_punch?: boolean;
 }
 
 export interface UserUpdateDTO {
@@ -46,6 +49,7 @@ export interface UserUpdateDTO {
   role_id?: number;
   department_id?: number | null;
   title?: string;
+  does_not_punch?: boolean;
 }
 
 export interface UserFilters {

@@ -37,7 +37,7 @@ function fmtThreshold(n: number): string {
 // carries its explanation. Content states the basis actually used rather than a
 // generic formula, per docs/design.md §6.6.
 
-function HeaderTooltip({ label, description, rows, width = 'w-80', children }: {
+export function HeaderTooltip({ label, description, rows, width = 'w-80', children }: {
   label: string
   description: string
   /** Label/value supporting detail, rendered below the description. */

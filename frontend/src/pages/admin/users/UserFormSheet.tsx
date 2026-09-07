@@ -9,6 +9,7 @@ import userService from '@/services/userService'
 import type { User, Role, Department } from '@/services/userService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet'
@@ -40,6 +41,7 @@ const makeSchema = (isCreate: boolean) =>
     role_id:       z.coerce.number().min(1, 'Role required'),
     department_id: z.coerce.number().nullable().optional(),
     is_active:     z.boolean().optional(),
+    does_not_punch: z.boolean().optional(),
   })
 
 type FormValues = z.infer<ReturnType<typeof makeSchema>>
@@ -64,7 +66,7 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
   const schema = makeSchema(isCreate)
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { username: '', email: '', password: '', title: '', role_id: ROLE_IDS.AGENT, department_id: null, is_active: true },
+    defaultValues: { username: '', email: '', password: '', title: '', role_id: ROLE_IDS.AGENT, department_id: null, is_active: true, does_not_punch: false },
   })
 
   // Reset form whenever the target user changes
@@ -78,9 +80,10 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
         title: editUser.title ?? '', role_id: editUser.role_id,
         department_id: editUser.department_id,
         is_active: editUser.is_active,
+        does_not_punch: editUser.does_not_punch ?? false,
       })
     } else {
-      form.reset({ username: '', email: '', password: '', title: '', role_id: ROLE_IDS.AGENT, department_id: null, is_active: true })
+      form.reset({ username: '', email: '', password: '', title: '', role_id: ROLE_IDS.AGENT, department_id: null, is_active: true, does_not_punch: false })
     }
   }, [open, editUser, form])
 
@@ -89,6 +92,7 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
       username: v.username, email: v.email,
       password: v.password!, role_id: v.role_id,
       department_id: v.department_id ?? null, title: v.title || undefined,
+      ...(Number(v.role_id) === ROLE_IDS.AGENT ? { does_not_punch: v.does_not_punch ?? false } : {}),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
@@ -104,6 +108,7 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
         username: v.username, email: v.email,
         ...(v.password ? { password: v.password } : {}),
         role_id: v.role_id, department_id: v.department_id ?? null, title: v.title || undefined,
+        ...(Number(v.role_id) === ROLE_IDS.AGENT ? { does_not_punch: v.does_not_punch ?? false } : {}),
       })
       const newActive = v.is_active ?? editUser!.is_active
       if (newActive !== editUser!.is_active) await userService.toggleUserStatus(editUser!.id, newActive)
@@ -206,6 +211,22 @@ export function UserFormSheet({ open, onOpenChange, editUser, currentUserId, rol
                 <FormMessage />
               </FormItem>
             )} />
+
+            {Number(form.watch('role_id')) === ROLE_IDS.AGENT && (
+              <FormField control={form.control} name="does_not_punch" render={({ field }) => (
+                <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <FormLabel className="text-[13px] font-medium">Does not punch</FormLabel>
+                    <p className="text-[12px] text-muted-foreground">
+                      On the schedule but does not clock in. Attendance and adherence points are not calculated.
+                    </p>
+                  </div>
+                  <FormControl>
+                    <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )} />
+            )}
 
             {!isCreate && editUser && editUser.id !== currentUserId && (
               <FormField control={form.control} name="is_active" render={({ field }) => (

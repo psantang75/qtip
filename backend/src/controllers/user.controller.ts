@@ -5,6 +5,8 @@ import prisma from '../config/prisma';
 import logger from '../config/logger';
 import { cancelFutureShiftsForUser } from '../services/scheduling';
 import { parsePagination } from '../validation/common';
+import { attachPunchExempt } from '../services/attendance/punchExempt.settings';
+import { applyUserPunchExempt } from '../services/attendance/punchExempt.apply';
 
 // Initialize user service with repository
 const userRepository = new MySQLUserRepository();
@@ -64,7 +66,7 @@ export const getUsers = async (req: Request, res: Response, next: NextFunction) 
     
     // Transform response to match frontend expectations
     const transformedResponse = {
-      items: result.users,
+      items: await attachPunchExempt(result.users),
       totalItems: result.pagination.total,
       totalPages: result.pagination.totalPages,
       currentPage: result.pagination.page
@@ -93,7 +95,8 @@ export const getUserById = async (req: Request, res: Response, next: NextFunctio
     
     const user_id = parseInt(req.params.id);
     const user = await userService.getUserById(user_id);
-    return res.status(200).json(user);
+    const [withFlag] = await attachPunchExempt([user]);
+    return res.status(200).json(withFlag);
   } catch (error) {
     logger.error('[USER CONTROLLER] Error in getUserById:', error);
     next(error); // Let the global error handler handle it
@@ -108,11 +111,15 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
   try {
     logger.info('[USER CONTROLLER] Creating new user');
     
-    const userData = req.body;
+    const { does_not_punch, ...userData } = req.body;
     const created_by = req.user?.user_id || 0;
     
     const newUser = await userService.createUser(userData, created_by);
-    return res.status(201).json(newUser);
+    if (typeof does_not_punch === 'boolean') {
+      await applyUserPunchExempt(newUser.id, does_not_punch);
+    }
+    const [withFlag] = await attachPunchExempt([newUser]);
+    return res.status(201).json(withFlag);
   } catch (error) {
     logger.error('[USER CONTROLLER] Error in createUser:', error);
     next(error); // Let the global error handler handle it
@@ -129,11 +136,15 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
     logger.info('[USER CONTROLLER] Request body:', JSON.stringify(req.body, null, 2));
     
     const user_id = parseInt(req.params.id);
-    const userData = req.body;
+    const { does_not_punch, ...userData } = req.body;
     const updatedBy = req.user?.user_id || 0;
     
     const updatedUser = await userService.updateUser(user_id, userData, updatedBy);
-    return res.status(200).json(updatedUser);
+    if (typeof does_not_punch === 'boolean') {
+      await applyUserPunchExempt(user_id, does_not_punch);
+    }
+    const [withFlag] = await attachPunchExempt([updatedUser]);
+    return res.status(200).json(withFlag);
   } catch (error) {
     logger.error('[USER CONTROLLER] Error in updateUser:', error);
     next(error); // Let the global error handler handle it

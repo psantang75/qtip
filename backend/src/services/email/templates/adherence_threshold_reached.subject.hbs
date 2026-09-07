@@ -1,0 +1,1 @@
+{{#if (eq recipient.matchedRole "agent")}}Adherence Points{{#if (eq itemCount 1)}}{{#each items}} — {{this.level}} Threshold Reached{{/each}}{{/if}}{{else}}Adherence Threshold Reached{{#if (eq itemCount 1)}}{{#each items}} — {{this.csrName}} at {{this.level}}{{/each}}{{/if}}{{/if}}

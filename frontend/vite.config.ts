@@ -13,6 +13,20 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // Do not poll: reading the tree every second wakes OneDrive and Cursor
+    // reloads the window. Ignore non-source paths so office/sync noise is skipped.
+    watch: {
+      ignored: [
+        '**/.git/**',
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/logs/**',
+        '**/backend/**',
+        '**/*.docx',
+        '**/*.xlsx',
+        '**/*.xls',
+      ],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3000',

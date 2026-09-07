@@ -20,11 +20,15 @@ import {
   getGrid, getRoster, getMySchedule, putShift, removeShift, postApply, postPublish, postUnpublish, postUnlock,
   getTemplates, getTemplateById, postTemplate, putTemplate, patchTemplateActive, postDuplicateTemplate,
   getExceptions, postException, removeException, postBulkException, getTimeOffImportReview,
+  getAdherenceExceptions, postAdherenceException, removeAdherenceException,
+  getAdherenceExceptionTypes, postAdherenceExceptionType, putAdherenceExceptionType,
+  patchAdherenceExceptionTypeActive, postReorderAdherenceExceptionTypes,
   getExceptionTypes, postExceptionType, putExceptionType, patchExceptionTypeActive, postReorderExceptionTypes,
   getActivityTypes, postActivityType, putActivityType, patchActivityTypeActive, postReorderActivityTypes,
   getCoverageThresholds, putCoverageThreshold, removeCoverageThreshold, putCoverageWindows,
   getCalendarDayTypes,
 } from '../controllers/scheduling';
+import { adherenceExceptionSaveSchema, adherenceExceptionTypeSaveSchema } from '../validation/adherence.validation';
 
 const router = Router();
 router.use(authenticate as unknown as RequestHandler);
@@ -34,6 +38,8 @@ const calViewAll = authorizePage('sched_calendar', 'viewAll') as unknown as Requ
 const calEdit    = authorizePage('sched_calendar', 'edit')    as unknown as RequestHandler;
 const excViewAll = authorizePage('sched_exceptions', 'viewAll') as unknown as RequestHandler;
 const excEdit    = authorizePage('sched_exceptions', 'edit')    as unknown as RequestHandler;
+const adhViewAll = authorizePage('sched_adherence_exceptions', 'viewAll') as unknown as RequestHandler;
+const adhEdit    = authorizePage('sched_adherence_exceptions', 'edit')    as unknown as RequestHandler;
 const admin      = authorizeAdmin as unknown as RequestHandler;
 
 // ── Business calendar (read for any authenticated user) ──────────────────────
@@ -86,5 +92,19 @@ router.post('/exceptions',       excEdit, validateSchema(ExceptionCreateSchema),
 router.delete('/exceptions/:id', excEdit, removeException as unknown as RequestHandler);
 router.post('/exceptions/bulk',  excEdit, validateSchema(BulkExceptionSchema), postBulkException as unknown as RequestHandler);
 router.get('/exceptions/time-off-import', excViewAll, getTimeOffImportReview as unknown as RequestHandler);
+
+// ── Adherence exceptions (approved reason per break/lunch) ───────────────────
+// Its own page + permission (sched_adherence_exceptions), mirroring attendance
+// exceptions. Type catalog is read here (for the entry picker) and admin-written
+// (from List Management). is_excused on the type decides scoring in the engine.
+router.get('/adherence-exception-types',        adhViewAll, getAdherenceExceptionTypes as unknown as RequestHandler);
+router.post('/adherence-exception-types',        admin, validateSchema(adherenceExceptionTypeSaveSchema), postAdherenceExceptionType as unknown as RequestHandler);
+router.put('/adherence-exception-types/:id',     admin, putAdherenceExceptionType as unknown as RequestHandler);
+router.patch('/adherence-exception-types/:id/active', admin, patchAdherenceExceptionTypeActive as unknown as RequestHandler);
+router.post('/adherence-exception-types/reorder', admin, validateSchema(ReorderTypesSchema), postReorderAdherenceExceptionTypes as unknown as RequestHandler);
+
+router.get('/adherence-exceptions',        adhViewAll, getAdherenceExceptions as unknown as RequestHandler);
+router.post('/adherence-exceptions',       adhEdit, validateSchema(adherenceExceptionSaveSchema), postAdherenceException as unknown as RequestHandler);
+router.delete('/adherence-exceptions/:id', adhEdit, removeAdherenceException as unknown as RequestHandler);
 
 export default router;

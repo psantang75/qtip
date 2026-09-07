@@ -136,6 +136,7 @@ export function ScheduleGrid({
           {!readOnly && (
             <th className={cn(SEL_COL, 'sticky left-0 z-20 border-b border-slate-200 bg-white px-0 py-2 text-center align-middle')}>
               <Checkbox
+                className="mx-auto"
                 checked={allIds.length > 0 && allIds.every(id => sel.has(id))}
                 onCheckedChange={v => onSelect?.(allIds, v === true)}
                 aria-label="Select all employees"
@@ -203,6 +204,7 @@ export function ScheduleGrid({
                   dept === UNASSIGNED ? 'bg-warning/15' : 'bg-slate-200/70',
                 )}>
                   <Checkbox
+                    className="mx-auto"
                     checked={members.every(m => sel.has(m.id))}
                     onCheckedChange={v => onSelect?.(members.map(m => m.id), v === true)}
                     aria-label={`Select everyone in ${dept}`}
@@ -275,6 +277,7 @@ export function ScheduleGrid({
                         })}
                         shift={person.shifts.find(s => s.date === iso)}
                         exceptions={person.exceptions.filter(e => e.date === iso)}
+                        adherenceExceptions={person.adherenceExceptions.filter(e => e.date === iso)}
                         isWeekend={isWeekend(iso)}
                         holidayName={MOCK_HOLIDAYS[iso]}
                         onClick={() => onEditShift?.(person.id, iso)}

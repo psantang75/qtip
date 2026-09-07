@@ -10,6 +10,10 @@ import {
   listActivityTypes, createActivityType, updateActivityType, setActivityTypeActive, reorderActivityTypes,
   listCoverageThresholds, upsertCoverageThreshold, deleteCoverageThreshold, saveCoverageWindows,
 } from '../../services/scheduling';
+import {
+  listAdherenceExceptionTypes, createAdherenceExceptionType, updateAdherenceExceptionType,
+  setAdherenceExceptionTypeActive, reorderAdherenceExceptionTypes,
+} from '../../services/adherence/adherence.exceptionType.service';
 import { respondWithError } from './respond';
 
 const includeInactive = (req: AuthReq) => req.query.include_inactive === 'true';
@@ -56,6 +60,28 @@ export const patchActivityTypeActive = async (req: AuthReq, res: Response) => {
 export const postReorderActivityTypes = async (req: AuthReq, res: Response) => {
   try { res.json({ success: true, data: await reorderActivityTypes(req.body.order) }); }
   catch (error) { respondWithError(res, 'postReorderActivityTypes', error); }
+};
+
+// ── Adherence exception types ────────────────────────────────────────────────
+export const getAdherenceExceptionTypes = async (req: AuthReq, res: Response) => {
+  try { res.json({ success: true, data: await listAdherenceExceptionTypes(includeInactive(req)) }); }
+  catch (error) { respondWithError(res, 'getAdherenceExceptionTypes', error); }
+};
+export const postAdherenceExceptionType = async (req: AuthReq, res: Response) => {
+  try { res.status(201).json({ success: true, data: await createAdherenceExceptionType(req.body) }); }
+  catch (error) { respondWithError(res, 'postAdherenceExceptionType', error); }
+};
+export const putAdherenceExceptionType = async (req: AuthReq, res: Response) => {
+  try { res.json({ success: true, data: await updateAdherenceExceptionType(parseInt(req.params.id), req.body) }); }
+  catch (error) { respondWithError(res, 'putAdherenceExceptionType', error); }
+};
+export const patchAdherenceExceptionTypeActive = async (req: AuthReq, res: Response) => {
+  try { res.json({ success: true, data: await setAdherenceExceptionTypeActive(parseInt(req.params.id), !!req.body.is_active) }); }
+  catch (error) { respondWithError(res, 'patchAdherenceExceptionTypeActive', error); }
+};
+export const postReorderAdherenceExceptionTypes = async (req: AuthReq, res: Response) => {
+  try { res.json({ success: true, data: await reorderAdherenceExceptionTypes(req.body.order) }); }
+  catch (error) { respondWithError(res, 'postReorderAdherenceExceptionTypes', error); }
 };
 
 // ── Coverage thresholds ──────────────────────────────────────────────────────

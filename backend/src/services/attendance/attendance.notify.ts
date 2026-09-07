@@ -31,6 +31,7 @@ import { resolveWarningLevel } from './attendance.rules';
 import { windowForFloored } from './attendance.rollup.service';
 import { dateOnlyValue } from '../scheduling/schedule.dates';
 import { resolveRecipients } from '../notifications/RoleResolver';
+import { isPunchExempt } from './punchExempt.settings';
 
 export const ATTENDANCE_LEVEL_TEMPLATE = 'attendance_threshold_reached';
 
@@ -64,6 +65,8 @@ export async function queueThresholdCrossings(asOf: string): Promise<number> {
       const claimKey = `attendance_level:${t.user_id}:${level.levelKey}`;
       const claimed = await prisma.notificationQueueEntry.findUnique({ where: { dedupe_key: claimKey } });
       if (claimed) continue;
+
+      if (await isPunchExempt(t.user_id)) continue;
 
       const csr = await prisma.user.findUnique({
         where: { id: t.user_id },

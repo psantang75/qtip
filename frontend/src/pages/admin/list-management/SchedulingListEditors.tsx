@@ -10,7 +10,7 @@
  *
  * Read-open, admin-write; the backend re-checks admin on every mutation.
  */
-import schedulingService, { type ApiActivityType, type ApiExceptionType } from '@/services/schedulingService'
+import schedulingService, { type ApiActivityType, type ApiExceptionType, type ApiAdherenceExceptionType } from '@/services/schedulingService'
 import {
   GenericListEditor,
   type EditorItem,
@@ -82,6 +82,40 @@ const excMeta: ListEditorMeta = {
 
 export function ExceptionTypesEditor() {
   return <GenericListEditor listType="schedule_exception_type" listLabel="exception type" service={excService} meta={excMeta} />
+}
+
+// ── Adherence exception types ─────────────────────────────────────────────────
+// The excused/unexcused catalog for adherence, the twin of attendance's exception
+// types above. is_excused alone decides scoring: an excused type forgives the
+// break/lunch it is logged against; an unexcused one is recorded only.
+const adhExcService: ListEditorService = {
+  getItems: async (inc) => (await schedulingService.listAdherenceExceptionTypes(inc)).map((x: ApiAdherenceExceptionType): EditorItem => ({
+    id: x.id, list_type: 'adherence_exception_type', label: x.label, category: x.category ?? undefined,
+    sort_order: x.sort_order, is_active: x.is_active, is_system: x.is_system, is_excused: x.is_excused,
+  })),
+  createItem:   (p) => schedulingService.createAdherenceExceptionType(p as Record<string, unknown>),
+  updateItem:   (id, p) => schedulingService.updateAdherenceExceptionType(id, p),
+  toggleStatus: async (id) => {
+    const cur = (await schedulingService.listAdherenceExceptionTypes(true)).find(x => x.id === id)
+    return schedulingService.setAdherenceExceptionTypeActive(id, !cur?.is_active)
+  },
+  reorder:      (order) => schedulingService.reorderAdherenceExceptionTypes(order),
+  deleteItem:   () => Promise.reject(new Error('Exception types are deactivated, not deleted')),
+}
+
+const adhExcMeta: ListEditorMeta = {
+  fields: [
+    { key: 'is_excused', label: 'Excused', type: 'select', coerce: 'boolean', options: [
+      { value: 'true', label: 'Excused' },
+      { value: 'false', label: 'Unexcused' },
+    ] },
+  ],
+  addDefaults: { is_excused: false },
+  allowDelete: false,
+}
+
+export function AdherenceExceptionTypesEditor() {
+  return <GenericListEditor listType="adherence_exception_type" listLabel="exception type" service={adhExcService} meta={adhExcMeta} />
 }
 
 // ── Activity types ───────────────────────────────────────────────────────────

@@ -100,6 +100,7 @@ export const NAV_CONFIG: SectionConfig[] = [
       // ── CSR Agent Activity ──
       { label: 'Call Activity',   path: '/app/insights/csr-call',       icon: 'Phone',         roles: [], pageKey: 'csr_call',       group: 'CSR Agent Activity' },
       { label: 'Attendance',      path: '/app/insights/csr-attendance', icon: 'CalendarCheck', roles: [], pageKey: 'csr_attendance', group: 'CSR Agent Activity' },
+      { label: 'Adherence',       path: '/app/insights/csr-adherence', icon: 'Timer', roles: [], pageKey: 'csr_adherence', group: 'CSR Agent Activity' },
       { label: 'Tickets & Tasks', path: '/app/insights/csr-tickets',    icon: 'Ticket',        roles: [], pageKey: 'csr_tickets',    group: 'CSR Agent Activity' },
       { label: 'Ticket and Task Workload', path: '/app/insights/csr-workload', icon: 'ClipboardList', roles: [], pageKey: 'csr_workload', group: 'CSR Agent Activity' },
       { label: 'Productivity', path: '/app/insights/csr-productivity', icon: 'Gauge', roles: [], pageKey: 'csr_productivity_report', group: 'CSR Agent Activity' },

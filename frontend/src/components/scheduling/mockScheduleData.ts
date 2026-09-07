@@ -42,6 +42,25 @@ export interface MockException {
   end?: string
 }
 
+/**
+ * An adherence exception logged against ONE break/lunch on ONE day, keyed by its
+ * kind and sorted-by-start sequence within that kind (matching the engine's seq).
+ * References a type whose excused flag decides scoring. Entered in the shift drawer
+ * beside the day's breaks, never on a separate form.
+ */
+export interface MockAdherenceException {
+  /** Absent until saved, so a row without one is a pending add. */
+  id?: number
+  /** 'YYYY-MM-DD' — carried for the grid, which filters by day. Omitted in the drawer. */
+  date?: string
+  segmentKind: 'BREAK' | 'LUNCH'
+  seq: number
+  exceptionTypeId: number
+  typeLabel: string
+  excused: boolean
+  reason?: string
+}
+
 export interface MockPerson {
   id: number
   name: string
@@ -49,6 +68,7 @@ export interface MockPerson {
   department: string | null
   shifts: MockShift[]
   exceptions: MockException[]
+  adherenceExceptions: MockAdherenceException[]
 }
 
 // ── Templates ────────────────────────────────────────────────────────────────

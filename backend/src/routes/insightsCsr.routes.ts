@@ -9,6 +9,8 @@ import {
   getAttendanceOccurrences,
   getAttendanceCompliance,
   getAttendanceDayOfWeek,
+  getAdherenceSummary,
+  getAdherenceOccurrences,
 } from '../controllers/insightsCsr.controller'
 // Tickets & Tasks reads the same service as its Sales twin, so the handler lives
 // with the rest of the Agent Activity fact readers; only the scope differs.
@@ -22,6 +24,8 @@ router.get('/attendance/summary',     h(getAttendanceSummary))
 router.get('/attendance/occurrences', h(getAttendanceOccurrences))
 router.get('/attendance/compliance',  h(getAttendanceCompliance))
 router.get('/attendance/day-of-week', h(getAttendanceDayOfWeek))
+router.get('/adherence/summary',      h(getAdherenceSummary))
+router.get('/adherence/occurrences',  h(getAdherenceOccurrences))
 router.get('/call',                   h(getCsrCallActivity))
 router.get('/tickets',                h(getCsrTicketsTasks))
 router.get('/tickets/past-due',       h(getCsrTicketsPastDue))

@@ -42,7 +42,7 @@ import { ExceptionSummary } from '@/components/scheduling/ExceptionSummary'
 import { ScheduleLegend } from '@/components/scheduling/ScheduleLegend'
 import {
   addDays, parseLocal, startOfWeek, toLocalIso,
-  type MockBreak, type MockException, type MockTemplate, type TemplateDay,
+  type MockAdherenceException, type MockBreak, type MockException, type MockTemplate, type TemplateDay,
 } from '@/components/scheduling/mockScheduleData'
 import { nextWorkday } from '@/components/scheduling/businessDays'
 import { useBusinessDayTypes } from '@/hooks/useBusinessDayTypes'
@@ -55,7 +55,7 @@ import schedulingService, { type ApiTemplate, type TemplateInput } from '@/servi
 const UNASSIGNED = 'Unassigned'
 type ViewMode = 'day' | 'week' | 'period'
 
-/** One drawer save: the shift itself plus the day's exception diff. */
+/** One drawer save: the shift itself plus the day's exception diffs. */
 interface DaySave {
   userId: number
   date: string
@@ -66,6 +66,8 @@ interface DaySave {
   shiftChanged: boolean
   exceptionAdds: MockException[]
   exceptionRemoveIds: number[]
+  adherenceAdds: MockAdherenceException[]
+  adherenceRemoveIds: number[]
 }
 
 const VIEWS: { id: ViewMode; label: string }[] = [
@@ -115,7 +117,28 @@ export default function SchedulingPage() {
   // Padded so the day-view arrows can look past the current window for the next
   // working day (weekend/holiday/closure are skipped).
   const dayTypes = useBusinessDayTypes(addDays(from, -7), addDays(to, 7)).data
-  const allPeople = useMemo(() => grid.data?.people ?? [], [grid.data])
+  // Adherence exceptions for the visible range, merged onto each person so the
+  // grid cells can note them beside the attendance exceptions. Their own endpoint,
+  // because the grid feed does not carry them.
+  const adherenceRangeQ = useQuery({
+    queryKey: ['adherence-exceptions', 'range', from, to],
+    queryFn: () => schedulingService.listAdherenceExceptions({ from, to }),
+  })
+  const allPeople = useMemo(() => {
+    const base = grid.data?.people ?? []
+    const rows = adherenceRangeQ.data ?? []
+    if (rows.length === 0) return base
+    const byUser = new Map<number, MockAdherenceException[]>()
+    for (const e of rows) {
+      const arr = byUser.get(e.user_id) ?? byUser.set(e.user_id, []).get(e.user_id)!
+      arr.push({
+        id: e.id, date: e.work_date, segmentKind: e.segment_kind, seq: e.seq,
+        exceptionTypeId: e.exception_type_id, typeLabel: e.type_label,
+        excused: e.is_excused, reason: e.reason ?? undefined,
+      })
+    }
+    return base.map(p => (byUser.has(p.id) ? { ...p, adherenceExceptions: byUser.get(p.id)! } : p))
+  }, [grid.data, adherenceRangeQ.data])
   const deptOptions = useMemo(
     () => [...new Set(allPeople.map(p => p.department ?? UNASSIGNED))].sort(),
     [allPeople],
@@ -211,7 +234,7 @@ export default function SchedulingPage() {
   // mutation rather than three: a partial save that wrote the shift but dropped
   // the exception is worse than a clean failure.
   const shiftMut = useMutation({
-    mutationFn: async ({ userId, date, start, end, breaks, shiftChanged, exceptionAdds, exceptionRemoveIds }: DaySave) => {
+    mutationFn: async ({ userId, date, start, end, breaks, shiftChanged, exceptionAdds, exceptionRemoveIds, adherenceAdds, adherenceRemoveIds }: DaySave) => {
       // Skip the shift write when only exceptions changed: a published, elapsed
       // shift is locked server-side (423), but exceptions are allowed against it,
       // so re-saving an untouched shift would needlessly block the exception.
@@ -239,10 +262,27 @@ export default function SchedulingPage() {
           end: ex.isFullDay ? null : ex.end ?? null,
         })
       }
-      return { added: exceptionAdds.length, removed: exceptionRemoveIds.length }
+      // Adherence exceptions are diffed the same way — remove first so freeing a
+      // (kind, seq) lets a replacement upsert onto it in the same save.
+      for (const id of adherenceRemoveIds) await schedulingService.deleteAdherenceException(id)
+      for (const ex of adherenceAdds) {
+        await schedulingService.saveAdherenceException({
+          user_id: userId,
+          work_date: date,
+          segment_kind: ex.segmentKind,
+          seq: ex.seq,
+          exception_type_id: ex.exceptionTypeId,
+          reason: ex.reason ?? null,
+        })
+      }
+      return {
+        added: exceptionAdds.length + adherenceAdds.length,
+        removed: exceptionRemoveIds.length + adherenceRemoveIds.length,
+      }
     },
     onSuccess: (r) => {
       invalidateGrid()
+      qc.invalidateQueries({ queryKey: ['adherence-exceptions'] })
       const parts = [
         r.added > 0 ? `${r.added} exception${r.added === 1 ? '' : 's'} added` : null,
         r.removed > 0 ? `${r.removed} removed` : null,
@@ -318,6 +358,30 @@ export default function SchedulingPage() {
   const editingPerson = editing ? allPeople.find(p => p.id === editing.personId) : undefined
   const editingShift = editingPerson?.shifts.find(s => s.date === editing?.date)
   const editingExceptions = editingPerson?.exceptions.filter(e => e.date === editing?.date) ?? []
+
+  // Adherence exceptions are logged per (kind, seq), so they are not part of the
+  // grid; the drawer pulls just the open day's rows when it opens.
+  const adherenceExsQ = useQuery({
+    queryKey: ['adherence-exceptions', 'day', editing?.personId, editing?.date],
+    queryFn: () => schedulingService.listAdherenceExceptions({
+      from: editing!.date, to: editing!.date, user_id: editing!.personId,
+    }),
+    enabled: !!editing,
+    // Don't refetch under the open drawer — it would overwrite pending, unsaved rows.
+    refetchOnWindowFocus: false,
+  })
+  const editingAdherenceExceptions = useMemo<MockAdherenceException[]>(
+    () => (adherenceExsQ.data ?? []).map(e => ({
+      id: e.id,
+      segmentKind: e.segment_kind,
+      seq: e.seq,
+      exceptionTypeId: e.exception_type_id,
+      typeLabel: e.type_label,
+      excused: e.is_excused,
+      reason: e.reason ?? undefined,
+    })),
+    [adherenceExsQ.data],
+  )
 
   const hasFilters = departments.length > 0 || people.length > 0 || search.trim().length > 0
   const hasSelection = selectedPeople.length > 0
@@ -498,6 +562,7 @@ export default function SchedulingPage() {
           date={editing?.date}
           shift={editingShift}
           exceptions={editingExceptions}
+          adherenceExceptions={editingAdherenceExceptions}
           onSave={canEdit ? onSaveShift : undefined}
           saving={shiftMut.isPending}
         />

@@ -25,9 +25,21 @@ import {
 } from '../services/attendance/attendance.rollup.service';
 import { getComplianceMatrix, getDayOfWeek } from '../services/attendance/attendance.analytics.service';
 import { loadPointRules, loadWarningThresholds } from '../services/attendance/attendance.config';
+import {
+  getAgentRows as getAdherenceRows,
+  getFilterOptions as getAdherenceFilterOptions,
+  getOccurrences as getAdherenceOccurrenceDetail,
+  windowForFloored as adherenceWindowForFloored,
+} from '../services/adherence/adherence.rollup.service';
+import {
+  loadPointRules as loadAdherenceRules,
+  loadWarningThresholds as loadAdherenceThresholds,
+} from '../services/adherence/adherence.config';
+import { getComplianceThresholds } from '../services/adherence/adherence.settings';
 
 const permissionService = new InsightsPermissionService();
-const PAGE_KEY = 'csr_attendance';
+const ATTENDANCE_PAGE_KEY = 'csr_attendance';
+const ADHERENCE_PAGE_KEY = 'csr_adherence';
 
 interface CsrContext {
   deptFilter: number[];
@@ -75,7 +87,15 @@ async function isUserInScope(userId: number, deptFilter: number[]): Promise<bool
   return user?.department_id != null && deptFilter.includes(user.department_id);
 }
 
-function csrHandler(fn: (ctx: CsrContext, req: Request) => Promise<unknown>) {
+/**
+ * Wraps a read with auth, page-access, department-scope and as-of resolution.
+ * Parametrised by page key so every "Agent Activity - CSR" page (Attendance,
+ * Adherence, and the next one) shares one wrapper instead of copying it.
+ */
+function csrHandler(
+  fn: (ctx: CsrContext, req: Request) => Promise<unknown>,
+  pageKey: string = ATTENDANCE_PAGE_KEY,
+) {
   return async (req: Request, res: Response): Promise<void> => {
     try {
       if (!req.user) {
@@ -88,7 +108,7 @@ function csrHandler(fn: (ctx: CsrContext, req: Request) => Promise<unknown>) {
         return;
       }
       const access: InsightsAccessResult = await permissionService.resolveAccess(
-        req.user.user_id, roleId, PAGE_KEY,
+        req.user.user_id, roleId, pageKey,
       );
       if (!access.canAccess) {
         res.status(403).json({ error: 'Access denied' });
@@ -182,3 +202,52 @@ export const getAttendanceDayOfWeek = csrHandler(async (ctx) => {
     days: await getDayOfWeek(ctx.deptFilter, from, ctx.asOf, ctx.selfUserId, ctx.userNames),
   };
 });
+
+// ── Adherence (break/lunch/phone) ────────────────────────────────────────────
+// Same wrapper, own page key so access is granted independently of Attendance.
+
+/** The adherence roster plus the bands/ladder that scored it, in one request. */
+export const getAdherenceSummary = csrHandler(async (ctx) => {
+  const [rows, options] = await Promise.all([
+    getAdherenceRows(ctx.deptFilter, ctx.asOf, ctx.selfUserId, ctx.userNames),
+    getAdherenceFilterOptions(ctx.deptFilter, ctx.asOf, ctx.selfUserId),
+  ]);
+  const [rules, thresholds, complianceThresholds] = await Promise.all([
+    loadAdherenceRules(), loadAdherenceThresholds(), getComplianceThresholds(),
+  ]);
+  const { from, pointsActive } = await adherenceWindowForFloored(ctx.asOf);
+  return {
+    asOf: ctx.asOf,
+    asOfClamped: ctx.asOfClamped,
+    windowFrom: from,
+    pointsActive,
+    complianceThresholds,
+    isSelfView: ctx.selfUserId !== undefined,
+    rows,
+    ...options,
+    pointBands: rules
+      .filter((r) => r.isActive && r.effectiveFrom <= ctx.asOf && (r.effectiveTo === null || ctx.asOf <= r.effectiveTo))
+      .map((r) => ({
+        ruleKey: r.ruleKey, label: r.label, kind: r.kind,
+        minSeconds: r.minSeconds, maxSeconds: r.maxSeconds, points: r.points,
+      })),
+    warningLevels: thresholds
+      .filter((t) => t.isActive && t.effectiveFrom <= ctx.asOf && (t.effectiveTo === null || ctx.asOf <= t.effectiveTo))
+      .map((t) => ({ levelKey: t.levelKey, label: t.label, pointsThreshold: t.pointsThreshold })),
+  };
+}, ADHERENCE_PAGE_KEY);
+
+/** Per-day break/lunch detail behind one person's adherence total. Authorised
+ * independently of the roster, exactly like the attendance drill-down. */
+export const getAdherenceOccurrences = csrHandler(async (ctx, req) => {
+  const requested = parseInt(String(req.query.userId ?? ''), 10);
+  const userId = ctx.selfUserId ?? requested;
+  if (!Number.isFinite(userId)) return { occurrences: [] };
+  if (ctx.selfUserId !== undefined && requested && requested !== ctx.selfUserId) {
+    return { occurrences: [] };
+  }
+  if (ctx.selfUserId === undefined && !(await isUserInScope(userId, ctx.deptFilter))) {
+    return { occurrences: [] };
+  }
+  return { userId, asOf: ctx.asOf, occurrences: await getAdherenceOccurrenceDetail(userId, ctx.asOf) };
+}, ADHERENCE_PAGE_KEY);

@@ -119,6 +119,9 @@ model User {
   phone_queue_overrides                 PhoneQueueAssignmentOverride[]
   attendance_daily                      AttendanceDaily[]
   attendance_occurrences                AttendanceOccurrence[]
+  adherence_daily                       AdherenceDaily[]
+  adherence_occurrences                 AdherenceOccurrence[]
+  adherence_exceptions                  AdherenceException[]
   quiz_attempts                         QuizAttempt[]
   training_resources                    TrainingResource[]
   write_ups_as_csr                      WriteUp[]          @relation("WriteUpCsr")
@@ -2539,6 +2542,7 @@ model ScheduleShift {
   segments ScheduleShiftSegment[]
   exceptions ScheduleException[]
   attendance_daily AttendanceDaily[]
+  adherence_daily AdherenceDaily[]
 
   @@unique([user_id, shift_date], map: "uq_schedule_shift_user_date")
   @@index([shift_date], map: "idx_schedule_shift_date")
@@ -2688,6 +2692,181 @@ model AttendanceOccurrence {
   @@unique([user_id, work_date, kind], map: "uq_attendance_occurrence_user_date_kind")
   @@index([work_date], map: "idx_attendance_occurrence_date")
   @@map("attendance_occurrence")
+}
+
+// ── Adherence points ─────────────────────────────────────────────────────────
+// Intraday adherence over scheduling + punch + phone data: break/lunch duration,
+// break/lunch start-time, and phone-status-vs-punch matching. Distinct from
+// Attendance (which scores shift start/end). Two config models (bands + ladder,
+// both effective-dated) and two derived models rebuilt by adherence.engine.ts.
+// Kind encodes the segment (BREAK/LUNCH) and the metric (DURATION/START/
+// PHONE_START/PHONE_STOP/MISSED). Phone is split so the two edges are scored and
+// coached independently: PHONE_START is the phone opening Break/Meal before the
+// punch-in, PHONE_STOP is it staying past the punch-out. Occurrences are always
+// recorded; points only count toward the ladder on/after ie_config
+// `adherence_points_active_from` (the report-only switch).
+
+enum AdherenceRuleKind {
+  BREAK_DURATION
+  LUNCH_DURATION
+  BREAK_START
+  LUNCH_START
+  BREAK_PHONE_START
+  BREAK_PHONE_STOP
+  LUNCH_PHONE_START
+  LUNCH_PHONE_STOP
+  BREAK_MISSED
+  LUNCH_MISSED
+}
+
+/// Which segment family an adherence variance exception applies to.
+enum AdherenceSegmentKind {
+  BREAK
+  LUNCH
+}
+
+model AdherencePointRule {
+  id             Int               @id @default(autoincrement())
+  rule_key       String            @db.VarChar(50)
+  label          String            @db.VarChar(100)
+  kind           AdherenceRuleKind
+  min_seconds    Int               @default(0)
+  max_seconds    Int?
+  points         Decimal           @default(0) @db.Decimal(4, 2)
+  effective_from DateTime          @db.Date
+  effective_to   DateTime?         @db.Date
+  sort_order     Int               @default(0)
+  is_active      Boolean           @default(true)
+  created_at     DateTime          @default(now()) @db.DateTime(0)
+  updated_at     DateTime          @default(now()) @updatedAt @db.DateTime(0)
+
+  occurrences AdherenceOccurrence[]
+
+  @@unique([rule_key, effective_from], map: "uq_adherence_point_rule_key_effective")
+  @@index([kind, is_active, effective_from], map: "idx_adherence_point_rule_lookup")
+  @@map("adherence_point_rule")
+}
+
+model AdherenceWarningThreshold {
+  id               Int       @id @default(autoincrement())
+  level_key        String    @db.VarChar(50)
+  label            String    @db.VarChar(100)
+  points_threshold Decimal   @db.Decimal(4, 2)
+  effective_from   DateTime  @db.Date
+  effective_to     DateTime? @db.Date
+  sort_order       Int       @default(0)
+  is_active        Boolean   @default(true)
+  created_at       DateTime  @default(now()) @db.DateTime(0)
+  updated_at       DateTime  @default(now()) @updatedAt @db.DateTime(0)
+
+  @@unique([level_key, effective_from], map: "uq_adherence_warning_threshold_level_effective")
+  @@index([is_active, effective_from], map: "idx_adherence_warning_threshold_lookup")
+  @@map("adherence_warning_threshold")
+}
+
+// One row per user per SCHEDULED day that carries a break or lunch. Holds the
+// scheduled vs actual seconds and the phone-vs-punch overhang per segment, plus
+// a scannable adherence_pct. Points are summed from adherence_occurrence, never
+// denormalised here.
+model AdherenceDaily {
+  id                    Int       @id @default(autoincrement())
+  user_id               Int
+  work_date             DateTime  @db.Date
+  shift_id              Int?
+  break_scheduled_sec   Int       @default(0)
+  break_actual_sec      Int       @default(0)
+  lunch_scheduled_sec   Int       @default(0)
+  lunch_actual_sec      Int       @default(0)
+  phone_break_extra_sec Int       @default(0)
+  phone_lunch_extra_sec Int       @default(0)
+  adherence_pct         Decimal?  @db.Decimal(5, 2)
+  computed_at           DateTime  @default(now()) @db.DateTime(0)
+
+  user  User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  shift ScheduleShift? @relation(fields: [shift_id], references: [id], onDelete: SetNull)
+
+  @@unique([user_id, work_date], map: "uq_adherence_daily_user_date")
+  @@index([work_date], map: "idx_adherence_daily_date")
+  @@map("adherence_daily")
+}
+
+// Point-bearing detail. Unique on (user, date, kind, seq): seq distinguishes the
+// first break from the second on a multi-break day.
+model AdherenceOccurrence {
+  id                Int               @id @default(autoincrement())
+  user_id           Int
+  work_date         DateTime          @db.Date
+  seq               Int               @default(1) @db.TinyInt
+  rule_id           Int?
+  kind              AdherenceRuleKind
+  deviation_seconds Int               @default(0)
+  scheduled_start_sec Int?
+  scheduled_end_sec   Int?
+  actual_start_sec    Int?
+  actual_end_sec      Int?
+  phone_start_sec     Int?
+  phone_end_sec       Int?
+  points            Decimal           @default(0) @db.Decimal(4, 2)
+  reason_label      String            @db.VarChar(100)
+  computed_at       DateTime          @default(now()) @db.DateTime(0)
+
+  user User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  rule AdherencePointRule? @relation(fields: [rule_id], references: [id], onDelete: SetNull)
+
+  @@unique([user_id, work_date, kind, seq], map: "uq_adherence_occurrence_user_date_kind_seq")
+  @@index([work_date], map: "idx_adherence_occurrence_date")
+  @@map("adherence_occurrence")
+}
+
+/// Catalog of adherence exception reasons, mirroring ScheduleExceptionType for
+/// attendance. is_excused alone decides scoring: an EXCUSED exception logged
+/// against a break/lunch forgives that segment's punch-side adherence points
+/// (duration + start, or a miss); an UNEXCUSED one is recorded only. Edited in
+/// Admin > List Management > Adherence. Soft-deleted via is_active, never hard
+/// deleted — a type that produced real rows is referenced by history.
+model AdherenceExceptionType {
+  id          Int      @id @default(autoincrement())
+  type_key    String   @unique(map: "uq_adherence_exception_type_key") @db.VarChar(50)
+  label       String   @db.VarChar(100)
+  category    String?  @db.VarChar(100)
+  description String?  @db.VarChar(255)
+  is_excused  Boolean  @default(false)
+  is_system   Boolean  @default(false)
+  sort_order  Int      @default(0)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now()) @db.DateTime(0)
+  updated_at  DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  exceptions AdherenceException[]
+
+  @@map("adherence_exception_type")
+}
+
+// Approved adherence exception for one break/lunch on one day, mirroring the
+// attendance ScheduleException. Adherence-only: consumed by adherence.engine at
+// recompute — an EXCUSED type forgives that segment's punch-side points; an
+// UNEXCUSED one is recorded only. Never edits the schedule, punch, attendance,
+// or phone rules (phone flows off the actual punch). One row per
+// (user, date, segment_kind, seq).
+model AdherenceException {
+  id                Int                  @id @default(autoincrement())
+  user_id           Int
+  work_date         DateTime             @db.Date
+  segment_kind      AdherenceSegmentKind
+  seq               Int                  @default(1) @db.TinyInt
+  exception_type_id Int
+  reason            String?              @db.VarChar(255)
+  entered_by        Int?
+  created_at        DateTime             @default(now()) @db.DateTime(0)
+  updated_at        DateTime             @default(now()) @updatedAt @db.DateTime(0)
+
+  user           User                   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  exception_type AdherenceExceptionType @relation(fields: [exception_type_id], references: [id], onDelete: Restrict)
+
+  @@unique([user_id, work_date, segment_kind, seq], map: "uq_adherence_exception_user_date_seg_seq")
+  @@index([work_date], map: "idx_adherence_exception_date")
+  @@index([exception_type_id], map: "idx_adherence_exception_type")
+  @@map("adherence_exception")
 }
 
 enum CampaignAnchorType {

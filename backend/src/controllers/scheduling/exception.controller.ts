@@ -7,6 +7,9 @@ import {
   AuthReq, resolveScope, listExceptions, createException, deleteException, bulkLogException,
   deriveTimeOffExceptions,
 } from '../../services/scheduling';
+import {
+  listAdherenceExceptions, upsertAdherenceException, deleteAdherenceException,
+} from '../../services/adherence/adherence.exception.service';
 import { respondWithError } from './respond';
 import { addDays, fmtLocal } from '../../services/scheduling/schedule.dates';
 
@@ -58,6 +61,44 @@ export const getTimeOffImportReview = async (req: AuthReq, res: Response) => {
     res.json({ success: true, data });
   } catch (error) {
     respondWithError(res, 'getTimeOffImportReview', error);
+  }
+};
+
+// ── Adherence variance exceptions (approved allowance, entered in the drawer) ──
+// Adherence-only: forgives one break/lunch's Long/Start deviation. Never touches
+// the schedule, punch, attendance, or phone rules. Shares the sched_exceptions
+// permission because it is entered from the same drawer.
+export const getAdherenceExceptions = async (req: AuthReq, res: Response) => {
+  try {
+    const scope = await resolveScope(req);
+    const data = await listAdherenceExceptions(scope, {
+      from: req.query.from as string | undefined,
+      to: req.query.to as string | undefined,
+      userId: req.query.user_id ? parseInt(req.query.user_id as string) : undefined,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    respondWithError(res, 'getAdherenceExceptions', error);
+  }
+};
+
+export const postAdherenceException = async (req: AuthReq, res: Response) => {
+  try {
+    const scope = await resolveScope(req);
+    const data = await upsertAdherenceException(scope, req.body, req.user!.user_id);
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    respondWithError(res, 'postAdherenceException', error);
+  }
+};
+
+export const removeAdherenceException = async (req: AuthReq, res: Response) => {
+  try {
+    const scope = await resolveScope(req);
+    const data = await deleteAdherenceException(scope, parseInt(req.params.id));
+    res.json({ success: true, data });
+  } catch (error) {
+    respondWithError(res, 'removeAdherenceException', error);
   }
 };
 

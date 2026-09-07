@@ -22,7 +22,6 @@ import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 import { t } from '@/lib/t'
@@ -33,28 +32,10 @@ import {
 import type {
   AttendancePointRuleConfig, AttendanceThresholdConfig, PointRuleSavePayload, ThresholdSavePayload,
 } from '@/services/insightsCsrService'
-
-const CARD = 'bg-white rounded-xl border border-slate-200 p-4'
-const SUBHEAD = 'text-[10px] font-semibold uppercase tracking-wide text-slate-400'
-
-const today = () => new Date().toISOString().slice(0, 10)
-
-/** 'M:SS' from seconds — how the policy table is written. Blank means unbounded. */
-function toMmSs(seconds: number | null): string {
-  if (seconds === null) return ''
-  const m = Math.floor(seconds / 60)
-  return `${m}:${String(seconds % 60).padStart(2, '0')}`
-}
-
-/** Parse 'M:SS' or plain minutes back to seconds. Returns null for blank. */
-function fromMmSs(value: string): number | null {
-  const trimmed = value.trim()
-  if (trimmed === '') return null
-  const parts = trimmed.split(':')
-  const m = Number(parts[0]) || 0
-  const s = parts.length > 1 ? Number(parts[1]) || 0 : 0
-  return m * 60 + s
-}
+import {
+  CARD, SUBHEAD, today, addDays, toMmSs, fromMmSs,
+} from './listEditorShared'
+import { EffectiveFromFooter } from './EffectiveFromFooter'
 
 const KIND_LABEL: Record<string, string> = {
   LATE: 'Late arrival',
@@ -354,33 +335,6 @@ export function AttendanceThresholdsEditor() {
   )
 }
 
-function EffectiveFromFooter({ effectiveFrom, onChange, onSave, saving }: {
-  effectiveFrom: string
-  onChange: (v: string) => void
-  onSave: () => void
-  saving: boolean
-}) {
-  return (
-    <div className="flex items-end justify-between gap-4 mt-4 pt-4 border-t border-slate-100">
-      <div className="space-y-1">
-        <Label htmlFor="effective-from" className={SUBHEAD}>Effective From</Label>
-        <Input
-          id="effective-from"
-          type="date"
-          value={effectiveFrom}
-          onChange={e => onChange(e.target.value)}
-          className="h-8 w-[160px] text-[13px]"
-        />
-        <p className="text-[11px] text-slate-400">Days before this date keep the rules they were scored under.</p>
-      </div>
-      <Button type="button" size="sm" className="gap-1.5 shrink-0" disabled={saving} onClick={onSave}>
-        <Save className="h-3.5 w-3.5" />
-        {saving ? 'Saving…' : 'Save'}
-      </Button>
-    </div>
-  )
-}
-
 function toPayload(r: AttendancePointRuleConfig, index: number): PointRuleSavePayload {
   return {
     ruleKey: r.ruleKey,
@@ -393,10 +347,4 @@ function toPayload(r: AttendancePointRuleConfig, index: number): PointRuleSavePa
     sortOrder: (index + 1) * 10,
     isActive: r.isActive,
   }
-}
-
-function addDays(dateStr: string, n: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const dt = new Date(y, m - 1, d + n)
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }

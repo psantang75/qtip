@@ -167,6 +167,27 @@ There are deliberately **no** `waived` columns. Forgiveness is a
 truth. `work_date` is a `DATE`; all calendar logic uses local-first `YYYY-MM-DD`
 strings per `.cursor/rules/date-handling.mdc`.
 
+## Adherence Points Tables
+
+Added by migration `20260903150000_add_adherence`. Same shape as Attendance — two
+effective-dated **config** tables and two **derived** tables rebuilt by
+`adherence.engine.ts` — but scoring intraday break/lunch/phone adherence instead
+of shift start/end. Also seeds `ie_config` settings and `ie_page` /
+`ie_kpi` / `ie_kpi_threshold` for the `csr_adherence` report. See
+[`insights_csr_adherence.md`](insights_csr_adherence.md) for the feature overview.
+
+| Table | Grain | Purpose |
+|-------|-------|---------|
+| `adherence_point_rule` | one per band per effective period | Bands keyed by `kind` (`BREAK_`/`LUNCH_` × `DURATION`/`START`/`PHONE`/`MISSED`), `min_seconds`/`max_seconds` (inclusive; NULL max = unbounded), `points`, `effective_from`/`effective_to`. Unique on (`rule_key`,`effective_from`). |
+| `adherence_warning_threshold` | one per discipline step per effective period | Coaching / Verbal / Written / Final / Termination Review. Unique on (`level_key`,`effective_from`). |
+| `adherence_daily` | one per user × **scheduled** day carrying a break/lunch | Scheduled vs actual seconds per segment, phone overhang, and a scannable `adherence_pct`. **No** `department_id` snapshot: joined live from `users`. |
+| `adherence_occurrence` | one per user × day × kind × **seq** | Point-bearing detail (`seq` distinguishes the first break from the second). Points summed from here, never denormalised. Also stores the raw `scheduled_/actual_/phone_start_sec`+`_end_sec` (nullable seconds-since-local-midnight, added by `20260903170000_adherence_occurrence_times`) so the drill-down shows scheduled vs actual-punch vs phone side by side without re-deriving; a null means the pair does not apply to that kind (missed = no punch; duration/start = no phone; phone = no scheduled instance). |
+
+Grace for duration/start is the gap below the lowest band (no separate column);
+the asymmetric phone tolerance and the report-only points-active date live in
+`ie_config` (`adherence_start_date`, `adherence_points_active_from`,
+`adherence_phone_grace_before_sec`, `adherence_phone_grace_after_sec`).
+
 ## Call Campaign Publishing
 
 Added by migration `20260804190000_campaign_publishing`, on top of the campaign

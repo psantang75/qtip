@@ -45,6 +45,38 @@ export interface ApiException {
   /** Owned by the Paychex import — a manual delete returns on the next import. */
   is_imported: boolean
 }
+/**
+ * An adherence exception logged against ONE break/lunch on ONE day. References a
+ * type whose is_excused flag decides scoring (excused forgives that segment's
+ * punch-side points; unexcused is recorded only). Adherence-only — never edits the
+ * schedule, punch, attendance, or phone rules. Mirrors attendance's exceptions.
+ */
+export interface ApiAdherenceException {
+  id: number
+  user_id: number
+  username: string
+  department_name: string | null
+  work_date: string
+  segment_kind: 'BREAK' | 'LUNCH'
+  seq: number
+  exception_type_id: number
+  type_label: string
+  is_excused: boolean
+  reason: string | null
+}
+export interface AdherenceExceptionInput {
+  user_id: number
+  work_date: string
+  segment_kind: 'BREAK' | 'LUNCH'
+  seq: number
+  exception_type_id: number
+  reason?: string | null
+}
+/** Adherence exception TYPE (the excused/unexcused catalog, edited in List Management). */
+export interface ApiAdherenceExceptionType {
+  id: number; type_key: string; label: string; category: string | null; description: string | null
+  is_excused: boolean; is_system: boolean; sort_order: number; is_active: boolean
+}
 export interface ApiRosterUser {
   id: number
   username: string
@@ -172,6 +204,28 @@ const schedulingService = {
     unwrap<TimeOffImportReview>(
       (await api.get(`/scheduling/exceptions/time-off-import?from=${from}&to=${to}`)).data,
     ),
+
+  // Adherence exceptions (approved reason per break/lunch, managed on its own page)
+  listAdherenceExceptions: async (params: { from?: string; to?: string; user_id?: number } = {}): Promise<ApiAdherenceException[]> => {
+    const q = new URLSearchParams()
+    if (params.from) q.set('from', params.from)
+    if (params.to) q.set('to', params.to)
+    if (params.user_id) q.set('user_id', String(params.user_id))
+    const qs = q.toString()
+    return unwrap<ApiAdherenceException[]>((await api.get(`/scheduling/adherence-exceptions${qs ? `?${qs}` : ''}`)).data)
+  },
+  saveAdherenceException: async (body: AdherenceExceptionInput) =>
+    unwrap((await api.post('/scheduling/adherence-exceptions', body)).data),
+  deleteAdherenceException: async (id: number) =>
+    unwrap((await api.delete(`/scheduling/adherence-exceptions/${id}`)).data),
+
+  // Adherence exception types (excused/unexcused catalog — read here, admin-written)
+  listAdherenceExceptionTypes: async (includeInactive = false): Promise<ApiAdherenceExceptionType[]> =>
+    unwrap<ApiAdherenceExceptionType[]>((await api.get(`/scheduling/adherence-exception-types?include_inactive=${includeInactive}`)).data),
+  createAdherenceExceptionType: async (body: Record<string, unknown>) => unwrap((await api.post('/scheduling/adherence-exception-types', body)).data),
+  updateAdherenceExceptionType: async (id: number, body: Record<string, unknown>) => unwrap((await api.put(`/scheduling/adherence-exception-types/${id}`, body)).data),
+  setAdherenceExceptionTypeActive: async (id: number, is_active: boolean) => unwrap((await api.patch(`/scheduling/adherence-exception-types/${id}/active`, { is_active })).data),
+  reorderAdherenceExceptionTypes: async (order: Array<{ id: number; sort_order: number }>) => unwrap((await api.post('/scheduling/adherence-exception-types/reorder', { order })).data),
 
   // Admin lists
   listActivityTypes: async (includeInactive = false): Promise<ApiActivityType[]> =>
