@@ -20,22 +20,26 @@ import {
   addDays, combineLocal, dateOnlyValue, dateStrFromDate, hmFromDateTime, exceptionsOverlap,
 } from './schedule.dates';
 import { recomputeRange } from '../attendance/attendance.engine';
+import { recomputeRange as recomputeAdherence } from '../adherence/adherence.engine';
 
 /**
- * Attendance points are derived, never stored at exception-write time: the engine
- * rebuilds a day from the published schedule, punches and rules. So after an
- * exception is added or removed we recompute just that user's day(s) so points
- * add/remove immediately instead of waiting for the next punch import or admin
- * recalculate. The engine is idempotent (delete + reinsert per range) and caps
- * itself to the punch-feed watermark, so a call on an out-of-coverage day is a
- * safe no-op. Failures are logged and swallowed — the exception write already
- * committed and the next recompute will heal the range.
+ * Attendance and adherence are both derived. After an exception is added or
+ * removed we recompute that user's day(s) so points add/remove immediately
+ * instead of waiting for the next punch import. Adherence treats any attendance
+ * exception as "not here" and drops overlapping breaks/lunches. Each engine is
+ * idempotent and isolated — a failure in one never rolls back the write or the
+ * other rescore. The next recompute heals the range.
  */
 async function safeRecompute(from: string, to: string, userIds: number[]): Promise<void> {
   try {
     await recomputeRange(from, to, userIds);
   } catch (err) {
     logger.error('[SCHEDULING] attendance recompute after exception change failed:', err);
+  }
+  try {
+    await recomputeAdherence(from, to, userIds);
+  } catch (err) {
+    logger.error('[SCHEDULING] adherence recompute after exception change failed:', err);
   }
 }
 

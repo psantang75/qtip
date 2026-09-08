@@ -138,11 +138,31 @@ Identical mechanics to Attendance (see that doc for the detail):
   recompute scores each day under the rules in force that day.
 - `recomputeRange` is idempotent, transactional and single-flight; the delete
   scope is the **date range**. Automatic after a punch import
-  (`runImport.rescoreAdherenceAfterPunchImport`); manual via
+  (`runImport.rescoreAdherenceAfterPunchImport`) and after an attendance
+  exception write (both engines rescore); manual via
   `POST /api/insights/admin/adherence/recalculate` (≤ 730 days).
 - Crossing a rung upward queues `notification_queue` rows with
   `template_key = 'adherence_threshold_reached'`, deduped on
   `adherence_level:<csr>:<level>`. Silent while points are report-only.
+
+## Attendance exceptions (not here → not scored)
+
+Adherence is a **when-present** metric. An attendance exception
+(`schedule_exception`) means the person was not here for that interval, so
+adherence does not record the breaks/lunches that fall inside it — **excused or
+unexcused**. Attendance already owns the absence/late/early call; stacking a
+missed-break point on a PTO or NCNS day is double-counting.
+
+| Attendance exception | Adherence |
+|----------------------|-----------|
+| Full-day (PTO, unpaid, NCNS, sick, …) | No daily row, no occurrences. |
+| Windowed (partial PTO, appointment, late, early leave) | A break/lunch whose **scheduled** window overlaps the exception is dropped from both sides of the math. The rest of the day still scores. |
+| Window that does not overlap (e.g. late 9:00–9:20 vs a 10:00 break) | No effect. |
+
+Dropped segments are **not** credited as 100% — they leave the universe. If every
+scheduled break/lunch on the day is inside an exception, the day is not recorded
+at all. Pairing (`seq`) stays on the original scheduled order so an adherence
+exception on segment 2 still targets segment 2.
 
 ## Adherence exceptions (excused / unexcused)
 
@@ -210,6 +230,7 @@ in the Attendance doc applies equally here.
 | Config load + `ie_config` settings/gate | `backend/src/services/adherence/adherence.config.ts`, `adherence.settings.ts` |
 | Actuals (break/meal punches) | `backend/src/services/adherence/breakPunchProvider.ts` |
 | Phone presence + identity bridge | `backend/src/services/adherence/phonePresenceProvider.ts` |
+| Presence gate (attendance exception = not here) | `backend/src/services/adherence/adherence.presence.ts` |
 | Scoring + idempotent recompute (excused segments forgiven) | `backend/src/services/adherence/adherence.engine.ts` |
 | Exception type catalog (list/create/update/setActive/reorder) | `backend/src/services/adherence/adherence.exceptionType.service.ts` |
 | Per-person exceptions (list/upsert/delete + recompute) | `backend/src/services/adherence/adherence.exception.service.ts` |
@@ -233,6 +254,8 @@ in the Attendance doc applies equally here.
   effective dating, ladder resolution, overlap validation.
 - `adherence.engine.test.ts` — `scoreDay` across duration grace, the missed path,
   start-time, and the phone before/after tolerance (the 10-min-early dodge), the
-  flawless-day = 100% invariant, and excused exceptions (an excused segment forgives
-  Long, early/late Start, Miss, and its phone Start/Stop; applies only to that
-  instance, not its siblings).
+  flawless-day = 100% invariant, excused adherence exceptions, and attendance
+  exceptions (full-day drops the day; a window drops only overlapping segments;
+  a non-overlapping late window leaves the break countable).
+- `adherence.presence.test.ts` — full-day vs windowed, midnight roll, overlap
+  vs a 10:00 break.

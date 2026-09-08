@@ -29,8 +29,10 @@ Services are split by concern under three folders (add to the matching slice):
   + start-time + phone-vs-punch matching). Same engine/rules/config/settings/
   rollup/notify split; reuses attendance's `scheduleProvider`/`punchProvider` for
   the plan/actuals and adds `breakPunchProvider.ts` (break/meal punches) +
-  `phonePresenceProvider.ts` (Genesys presence). Keep the two domains separate — do
-  not fold adherence math into `attendance.rules.ts`.
+  `phonePresenceProvider.ts` (Genesys presence). Attendance exceptions are a
+  presence gate (`adherence.presence.ts`): if they were not here, overlapping
+  breaks/lunches are not recorded (excused or not). Keep the two domains' points
+  separate — do not fold adherence math into `attendance.rules.ts`.
   Per-user **Does not punch** (`punchExempt.settings.ts`, Admin → Users) skips
   scoring in both engines so a scheduled-but-never-clocks-in CSR cannot earn
   points or threshold emails.

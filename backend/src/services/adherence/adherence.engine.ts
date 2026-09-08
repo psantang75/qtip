@@ -14,8 +14,10 @@
  * Policy: only SCHEDULED break/lunch segments are scored (the agent's published
  * schedule is the plan). A scheduled segment with no matching punch is a MISS;
  * extra unscheduled breaks are not scored (there is no plan to compare them to).
- * Points are always stored on the occurrence; whether they COUNT toward the
- * ladder is gated later, at read time, by adherence_points_active_from.
+ * Attendance exceptions mean the person was not here — those intervals drop out
+ * of the universe (full-day → no row; overlapping segments → not recorded),
+ * excused or not. Points are always stored on the occurrence; whether they COUNT
+ * toward the ladder is gated later, at read time, by adherence_points_active_from.
  */
 import prisma from '../../config/prisma';
 import logger from '../../config/logger';
@@ -32,6 +34,10 @@ import { getPunchExemptUserIds } from '../attendance/punchExempt.settings';
 import type { PhoneGrace } from './adherence.settings';
 import { matchBand, missedRule, formatDeviation } from './adherence.rules';
 import type { PointRule, AdherenceKind } from './adherence.rules';
+import {
+  isFullDayAbsence, absenceWindows, absentScheduledSeqs, overlapsAny,
+} from './adherence.presence';
+import type { PresenceException, SecRange } from './adherence.presence';
 import { combineLocal, parseLocal, addDays, dateOnlyValue, dateStrFromDate } from '../scheduling/schedule.dates';
 
 /** The policy scores CSRs only, exactly like attendance (role_id = 3). */
@@ -188,10 +194,19 @@ function scoreSegment(
   rules: PointRule[],
   phoneGrace: PhoneGrace,
   excusedSeqs: Set<number> = new Set(),
+  absentSeqs: Set<number> = new Set(),
+  outWindows: SecRange[] = [],
 ): SegmentScore {
   const occurrences: OccurrenceRow[] = [];
-  const scheduledSec = scheduled.reduce((a, s) => a + Math.max(0, s.endSec - s.startSec), 0);
-  const actualSec = actual.reduce((a, s) => a + s.durationSec, 0);
+  // Attendance-absent segments are dropped from both sides — not a miss, not 100%.
+  const scheduledSec = scheduled.reduce((a, s, i) => (
+    absentSeqs.has(i + 1) ? a : a + Math.max(0, s.endSec - s.startSec)
+  ), 0);
+  const actualSec = actual.reduce((a, s, i) => {
+    if (scheduled[i] && absentSeqs.has(i + 1)) return a;
+    if (overlapsAny(s.startSec, s.endSec, outWindows)) return a;
+    return a + s.durationSec;
+  }, 0);
   let deviationSec = 0;
   let phoneExtraSec = 0;
 
@@ -211,6 +226,12 @@ function scoreSegment(
     // itself is approved, the phone timing that hangs off that same punch is
     // approved with it, so it reads as fully adherent and adds no deviation.
     const excused = excusedSeqs.has(seq);
+    if (absentSeqs.has(seq)) {
+      // Not here — consume the paired punch/phone so they cannot attach to a
+      // sibling, then record nothing.
+      if (act) takeOverlappingPhone(act, phoneSorted, phoneUsed);
+      return;
+    }
 
     if (!act) {
       if (excused) return; // approved absence of this break/lunch — nothing scored
@@ -311,8 +332,10 @@ function scoreSegment(
 
 /**
  * Score one scheduled day. Returns null when the day carries no scheduled break
- * or lunch (nothing to measure). Pure — numbers in, rows out — so the boundary
- * behaviour is unit-testable without a database.
+ * or lunch (nothing to measure), when a full-day attendance exception is on the
+ * day, or when every remaining segment sits inside a windowed attendance
+ * exception. Pure — numbers in, rows out — so the boundary behaviour is
+ * unit-testable without a database.
  */
 export function scoreDay(
   userId: number,
@@ -324,17 +347,29 @@ export function scoreDay(
   rules: PointRule[],
   phoneGrace: PhoneGrace,
   excusals: DayExcusals = EMPTY_EXCUSALS,
+  attendanceExceptions: PresenceException[] = [],
 ): { daily: DailyRow; occurrences: OccurrenceRow[] } | null {
+  if (isFullDayAbsence(attendanceExceptions)) return null;
   if (scheduled.breaks.length === 0 && scheduled.lunches.length === 0) return null;
+
+  const outWindows = absenceWindows(attendanceExceptions);
+  const absentBreaks = absentScheduledSeqs(scheduled.breaks, outWindows);
+  const absentLunches = absentScheduledSeqs(scheduled.lunches, outWindows);
+  const countable =
+    scheduled.breaks.filter((_, i) => !absentBreaks.has(i + 1)).length
+    + scheduled.lunches.filter((_, i) => !absentLunches.has(i + 1)).length;
+  if (countable === 0) return null;
 
   const workDate = dateOnlyValue(dateStr);
   const br = scoreSegment(
     userId, workDate, dateStr, BREAK_KINDS,
-    scheduled.breaks, actual.breaks, phone?.breaks ?? [], rules, phoneGrace, excusals.breaks,
+    scheduled.breaks, actual.breaks, phone?.breaks ?? [], rules, phoneGrace,
+    excusals.breaks, absentBreaks, outWindows,
   );
   const lu = scoreSegment(
     userId, workDate, dateStr, LUNCH_KINDS,
-    scheduled.lunches, actual.lunches, phone?.lunches ?? [], rules, phoneGrace, excusals.lunches,
+    scheduled.lunches, actual.lunches, phone?.lunches ?? [], rules, phoneGrace,
+    excusals.lunches, absentLunches, outWindows,
   );
 
   const scheduledTotal = br.scheduledSec + lu.scheduledSec;
@@ -550,7 +585,9 @@ async function runRecompute(
     const phone = phonePresence.get(k) ?? null;
     const excusals = excusalsByDay.get(k) ?? EMPTY_EXCUSALS;
 
-    const scored = scoreDay(userId, dateStr, day.shiftId, scheduled, actual, phone, rules, phoneGrace, excusals);
+    const scored = scoreDay(
+      userId, dateStr, day.shiftId, scheduled, actual, phone, rules, phoneGrace, excusals, day.exceptions,
+    );
     if (!scored) continue;
     dailyRows.push(scored.daily);
     occurrenceRows.push(...scored.occurrences);

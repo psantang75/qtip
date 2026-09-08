@@ -11,6 +11,7 @@ import { scoreDay } from '../adherence.engine';
 import type { ScheduledSeg, ActualSeg, DayExcusals } from '../adherence.engine';
 import type { PointRule } from '../adherence.rules';
 import type { PhonePresence } from '../phonePresenceProvider';
+import type { PresenceException } from '../adherence.presence';
 
 const D = '2026-08-01';
 const USER = 42;
@@ -304,6 +305,85 @@ describe('adherence exceptions (excused forgives the segment)', () => {
     const phones = res!.occurrences.filter((o) => o.kind.startsWith('BREAK_PHONE'));
     expect(phones).toHaveLength(1);
     expect(phones[0].seq).toBe(1);
+  });
+});
+
+describe('attendance exceptions (not-here drops the segment)', () => {
+  const fullDay: PresenceException = { isFullDay: true, start: null, end: null };
+  const windowed = (start: string, end: string): PresenceException => ({
+    isFullDay: false, start, end,
+  });
+
+  it('a full-day PTO (excused) records nothing', () => {
+    const res = scoreDay(
+      USER, D, 900,
+      { breaks: [sched(36000, 900)], ...noLunch },
+      { breaks: [], ...noLunchAct },
+      null, RULES, GRACE, undefined, [fullDay],
+    );
+    expect(res).toBeNull();
+  });
+
+  it('a full-day NCNS (unexcused) records nothing — attendance already owns it', () => {
+    const res = scoreDay(
+      USER, D, 900,
+      { breaks: [sched(36000, 900)], ...noLunch },
+      { breaks: [], ...noLunchAct },
+      null, RULES, GRACE, undefined, [{ ...fullDay }],
+    );
+    expect(res).toBeNull();
+  });
+
+  it('a 9-12 window drops the 10:00 break and leaves the 15:00 break countable', () => {
+    const res = scoreDay(
+      USER, D, 900,
+      { breaks: [sched(36000, 900), sched(54000, 900)], ...noLunch },
+      { breaks: [], ...noLunchAct },
+      null, RULES, GRACE, undefined, [windowed('09:00', '12:00')],
+    );
+    expect(res).not.toBeNull();
+    const misses = res!.occurrences.filter((o) => o.kind === 'BREAK_MISSED');
+    expect(misses).toHaveLength(1);
+    expect(misses[0].seq).toBe(2);
+    expect(res!.daily.break_scheduled_sec).toBe(900);
+  });
+
+  it('a late 9:00-9:20 window does not drop a 10:00 break', () => {
+    const res = scoreDay(
+      USER, D, 900,
+      { breaks: [sched(36000, 900)], ...noLunch },
+      { breaks: [], ...noLunchAct },
+      null, RULES, GRACE, undefined, [windowed('09:00', '09:20')],
+    );
+    expect(res!.occurrences.find((o) => o.kind === 'BREAK_MISSED')).toBeDefined();
+  });
+
+  it('dropping the only scheduled segment records no day (not 100%)', () => {
+    const res = scoreDay(
+      USER, D, 900,
+      { breaks: [sched(36000, 900)], ...noLunch },
+      { breaks: [actual(36000, 900)], ...noLunchAct },
+      null, RULES, GRACE, undefined, [windowed('09:00', '12:00')],
+    );
+    expect(res).toBeNull();
+  });
+
+  it('consumes phone on the dropped segment so it cannot attach to a sibling', () => {
+    const phone: PhonePresence = {
+      breaks: [
+        { startSec: 36000 - 600, endSec: 36900 },
+        { startSec: 54000, endSec: 54900 },
+      ],
+      lunches: [],
+    };
+    const res = scoreDay(
+      USER, D, 900,
+      { breaks: [sched(36000, 900), sched(54000, 900)], ...noLunch },
+      { breaks: [actual(36000, 900), actual(54000, 900)], ...noLunchAct },
+      phone, RULES, GRACE, undefined, [windowed('09:00', '12:00')],
+    );
+    expect(res!.occurrences.some((o) => o.kind.startsWith('BREAK_PHONE'))).toBe(false);
+    expect(res!.daily.break_scheduled_sec).toBe(900);
   });
 });
 
