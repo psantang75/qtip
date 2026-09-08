@@ -6,7 +6,7 @@
  * the pre-stream 400/404/502 guards became throws. The service is mocked, so
  * these run without the external PhoneSystem database.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../services/PhoneSystemService', () => ({
   default: {
@@ -24,6 +24,7 @@ vi.mock('../../services/PhoneSystemService', () => ({
 
 import phoneSystemService from '../../services/PhoneSystemService';
 import { AppError, ErrorType } from '../../utils/errorHandler';
+import { config } from '../../config/environment';
 import {
   getAudioUrlByConversationId,
   getAudioUrlsByConversationIds,
@@ -31,6 +32,7 @@ import {
   getTranscriptByConversationId,
   getRecordingsForConversation,
   streamRecording,
+  resolveRecordingCandidates,
 } from '../phoneSystem.controller';
 
 const svc = phoneSystemService as unknown as {
@@ -115,6 +117,43 @@ describe('getRecordingsForConversation', () => {
   it('400 when conversationId is missing', async () => {
     const err = await runExpectError(getRecordingsForConversation, { params: {} });
     expect(err.statusCode).toBe(400);
+  });
+});
+
+describe('resolveRecordingCandidates', () => {
+  const original = config.PHONE_RECORDING_BASE_PATH;
+  afterEach(() => {
+    config.PHONE_RECORDING_BASE_PATH = original;
+  });
+
+  it('returns the raw UNC path unchanged when no mount root is configured', () => {
+    config.PHONE_RECORDING_BASE_PATH = '';
+    const raw = '\\\\wagoneer\\DMCMS\\PhoneSystem Recording\\abc.mp3';
+    expect(resolveRecordingCandidates(raw)).toEqual([raw]);
+  });
+
+  it('rewrites the legacy flat share against its mount root', () => {
+    config.PHONE_RECORDING_BASE_PATH = '/mnt/qtip-audio';
+    const raw = '\\\\wagoneer\\DMCMS\\PhoneSystem Recording\\abc.mp3';
+    expect(resolveRecordingCandidates(raw)).toEqual(['/mnt/qtip-audio/abc.mp3']);
+  });
+
+  it('rewrites the new nested share, preserving the sub-folders', () => {
+    config.PHONE_RECORDING_BASE_PATH = '/mnt/qtip-audio,/mnt/recordings';
+    const raw = '\\\\F350\\Divisions\\Recordings\\Phone System\\Prod\\abc.mp3';
+    expect(resolveRecordingCandidates(raw)).toEqual([
+      '/mnt/qtip-audio/Phone System/Prod/abc.mp3',
+      '/mnt/recordings/Phone System/Prod/abc.mp3',
+    ]);
+  });
+
+  it('produces one candidate per configured mount root (trimmed)', () => {
+    config.PHONE_RECORDING_BASE_PATH = ' /mnt/qtip-audio , /mnt/recordings/ ';
+    const raw = '\\\\wagoneer\\DMCMS\\PhoneSystem Recording\\abc.mp3';
+    expect(resolveRecordingCandidates(raw)).toEqual([
+      '/mnt/qtip-audio/abc.mp3',
+      '/mnt/recordings/abc.mp3',
+    ]);
   });
 });
 

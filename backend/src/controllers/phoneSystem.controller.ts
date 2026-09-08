@@ -13,21 +13,37 @@ import {
 } from '../utils/errorHandler';
 
 /**
- * Resolve a `RecordingPath` value from `tblConversationRecording` into
- * an actual filesystem path the Node process can open. Windows UNC
- * paths work as-is on a Windows host with share access; on other
- * platforms (or any host that mounts the share locally) set
- * `PHONE_RECORDING_BASE_PATH` to the mount root and we'll rewrite the
- * leading UNC root to it.
+ * Resolve a `RecordingPath` value from `tblConversationRecording` into the
+ * candidate filesystem paths the Node process can open. Windows UNC paths
+ * work as-is on a Windows host with share access; on other platforms (or any
+ * host that mounts the share locally) set `PHONE_RECORDING_BASE_PATH` to the
+ * mount root and we rewrite the leading UNC root to it.
+ *
+ * PhoneSystem writes recordings to more than one file share over time — e.g.
+ * the legacy flat store (`\\wagoneer\DMCMS\PhoneSystem Recording\<id>.mp3`,
+ * mounted at `/mnt/qtip-audio`) and the current tree
+ * (`\\F350\Divisions\Recordings\Phone System\Prod\<id>.mp3`, mounted at
+ * `/mnt/recordings`). Each share is mounted at its own local root, so
+ * `PHONE_RECORDING_BASE_PATH` accepts a comma-separated list of mount roots;
+ * we rewrite the UNC root against each and return every candidate so the
+ * caller can open the first that exists on disk. On Windows (blank override)
+ * the raw UNC is returned unchanged.
  */
 const PHONE_UNC_ROOT_RE = /^\\\\[^\\]+\\[^\\]+\\[^\\]+\\/;
-function resolveRecordingPath(rawPath: string): string {
-  const override = (config.PHONE_RECORDING_BASE_PATH || '').trim();
-  if (!override) return rawPath;
-  const cleanOverride = override.replace(/[\\/]+$/, '');
-  const rewritten = rawPath.replace(PHONE_UNC_ROOT_RE, `${cleanOverride}/`);
-  // Normalize backslashes for non-Windows fs.
-  return path.sep === '/' ? rewritten.replace(/\\/g, '/') : rewritten;
+export function resolveRecordingCandidates(rawPath: string): string[] {
+  const roots = (config.PHONE_RECORDING_BASE_PATH || '')
+    .split(',')
+    .map((r) => r.trim())
+    .filter(Boolean);
+  if (roots.length === 0) return [rawPath];
+  return roots.map((root) => {
+    const cleanRoot = root.replace(/[\\/]+$/, '');
+    const rewritten = rawPath.replace(PHONE_UNC_ROOT_RE, `${cleanRoot}/`);
+    // Once we've rewritten onto a configured mount root, normalize the UNC
+    // backslashes to forward slashes. Node's fs accepts `/` on every platform,
+    // so this keeps the resolved candidate deterministic on Linux and Windows.
+    return rewritten.replace(/\\/g, '/');
+  });
 }
 
 /**
@@ -205,13 +221,26 @@ export const streamRecording = asyncHandler(async (req: Request, res: Response):
       throw createNotFoundError(`No recording found for ID: ${recordingId}`);
     }
 
-    const filePath = resolveRecordingPath(record.path);
+    // The recording may live on any of the configured mount roots (PhoneSystem
+    // has migrated shares over time), so stat each candidate and use the first
+    // that exists on disk.
+    const candidates = resolveRecordingCandidates(record.path);
+    let filePath: string | null = null;
+    let stat: fs.Stats | null = null;
+    for (const candidate of candidates) {
+      try {
+        stat = await fs.promises.stat(candidate);
+        filePath = candidate;
+        break;
+      } catch {
+        // Try the next mount root.
+      }
+    }
 
-    let stat: fs.Stats;
-    try {
-      stat = await fs.promises.stat(filePath);
-    } catch (err) {
-      logger.error(`[PHONE SYSTEM CONTROLLER] Recording file unreachable on disk: ${filePath}`, err);
+    if (!filePath || !stat) {
+      logger.error(
+        `[PHONE SYSTEM CONTROLLER] Recording file unreachable on disk. Tried: ${candidates.join(', ')}`,
+      );
       throw new AppError(
         'Recording file is unreachable on the PhoneSystem share',
         ErrorType.EXTERNAL_SERVICE_ERROR,
