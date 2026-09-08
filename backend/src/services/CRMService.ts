@@ -204,11 +204,22 @@ class CRMService {
    */
   async getTaskNotes(taskId: number, auditSubmittedAt?: Date | null): Promise<CRMNote[]> {
     try {
+      // A `tblAction` row is CREATED when the follow-up is scheduled and
+      // COMPLETED when the agent actually works it and writes the note — on
+      // these self-chained tasks a row's CreatedOn equals the prior row's
+      // CompletedOn. The CRM UI dates and attributes each note by its
+      // completion, so we mirror that: use CompletedOn / CompletedBy, falling
+      // back to CreatedOn / CreatedBy only for a row with no completion stamp
+      // (the CRM's "0001-01-01" sentinel / a 0 actor). Ordering the same way
+      // keeps the newest-worked note on top and the before/after-audit split
+      // honest.
+      const EFFECTIVE_ON = `CASE WHEN a.CompletedOn > '1970-01-01' THEN a.CompletedOn ELSE a.CreatedOn END`;
+      const EFFECTIVE_BY = `COALESCE(NULLIF(a.CompletedBy, 0), a.CreatedBy)`;
       const rows = await executeQuery<{
         ActionID: number;
         Note: string | null;
-        CreatedOn: Date | null;
-        CreatedBy: number | null;
+        EffectiveOn: Date | null;
+        EffectiveBy: number | null;
         CreatedByName: string | null;
         StatusAfter: string | null;
       }>(
@@ -216,15 +227,15 @@ class CRMService {
           SELECT
             a.ActionID,
             a.Note,
-            a.CreatedOn,
-            a.CreatedBy,
+            ${EFFECTIVE_ON} AS EffectiveOn,
+            ${EFFECTIVE_BY} AS EffectiveBy,
             sp.SalesPersonName AS CreatedByName,
             ts.Title AS StatusAfter
           FROM tblAction a
           LEFT JOIN tblTaskStatus  ts ON ts.TaskStatusID  = a.TaskStatusID
-          LEFT JOIN tblSalesPeople sp ON sp.UserID = a.CreatedBy AND sp.isDisplayInCRM = 1
+          LEFT JOIN tblSalesPeople sp ON sp.UserID = ${EFFECTIVE_BY} AND sp.isDisplayInCRM = 1
           WHERE a.TaskID = ?
-          ORDER BY a.CreatedOn DESC, a.ActionID DESC
+          ORDER BY EffectiveOn DESC, a.ActionID DESC
         `,
         [taskId],
         'crm'
@@ -242,11 +253,12 @@ class CRMService {
           // don't want to take the chance. The cleaned body is what we
           // surface to the AI / UI.
           const parsed = this.parseTaskNoteText(noteText);
-          const createdMs = r.CreatedOn ? new Date(r.CreatedOn).getTime() : null;
+          const effectiveDate = this.normalizeDate(r.EffectiveOn);
+          const createdMs = effectiveDate ? effectiveDate.getTime() : null;
           return {
             id: r.ActionID,
-            created_on: this.normalizeDate(r.CreatedOn)?.toISOString() ?? null,
-            created_by: r.CreatedBy,
+            created_on: effectiveDate?.toISOString() ?? null,
+            created_by: r.EffectiveBy,
             // Prefer the joined SalesPeople name; only fall back to the
             // bracketed `[Display Name]` parsed out of the note text when
             // the user isn't in tblSalesPeople (deleted / system author).
