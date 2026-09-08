@@ -81,6 +81,18 @@ function tryParseTranscriptTurns(text: string): TranscriptTurn[] {
   } catch {
     return [];
   }
+
+  // Genesys conversation-transcript shape: `{ transcripts: [ { phrases: [...] } ] }`
+  // (or a bare `{ phrases: [...] }`). Handled first because these objects have
+  // no turns/segments/messages/utterances field, so without this branch they
+  // fall straight through to the verbatim dump below — which for a real call is
+  // ~70KB of per-word timing JSON that then gets truncated to the opening IVR
+  // greeting, leaving the model to grade a call it never actually saw. The
+  // frontend already parses this shape in transcriptUtils.ts; this mirrors that
+  // so a call reads the same on the QA screen and in every model prompt.
+  const genesys = parseGenesysPhrases(parsed);
+  if (genesys.length > 0) return genesys;
+
   let rawArr: unknown[] = [];
   if (Array.isArray(parsed)) {
     rawArr = parsed;
@@ -102,6 +114,77 @@ function tryParseTranscriptTurns(text: string): TranscriptTurn[] {
     out.push({ speaker, timestamp: formatTimestamp(tsRaw), text });
   }
   return out;
+}
+
+/**
+ * Parse the Genesys `{ transcripts: [ { phrases: [...] } ] }` shape into turns.
+ *
+ * Mirrors `frontend/src/utils/transcriptUtils.ts` so the same call renders
+ * identically on the QA screen and in a model prompt: `decoratedText` preferred
+ * over the raw all-lowercase ASR text, `participantPurpose` collapsed to
+ * Agent/Customer, and `startTimeMs` (absolute epoch ms) rebased to a per-segment
+ * `m:ss` offset. Returns [] for any non-Genesys payload so the caller's other
+ * shape handlers still run.
+ */
+function parseGenesysPhrases(parsed: unknown): TranscriptTurn[] {
+  if (!parsed || typeof parsed !== 'object') return [];
+  const root = parsed as Record<string, unknown>;
+  const segments: unknown[] = Array.isArray(root.transcripts)
+    ? root.transcripts
+    : Array.isArray(root.phrases)
+      ? [root]
+      : [];
+  if (segments.length === 0) return [];
+
+  const out: TranscriptTurn[] = [];
+  for (const seg of segments) {
+    if (!seg || typeof seg !== 'object') continue;
+    const s = seg as Record<string, unknown>;
+    const phrases = s.phrases;
+    if (!Array.isArray(phrases)) continue;
+
+    // startTimeMs is absolute epoch ms, not an in-call offset, so rebase to the
+    // segment start (or the first phrase) to render each turn as m:ss.
+    const firstWithTime = phrases.find(
+      (p) => p && typeof (p as Record<string, unknown>).startTimeMs === 'number',
+    ) as Record<string, unknown> | undefined;
+    const baselineMs = typeof s.startTime === 'number'
+      ? s.startTime
+      : typeof firstWithTime?.startTimeMs === 'number'
+        ? (firstWithTime.startTimeMs as number)
+        : 0;
+
+    for (const phrase of phrases) {
+      if (!phrase || typeof phrase !== 'object') continue;
+      const p = phrase as Record<string, unknown>;
+      const decorated = typeof p.decoratedText === 'string' ? p.decoratedText.trim() : '';
+      const raw = typeof p.text === 'string' ? p.text.trim() : '';
+      const display = decorated || raw;
+      if (!display) continue;
+      const offsetSec = typeof p.startTimeMs === 'number'
+        ? Math.max(0, Math.floor(((p.startTimeMs as number) - baselineMs) / 1000))
+        : 0;
+      out.push({
+        speaker: genesysSpeaker(p.participantPurpose),
+        timestamp: secondsToMmss(offsetSec),
+        text: display,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Collapse a Genesys `participantPurpose` to a speaker label. Everything on our
+ * side of the line — agent, ACD, IVR, system — is "Agent" from a reviewer's
+ * point of view; the far end is "Customer". Matches the frontend mapping.
+ */
+function genesysSpeaker(purpose: unknown): string {
+  if (typeof purpose !== 'string') return 'Unknown';
+  const p = purpose.toLowerCase();
+  if (p === 'external' || p === 'customer') return 'Customer';
+  if (p === 'internal' || p === 'agent' || p === 'acd' || p === 'ivr' || p === 'system') return 'Agent';
+  return 'Unknown';
 }
 
 function pickString(o: Record<string, unknown>, keys: string[]): string {
