@@ -3,6 +3,7 @@ import { RowDataPacket } from 'mysql2'
 import type { PeriodRanges } from '../utils/periodUtils'
 import { fmtDatetime as fmt } from '../utils/dateHelpers'
 import { deptClause, formClause, formFilter, CSR_JOIN } from './qcQueryHelpers'
+import { EARNED_EXPR, POSSIBLE_EXPR } from './qcScoreExprs'
 import { accessScopeClause, type AccessScope } from '../utils/formScope'
 
 // ── Filter options (cross-filtered) ──────────────────────────────────────────
@@ -96,35 +97,8 @@ async function queryCategoryScores(
        f.id                            AS form_id,
        f.form_name                     AS form_name,
        COUNT(DISTINCT s.id)            AS audits,
-       SUM(
-         CASE fq.question_type
-           WHEN 'YES_NO' THEN
-             CASE LOWER(sa.answer)
-               WHEN 'yes' THEN COALESCE(fq.yes_value, 0)
-               WHEN 'no'  THEN COALESCE(fq.no_value,  0)
-               WHEN 'n/a' THEN COALESCE(fq.na_value,  0)
-               ELSE 0
-             END
-           WHEN 'SCALE' THEN COALESCE(CAST(sa.answer AS DECIMAL(5,2)), 0)
-           WHEN 'RADIO' THEN COALESCE((
-             SELECT ro.score FROM radio_options ro
-             WHERE ro.question_id = fq.id AND ro.option_value = sa.answer
-             LIMIT 1
-           ), 0)
-           ELSE 0
-         END
-       )                               AS earned_points,
-       SUM(
-         CASE fq.question_type
-           WHEN 'YES_NO' THEN COALESCE(fq.yes_value, 0)
-           WHEN 'SCALE'  THEN COALESCE(fq.scale_max, 5)
-           WHEN 'RADIO'  THEN COALESCE((
-             SELECT MAX(ro.score) FROM radio_options ro
-             WHERE ro.question_id = fq.id
-           ), 0)
-           ELSE 0
-         END
-       )                               AS possible_points
+       SUM(${EARNED_EXPR})             AS earned_points,
+       SUM(${POSSIBLE_EXPR})           AS possible_points
      FROM submission_answers sa
      JOIN form_questions   fq ON sa.question_id  = fq.id
      JOIN form_categories  fc ON fq.category_id  = fc.id
@@ -173,33 +147,6 @@ export async function getCategoryScores(
     return { ...row, priorScore }
   })
 }
-
-const EARNED_EXPR = `
-  CASE fq.question_type
-    WHEN 'YES_NO' THEN
-      CASE LOWER(sa.answer)
-        WHEN 'yes' THEN COALESCE(fq.yes_value, 0)
-        WHEN 'no'  THEN COALESCE(fq.no_value,  0)
-        WHEN 'n/a' THEN COALESCE(fq.na_value,  0)
-        ELSE 0
-      END
-    WHEN 'SCALE' THEN COALESCE(CAST(sa.answer AS DECIMAL(5,2)), 0)
-    WHEN 'RADIO' THEN COALESCE((
-      SELECT ro.score FROM radio_options ro
-      WHERE ro.question_id = fq.id AND ro.option_value = sa.answer LIMIT 1
-    ), 0)
-    ELSE 0
-  END`
-
-const POSSIBLE_EXPR = `
-  CASE fq.question_type
-    WHEN 'YES_NO' THEN COALESCE(fq.yes_value, 0)
-    WHEN 'SCALE'  THEN COALESCE(fq.scale_max, 5)
-    WHEN 'RADIO'  THEN COALESCE((
-      SELECT MAX(ro.score) FROM radio_options ro WHERE ro.question_id = fq.id
-    ), 0)
-    ELSE 0
-  END`
 
 export async function getMissedQuestions(
   deptFilter: number[], formNames: string[], ranges: PeriodRanges, userId?: number | null,

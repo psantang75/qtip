@@ -4,7 +4,10 @@
 -- These rows exercise the corner cases that the golden slice does not cover:
 --   1. Empty period            — query against a window with zero finalized
 --                                audits must return [] / no NaN.
---   2. All-N/A submission      — earned=0, possible>0 → category score 0%.
+--   2. All-N/A submission      — allowed N/A is excluded from earned AND
+--                                possible (matches scoringUtil). Unanswered
+--                                SCALE/RADIO that do not allow N/A still
+--                                contribute 0 earned / full possible.
 --   3. Threshold boundaries     — submissions whose total_score lands exactly
 --                                on the goal / warning / critical thresholds
 --                                from `ie_kpi_threshold` for `avg_qa_score`.
@@ -36,6 +39,8 @@ DELETE FROM submission_metadata
  WHERE submission_id BETWEEN 99000 AND 99999;
 DELETE FROM submissions
  WHERE id BETWEEN 99000 AND 99999;
+DELETE FROM form_question_conditions
+ WHERE question_id BETWEEN 99000 AND 99999;
 DELETE FROM radio_options
  WHERE question_id BETWEEN 99000 AND 99999;
 DELETE FROM form_questions
@@ -66,16 +71,19 @@ INSERT INTO users (id, username, email, password_hash, role_id, department_id, i
 
 INSERT INTO forms (id, form_name, interaction_type, version, created_by, is_active) VALUES
   (99001, 'EdgeCase Mixed Form',  'CALL', 1, 99001, 1),
-  (99002, 'EdgeCase Empty Form',  'CALL', 1, 99001, 1);
+  (99002, 'EdgeCase Empty Form',  'CALL', 1, 99001, 1),
+  (99003, 'EdgeCase Gated Form',  'CALL', 1, 99001, 1);
 
 INSERT INTO form_metadata_fields (id, form_id, interaction_type, field_name, field_type, is_required, sort_order) VALUES
   (99001, 99001, 'CALL', 'CSR',              'DROPDOWN', 1, 0),
   (99002, 99001, 'CALL', 'Interaction Date', 'DATE',     1, 1),
-  (99003, 99002, 'CALL', 'CSR',              'DROPDOWN', 1, 0);
+  (99003, 99002, 'CALL', 'CSR',              'DROPDOWN', 1, 0),
+  (99004, 99003, 'CALL', 'CSR',              'DROPDOWN', 1, 0);
 
 INSERT INTO form_categories (id, form_id, category_name, weight, sort_order) VALUES
   (99001, 99001, 'Edge Mixed Cat', 1.00, 0),
-  (99002, 99002, 'Edge Empty Cat', 1.00, 0);
+  (99002, 99002, 'Edge Empty Cat', 1.00, 0),
+  (99003, 99003, 'Edge Gated Cat', 1.00, 0);
 
 -- Q99001 YES_NO — yes=10, no=0, na=0   (max contribution: 10)
 -- Q99002 SCALE  — scale 1..10           (max contribution: 10)
@@ -83,7 +91,15 @@ INSERT INTO form_categories (id, form_id, category_name, weight, sort_order) VAL
 INSERT INTO form_questions (id, category_id, question_text, question_type, weight, sort_order, scale_min, scale_max, is_na_allowed, yes_value, no_value, na_value, visible_to_csr) VALUES
   (99001, 99001, 'YES_NO probe',  'YES_NO', 0, 0, NULL, NULL, 1, 10, 0, 0, 1),
   (99002, 99001, 'SCALE probe',   'SCALE',  0, 1,    1,   10, 0,  1, 0, 0, 1),
-  (99003, 99001, 'RADIO probe',   'RADIO',  0, 2, NULL, NULL, 0,  1, 0, 0, 1);
+  (99003, 99001, 'RADIO probe',   'RADIO',  0, 2, NULL, NULL, 0,  1, 0, 0, 1),
+  -- Gated form: gate does not score (yes_value=0). Action scores 1 and is
+  -- hidden unless the gate is YES. Always is an always-visible scored check.
+  (99010, 99003, 'Gate',   'YES_NO', 0, 0, NULL, NULL, 0, 0, 0, 0, 1),
+  (99011, 99003, 'Action', 'YES_NO', 0, 1, NULL, NULL, 1, 1, 0, 0, 1),
+  (99012, 99003, 'Always', 'YES_NO', 0, 2, NULL, NULL, 0, 1, 0, 0, 1);
+
+INSERT INTO form_question_conditions (id, question_id, target_question_id, condition_type, target_value, logical_operator, group_id, sort_order) VALUES
+  (99001, 99011, 99010, 'EQUALS', 'YES', 'AND', 0, 0);
 
 INSERT INTO radio_options (id, question_id, option_text, option_value, score, sort_order) VALUES
   (99001, 99003, 'Excellent', 'excellent', 10, 0),
@@ -145,10 +161,10 @@ INSERT INTO submission_answers (submission_id, question_id, answer) VALUES
   (99004, 99002, '5'),
   (99004, 99003, 'good');
 
--- 99005 — All-N/A. YES_NO answered "n/a" (na_value=0). SCALE / RADIO
---          left empty → ELSE 0 in EARNED_EXPR. Possible for YES_NO is
---          yes_value=10; SCALE = scale_max (10); RADIO = max option score (10).
---          So earned=0, possible=30 → category score 0.0%.
+-- 99005 — All-N/A. YES_NO answered "N/A" with is_na_allowed=1 is excluded
+--          from earned AND possible (scoringUtil skip). SCALE / RADIO are
+--          unanswered and do not allow N/A, so they still contribute
+--          0 earned / 10 possible each. earned=0, possible=20.
 INSERT INTO submissions (id, form_id, submitted_by, submitted_at, total_score, status) VALUES
   (99005, 99001, 99001, '2024-01-20 10:00:00', 0.00, 'FINALIZED');
 INSERT INTO submission_metadata (submission_id, field_id, value, date_value) VALUES
@@ -181,6 +197,31 @@ INSERT INTO submission_answers (submission_id, question_id, answer) VALUES
   (99007, 99002, '10'),
   (99007, 99003, 'excellent');
 
+-- Gated form submissions land in 2024-02 so they cannot change the Jan-2024
+-- mixed-form aggregates. CSR is still edge.csr.a (99002).
+--   99010 gate=NO, leftover Action=NO, Always=YES → Action hidden → 1/1 = 100%
+--   99011 gate=YES, Action=NO, Always=YES           → Action miss  → 1/2 =  50%
+--   99012 gate=YES, Action=na, Always=YES           → Action N/A   → 1/1 = 100%
+-- Category: earned=3, possible=4 → 75.0. Action miss rate: 1 missed / 1 applicable.
+INSERT INTO submissions (id, form_id, submitted_by, submitted_at, total_score, status) VALUES
+  (99010, 99003, 99001, '2024-02-05 10:00:00', 100.00, 'FINALIZED'),
+  (99011, 99003, 99001, '2024-02-06 10:00:00',  50.00, 'FINALIZED'),
+  (99012, 99003, 99001, '2024-02-07 10:00:00', 100.00, 'FINALIZED');
+INSERT INTO submission_metadata (submission_id, field_id, value, date_value) VALUES
+  (99010, 99004, '99002', NULL),
+  (99011, 99004, '99002', NULL),
+  (99012, 99004, '99002', NULL);
+INSERT INTO submission_answers (submission_id, question_id, answer) VALUES
+  (99010, 99010, 'no'),
+  (99010, 99011, 'no'),
+  (99010, 99012, 'yes'),
+  (99011, 99010, 'yes'),
+  (99011, 99011, 'no'),
+  (99011, 99012, 'yes'),
+  (99012, 99010, 'yes'),
+  (99012, 99011, 'na'),
+  (99012, 99012, 'yes');
+
 -- ── 4. Disputes ──────────────────────────────────────────────────────────────
 -- One UPHELD + one ADJUSTED on the dept-A submissions so the dispute_rate /
 -- dispute_upheld_rate / dispute_adjusted_rate edge cases (0/0 protection,
@@ -200,12 +241,15 @@ INSERT INTO disputes (id, submission_id, disputed_by, resolved_by, created_at, r
 --       99002 @goal:    Yes(10) + SCALE  8 + RADIO good(5)       = 23
 --       99003 @warn:    Yes(10) + SCALE  6 + RADIO good(5)       = 21
 --       99004 @crit:    No(0)   + SCALE  5 + RADIO good(5)       = 10
---       99005 all-NA:   N/A(0)  + null(0) + null(0)               =  0
---     earned total = 84,  possible = 5 × 30 = 150
---     score = 84/150 × 100 = 56.0000 → 56.0
+--       99005 all-NA:   N/A excluded + SCALE unanswered(0/10) + RADIO unanswered(0/10) = 0 / 20
+--     earned total = 84,  possible = 30*4 + 20 = 140
+--     score = 84/140 × 100 = 60.0000 → 60.0
 --     priorScore = null (no Dec-2023 fixtures)
 --   getCategoryScores (user 99003): audits = 1, earned = 22, possible = 30
 --                                   score = 73.3333… → 73.3
+--   getCategoryScores gated form (Feb 2024, user 99002):
+--     earned = 1+1+1 = 3, possible = 1+2+1 = 4 → 75.0
+--     Action (q 99011) missed 1 / total 1 (hidden leftover NO and N/A excluded)
 --   getFormScores (dept 99001): "EdgeCase Mixed Form", submissions = 5,
 --                                avg(total_score) = (100+90+80+70+0)/5 = 68.0
 --   getFormScores (dept 99002): "EdgeCase Mixed Form", submissions = 1,

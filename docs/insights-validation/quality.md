@@ -185,18 +185,21 @@ Sum = 27 / 99 ✅ matches `audits_completed`.
 
 ### 2.5 Per-category — `getCategoryScores` (slice / user 23)
 
-`avgScore = round((earned / possible) × 1000) / 10`.
+`avgScore = round((earned / possible) × 1000) / 10`, using the same
+N/A + conditional-visibility skips as `scoringUtil` (`qcScoreExprs.ts`).
+Allowed N/A (`na` / `n/a`) and questions hidden by
+`form_question_conditions` are excluded from both earned and possible.
 
 | category | audits | earned | possible | expected `avgScore` |
 | --- | --- | --- | --- | --- |
 | Initial Greeting / Customer Verification | 27 | 101 | 108 | `101/108×100=93.5185…` → **93.5** |
 | Contact Management | 27 | 4 | 5 | `80.0000` → **80.0** |
-| CRM / Knowledge Base | 27 | 77 | 108 | `71.2962…` → **71.3** |
-| Product / Service Knowledge and Problem Solving Ability | 27 | 53 | 54 | `98.1481…` → **98.1** |
-| Call Transfer / Hold Procedures | 27 | 22 | 23 | `95.6521…` → **95.7** |
-| Wrap-Up Process | 27 | 117 | 123 | `95.1219…` → **95.1** |
-| Professionalism / Rapport | 27 | 256 | 261 | `98.0842…` → **98.1** |
-| Ticket / Task Documentation | 27 | 341 | 358 | `95.2513…` → **95.3** |
+| CRM / Knowledge Base | 27 | 77 | 85 | `90.5882…` → **90.6** |
+| Product / Service Knowledge and Problem Solving Ability | 27 | 46 | 47 | `97.8723…` → **97.9** |
+| Call Transfer / Hold Procedures | 27 | 20 | 21 | `95.2381…` → **95.2** |
+| Wrap-Up Process | 27 | 113 | 115 | `98.2609…` → **98.3** |
+| Professionalism / Rapport | 27 | 254 | 259 | `98.0695…` → **98.1** |
+| Ticket / Task Documentation | 27 | 330 | 340 | `97.0588…` → **97.1** |
 | Work From Home Policy | 27 | 27 | 27 | `100.0000` → **100.0** |
 
 > "Overall Feedback" is omitted because it has no `YES_NO`/`SCALE`/`RADIO`
@@ -227,9 +230,11 @@ Selection rule (from the SQL):
   `agentMissed DESC, csr.username`.
 - `missRate = round((missed / total) × 1000) / 10`
 
-Exact list depends on `EARNED_EXPR = 0` matches (e.g. a `YES_NO` answered
-"no" with `no_value = 0`, or a `SCALE` answered `0`). Pinned at run-time by
-the API diff so a deterministic snapshot is captured into the report.
+Exact list depends on `EARNED_EXPR = 0` among **applicable** answers
+(visible, not allowed-N/A). A `YES_NO` answered `"no"` with `no_value = 0`
+is a miss; `"na"` / `"n/a"` on `is_na_allowed` is not. Hidden leftover
+answers on gated questions are not misses. Pinned at run-time by the API
+diff so a deterministic snapshot is captured into the report.
 
 ### 2.8 Department comparison — `getQualityDeptComparison` (ALL scope)
 

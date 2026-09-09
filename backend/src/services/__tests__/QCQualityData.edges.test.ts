@@ -14,6 +14,7 @@ import * as path from 'path'
 import {
   getCategoryScores,
   getFormScores,
+  getMissedQuestions,
   getQualityDeptComparison,
   getScoreDistribution,
 } from '../QCQualityData'
@@ -26,9 +27,14 @@ const describeDb = describe.skipIf(!DB_TESTS_ENABLED)
 const DEPT_A = [99001]
 const DEPT_B = [99002]
 const FORM_NAME = 'EdgeCase Mixed Form'
+const GATED_FORM = 'EdgeCase Gated Form'
 const RANGES = {
   current: { start: new Date(2024, 0, 1, 0, 0, 0), end: new Date(2024, 0, 31, 23, 59, 59, 999) },
   prior:   { start: new Date(2023, 11, 1, 0, 0, 0), end: new Date(2023, 11, 31, 23, 59, 59, 999) },
+}
+const GATED_RANGES = {
+  current: { start: new Date(2024, 1, 1, 0, 0, 0), end: new Date(2024, 1, 29, 23, 59, 59, 999) },
+  prior:   { start: new Date(2024, 0, 1, 0, 0, 0), end: new Date(2024, 0, 31, 23, 59, 59, 999) },
 }
 const EMPTY_RANGES = {
   current: { start: new Date(2023, 5, 1, 0, 0, 0), end: new Date(2023, 5, 30, 23, 59, 59, 999) },
@@ -72,6 +78,7 @@ afterAll(async () => {
   await pool.query('DELETE FROM submission_answers WHERE submission_id BETWEEN 99000 AND 99999')
   await pool.query('DELETE FROM submission_metadata WHERE submission_id BETWEEN 99000 AND 99999')
   await pool.query('DELETE FROM submissions WHERE id BETWEEN 99000 AND 99999')
+  await pool.query('DELETE FROM form_question_conditions WHERE question_id BETWEEN 99000 AND 99999')
   await pool.query('DELETE FROM radio_options WHERE question_id BETWEEN 99000 AND 99999')
   await pool.query('DELETE FROM form_questions WHERE id BETWEEN 99000 AND 99999')
   await pool.query('DELETE FROM form_categories WHERE id BETWEEN 99000 AND 99999')
@@ -102,9 +109,10 @@ describeDb('QCQualityData — edge cases', () => {
     const row = cats.find(c => c.category === 'Edge Mixed Cat')
     expect(row).toBeDefined()
     expect(row!.audits).toBe(5)
-    // earned = 30+23+21+10+0 = 84,  possible = 5 × 30 = 150
-    // score  = 84/150 × 100 = 56.0
-    expect(row!.avgScore!).toBeCloseTo(56.0, 1)
+    // earned = 30+23+21+10+0 = 84,  possible = 30×4 + 20 = 140
+    // (all-N/A YES_NO is excluded; unanswered SCALE/RADIO still count)
+    // score  = 84/140 × 100 = 60.0
+    expect(row!.avgScore!).toBeCloseTo(60.0, 1)
     // Prior period (Dec 2023) has no rows → priorScore null.
     expect(row!.priorScore).toBeNull()
   })
@@ -123,13 +131,29 @@ describeDb('QCQualityData — edge cases', () => {
   })
 
   it('all-N/A submission contributes 0 earned but does NOT divide-by-zero', async () => {
-    // Category score for ONLY submission 99005 (the all-NA) by itself is hard
-    // to isolate via the public reader — so we assert the aggregate
-    // already-validated above includes it without throwing or returning NaN.
+    // Allowed N/A is excluded from possible; unanswered SCALE/RADIO still
+    // contribute, so the mixed-form aggregate stays finite (60.0 above).
     const cats = await getCategoryScores(DEPT_A, [FORM_NAME], RANGES, 99002)
     const row = cats.find(c => c.category === 'Edge Mixed Cat')
     expect(row).toBeDefined()
     expect(Number.isFinite(row!.avgScore!)).toBe(true)
+  })
+
+  it('excludes N/A and hidden leftover answers from category score and missed questions', async () => {
+    const cats = await getCategoryScores(DEPT_A, [GATED_FORM], GATED_RANGES, 99002)
+    const row = cats.find(c => c.category === 'Edge Gated Cat')
+    expect(row).toBeDefined()
+    expect(row!.audits).toBe(3)
+    // Hidden Action=NO and Action=na are skipped → earned 3 / possible 4 = 75.0
+    expect(row!.avgScore!).toBeCloseTo(75.0, 1)
+
+    const missed = await getMissedQuestions(DEPT_A, [GATED_FORM], GATED_RANGES, 99002)
+    const action = missed.find(q => q.question === 'Action')
+    expect(action).toBeDefined()
+    expect(action!.missed).toBe(1)
+    expect(action!.total).toBe(1)
+    expect(missed.find(q => q.question === 'Always')).toBeUndefined()
+    expect(missed.find(q => q.question === 'Gate')).toBeUndefined()
   })
 
   it('score distribution for dept A buckets the 5 fixture submissions correctly', async () => {

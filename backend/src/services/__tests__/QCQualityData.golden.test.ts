@@ -52,12 +52,12 @@ describeDb('QCQualityData — golden slice', () => {
     const expected: Record<string, { audits: number; avgScore: number }> = {
       'Initial Greeting / Customer Verification':                { audits: 27, avgScore: 93.5 },
       'Contact Management':                                      { audits: 27, avgScore: 80.0 },
-      'CRM / Knowledge Base':                                    { audits: 27, avgScore: 71.3 },
-      'Product / Service Knowledge and Problem Solving Ability': { audits: 27, avgScore: 98.1 },
-      'Call Transfer / Hold Procedures':                         { audits: 27, avgScore: 95.7 },
-      'Wrap-Up Process':                                         { audits: 27, avgScore: 95.1 },
+      'CRM / Knowledge Base':                                    { audits: 27, avgScore: 90.6 },
+      'Product / Service Knowledge and Problem Solving Ability': { audits: 27, avgScore: 97.9 },
+      'Call Transfer / Hold Procedures':                         { audits: 27, avgScore: 95.2 },
+      'Wrap-Up Process':                                         { audits: 27, avgScore: 98.3 },
       'Professionalism / Rapport':                               { audits: 27, avgScore: 98.1 },
-      'Ticket / Task Documentation':                             { audits: 27, avgScore: 95.3 },
+      'Ticket / Task Documentation':                             { audits: 27, avgScore: 97.1 },
       'Work From Home Policy':                                   { audits: 27, avgScore: 100.0 },
     }
     for (const [name, exp] of Object.entries(expected)) {
