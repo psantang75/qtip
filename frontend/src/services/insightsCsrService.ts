@@ -174,6 +174,11 @@ export const getCsrTicketsPastDue = async (q: PastDueQuery): Promise<PastDueItem
   return response.data
 }
 
+export const getCsrTicketsDueToday = async (q: PastDueQuery): Promise<PastDueItem[]> => {
+  const response = await api.get('/insights/csr/tickets/due-today', { params: q })
+  return response.data
+}
+
 export const getCsrTicketsDailyHistory = async (p: TicketHistoryParams): Promise<TicketDailyPoint[]> => {
   const { users, departments } = p
   const response = await api.get('/insights/csr/tickets/daily-history', { params: { users, departments } })

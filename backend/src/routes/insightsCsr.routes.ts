@@ -14,7 +14,7 @@ import {
 } from '../controllers/insightsCsr.controller'
 // Tickets & Tasks reads the same service as its Sales twin, so the handler lives
 // with the rest of the Agent Activity fact readers; only the scope differs.
-import { getCsrCallActivity, getCsrTicketsTasks, getCsrTicketsPastDue, getCsrTicketsDailyHistory, getCsrTicketsProductivity, getCsrProductivityRoster, getCsrProductivityDay } from '../controllers/insightsAgentActivity.controller'
+import { getCsrCallActivity, getCsrTicketsTasks, getCsrTicketsPastDue, getCsrTicketsDueToday, getCsrTicketsDailyHistory, getCsrTicketsProductivity, getCsrProductivityRoster, getCsrProductivityDay } from '../controllers/insightsAgentActivity.controller'
 
 const router = express.Router()
 
@@ -29,6 +29,7 @@ router.get('/adherence/occurrences',  h(getAdherenceOccurrences))
 router.get('/call',                   h(getCsrCallActivity))
 router.get('/tickets',                h(getCsrTicketsTasks))
 router.get('/tickets/past-due',       h(getCsrTicketsPastDue))
+router.get('/tickets/due-today',      h(getCsrTicketsDueToday))
 router.get('/tickets/daily-history',  h(getCsrTicketsDailyHistory))
 router.get('/tickets/productivity',   h(getCsrTicketsProductivity))
 router.get('/productivity',           h(getCsrProductivityRoster))

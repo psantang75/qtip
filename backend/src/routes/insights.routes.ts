@@ -6,7 +6,7 @@ import {
   getDataFreshness,
   getKpiConfig,
 } from '../controllers/insights.controller';
-import { getAgentActivityStatus, getDatasetFreshness, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getProductivityRoster, getProductivityDay, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
+import { getAgentActivityStatus, getDatasetFreshness, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDueToday, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getProductivityRoster, getProductivityDay, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
 import { getServiceCountsReport } from '../controllers/insightsCompanyReporting.controller';
 import qcRouter from './insightsQC.routes';
 import irRouter from './insightsIR.routes';
@@ -66,6 +66,11 @@ router.get('/agent-activity/tickets',
 router.get('/agent-activity/tickets/past-due',
   authenticate as unknown as RequestHandler,
   getTicketsPastDue as unknown as RequestHandler
+);
+
+router.get('/agent-activity/tickets/due-today',
+  authenticate as unknown as RequestHandler,
+  getTicketsDueToday as unknown as RequestHandler
 );
 
 router.get('/agent-activity/tickets/daily-history',

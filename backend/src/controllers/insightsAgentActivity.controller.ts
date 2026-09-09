@@ -13,6 +13,7 @@ import {
   getDatasetFreshness as svcGetDatasetFreshness,
   getLeads as svcGetLeads,
   getMargin as svcGetMargin,
+  type TicketDueBucket,
 } from '../services/insightsAgentActivity.service';
 import { NO_MATCH_DEPARTMENT_ID } from '../services/insightsScope';
 import { getTicketTouchDetail as svcGetTicketTouchDetail } from '../services/insightsTouchDetail.service';
@@ -215,11 +216,12 @@ export const getCsrTicketsTasks = async (req: Request, res: Response): Promise<v
 };
 
 /**
- * Shared handler for the Past Due drill-in behind a Tickets & Tasks cell. Both
- * sections read the same fact through the same guards; only the page grant and
- * the department subtree differ.
+ * Shared handler for the Past Due / Due Today drill-in behind a Tickets & Tasks
+ * cell. Both sections read the same fact through the same guards; only the page
+ * grant, the department subtree, and the due-date bucket differ.
  */
-function pastDueHandler(pageKey: string, area: 'sales' | 'csr') {
+function dueItemsHandler(pageKey: string, area: 'sales' | 'csr', bucket: TicketDueBucket) {
+  const label = bucket === 'due_today' ? 'due today' : 'past due';
   return async (req: Request, res: Response): Promise<void> => {
     try {
       const scope = await resolveAaScope(req, res, pageKey);
@@ -234,11 +236,12 @@ function pastDueHandler(pageKey: string, area: 'sales' | 'csr') {
         classification,
         selfEmployeeKey: scope.selfEmployeeKey,
         area,
+        bucket,
       });
       res.json(items);
     } catch (error) {
-      logger.error('getTicketsPastDue error:', error);
-      res.status(500).json({ error: 'Failed to load past due tickets & tasks' });
+      logger.error(`getTickets ${label} error:`, error);
+      res.status(500).json({ error: `Failed to load ${label} tickets & tasks` });
     }
   };
 }
@@ -249,8 +252,16 @@ function pastDueHandler(pageKey: string, area: 'sales' | 'csr') {
  * The individual overdue work items behind one Past Due count, each with its CRM
  * deep link so the viewer can act on it.
  */
-export const getTicketsPastDue = pastDueHandler('aa_sales_tickets', 'sales');
-export const getCsrTicketsPastDue = pastDueHandler('csr_tickets', 'csr');
+export const getTicketsPastDue = dueItemsHandler('aa_sales_tickets', 'sales', 'past_due');
+export const getCsrTicketsPastDue = dueItemsHandler('csr_tickets', 'csr', 'past_due');
+
+/**
+ * GET /api/insights/agent-activity/tickets/due-today?agent=&classification=
+ * GET /api/insights/csr/tickets/due-today?agent=&classification=
+ * Same list as Past Due, filtered to items whose next contact is today.
+ */
+export const getTicketsDueToday = dueItemsHandler('aa_sales_tickets', 'sales', 'due_today');
+export const getCsrTicketsDueToday = dueItemsHandler('csr_tickets', 'csr', 'due_today');
 
 /**
  * Shared handler for the Tickets & Tasks daily trend. Same page grants and

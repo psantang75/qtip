@@ -3,7 +3,7 @@ import { InsightsSection } from '@/components/insights'
 import ActivityReportShell from '@/components/insights/agentActivity/ActivityReportShell'
 import TicketsTasksTable from '@/components/insights/agentActivity/TicketsTasksTable'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
-import { getTicketsPastDue, getTicketsTasks } from '@/services/insightsService'
+import { getTicketsDueToday, getTicketsPastDue, getTicketsTasks } from '@/services/insightsService'
 
 export default function AATicketsTasksPage() {
   const filters = useActivityFilters()
@@ -42,7 +42,8 @@ export default function AATicketsTasksPage() {
             grandTotal={data?.grandTotal}
             agentLabel="Salesperson"
             fetchPastDue={getTicketsPastDue}
-            pastDueQueryKey="aa-tickets-past-due"
+            fetchDueToday={getTicketsDueToday}
+            queryKeyPrefix="aa-tickets"
           />
         )}
       </InsightsSection>

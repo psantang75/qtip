@@ -1,7 +1,7 @@
 /**
- * The overdue work items behind one Past Due cell on a Tickets & Tasks report.
- * Read-only and act-on-it: every row carries its CRM deep link so the viewer can
- * open the ticket/task in a new tab and clear it.
+ * The work items behind one Past Due or Due Today cell on a Tickets & Tasks
+ * report. Read-only and act-on-it: every row carries its CRM deep link so the
+ * viewer can open the ticket/task in a new tab and clear it.
  *
  * Shared by the Sales and CSR reports — the caller supplies the fetcher, which is
  * the only thing that differs between the two sections.
@@ -12,9 +12,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { formatQualityDate } from '@/utils/dateFormat'
 import type { PastDueItem, PastDueQuery } from '@/services/insightsService'
 
+export type DueItemsBucket = 'past-due' | 'due-today'
+
 export interface PastDueTarget {
   agent: string
   classification: string
+  bucket: DueItemsBucket
 }
 
 interface PastDueItemsModalProps {
@@ -22,16 +25,39 @@ interface PastDueItemsModalProps {
   target: PastDueTarget | null
   onClose: () => void
   fetchPastDue: (q: PastDueQuery) => Promise<PastDueItem[]>
+  fetchDueToday: (q: PastDueQuery) => Promise<PastDueItem[]>
   /** Distinguishes the Sales and CSR caches, which scope to different agents. */
   queryKeyPrefix: string
 }
 
+const COPY: Record<DueItemsBucket, { title: string; empty: string; error: string; count: (n: number) => string }> = {
+  'past-due': {
+    title: 'Past Due',
+    empty: 'No past due items.',
+    error: "Couldn't load past due items. Close and try again.",
+    count: (n) => `${n} overdue item${n === 1 ? '' : 's'}, oldest first`,
+  },
+  'due-today': {
+    title: 'Due Today',
+    empty: 'No items due today.',
+    error: "Couldn't load items due today. Close and try again.",
+    count: (n) => `${n} item${n === 1 ? '' : 's'} due today`,
+  },
+}
+
 const dash = (v: string | null) => (v ? v : '—')
 
-export default function PastDueItemsModal({ target, onClose, fetchPastDue, queryKeyPrefix }: PastDueItemsModalProps) {
+export default function PastDueItemsModal({
+  target, onClose, fetchPastDue, fetchDueToday, queryKeyPrefix,
+}: PastDueItemsModalProps) {
+  const bucket = target?.bucket ?? 'past-due'
+  const copy = COPY[bucket]
   const { data, isLoading, isError } = useQuery({
-    queryKey: [queryKeyPrefix, target?.agent, target?.classification],
-    queryFn:  () => fetchPastDue({ agent: target!.agent, classification: target!.classification }),
+    queryKey: ['insights', 'tickets', queryKeyPrefix, bucket, target?.agent, target?.classification],
+    queryFn:  () => {
+      const q = { agent: target!.agent, classification: target!.classification }
+      return bucket === 'due-today' ? fetchDueToday(q) : fetchPastDue(q)
+    },
     enabled:  !!target,
     staleTime: 0,
   })
@@ -52,10 +78,10 @@ export default function PastDueItemsModal({ target, onClose, fetchPastDue, query
     <Dialog open={!!target} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="max-w-6xl max-h-[85vh] flex flex-col gap-0 p-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-slate-100 shrink-0">
-          <DialogTitle>Past Due — {target?.classification}</DialogTitle>
+          <DialogTitle>{copy.title} — {target?.classification}</DialogTitle>
           <DialogDescription className="text-[12.5px] text-slate-500">
             {target?.agent}
-            {items.length > 0 && ` · ${items.length} overdue item${items.length === 1 ? '' : 's'}, oldest first`}
+            {items.length > 0 && ` · ${copy.count(items.length)}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -63,9 +89,9 @@ export default function PastDueItemsModal({ target, onClose, fetchPastDue, query
           {isLoading ? (
             <p className="text-sm text-slate-400 text-center py-8">Loading…</p>
           ) : isError ? (
-            <p className="text-sm text-danger text-center py-8">Couldn't load past due items. Close and try again.</p>
+            <p className="text-sm text-danger text-center py-8">{copy.error}</p>
           ) : items.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8">No past due items.</p>
+            <p className="text-sm text-slate-400 text-center py-8">{copy.empty}</p>
           ) : (
             <table className="w-full text-sm table-fixed [&_th:first-child]:pl-5 [&_td:first-child]:pl-5 [&_th:last-child]:pr-5 [&_td:last-child]:pr-5">
               {/* Frozen while the list scrolls. `sticky` resolves against this table's

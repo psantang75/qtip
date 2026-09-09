@@ -11,19 +11,35 @@ import type { PastDueItem, PastDueQuery, TicketGroup, TicketsTasksResponse } fro
 // Zero counts render as an em dash, matching the source report.
 const dash = (v: number) => (v === 0 ? '—' : fmtNum(v))
 
+function CountLink({
+  count, title, onClick,
+}: { count: number; title: string; onClick: () => void }) {
+  if (count <= 0) return <>{dash(count)}</>
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="font-medium text-primary hover:underline focus:outline-none focus-visible:underline"
+      title={title}
+    >
+      {fmtNum(count)}
+    </button>
+  )
+}
+
 interface TicketsTasksTableProps {
   groups: TicketGroup[]
   grandTotal?: TicketsTasksResponse['grandTotal']
   /** First-column header: "Salesperson" for Sales, "Agent" for CSR. */
   agentLabel: string
-  /** Section-specific loader for the Past Due drill-in. */
   fetchPastDue: (q: PastDueQuery) => Promise<PastDueItem[]>
+  fetchDueToday: (q: PastDueQuery) => Promise<PastDueItem[]>
   /** Distinguishes the Sales and CSR drill-in caches. */
-  pastDueQueryKey: string
+  queryKeyPrefix: string
 }
 
 export default function TicketsTasksTable({
-  groups, grandTotal, agentLabel, fetchPastDue, pastDueQueryKey,
+  groups, grandTotal, agentLabel, fetchPastDue, fetchDueToday, queryKeyPrefix,
 }: TicketsTasksTableProps) {
   const [target, setTarget] = useState<PastDueTarget | null>(null)
 
@@ -33,7 +49,8 @@ export default function TicketsTasksTable({
         target={target}
         onClose={() => setTarget(null)}
         fetchPastDue={fetchPastDue}
-        queryKeyPrefix={pastDueQueryKey}
+        fetchDueToday={fetchDueToday}
+        queryKeyPrefix={queryKeyPrefix}
       />
       <table className="w-full text-sm table-fixed [&_th:first-child]:pl-4 [&_td:first-child]:pl-4 [&_th:last-child]:pr-4 [&_td:last-child]:pr-4">
         <thead>
@@ -55,20 +72,19 @@ export default function TicketsTasksTable({
                   <td className="py-2.5 pr-4 text-slate-500">{r.department}</td>
                   <td className="py-2.5 pr-4 text-slate-600">{r.classification}</td>
                   <td className="py-2.5 pr-4 text-right text-slate-600">{dash(r.current)}</td>
-                  <td className="py-2.5 pr-4 text-right text-slate-600">{dash(r.dueToday)}</td>
+                  <td className="py-2.5 pr-4 text-right text-slate-600">
+                    <CountLink
+                      count={r.dueToday}
+                      title={`View the ${fmtNum(r.dueToday)} ${r.classification} item${r.dueToday === 1 ? '' : 's'} due today`}
+                      onClick={() => setTarget({ agent: r.agent, classification: r.classification, bucket: 'due-today' })}
+                    />
+                  </td>
                   <td className="py-2.5 text-right text-slate-600">
-                    {r.pastDue > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => setTarget({ agent: r.agent, classification: r.classification })}
-                        className="font-medium text-primary hover:underline focus:outline-none focus-visible:underline"
-                        title={`View the ${fmtNum(r.pastDue)} past due ${r.classification} item${r.pastDue === 1 ? '' : 's'}`}
-                      >
-                        {fmtNum(r.pastDue)}
-                      </button>
-                    ) : (
-                      dash(r.pastDue)
-                    )}
+                    <CountLink
+                      count={r.pastDue}
+                      title={`View the ${fmtNum(r.pastDue)} past due ${r.classification} item${r.pastDue === 1 ? '' : 's'}`}
+                      onClick={() => setTarget({ agent: r.agent, classification: r.classification, bucket: 'past-due' })}
+                    />
                   </td>
                 </tr>
               ))}

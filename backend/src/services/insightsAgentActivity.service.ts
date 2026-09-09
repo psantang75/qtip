@@ -779,6 +779,7 @@ export interface TicketTaskFilters {
  * binds `businessNow(new Date()).date` for the `?`.
  */
 const PAST_DUE_PREDICATE = 'f.next_contact IS NOT NULL AND DATE(f.next_contact) < ?';
+const DUE_TODAY_PREDICATE = 'f.next_contact IS NOT NULL AND DATE(f.next_contact) = ?';
 
 /**
  * Bucket expressions shared by the live report and the daily snapshot capture.
@@ -941,13 +942,17 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
   };
 }
 
+export type TicketDueBucket = 'past_due' | 'due_today';
+
 export interface TicketPastDueFilters {
-  /** The agent whose Past Due cell was opened (ie_fact_ticket_task.agent_name). */
+  /** The agent whose Past Due / Due Today cell was opened (ie_fact_ticket_task.agent_name). */
   agent: string;
   /** The classification row that was opened. */
   classification: string;
   selfEmployeeKey?: number | null;
   area?: 'sales' | 'csr';
+  /** Which snapshot bucket to list. Defaults to past due so existing callers stay put. */
+  bucket?: TicketDueBucket;
 }
 
 export interface PastDueItem {
@@ -970,10 +975,9 @@ export interface PastDueItem {
 }
 
 /**
- * The individual past-due work items behind one Past Due cell, oldest due date
- * first so the most overdue work is at the top. Same guards as the aggregate —
- * including SELF scope — so opening a cell can never reveal a row the report
- * itself would have excluded.
+ * The individual work items behind one Past Due or Due Today cell, oldest due
+ * date first. Same guards as the aggregate — including SELF scope — so opening
+ * a cell can never reveal a row the report itself would have excluded.
  *
  * The two process types carry different meaning in the same columns, so they are
  * split out here rather than in the UI: a Task's `classification` is really its
@@ -984,9 +988,10 @@ export interface PastDueItem {
 export async function getTicketsPastDue(filters: TicketPastDueFilters): Promise<PastDueItem[]> {
   if (!(await factTableExists('ie_fact_ticket_task'))) return [];
 
+  const predicate = filters.bucket === 'due_today' ? DUE_TODAY_PREDICATE : PAST_DUE_PREDICATE;
   const { EMP_JOIN, DEPT_JOIN, baseWhere, baseParams } = ticketTaskBase(filters.area, filters.selfEmployeeKey);
-  const where = [...baseWhere, 'f.agent_name = ?', 'f.classification = ?', PAST_DUE_PREDICATE];
-  // Final `?` is PAST_DUE_PREDICATE's business-timezone (ET) today.
+  const where = [...baseWhere, 'f.agent_name = ?', 'f.classification = ?', predicate];
+  // Final `?` is the business-timezone (ET) today for the due-date predicate.
   const params = [...baseParams, filters.agent, filters.classification, businessNow(new Date()).date];
 
   const [rows] = await pool.query<RowDataPacket[]>(

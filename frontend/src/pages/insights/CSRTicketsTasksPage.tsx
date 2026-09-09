@@ -3,7 +3,7 @@ import { InsightsSection } from '@/components/insights'
 import ActivityReportShell from '@/components/insights/agentActivity/ActivityReportShell'
 import TicketsTasksTable from '@/components/insights/agentActivity/TicketsTasksTable'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
-import { getCsrTicketsPastDue, getCsrTicketsTasks } from '@/services/insightsCsrService'
+import { getCsrTicketsDueToday, getCsrTicketsPastDue, getCsrTicketsTasks } from '@/services/insightsCsrService'
 
 export default function CSRTicketsTasksPage() {
   const filters = useActivityFilters()
@@ -42,7 +42,8 @@ export default function CSRTicketsTasksPage() {
             grandTotal={data?.grandTotal}
             agentLabel="Agent"
             fetchPastDue={getCsrTicketsPastDue}
-            pastDueQueryKey="csr-tickets-past-due"
+            fetchDueToday={getCsrTicketsDueToday}
+            queryKeyPrefix="csr-tickets"
           />
         )}
       </InsightsSection>
