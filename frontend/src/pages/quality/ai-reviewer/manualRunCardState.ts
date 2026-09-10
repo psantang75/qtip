@@ -12,6 +12,7 @@ import type {
   ManualRunAttachedSource,
   ManualRunKind,
 } from '@/services/aiReviewerService'
+import { normalizeConversationId } from '@/utils/conversationId'
 
 /**
  * Pick a sensible default kind for a freshly-attached row.
@@ -27,16 +28,25 @@ export function nextAttachedDefault(primaryKind: ManualRunKind): ManualRunKind {
 }
 
 /**
- * Strip whitespace and drop blank rows. We do not mutate the on-screen
- * state (the user might be mid-paste with spaces in the buffer) — this
- * runs once at submit time to produce the request body's
- * `attached_sources[]`.
+ * Canonicalize one entered id. A conversation id is routinely pasted as the
+ * whole Genesys Cloud URL the reviewer was looking at, so reduce that to the
+ * id itself; ticket and task ids are plain numbers that only need the
+ * surrounding whitespace removed.
  */
-export function trimAttachedSources(
+export function normalizeManualRunId(kind: ManualRunKind, raw: string): string {
+  return kind === 'CONVERSATION' ? normalizeConversationId(raw) : raw.trim()
+}
+
+/**
+ * Canonicalize every row and drop the blank ones, producing the request body's
+ * `attached_sources[]`. Runs at submit time, so a row whose kind changed after
+ * the id was typed is still normalized for the kind actually being submitted.
+ */
+export function normalizeAttachedSources(
   rows: ManualRunAttachedSource[]
 ): ManualRunAttachedSource[] {
   return rows
-    .map((a) => ({ kind: a.kind, external_id: a.external_id.trim() }))
+    .map((a) => ({ kind: a.kind, external_id: normalizeManualRunId(a.kind, a.external_id) }))
     .filter((a) => a.external_id.length > 0)
 }
 

@@ -38,7 +38,8 @@ import { t } from '@/lib/t'
 import {
   canRunManual,
   nextAttachedDefault,
-  trimAttachedSources,
+  normalizeAttachedSources,
+  normalizeManualRunId,
 } from './manualRunCardState'
 
 // Minimal shape of the axios error thrown by a failed run — the backend
@@ -143,14 +144,12 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
     setAttached((prev) => [...prev, { kind: nextAttachedDefault(kind), external_id: '' }])
   }
 
-  // Only send rows that have a non-empty id. We don't auto-trim on
-  // every keystroke (the user may legitimately have whitespace in a
-  // conversation id mid-paste), but we trim at submit time.
-  const trimmedAttached = trimAttachedSources(attached)
+  // Only send rows that have a non-empty id, each canonicalized for its kind.
+  const normalizedAttached = normalizeAttachedSources(attached)
 
   const mut = useMutation({
     mutationFn: () =>
-      aiReviewerService.runManual(formId, kind, externalId.trim(), trimmedAttached),
+      aiReviewerService.runManual(formId, kind, normalizeManualRunId(kind, externalId), normalizedAttached),
     onMutate: () => {
       // Clear any prior result/error so the strip below the button always
       // reflects the run the user is currently waiting on.
@@ -222,8 +221,8 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
           const value = await aiReviewerService.runManual(
             formId,
             kind,
-            externalId.trim(),
-            trimmedAttached,
+            normalizeManualRunId(kind, externalId),
+            normalizedAttached,
             key,
           )
           return { key, value }
@@ -295,8 +294,8 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
           const value = await aiReviewerService.runManual(
             formId,
             kind,
-            externalId.trim(),
-            trimmedAttached,
+            normalizeManualRunId(kind, externalId),
+            normalizedAttached,
             'anthropic',
             tier,
           )
@@ -360,11 +359,11 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
   // because the single-source synthesis path doesn't honour the
   // provider OR model_tier overrides. Surface this in the disabled
   // state + tooltip so the user doesn't fire a doomed run.
-  const canCompare = canRun && trimmedAttached.length > 0
+  const canCompare = canRun && normalizedAttached.length > 0
   const canCompareTier = canCompare
   const compareDisabledReason = !canRun
     ? undefined
-    : trimmedAttached.length === 0
+    : normalizedAttached.length === 0
     ? 'Compare requires at least one attached source (multi-source path).'
     : undefined
   const compareTierDisabledReason = compareDisabledReason
@@ -429,7 +428,7 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
                   id="manual-run-id"
                   aria-label={kind === 'CONVERSATION' ? 'Conversation ID' : `${selectedOpt.label} ID`}
                   value={externalId}
-                  onChange={(e) => setExternalId(e.target.value)}
+                  onChange={(e) => setExternalId(normalizeManualRunId(kind, e.target.value))}
                   placeholder={selectedOpt.placeholder}
                   disabled={mut.isPending}
                   autoComplete="off"
@@ -468,7 +467,7 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
                     <Input
                       aria-label={`Attached source ${idx + 1} ID`}
                       value={row.external_id}
-                      onChange={(e) => updateAttached(idx, { external_id: e.target.value })}
+                      onChange={(e) => updateAttached(idx, { external_id: normalizeManualRunId(row.kind, e.target.value) })}
                       placeholder={rowOpt.placeholder}
                       disabled={mut.isPending}
                       autoComplete="off"
@@ -554,7 +553,7 @@ export function ManualRunCard({ formId, maxAttachedSources }: Props) {
             {mut.isPending ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                {trimmedAttached.length > 0
+                {normalizedAttached.length > 0
                   ? 'Running multi-source review… this can take 60–120s'
                   : 'Running… this can take 30–60s'}
               </>

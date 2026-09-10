@@ -35,6 +35,17 @@ export function isAgentMetadataField(field: FormMetadataField): boolean {
   return name === 'agent' || name === 'csr'
 }
 
+/**
+ * Does this field hold a Genesys conversation id? Call forms seed it as
+ * "Call ID"; the form builder's own template calls it "Call Conversation ID".
+ * Matching on the label is how the renderer already identifies fields
+ * (see `isAgentMetadataField` and the AUTO branch of `FormMetadataDisplay`).
+ */
+export function isCallIdMetadataField(field: FormMetadataField): boolean {
+  const name = field.field_name.trim().toLowerCase()
+  return name === 'call id' || name === 'call conversation id' || name === 'conversation id'
+}
+
 /** Map legacy "CSR" field labels to "Agent" for display. All other names pass through unchanged. */
 export function displayFieldName(fieldName: string): string {
   return fieldName.trim().toLowerCase() === 'csr' ? 'Agent' : fieldName

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import callService, { type Call, type CallRecording } from '@/services/callService'
 import { AudioPlayer } from '@/components/common/AudioPlayer'
 import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
+import { normalizeConversationId } from '@/utils/conversationId'
 import { formatTranscriptText } from '@/utils/transcriptUtils'
 
 interface MultipleCallSelectorProps {
@@ -239,7 +240,7 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
             <Input
               placeholder="e.g. 4567894"
               value={callId}
-              onChange={e => setCallId(e.target.value)}
+              onChange={e => setCallId(normalizeConversationId(e.target.value))}
               onKeyDown={e => e.key === 'Enter' && handleAdd()}
               disabled={addMut.isPending}
               className="h-9 text-[13px]"

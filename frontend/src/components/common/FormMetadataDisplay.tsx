@@ -1,7 +1,8 @@
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { FormMetadataField } from '@/types/form.types'
-import { isAgentMetadataField, displayFieldName } from '@/utils/formMetadataOrder'
+import { isAgentMetadataField, isCallIdMetadataField, displayFieldName } from '@/utils/formMetadataOrder'
+import { normalizeConversationId } from '@/utils/conversationId'
 
 interface FormMetadataDisplayProps {
   metadataFields: FormMetadataField[]
@@ -30,7 +31,7 @@ export default function FormMetadataDisplay({
 
   const handleChange = (field: FormMetadataField, value: string) => {
     if (!onChange || readonly) return
-    onChange(getKey(field), value)
+    onChange(getKey(field), isCallIdMetadataField(field) ? normalizeConversationId(value) : value)
   }
 
   const sorted = [...metadataFields].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
