@@ -36,7 +36,7 @@ export default function MyCoachingPage() {
     statuses: '', formats: '', topics: '',
     from: defaultFrom, to: defaultTo, overdue: '', dueToday: '', sessionId: '',
     page: '1', size: '20',
-  })
+  }, 'training.myCoaching')
 
   const statusesParam = get('statuses')
   const formatsParam  = get('formats')

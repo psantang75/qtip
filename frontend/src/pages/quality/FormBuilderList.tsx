@@ -41,7 +41,7 @@ export function FormBuilderList() {
     filtered,
     hasFilters,
     resetFilters,
-  } = useFormListFilters(rawForms as FormSummary[], { defaultStatus: 'active' })
+  } = useFormListFilters(rawForms as FormSummary[], { defaultStatus: 'active', scope: 'quality.formBuilder' })
 
   const { sort, dir, toggle, sorted } = useListSort(filtered)
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))

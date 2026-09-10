@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Eye, RotateCcw } from 'lucide-react'
@@ -21,10 +21,12 @@ import { ListPagination } from '@/components/common/ListPagination'
 import { RowActionButton } from '@/components/common/RowActionButton'
 import { DateRangeFilter, type DateRange } from '@/components/common/DateRangeFilter'
 import { useListSort } from '@/hooks/useListSort'
+import { useStickyState } from '@/hooks/useStickyFilters'
 import { formatQualityDate as fmtDate, defaultDateRange90 } from '@/utils/dateFormat'
 import { DISPUTE_STATUSES, CLIENT_FETCH_LIMIT } from '@/constants/labels'
 
 const DEFAULT_PAGE_SIZE = 20
+const FILTER_SCOPE = 'quality.disputes'
 
 
 /** Normalize agent dispute history items to the shared DisputeRecord shape */
@@ -47,16 +49,16 @@ function DisputeListView() {
   const navigate = useNavigate()
   const { isAgent } = useQualityRole()
 
-  const [page, setPage]         = useState(1)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
-  const [dateRange, setDateRange] = useState<DateRange>(() => defaultDateRange90())
+  const [page, setPage]         = useStickyState(FILTER_SCOPE, 'page', 1)
+  const [pageSize, setPageSize] = useStickyState(FILTER_SCOPE, 'pageSize', DEFAULT_PAGE_SIZE)
+  const [dateRange, setDateRange] = useStickyState<DateRange>(FILTER_SCOPE, 'dateRange', () => defaultDateRange90())
 
   // Multi-select filter state — staged via StagedMultiSelect, applied on click
-  const [selectedFormNames,     setSelectedFormNames]     = useState<string[]>([])
-  const [selectedAgentNames,    setSelectedAgentNames]    = useState<string[]>([])
-  const [selectedReviewerNames, setSelectedReviewerNames] = useState<string[]>([])
-  const [selectedStatuses,      setSelectedStatuses]      = useState<string[]>([])
-  const [disputeId,             setDisputeId]             = useState('')
+  const [selectedFormNames,     setSelectedFormNames]     = useStickyState<string[]>(FILTER_SCOPE, 'forms', [])
+  const [selectedAgentNames,    setSelectedAgentNames]    = useStickyState<string[]>(FILTER_SCOPE, 'agents', [])
+  const [selectedReviewerNames, setSelectedReviewerNames] = useStickyState<string[]>(FILTER_SCOPE, 'reviewers', [])
+  const [selectedStatuses,      setSelectedStatuses]      = useStickyState<string[]>(FILTER_SCOPE, 'statuses', [])
+  const [disputeId,             setDisputeId]             = useStickyState(FILTER_SCOPE, 'disputeId', '')
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['disputes', isAgent, dateRange.start, dateRange.end],

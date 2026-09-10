@@ -31,6 +31,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { useStickyState } from '@/hooks/useStickyFilters'
 import { t } from '@/lib/t'
 import { cn } from '@/lib/utils'
 import { optionCls } from '@/utils/forms/optionCls'
@@ -87,6 +88,8 @@ const rangeLabel = (start: string) => {
 const clockOf = (ms: number) =>
   new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 
+const FILTER_SCOPE = 'scheduling.queueCoverage'
+
 export default function QueueCoveragePage() {
   const qc = useQueryClient()
   const { toast } = useToast()
@@ -95,10 +98,10 @@ export default function QueueCoveragePage() {
   // Remembered across reloads so a manager lands back on the department they
   // work, not whichever one sorts first in their scope.
   const [departmentId, setDepartmentId] = useLocalStorage<number | null>('qtip_queue_department', null)
-  const [view, setView] = useState<ViewMode>('day')
+  const [view, setView] = useStickyState<ViewMode>(FILTER_SCOPE, 'view', 'day')
   const [date, setDate] = useState(() => toLocalIso(new Date()))
   const [weekStart, setWeekStart] = useState(() => startOfWeek(toLocalIso(new Date())))
-  const [includeDraft, setIncludeDraft] = useState(false)
+  const [includeDraft, setIncludeDraft] = useStickyState(FILTER_SCOPE, 'includeDraft', false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const deptsQ = useQuery({ queryKey: phoneQueueKeys.departments(), queryFn: phoneQueueService.listDepartments })

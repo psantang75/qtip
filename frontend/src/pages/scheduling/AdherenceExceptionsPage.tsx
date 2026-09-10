@@ -7,7 +7,6 @@
  * flag decides scoring — excused forgives that segment's adherence points,
  * unexcused is recorded only. Managers/admins see their scope; editors can delete.
  */
-import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarClock, Trash2 } from 'lucide-react'
 
@@ -24,6 +23,7 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { t } from '@/lib/t'
 import { useScheduleRole } from '@/hooks/useScheduleRole'
+import { useStickyState } from '@/hooks/useStickyFilters'
 import schedulingService from '@/services/schedulingService'
 import { parseLocal, toLocalIso, addDays } from '@/components/scheduling/mockScheduleData'
 
@@ -31,6 +31,7 @@ const fmt = (iso: string) => parseLocal(iso).toLocaleDateString('en-US', { month
 
 /** The rolling adherence-point window, mirroring adherence.rollup.service. */
 const POINT_WINDOW_DAYS = 90
+const FILTER_SCOPE = 'scheduling.adherenceExceptions'
 const segLabel = (kind: 'BREAK' | 'LUNCH', seq: number) => `${kind === 'BREAK' ? 'Break' : 'Lunch'} #${seq}`
 
 export default function AdherenceExceptionsPage() {
@@ -40,8 +41,8 @@ export default function AdherenceExceptionsPage() {
 
   // Defaults to the rolling 90-day point window, because that is the range these
   // exceptions are actually being scored over.
-  const [from, setFrom] = useState(addDays(toLocalIso(new Date()), -(POINT_WINDOW_DAYS - 1)))
-  const [to, setTo] = useState(toLocalIso(new Date()))
+  const [from, setFrom] = useStickyState(FILTER_SCOPE, 'from', () => addDays(toLocalIso(new Date()), -(POINT_WINDOW_DAYS - 1)))
+  const [to, setTo] = useStickyState(FILTER_SCOPE, 'to', () => toLocalIso(new Date()))
 
   const { data, isLoading } = useQuery({
     queryKey: ['adherence-exceptions', from, to],

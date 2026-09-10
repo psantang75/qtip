@@ -20,20 +20,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { StatusActiveFilter, type StatusActiveValue } from '@/components/common/StatusActiveFilter'
 import { useToast } from '@/hooks/use-toast'
 import { useListSort } from '@/hooks/useListSort'
+import { useStickyState } from '@/hooks/useStickyFilters'
 import { QuizPreviewModal } from '@/components/training/QuizPreviewModal'
 import { TopicListTooltip } from '@/components/training/TopicListTooltip'
 
 type StatusFilter = StatusActiveValue
 
+const FILTER_SCOPE = 'training.library.quizzes'
+
 export default function LibraryQuizzesPage() {
   const navigate        = useNavigate()
   const { toast }       = useToast()
 
-  const [search,        setSearch]        = useState('')
-  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('active')
-  const [topicFilter,   setTopicFilter]   = useState<string[]>([])
-  const [page,          setPage]          = useState(1)
-  const [pageSize,      setPageSize]      = useState(20)
+  const [search,        setSearch]        = useStickyState(FILTER_SCOPE, 'search', '')
+  const [statusFilter,  setStatusFilter]  = useStickyState<StatusFilter>(FILTER_SCOPE, 'status', 'active')
+  const [topicFilter,   setTopicFilter]   = useStickyState<string[]>(FILTER_SCOPE, 'topics', [])
+  const [page,          setPage]          = useStickyState(FILTER_SCOPE, 'page', 1)
+  const [pageSize,      setPageSize]      = useStickyState(FILTER_SCOPE, 'pageSize', 20)
   const [previewOpen, setPreviewOpen] = useState(false)
 
   const { data: quizData, isLoading, isError, refetch } = useQuery({

@@ -4,7 +4,6 @@
  * exceptions happens in the calendar (per-day drawer or bulk bar), so this page
  * is a review + cleanup surface, not an entry form.
  */
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarX, FileInput, Trash2 } from 'lucide-react'
@@ -22,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { t } from '@/lib/t'
 import { useScheduleRole } from '@/hooks/useScheduleRole'
+import { useStickyState } from '@/hooks/useStickyFilters'
 import schedulingService from '@/services/schedulingService'
 import { parseLocal, toLocalIso, addDays } from '@/components/scheduling/mockScheduleData'
 
@@ -29,6 +29,7 @@ const fmt = (iso: string) => parseLocal(iso).toLocaleDateString('en-US', { month
 
 /** The rolling attendance-point window, mirroring attendance.rollup.service. */
 const POINT_WINDOW_DAYS = 90
+const FILTER_SCOPE = 'scheduling.exceptions'
 
 export default function SchedulingExceptionsPage() {
   const { toast } = useToast()
@@ -38,8 +39,8 @@ export default function SchedulingExceptionsPage() {
   // Defaults to the rolling 90-day point window, because that is the range these
   // exceptions are actually being scored over. Widen the filter to see leave
   // logged ahead, or anything that has already rolled off.
-  const [from, setFrom] = useState(addDays(toLocalIso(new Date()), -(POINT_WINDOW_DAYS - 1)))
-  const [to, setTo] = useState(toLocalIso(new Date()))
+  const [from, setFrom] = useStickyState(FILTER_SCOPE, 'from', () => addDays(toLocalIso(new Date()), -(POINT_WINDOW_DAYS - 1)))
+  const [to, setTo] = useStickyState(FILTER_SCOPE, 'to', () => toLocalIso(new Date()))
 
   const { data, isLoading } = useQuery({
     queryKey: ['schedule-exceptions', from, to],

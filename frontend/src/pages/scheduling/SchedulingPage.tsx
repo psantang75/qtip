@@ -50,6 +50,7 @@ import { minutesOf, rangeStatus, type CoverageWindow } from '@/components/schedu
 import { useScheduleGrid } from '@/hooks/useScheduleGrid'
 import { useScheduleTemplates, adaptTemplate } from '@/hooks/useScheduleTemplates'
 import { useScheduleRole } from '@/hooks/useScheduleRole'
+import { useStickyState } from '@/hooks/useStickyFilters'
 import schedulingService, { type ApiTemplate, type TemplateInput } from '@/services/schedulingService'
 
 const UNASSIGNED = 'Unassigned'
@@ -82,20 +83,24 @@ const optionCls = (selected: boolean) =>
     ? 'bg-[#00aeef] text-white border-[#00aeef]'
     : 'bg-white text-slate-600 border-slate-200 hover:border-[#00aeef] hover:text-[#00aeef]'
 
+const FILTER_SCOPE = 'scheduling.grid'
+
 export default function SchedulingPage() {
   const { toast } = useToast()
   const qc = useQueryClient()
   const { canEdit } = useScheduleRole()
 
-  const [view, setView] = useState<ViewMode>('week')
+  // Filters are sticky for the session; the anchor/day the grid is parked on is
+  // not, so every visit opens on the current week.
+  const [view, setView] = useStickyState<ViewMode>(FILTER_SCOPE, 'view', 'week')
   const [anchor, setAnchor] = useState(startOfWeek(toLocalIso(new Date())))
   const [day, setDay] = useState(toLocalIso(new Date()))
-  const [departments, setDepartments] = useState<string[]>([])
-  const [people, setPeople] = useState<string[]>([])
-  const [search, setSearch] = useState('')
+  const [departments, setDepartments] = useStickyState<string[]>(FILTER_SCOPE, 'departments', [])
+  const [people, setPeople] = useStickyState<string[]>(FILTER_SCOPE, 'people', [])
+  const [search, setSearch] = useStickyState(FILTER_SCOPE, 'search', '')
   // Unassigned users (no department) are admin-only noise on most days, so they
   // are hidden until explicitly toggled on.
-  const [showUnassigned, setShowUnassigned] = useState(false)
+  const [showUnassigned, setShowUnassigned] = useStickyState(FILTER_SCOPE, 'showUnassigned', false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [builder, setBuilder] = useState<{ template?: MockTemplate; readOnly?: boolean } | null>(null)
   const [applyMode, setApplyMode] = useState<ApplyMode | null>(null)

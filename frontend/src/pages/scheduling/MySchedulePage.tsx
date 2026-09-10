@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils'
 import { ScheduleGrid } from '@/components/scheduling/ScheduleGrid'
 import { addDays, parseLocal, startOfWeek, toLocalIso } from '@/components/scheduling/mockScheduleData'
 import { useMySchedule } from '@/hooks/useMySchedule'
+import { useStickyState } from '@/hooks/useStickyFilters'
 
 type ViewMode = 'week' | 'period'
 
@@ -34,7 +35,7 @@ const optionCls = (selected: boolean) =>
     : 'bg-white text-slate-600 border-slate-200 hover:border-[#00aeef] hover:text-[#00aeef]'
 
 export default function MySchedulePage() {
-  const [view, setView] = useState<ViewMode>('week')
+  const [view, setView] = useStickyState<ViewMode>('scheduling.mySchedule', 'view', 'week')
   const [anchor, setAnchor] = useState(startOfWeek(toLocalIso(new Date())))
 
   const span = view === 'week' ? 7 : 14

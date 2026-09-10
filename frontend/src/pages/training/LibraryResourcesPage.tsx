@@ -28,6 +28,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useListSort } from '@/hooks/useListSort'
+import { useStickyState } from '@/hooks/useStickyFilters'
 import { RichTextEditor } from '@/components/common/RichTextEditor'
 import { TopicListTooltip } from '@/components/training/TopicListTooltip'
 // ── Resource type config ──────────────────────────────────────────────────────
@@ -77,6 +78,8 @@ function isValidUrl(url: string): boolean {
   try { new URL(url); return true } catch { return false }
 }
 
+const FILTER_SCOPE = 'training.library.resources'
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LibraryResourcesPage() {
@@ -88,11 +91,11 @@ export default function LibraryResourcesPage() {
   const [form,         setForm]         = useState<ResourceForm>(EMPTY)
   const [urlErr,       setUrlErr]       = useState('')
   const [titleErr,     setTitleErr]     = useState('')
-  const [search,       setSearch]       = useState('')
-  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>('active')
-  const [topicFilter,   setTopicFilter]   = useState<string[]>([])
-  const [page,          setPage]          = useState(1)
-  const [pageSize,     setPageSize]     = useState(20)
+  const [search,       setSearch]       = useStickyState(FILTER_SCOPE, 'search', '')
+  const [statusFilter,  setStatusFilter]  = useStickyState<StatusFilter>(FILTER_SCOPE, 'status', 'active')
+  const [topicFilter,   setTopicFilter]   = useStickyState<string[]>(FILTER_SCOPE, 'topics', [])
+  const [page,          setPage]          = useStickyState(FILTER_SCOPE, 'page', 1)
+  const [pageSize,     setPageSize]     = useStickyState(FILTER_SCOPE, 'pageSize', 20)
 
   const { data: resData,   isLoading, isError, refetch } = useQuery({ queryKey: ['resources-all'], queryFn: () => trainingService.getResources({ limit: 1000 }) })
   const { data: topicsData }           = useQuery({ queryKey: ['list-items', 'training_topic'], queryFn: () => listService.getItems('training_topic') })

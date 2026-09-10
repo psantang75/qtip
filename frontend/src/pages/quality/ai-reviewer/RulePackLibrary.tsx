@@ -60,6 +60,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { useToast } from '@/hooks/use-toast'
+import { useStickyState } from '@/hooks/useStickyFilters'
 
 type EditorState =
   | { mode: 'closed' }
@@ -75,7 +76,7 @@ function fmtDate(iso: string): string {
 export default function RulePackLibrary() {
   const qc = useQueryClient()
   const { toast } = useToast()
-  const [showArchived, setShowArchived] = useState(false)
+  const [showArchived, setShowArchived] = useStickyState('quality.aiReviewer.rulePacks', 'showArchived', false)
   const [editor, setEditor] = useState<EditorState>({ mode: 'closed' })
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }])
 

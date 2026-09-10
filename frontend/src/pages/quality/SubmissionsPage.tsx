@@ -66,7 +66,7 @@ export default function SubmissionsPage() {
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
     forms: '', agents: '', statuses: '', from: defaultFrom, to: defaultTo, reviewId: '', page: '1', size: '20',
-  })
+  }, 'quality.submissions')
 
   const formsParam    = get('forms')
   const agentsParam   = get('agents')

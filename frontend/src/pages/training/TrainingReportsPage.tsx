@@ -96,7 +96,7 @@ export default function TrainingReportsPage() {
 
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
     from: defaultFrom, to: defaultTo, agents: '', types: '', topics: '', page: '1', size: '20',
-  })
+  }, 'training.reports')
 
   const dateFrom  = get('from')
   const dateTo    = get('to')

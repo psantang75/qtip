@@ -10,7 +10,7 @@
  * The classification runs live on every request rather than being stored, so
  * what is shown here is by construction what attendance actually scored.
  */
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, CalendarX } from 'lucide-react'
@@ -30,6 +30,7 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { useStickyState } from '@/hooks/useStickyFilters'
 import schedulingService, { type TimeOffOutcome } from '@/services/schedulingService'
 import { parseLocal, toLocalIso, addDays } from '@/components/scheduling/mockScheduleData'
 
@@ -78,6 +79,8 @@ const OUTCOMES: Record<TimeOffOutcome, OutcomeMeta> = {
   },
 }
 
+const FILTER_SCOPE = 'scheduling.timeOffImportReview'
+
 const TONE_CLS: Record<OutcomeMeta['tone'], string> = {
   applied: 'border-success/30 bg-success/10 text-success',
   skipped: 'border-slate-200 bg-slate-50 text-slate-500',
@@ -95,8 +98,8 @@ function SummaryTile({ label, value, hint }: { label: string; value: string; hin
 }
 
 export default function TimeOffImportReviewPage() {
-  const [from, setFrom] = useState(addDays(toLocalIso(new Date()), -30))
-  const [to, setTo] = useState(toLocalIso(new Date()))
+  const [from, setFrom] = useStickyState(FILTER_SCOPE, 'from', () => addDays(toLocalIso(new Date()), -30))
+  const [to, setTo] = useStickyState(FILTER_SCOPE, 'to', () => toLocalIso(new Date()))
 
   const { data, isLoading } = useQuery({
     queryKey: ['time-off-import-review', from, to],

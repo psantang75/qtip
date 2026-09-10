@@ -29,6 +29,7 @@ import { SearchableMultiSelect } from '@/components/common/SearchableMultiSelect
 import { useToast } from '@/hooks/use-toast'
 import { t } from '@/lib/t'
 import { useScheduleRole } from '@/hooks/useScheduleRole'
+import { useStickyState } from '@/hooks/useStickyFilters'
 import { MonthCampaignGrid } from '@/components/scheduling/MonthCampaignGrid'
 import { CampaignScheduleEditorDialog } from '@/components/scheduling/CampaignScheduleEditorDialog'
 import { CampaignMonthNav } from '@/components/scheduling/CampaignMonthNav'
@@ -45,7 +46,9 @@ export default function CampaignSchedulePage() {
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
-  const [scheduleId, setScheduleId] = useState<number | null>(null)
+  // Sticky so a manager returns to the schedule they were working, not whichever
+  // one the auto-select below picks first. A stale id is replaced by that effect.
+  const [scheduleId, setScheduleId] = useStickyState<number | null>('scheduling.campaigns', 'scheduleId', null)
   const [editOpen, setEditOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
@@ -68,7 +71,7 @@ export default function CampaignSchedulePage() {
     if (list.length === 0) return
     if (scheduleId != null && list.some(s => s.id === scheduleId)) return
     setScheduleId((list.find(s => s.is_active) ?? list[0]).id)
-  }, [schedulesQ.data, scheduleId])
+  }, [schedulesQ.data, scheduleId, setScheduleId])
 
   const selected = useMemo(() => (schedulesQ.data ?? []).find(s => s.id === scheduleId) ?? null, [schedulesQ.data, scheduleId])
   const publishedMonths = selected?.published_months ?? []

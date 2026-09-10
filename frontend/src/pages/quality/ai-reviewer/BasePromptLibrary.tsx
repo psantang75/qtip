@@ -60,6 +60,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { useToast } from '@/hooks/use-toast'
+import { useStickyState } from '@/hooks/useStickyFilters'
 import { BasePromptVersionHistory } from './BasePromptVersionHistory'
 
 type EditorState =
@@ -84,7 +85,7 @@ export default function BasePromptLibrary() {
   const [params] = useSearchParams()
   const preselectId = params.get('base')
 
-  const [showArchived, setShowArchived] = useState(false)
+  const [showArchived, setShowArchived] = useStickyState('quality.aiReviewer.basePrompts', 'showArchived', false)
   const [editor, setEditor] = useState<EditorState>({ mode: 'closed' })
   const [historyFor, setHistoryFor] = useState<BasePromptDetail | null>(null)
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }])

@@ -40,7 +40,7 @@ export default function ReviewFormsPage() {
     filtered,
     hasFilters,
     resetFilters,
-  } = useFormListFilters(rawForms as FormSummary[])
+  } = useFormListFilters(rawForms as FormSummary[], { scope: 'quality.reviewForms' })
 
   const { sort, dir, toggle, sorted } = useListSort(filtered)
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))

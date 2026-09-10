@@ -42,7 +42,7 @@ export default function WriteUpsPage() {
   const { get, set, setMany, reset, hasAnyFilter } = useUrlFilters({
     csrs: '', statuses: '', types: '', warningId: '',
     from: '', to: '', page: '1', size: '20',
-  })
+  }, 'writeups.list')
 
   const csrsParam   = get('csrs')
   const statusParam = get('statuses')

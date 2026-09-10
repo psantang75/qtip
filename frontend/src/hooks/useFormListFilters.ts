@@ -2,8 +2,9 @@
  * Shared filter state + client-side filtering logic for form list pages
  * (Form Builder list and Review Forms list).
  */
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import type { DateRange } from '@/components/common/DateRangeFilter'
+import { useStickyState } from './useStickyFilters'
 
 interface RawForm {
   form_name?: string
@@ -23,20 +24,22 @@ function formStatusOf(f: RawForm): 'active' | 'inactive' | 'internal' {
 interface UseFormListFiltersOptions {
   /** Initial value for the status filter — 'active' | 'inactive' | 'all' */
   defaultStatus?: string
+  /** Sticky-filter scope, so the two list pages remember their own selections. */
+  scope: string
 }
 
 export function useFormListFilters(
   rawForms: RawForm[],
-  { defaultStatus = 'all' }: UseFormListFiltersOptions = {},
+  { defaultStatus = 'all', scope }: UseFormListFiltersOptions,
 ) {
-  const [search, setSearch]                       = useState('')
-  const [selectedFormNames, setSelectedFormNames] = useState<string[]>([])
-  const [selectedTypes, setSelectedTypes]         = useState<string[]>([])
-  const [statusFilter, setStatusFilter]           = useState(defaultStatus)
-  const [typeFilter, setTypeFilter]               = useState('all')
-  const [dateRange, setDateRange]                 = useState<DateRange>({ start: '', end: '' })
-  const [page, setPage]                           = useState(1)
-  const [pageSize, setPageSize]                   = useState(20)
+  const [search, setSearch]                       = useStickyState(scope, 'search', '')
+  const [selectedFormNames, setSelectedFormNames] = useStickyState<string[]>(scope, 'formNames', [])
+  const [selectedTypes, setSelectedTypes]         = useStickyState<string[]>(scope, 'types', [])
+  const [statusFilter, setStatusFilter]           = useStickyState(scope, 'status', defaultStatus)
+  const [typeFilter, setTypeFilter]               = useStickyState(scope, 'type', 'all')
+  const [dateRange, setDateRange]                 = useStickyState<DateRange>(scope, 'dateRange', { start: '', end: '' })
+  const [page, setPage]                           = useStickyState(scope, 'page', 1)
+  const [pageSize, setPageSize]                   = useStickyState(scope, 'pageSize', 20)
 
   /** Unique types from forms that pass all OTHER active filters (status, selectedFormNames, date)
    *  so the dropdown only lists types present in the current list view. */

@@ -31,7 +31,7 @@ export default function MyWriteUpsPage() {
 
   const { get, setMany, reset, hasAnyFilter } = useUrlFilters({
     statuses: '', types: '', warningId: '', from: '', to: '', page: '1', size: '20',
-  })
+  }, 'writeups.mine')
 
   const statusParam = get('statuses')
   const typeParam   = get('types')

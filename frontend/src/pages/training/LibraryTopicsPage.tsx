@@ -17,6 +17,7 @@ import { RowActionButton } from '@/components/common/RowActionButton'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
+import { useStickyState } from '@/hooks/useStickyFilters'
 
 interface TopicForm {
   linkedResourceIds: number[]
@@ -32,7 +33,7 @@ export default function LibraryTopicsPage() {
   const { toast } = useToast()
 
   const [expanded,     setExpanded]     = useState<Set<number>>(new Set())
-  const [search,       setSearch]       = useState('')
+  const [search,       setSearch]       = useStickyState('training.library.topics', 'search', '')
   const [modalOpen,    setModalOpen]    = useState(false)
   const [editingTopic, setEditingTopic] = useState<ListItem | null>(null)
   const [form,         setForm]         = useState<TopicForm>(EMPTY_FORM)

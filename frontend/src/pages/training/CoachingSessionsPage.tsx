@@ -70,7 +70,7 @@ export default function CoachingSessionsPage() {
     coaches: '', agents: '', statuses: '', formats: '', topics: '',
     from: defaultFrom, to: defaultTo, overdue: '', dueToday: '', sessionId: '',
     page: '1', size: '20', expanded: '',
-  })
+  }, 'training.coachingSessions')
 
   const expandedParam    = get('expanded')
   const expandedBatches  = useMemo(() => new Set(expandedParam ? expandedParam.split(',').filter(Boolean) : []), [expandedParam])
