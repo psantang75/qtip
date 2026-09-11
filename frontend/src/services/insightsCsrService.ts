@@ -8,6 +8,7 @@
  */
 import { api } from './authService'
 import type { AAParams, CallActivityResponse, PastDueItem, PastDueQuery, TicketsTasksResponse, TicketDailyPoint, TicketHistoryParams, TicketProductivityRow } from './insightsService'
+import type { CallLengthResponse } from '@/types/callLength'
 
 export interface AttendanceParams {
   users?: string
@@ -155,6 +156,15 @@ export const getAttendanceDayOfWeek = async (
 
 export const getCsrCallActivity = async (p: AAParams): Promise<CallActivityResponse> => {
   const response = await api.get('/insights/csr/call', { params: p })
+  return response.data
+}
+
+// ── Call Length ──────────────────────────────────────────────────────────────
+// Handle-time distribution over ie_fact_support_call. Period-based, and takes
+// the same agent/department filters as Call Activity above it.
+
+export const getCsrCallLength = async (p: AAParams): Promise<CallLengthResponse> => {
+  const response = await api.get('/insights/csr/call-length', { params: p })
   return response.data
 }
 

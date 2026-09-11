@@ -117,6 +117,7 @@ const AAProductivityPage     = React.lazy(() => import('../pages/insights/AAProd
 const WorkloadTouchValidationPage = React.lazy(() => import('../pages/insights/WorkloadTouchValidationPage'))
 const AAEmailActivityPage    = React.lazy(() => import('../pages/insights/AAEmailActivityPage'))
 const CSRCallActivityPage    = React.lazy(() => import('../pages/insights/CSRCallActivityPage'))
+const CSRCallLengthPage      = React.lazy(() => import('../pages/insights/CSRCallLengthPage'))
 const CSRAttendancePage      = React.lazy(() => import('../pages/insights/CSRAttendancePage'))
 const CSRAdherencePage       = React.lazy(() => import('../pages/insights/CSRAdherencePage'))
 const CSRTicketsTasksPage    = React.lazy(() => import('../pages/insights/CSRTicketsTasksPage'))
@@ -430,6 +431,7 @@ export default function AppRoutes(): React.ReactElement {
             <Route path="aa-email"    element={<RequireInsightsAccess pageKey="aa_sales_email"><PageLoader><AAEmailActivityPage /></PageLoader></RequireInsightsAccess>} />
             {/* Agent Activity - CSR */}
             <Route path="csr-call"       element={<RequireInsightsAccess pageKey="csr_call"><PageLoader><CSRCallActivityPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="csr-call-length" element={<RequireInsightsAccess pageKey="csr_call_length"><PageLoader><CSRCallLengthPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-attendance" element={<RequireInsightsAccess pageKey="csr_attendance"><PageLoader><CSRAttendancePage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-adherence" element={<RequireInsightsAccess pageKey="csr_adherence"><PageLoader><CSRAdherencePage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-tickets"    element={<RequireInsightsAccess pageKey="csr_tickets"><PageLoader><CSRTicketsTasksPage /></PageLoader></RequireInsightsAccess>} />
