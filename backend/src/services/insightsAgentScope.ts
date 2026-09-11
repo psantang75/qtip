@@ -32,3 +32,54 @@ export function areaDeptGuard(area: Area, alias = 'dpt'): { sql: string; params:
     : `(${alias}.hierarchy_path = ? OR ${alias}.hierarchy_path LIKE CONCAT(?, '/%'))`;
   return { sql, params: [SALES_DEPT_ROOT_PATH, SALES_DEPT_ROOT_PATH] };
 }
+
+export interface EmployeeJoinOptions {
+  /** Alias of the fact/source table holding the employee foreign key. Default `f`. */
+  factAlias?: string;
+  /** Employee foreign key column. Default `<factAlias>.employee_key`. */
+  factColumn?: string;
+  /** Alias bound to the employee's CURRENT row — what callers should read. Default `e`. */
+  alias?: string;
+  /** Alias bound to the (possibly superseded) row the fact points at. Default `fe`. */
+  versionAlias?: string;
+  /** Emit LEFT JOINs, for readers that keep rows with no employee match. */
+  left?: boolean;
+  /** Extra predicate on the current row, e.g. `e.is_active = 1`. */
+  extra?: string;
+}
+
+/**
+ * Join a fact to the employee's CURRENT dimension row, surviving Type-2 churn.
+ *
+ * `ie_dim_employee` is a Type-2 dimension: EmployeeSyncWorker responds to a
+ * change of department, role, title, manager or active flag by closing the
+ * existing row (`is_current = 0`) and inserting a new one with a NEW
+ * `employee_key`. Facts are stamped with whichever key was current when they
+ * were LOADED, so the obvious join —
+ *
+ *     JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key
+ *
+ * — stops matching every row loaded before that person's most recent change.
+ * With an inner join their history silently disappears from the report instead
+ * of moving departments; with a left join it survives but reads as unattributed.
+ * Either way the report quietly loses data, and it gets worse with every reorg.
+ *
+ * So resolve through the business key: land on the row the fact actually points
+ * at to read `user_id`, then hop to that user's current row. Attribution is
+ * therefore always by CURRENT department and role — move an agent to Tech
+ * Support and their whole history moves with them — and no row is ever dropped
+ * for predating a change. Both hops hit a dimension of a few dozen rows.
+ *
+ * Read every employee attribute off `alias` (the current row). `versionAlias`
+ * exists only to carry `user_id` across, and is what the as-of-load state looked
+ * like — do not filter on it.
+ */
+export function currentEmployeeJoin(opts: EmployeeJoinOptions = {}): string {
+  const {
+    factAlias = 'f', alias = 'e', versionAlias = 'fe', left = false, extra,
+  } = opts;
+  const factColumn = opts.factColumn ?? `${factAlias}.employee_key`;
+  const join = left ? 'LEFT JOIN' : 'JOIN';
+  return `${join} ie_dim_employee ${versionAlias} ON ${versionAlias}.employee_key = ${factColumn}
+     ${join} ie_dim_employee ${alias} ON ${alias}.is_current = 1 AND ${alias}.user_id = ${versionAlias}.user_id${extra ? ` AND ${extra}` : ''}`;
+}

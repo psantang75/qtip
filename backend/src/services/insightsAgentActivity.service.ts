@@ -24,7 +24,7 @@ import {
 // The "who is an agent" rule (CSR role + Sales-subtree guard) lives in one place
 // so this reader, the Productivity roster/day services, and the Workload
 // aggregator cannot drift apart. See insightsAgentScope for the guard itself.
-import { AGENT_ROLE, SALES_DEPT_ROOT_PATH } from './insightsAgentScope';
+import { AGENT_ROLE, SALES_DEPT_ROOT_PATH, currentEmployeeJoin } from './insightsAgentScope';
 
 /** Direction that counts as a "sent" email on the Email Activity report. */
 const SENT_DIRECTION = 'Outbound';
@@ -36,8 +36,13 @@ const SENT_DIRECTION = 'Outbound';
  * AND the filter dropdowns — is limited to that one employee. Injected into the
  * base (not the layered) predicate so the user can never widen past themselves.
  * No-op for ALL scope (selfEmployeeKey == null), leaving admin/manager views
- * unchanged. Every AA fact table conforms on `f.employee_key`, so this is the
- * single uniform hook across all five reports.
+ * unchanged. Every AA reader joins the employee dimension the same way, so this
+ * is the single uniform hook across all five reports.
+ *
+ * Pins the CURRENT dimension row (`e`), never the fact's own `employee_key`:
+ * ie_dim_employee is Type-2, so the caller's key is their current one while
+ * their older facts carry superseded keys. Filtering the fact column would hide
+ * a SELF viewer's own history from them after any change to their record.
  */
 function applySelfScope(
   baseWhere: string[],
@@ -45,7 +50,7 @@ function applySelfScope(
   selfEmployeeKey?: number | null,
 ): void {
   if (selfEmployeeKey != null) {
-    baseWhere.push('f.employee_key = ?');
+    baseWhere.push('e.employee_key = ?');
     baseParams.push(selfEmployeeKey);
   }
 }
@@ -323,7 +328,7 @@ export async function getEmailActivity(filters: EmailActivityFilters): Promise<E
   // and within the Sales Department - All subtree. The employee + department
   // joins enforce the sales-only rule (and drop unmatched mailboxes). The
   // sales-path test matches the rollup node itself OR any descendant department.
-  const EMP_JOIN = `JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key`;
+  const EMP_JOIN = currentEmployeeJoin();
   const DEPT_JOIN = `JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key`;
   const baseWhere = [
     'f.email_direction = ?',
@@ -521,7 +526,7 @@ export async function getCallActivity(filters: CallActivityFilters): Promise<Cal
   // Base predicate: Inbound/Outbound only, in-period, CSR role, section subtree.
   // 'sales' keeps the Sales Department - All subtree; 'csr' reads its complement
   // (COALESCE so a not-yet-backfilled hierarchy_path still counts as non-Sales).
-  const EMP_JOIN = `JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key`;
+  const EMP_JOIN = currentEmployeeJoin();
   const DEPT_JOIN = `JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key`;
   const DATE_JOIN = `JOIN ie_dim_date d ON d.date_key = f.date_key`;
   const deptGuard = filters.area === 'csr'
@@ -811,7 +816,7 @@ function ticketTaskBase(area: 'sales' | 'csr' | undefined, selfEmployeeKey?: num
   applySelfScope(baseWhere, baseParams, selfEmployeeKey);
 
   return {
-    EMP_JOIN: 'JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key',
+    EMP_JOIN: currentEmployeeJoin(),
     DEPT_JOIN: 'JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key',
     baseWhere,
     baseParams,
@@ -1093,13 +1098,13 @@ export async function captureDailyTicketTotals(now: Date = new Date()): Promise<
     const [result] = await pool.query<ResultSetHeader>(
       `INSERT IGNORE INTO ie_ticket_task_daily
          (snapshot_date, area, employee_key, agent_name, department_name, cur, due_today, past_due)
-       SELECT ?, ?, f.employee_key, f.agent_name, dpt.department_name,
+       SELECT ?, ?, e.employee_key, f.agent_name, dpt.department_name,
               ${TICKET_CUR_EXPR} AS cur, ${TICKET_DUE_EXPR} AS due_today, ${TICKET_PAST_EXPR} AS past_due
        FROM ie_fact_ticket_task f
        ${EMP_JOIN}
        ${DEPT_JOIN}
        WHERE ${baseWhere.join(' AND ')}
-       GROUP BY f.employee_key, f.agent_name, dpt.department_name
+       GROUP BY e.employee_key, f.agent_name, dpt.department_name
        HAVING cur > 0 OR due_today > 0 OR past_due > 0`,
       // etDate twice-over: the INSERT's snapshot_date + area, then the three
       // bucket predicates (Current/Due/Past) all keyed to ET today.
@@ -1229,7 +1234,7 @@ export async function getTicketProductivity(filters: TicketProductivityFilters):
   const where = ['d.area = ?', 'd.snapshot_date BETWEEN ? AND ?'];
   const params: (string | number)[] = [filters.area, startDate, endDate];
   if (filters.selfEmployeeKey != null) {
-    where.push('d.employee_key = ?');
+    where.push('e.employee_key = ?');
     params.push(filters.selfEmployeeKey);
   }
   if (filters.departments?.length) {
@@ -1251,14 +1256,14 @@ export async function getTicketProductivity(filters: TicketProductivityFilters):
 
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT DATE_FORMAT(d.snapshot_date, '%Y-%m-%d') AS date,
-            MAX(d.agent_name) AS agent, MAX(d.department_name) AS department, d.employee_key AS employeeKey,
+            MAX(d.agent_name) AS agent, MAX(d.department_name) AS department, e.employee_key AS employeeKey,
             ${segSelect}
             SUM(d.beginning) AS beginning, SUM(d.new_assigned) AS newAssigned,
             SUM(d.touched) AS touched, SUM(d.closed) AS closed
      FROM ie_ticket_task_productivity_daily d
-     JOIN ie_dim_employee e ON e.is_current = 1 AND e.is_active = 1 AND e.employee_key = d.employee_key
+     ${currentEmployeeJoin({ factAlias: 'd', extra: 'e.is_active = 1' })}
      WHERE ${where.join(' AND ')}
-     GROUP BY d.snapshot_date, d.employee_key${segGroup}
+     GROUP BY d.snapshot_date, e.employee_key${segGroup}
      ORDER BY agent, date`,
     params,
   );
@@ -1591,7 +1596,7 @@ export async function getLeads(filters: LeadsFilters): Promise<LeadsResult> {
   const toKey = toDateKey(current.end);
   const todayKey = toDateKey(new Date());
 
-  const EMP_JOIN = `JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key`;
+  const EMP_JOIN = currentEmployeeJoin();
   const DEPT_JOIN = `JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key`;
   const baseWhere = [
     'f.date_key BETWEEN ? AND ?',
@@ -1791,7 +1796,7 @@ export async function getMargin(filters: MarginFilters): Promise<MarginResult> {
   const todayKey = toDateKey(new Date());
   const naturalEndKey = toDateKey(periodNaturalEnd(filters.period, current.start, current.end));
 
-  const EMP_JOIN = `JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key`;
+  const EMP_JOIN = currentEmployeeJoin();
   const DEPT_JOIN = `JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key`;
   const baseWhere = [
     'f.date_key BETWEEN ? AND ?',

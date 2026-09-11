@@ -23,7 +23,7 @@
 import { RowDataPacket } from 'mysql2';
 import pool from '../../config/database';
 // Same "who is an agent" rule the live pipeline uses — imported, not re-declared.
-import { AGENT_ROLE, SALES_DEPT_ROOT_PATH } from '../../services/insightsAgentScope';
+import { AGENT_ROLE, SALES_DEPT_ROOT_PATH, currentEmployeeJoin } from '../../services/insightsAgentScope';
 
 /** The one task type the Sales Productivity page splits out from everything else. */
 const CONTACT_MANAGER_TITLE = 'Contact Manager';
@@ -344,7 +344,7 @@ export async function liveReportTotals(): Promise<Record<string, AreaTotals>> {
             SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) = CURDATE()) AS due_today,
             SUM(f.next_contact IS NOT NULL AND DATE(f.next_contact) < CURDATE()) AS past_due
      FROM ie_fact_ticket_task f
-     JOIN ie_dim_employee e ON e.is_current = 1 AND e.employee_key = f.employee_key AND e.role_name = '${AGENT_ROLE}'
+     ${currentEmployeeJoin({ extra: `e.role_name = '${AGENT_ROLE}'` })}
      JOIN ie_dim_department dpt ON dpt.is_current = 1 AND dpt.department_key = e.department_key
      GROUP BY area`,
     [SALES_DEPT_ROOT_PATH, SALES_DEPT_ROOT_PATH],
