@@ -15,19 +15,28 @@ export type RoutingSpan = StatusSpan<RoutingStatus>
 export type PresenceSpan = StatusSpan<PresenceStatus>
 export type ClockSpan = StatusSpan<ClockStatus>
 
-/** One conversation leg the agent participated in. */
+/**
+ * One conversation leg the agent participated in.
+ *
+ * The durations are SECONDS, as Genesys reports them, and the end of the call is
+ * derived from them rather than sent — carrying whole minutes dropped every call
+ * shorter than 30 seconds to nothing, which understated talk time and AHT
+ * against the roster and left those calls zero-length on the timeline.
+ */
 export interface CallSpan {
   conversationId: string
+  /** Local "HH:MM" (24h) the agent connected; Genesys minute resolution. */
   start: string
-  end: string
   direction: CallDirection
   /** False when the call alerted but was never answered (Genesys NOT_RESPONDING). */
   answered: boolean
   /** True when the call was offered through a queue; false for direct/outbound. */
   acd: boolean
-  holdMins: number
+  /** Talk time (Genesys Interact segments). Zero for a call never answered. */
+  talkSec: number
+  holdSec: number
   /** After-call work (Genesys Wrapup segment). */
-  wrapMins: number
+  wrapSec: number
   /** Passed to another agent or queue instead of being resolved on this call. */
   transferred: boolean
 }

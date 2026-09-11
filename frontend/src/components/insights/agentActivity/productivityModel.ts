@@ -3,13 +3,10 @@
  * into the presentational model the timeline and summary panels render, so the
  * components stay layout-only.
  *
- * Every segment carries its own `leftPct` / `widthPct` against the shared day
- * axis — rows must be absolutely positioned rather than flex-proportional, or a
- * stream that starts later than the axis (the punch clock against an earlier
- * scheduled start, for example) silently stretches to fill the row and stops
- * lining up with the hour ticks.
- *
- * Color tokens and status vocabularies live in `productivityStatus.ts`.
+ * Timeline geometry (the shared axis, segment placement) and the Status row's
+ * reconciliation of the routing and presence streams live in
+ * `productivitySegments.ts`; color tokens and status vocabularies live in
+ * `productivityStatus.ts`.
  */
 
 import type {
@@ -17,15 +14,25 @@ import type {
 } from './productivityTypes'
 import {
   PRESENCE_ORDER, isEngaged, isOnQueue,
-  type CallLabel, type ClockStatus, type PresenceStatus, type RoutingStatus,
+  type CallLabel, type ClockStatus, type PresenceStatus,
 } from './productivityStatus'
+import {
+  BLOCK_MIN, buildStatusSegments, makeAxis, place, toMin, toStatusBlocks,
+} from './productivitySegments'
+import type { Segment, StatusBlock, StatusSegment } from './productivitySegments'
+
+export { BLOCK_MIN }
+export type { Segment, StatusBlock, StatusSegment, StatusSlice } from './productivitySegments'
 
 // ── Formatting ──────────────────────────────────────────────────────────────
 
-const toMin = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m }
-
-/** Minutes → compact "Xh Ym" (e.g. 402 → "6h 42m", 45 → "45m"). */
+/**
+ * Minutes → compact "Xh Ym" (e.g. 402 → "6h 42m", 45 → "45m"). A non-zero span
+ * under a minute reports seconds instead of collapsing to "0m", which is what a
+ * slot holding nothing but quick dials would otherwise show.
+ */
 export function fmtHM(mins: number): string {
+  if (mins > 0 && mins < 1) return `${Math.round(mins * 60)}s`
   const h = Math.floor(mins / 60)
   const m = Math.round(mins % 60)
   return h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h ${m}m`
@@ -39,9 +46,11 @@ export function fmtMS(mins: number): string {
   return `${m}m ${String(s).padStart(2, '0')}s`
 }
 
-/** Minutes-from-midnight → "9:05 AM". */
+/** Minutes-from-midnight → "9:05 AM". Rounds, so a fractional call end still
+ *  prints a clock time rather than "9:47.2 AM". */
 export function fmtClock(mins: number): string {
-  const h = Math.floor(mins / 60), m = mins % 60
+  const t = Math.round(mins)
+  const h = Math.floor(t / 60), m = t % 60
   const ampm = h >= 12 ? 'PM' : 'AM'
   const h12 = h % 12 || 12
   return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
@@ -49,20 +58,11 @@ export function fmtClock(mins: number): string {
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
-export interface Segment<T extends string> {
-  status: T
-  mins: number
-  startMin: number
-  endMin: number
-  leftPct: number
-  widthPct: number
-}
-
-/** A routing-status run, annotated with the presence reason when off queue. */
-export interface StatusSegment extends Segment<RoutingStatus> {
-  reason: PresenceStatus | null
-}
-
+/**
+ * One call placed on the axis. The minute figures are FRACTIONAL — they come
+ * straight from the Genesys second counts — so a 13-second call is 0.22 minutes
+ * rather than nothing.
+ */
 export interface CallMark {
   leftPct: number; widthPct: number; label: CallLabel; mins: number
   startMin: number; endMin: number; conversationId: string; acd: boolean
@@ -94,22 +94,7 @@ export interface TicketBlock {
   completed: number; updated: number; ids: TicketEvent['ids']
 }
 
-/**
- * A single 5-minute bar of the phone Status row. The row is drawn as a
- * continuous run of these bars so the day reads as discrete five-minute blocks
- * rather than a few long runs. The bar is coloured by whichever status covered
- * most of its five minutes; the exact status runs (and any shorter switches
- * hiding inside the block) are listed in the bar's hover detail.
- */
-export interface StatusBlock {
-  startMin: number; leftPct: number; widthPct: number
-  status: RoutingStatus; reason: PresenceStatus | null
-}
-
 export interface SummaryRow<T extends string> { status: T; mins: number; pct: number }
-
-/** The activity timeline is quantised to this grid, in minutes. */
-export const BLOCK_MIN = 5
 
 /** The fixed on-screen axis window: 8:00 AM to 6:30 PM. Activity outside it
  *  extends the axis and scrolls into view rather than rescaling the day. */
@@ -142,7 +127,8 @@ export interface DayModel {
   scheduleSegments: ScheduleSegment[]
   statusSegments: StatusSegment[]
   clockSegments: Segment<ClockStatus>[]
-  /** Phone Status, drawn as a continuous run of 5-minute bars. */
+  /** Phone Status, drawn as a continuous run of 5-minute bars, each filled at
+   *  minute resolution from its own slices. */
   statusBlocks: StatusBlock[]
   /** Calls and tickets, aggregated into 5-minute blocks for the timeline. */
   callBlocks: CallBlock[]
@@ -155,6 +141,8 @@ export interface DayModel {
   timeAccounting: TimeBucket[]
   callSummary: {
     total: number; answered: number; missed: number; inbound: number; outbound: number
+    /** Fractional minutes, summed from the Genesys second counts, so these agree
+     *  with the roster's handle time to the second. */
     talkMins: number; holdMins: number; wrapMins: number
     /** Talk + hold + after-call work: the whole cost of handling calls. */
     handleMins: number
@@ -227,12 +215,10 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   const schedEnd = sched ? toMin(sched.end) : null
 
   // An agent who never joins a phone queue (e.g. an admin who does not take
-  // calls) has no routing status at all — Genesys only records their presence.
-  // Fall back to the presence stream so the Status row and Phone Status card
-  // still show what they were doing (Available / Break / Meal / Away), drawn as
-  // off-queue reasons. Queue agents (any routing at all) are unaffected.
-  const usePresenceStatus = routing.length === 0 && presence.length > 0
-  const statusSpans = usePresenceStatus ? presence : routing
+  // calls) has no routing status at all — Genesys only records their presence,
+  // and `buildStatusSegments` falls back to it. The axis has to bound whichever
+  // stream the Status row ends up drawing.
+  const statusSpans = routing.length === 0 ? presence : routing
 
   // The axis spans everything on screen — including the planned shift — so no
   // row can overflow the shared time window.
@@ -252,68 +238,20 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   // pixels-per-minute width), it is never squeezed to fit.
   const startMin = hasData ? Math.min(WINDOW_START, Math.floor(workedStart / 60) * 60) : WINDOW_START
   const endMin = hasData ? Math.max(WINDOW_END, Math.ceil(workedEnd / 60) * 60) : WINDOW_END
-  const total = Math.max(1, endMin - startMin)
+  const axis = makeAxis(startMin, endMin)
+  const blockWidth = axis.span(BLOCK_MIN)
 
-  const pct = (m: number) => ((m - startMin) / total) * 100
-  const place = <T extends string>(s: { start: string; end: string; status: T }): Segment<T> => {
-    const a = toMin(s.start), b = toMin(s.end)
-    return { status: s.status, startMin: a, endMin: b, mins: b - a, leftPct: pct(a), widthPct: ((b - a) / total) * 100 }
-  }
+  const clockSegments = (day?.clock ?? []).map(s => place<ClockStatus>(axis, s))
 
-  const blockWidth = (BLOCK_MIN / total) * 100
-
-  /**
-   * Cut a set of exact runs into a continuous row of 5-minute bars, each carrying
-   * the run that covered most of it plus a count of the shorter switches inside.
-   * Only slots that fall inside a run get a bar, so the empty time before and
-   * after the shift stays blank rather than drawing empty bars.
-   */
-  function toBlocks<S extends { startMin: number; endMin: number }>(segs: S[]): { startMin: number; leftPct: number; widthPct: number; cover: S }[] {
-    const out: { startMin: number; leftPct: number; widthPct: number; cover: S }[] = []
-    if (!hasData) return out
-    for (let s = startMin; s < endMin; s += BLOCK_MIN) {
-      const e = s + BLOCK_MIN
-      let cover: S | null = null, best = 0
-      for (const seg of segs) {
-        const ov = Math.min(seg.endMin, e) - Math.max(seg.startMin, s)
-        if (ov <= 0) continue
-        if (ov > best) { best = ov; cover = seg }
-      }
-      if (cover) out.push({ startMin: s, leftPct: pct(s), widthPct: blockWidth, cover })
-    }
-    return out
-  }
-
-  const clockSegments = (day?.clock ?? []).map(s => place<ClockStatus>(s))
-
-  // Off-queue runs are labelled with whichever presence span covers their
-  // midpoint, so the timeline can name the reason without a second row. In the
-  // presence-only fallback each presence span is itself an off-queue run whose
-  // reason is the presence status, so it colours by the same reason vocabulary.
-  const statusSegments: StatusSegment[] = usePresenceStatus
-    ? presence.map(p => ({
-        ...place<RoutingStatus>({ start: p.start, end: p.end, status: 'OFF_QUEUE' }),
-        reason: p.status,
-      }))
-    : routing.map(s => {
-        const seg = place<RoutingStatus>(s)
-        if (isOnQueue(seg.status)) return { ...seg, reason: null }
-        const mid = (seg.startMin + seg.endMin) / 2
-        const hit = presence.find(p => toMin(p.start) <= mid && toMin(p.end) >= mid)
-        return { ...seg, reason: hit?.status ?? null }
-      })
-
-  const statusBlocks: StatusBlock[] = toBlocks(statusSegments).map(b => ({
-    startMin: b.startMin, leftPct: b.leftPct, widthPct: b.widthPct,
-    status: b.cover.status, reason: b.cover.reason,
-  }))
+  const statusSegments: StatusSegment[] = buildStatusSegments(axis, routing, presence)
+  const statusBlocks: StatusBlock[] = hasData ? toStatusBlocks(axis, statusSegments) : []
 
   const scheduleBar: ScheduleBar | null = sched && schedStart !== null && schedEnd !== null
-    ? { leftPct: pct(schedStart), widthPct: ((schedEnd - schedStart) / total) * 100, startMin: schedStart, endMin: schedEnd }
+    ? { leftPct: axis.at(schedStart), widthPct: axis.span(schedEnd - schedStart), startMin: schedStart, endMin: schedEnd }
     : null
   const scheduleSegments: ScheduleSegment[] = (sched?.breaks ?? []).map(b => {
     const s = toMin(b.start), e = toMin(b.end)
-    return { leftPct: pct(s), widthPct: ((e - s) / total) * 100, kind: b.kind, startMin: s, endMin: e }
+    return { leftPct: axis.at(s), widthPct: axis.span(e - s), kind: b.kind, startMin: s, endMin: e }
   })
 
   // A "missed" call is an inbound/queued call that alerted and went unanswered.
@@ -323,13 +261,17 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   const callMarks: CallMark[] = (day?.calls ?? [])
     .filter((c: CallSpan) => c.answered || c.acd)
     .map((c: CallSpan) => {
-      const s = toMin(c.start), e = toMin(c.end)
+      const s = toMin(c.start)
+      const mins = c.talkSec / 60
       return {
-        leftPct: Math.max(0, pct(s)),
-        widthPct: Math.max(0.4, ((e - s) / total) * 100),
+        leftPct: Math.max(0, axis.at(s)),
+        // A call too short to be visible at this scale still has to be findable,
+        // hence the floor on the width.
+        widthPct: Math.max(0.4, axis.span(mins)),
         label: !c.answered ? 'Missed' : c.direction,
-        mins: e - s, startMin: s, endMin: e,
-        conversationId: c.conversationId, acd: c.acd, holdMins: c.holdMins, wrapMins: c.wrapMins,
+        mins, startMin: s, endMin: s + mins,
+        conversationId: c.conversationId, acd: c.acd,
+        holdMins: c.holdSec / 60, wrapMins: c.wrapSec / 60,
       }
     })
 
@@ -364,10 +306,21 @@ export function buildDayModel(day: AgentDay | null): DayModel {
         })
       }
       if (calls.length > 0) {
+        // Colour by what dominated the block. Talk minutes decide that when there
+        // are any; a block can still hold answered calls and no talk time at all
+        // (a zero-length Interact segment), so fall back to counting the calls.
+        // A block only goes red when nothing in it was answered — inferring the
+        // miss from absent talk time is what used to turn a slot of quick dials
+        // red while its own hover listed no missed call.
+        const answered = calls.filter(c => c.label !== 'Missed')
+        const inboundCalls = answered.filter(c => c.label === 'Inbound').length
+        const outboundCalls = answered.length - inboundCalls
         const tone: CallBlock['tone'] =
-          inboundMins === 0 && outboundMins === 0 ? 'missed' :
-          inboundMins >= outboundMins ? 'inbound' : 'outbound'
-        callBlocks.push({ startMin: s, leftPct: pct(s), widthPct: blockWidth, tone, inboundMins, outboundMins, missed, calls })
+          answered.length === 0 ? 'missed' :
+          inboundMins > 0 || outboundMins > 0
+            ? (inboundMins >= outboundMins ? 'inbound' : 'outbound')
+            : (inboundCalls >= outboundCalls ? 'inbound' : 'outbound')
+        callBlocks.push({ startMin: s, leftPct: axis.at(s), widthPct: blockWidth, tone, inboundMins, outboundMins, missed, calls })
       }
 
       // Tickets: touches are instantaneous, so a slot simply gathers the events
@@ -383,7 +336,7 @@ export function buildDayModel(day: AgentDay | null): DayModel {
       }
       if (ids.length > 0) {
         ticketBlocks.push({
-          startMin: s, leftPct: pct(s), widthPct: blockWidth,
+          startMin: s, leftPct: axis.at(s), widthPct: blockWidth,
           tone: completed >= updated ? 'completed' : 'updated', completed, updated, ids,
         })
       }
@@ -403,7 +356,7 @@ export function buildDayModel(day: AgentDay | null): DayModel {
         inHour === 30 ? 'half' :
         inHour === 15 || inHour === 45 ? 'quarter' :
         'five'
-      axisTicks.push({ min: m, leftPct: pct(m), tier, label: tier === 'hour' ? fmtClock(m) : null })
+      axisTicks.push({ min: m, leftPct: axis.at(m), tier, label: tier === 'hour' ? fmtClock(m) : null })
     }
   }
 
@@ -452,8 +405,8 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   const calls = day?.calls ?? []
   const answered = calls.filter(c => c.answered)
   const talkMins = callMarks.filter(c => c.label !== 'Missed').reduce((a, c) => a + c.mins, 0)
-  const holdMins = calls.reduce((a, c) => a + c.holdMins, 0)
-  const wrapMins = calls.reduce((a, c) => a + c.wrapMins, 0)
+  const holdMins = calls.reduce((a, c) => a + c.holdSec / 60, 0)
+  const wrapMins = calls.reduce((a, c) => a + c.wrapSec / 60, 0)
   const perCall = Math.max(1, answered.length)
   const out = day?.outbound ?? { dials: 0, connected: 0, voicemail: 0, noAnswer: 0 }
   const callSummary = {
@@ -469,7 +422,7 @@ export function buildDayModel(day: AgentDay | null): DayModel {
     ahtMins: (talkMins + holdMins + wrapMins) / perCall,
     acwMins: wrapMins / perCall,
     transferred: answered.filter(c => c.transferred).length,
-    heldCount: calls.filter(c => c.holdMins > 0).length,
+    heldCount: calls.filter(c => c.holdSec > 0).length,
     longestMins: callMarks.filter(c => c.label !== 'Missed').reduce((a, c) => Math.max(a, c.mins), 0),
     underOneMin: callMarks.filter(c => c.label !== 'Missed' && c.mins < 1).length,
     overOneMin: callMarks.filter(c => c.label !== 'Missed' && c.mins >= 1).length,

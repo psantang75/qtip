@@ -94,7 +94,7 @@ export const offQueueCls = (reason: PresenceStatus | null): string =>
  * first (shared by the Clock and Status rows), then the two streams that reuse
  * those same brand tones with their own labels.
  */
-export interface LegendItem { label: string; cls: string; outline?: boolean }
+export interface LegendItem { label: string; cls: string }
 export const CHART_LEGEND_GROUPS: { group: string; items: LegendItem[] }[] = [
   {
     group: 'Phone status',
@@ -117,7 +117,7 @@ export const CHART_LEGEND_GROUPS: { group: string; items: LegendItem[] }[] = [
     items: [
       { label: 'Inbound', cls: TONE.ready },
       { label: 'Outbound', cls: TONE.work },
-      { label: 'Missed', cls: 'border border-destructive bg-white', outline: true },
+      { label: 'Missed', cls: TONE.alert },
     ],
   },
   {
@@ -172,7 +172,7 @@ export const CLOCK_CLS: Record<ClockStatus, string> = {
 }
 
 // Direction reuses the brand tones (teal in, blue out) rather than new hues;
-// a missed call is drawn as a red outline by the timeline, not a fill.
+// a missed call is the attention tone, filled like every other call block.
 export const CALL_CLS: Record<CallLabel, string> = {
   'Inbound':  TONE.ready,
   'Outbound': TONE.work,

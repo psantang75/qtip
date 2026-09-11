@@ -26,9 +26,11 @@ import type { Area } from './insightsAgentScope';
 export type { Area };
 
 interface Span { start: string; end: string; status: string }
+/** Durations in SECONDS; the call's end is derived from talkSec by the client. */
 interface CallSpan {
-  conversationId: string; start: string; end: string; direction: 'Inbound' | 'Outbound';
-  answered: boolean; acd: boolean; holdMins: number; wrapMins: number; transferred: boolean;
+  conversationId: string; start: string; direction: 'Inbound' | 'Outbound';
+  answered: boolean; acd: boolean;
+  talkSec: number; holdSec: number; wrapSec: number; transferred: boolean;
 }
 interface TicketTouch {
   itemType: 'task' | 'ticket';
@@ -51,9 +53,6 @@ export interface AgentDay {
 }
 
 const phonePool = () => getDatabasePool('phone');
-
-const toMin = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
-const toHHMM = (min: number) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
 /**
  * Punch datetimes are stored as UTC instants and the process is pinned to
@@ -167,6 +166,11 @@ async function loadPresence(guid: string, dayStart: string, dayEnd: string): Pro
  * One row per conversation the agent took part in, with the Genesys segments
  * folded into the handle measures the model needs: Interact = answered + talk,
  * Hold = hold time, Wrapup = after-call work, a Transfer disconnect = transferred.
+ *
+ * The three durations are handed over in SECONDS, exactly as Genesys reports
+ * them. Rounding them to minutes here erased every call shorter than 30 seconds,
+ * which both understated talk time against the roster (which has always summed
+ * raw seconds) and left such a call zero-length on the timeline.
  */
 async function loadCalls(guid: string, dayStart: string, dayEnd: string): Promise<{ calls: CallSpan[]; outbound: AgentDay['outbound'] }> {
   const [rows] = await phonePool().query<RowDataPacket[]>(
@@ -192,18 +196,17 @@ async function loadCalls(guid: string, dayStart: string, dayEnd: string): Promis
   const calls: CallSpan[] = rows.map((r) => {
     const direction: 'Inbound' | 'Outbound' = r.dir === 'Inbound' ? 'Inbound' : 'Outbound';
     const answered = Number(r.answered) === 1;
-    const talkMin = Math.round(Number(r.talkSec || 0) / 60);
-    const holdMins = Math.round(Number(r.holdSec || 0) / 60);
-    const wrapMins = Math.round(Number(r.wrapSec || 0) / 60);
-    const start = String(r.startHm);
-    const end = answered ? toHHMM(toMin(start) + talkMin) : start;
     if (direction === 'Outbound') {
       outbound.dials += 1;
       if (answered) outbound.connected += 1; else outbound.noAnswer += 1;
     }
     return {
-      conversationId: String(r.cid), start, end, direction, answered,
-      acd: direction === 'Inbound', holdMins, wrapMins, transferred: Number(r.transferred) === 1,
+      conversationId: String(r.cid), start: String(r.startHm), direction, answered,
+      acd: direction === 'Inbound',
+      talkSec: answered ? Number(r.talkSec || 0) : 0,
+      holdSec: Number(r.holdSec || 0),
+      wrapSec: Number(r.wrapSec || 0),
+      transferred: Number(r.transferred) === 1,
     };
   });
   return { calls, outbound };

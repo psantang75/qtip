@@ -5,6 +5,7 @@ import { BLOCK_MIN, WINDOW_END, WINDOW_START, fmtClock, fmtHM, type AxisTick, ty
 import {
   CALL_CLS, CHART_LEGEND_GROUPS, CLOCK_CLS, offQueueCls, ROUTING_CLS, ROUTING_LABEL,
   SCHEDULE_TRACK, TICKET_CLS, TRACK,
+  type PresenceStatus, type RoutingStatus,
 } from './productivityStatus'
 import CallTranscriptModal from './CallTranscriptModal'
 
@@ -47,6 +48,10 @@ const TICKET_TONE: Record<'completed' | 'updated', string> = {
   completed: TICKET_CLS.Completed,
   updated:   TICKET_CLS.Updated,
 }
+
+/** The fill for one status run — an off-queue run takes its presence reason's hue. */
+const statusCls = (status: RoutingStatus, reason: PresenceStatus | null) =>
+  status === 'OFF_QUEUE' ? offQueueCls(reason) : ROUTING_CLS[status]
 
 /** Title Case for the status/label text shown in hovers (e.g. "queued call" →
  *  "Queued Call"), leaving the "·" separators and numeric spans untouched. */
@@ -235,9 +240,12 @@ export default function ActivityGantt({ model }: { model: DayModel }) {
             ))}
           </TimelineRow>
 
-          {/* Genesys routing status, as 5-minute bars. Each bar takes the colour
-              of whatever status covered most of it; the hover lists the actual
-              status runs (with their real time ranges) that fell in the block. */}
+          {/* Genesys routing status, as 5-minute bars. A bar that holds a single
+              status is one solid colour; one that spans a switch — a meeting
+              running into a break — is filled from its minute slices, so the
+              boundary sits where it really fell instead of rounding to the
+              nearest five. The hover lists the actual status runs (with their
+              real time ranges) that fell in the block. */}
           <TimelineRow label="Status">
             <Gridlines ticks={axisTicks} />
             {statusBlocks.map((b, i) => {
@@ -255,7 +263,10 @@ export default function ActivityGantt({ model }: { model: DayModel }) {
                 <Bar
                   key={i}
                   gap
-                  cls={b.status === 'OFF_QUEUE' ? offQueueCls(b.reason) : ROUTING_CLS[b.status]}
+                  // The dominant status is the base fill, so a block the runs
+                  // only partly cover (the last one of a shift) still reads as a
+                  // whole bar; the slices paint the real boundaries over it.
+                  cls={statusCls(b.status, b.reason)}
                   leftPct={b.leftPct}
                   widthPct={b.widthPct}
                   onShow={show}
@@ -265,7 +276,15 @@ export default function ActivityGantt({ model }: { model: DayModel }) {
                     gridCols: 'auto auto auto',
                     rows: rows.length ? rows : [{ cells: [hTime(b.startMin, blockEnd), hText(titleCase(ROUTING_LABEL[b.status]).split(' · ')[0]), hMuted('')] }],
                   }}
-                />
+                >
+                  {b.slices.length > 1 && b.slices.map((sl, j) => (
+                    <span
+                      key={j}
+                      className={cn('absolute inset-y-0', statusCls(sl.status, sl.reason))}
+                      style={{ left: `${sl.leftPct}%`, width: `${sl.widthPct}%` }}
+                    />
+                  ))}
+                </Bar>
               )
             })}
           </TimelineRow>
