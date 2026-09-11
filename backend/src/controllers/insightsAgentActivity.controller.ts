@@ -28,8 +28,12 @@ const permissionService = new InsightsPermissionService();
  * has no grant. On success returns the SELF-scope employee key (or null for
  * ALL scope). A SELF grant with no conformed employee row resolves to -1 (an
  * impossible key) so the viewer sees nothing rather than everything.
+ *
+ * Exported so sibling Agent Activity controllers that live in their own file
+ * (e.g. insightsCallLength.controller.ts) gate on the identical logic instead
+ * of carrying a second copy of it.
  */
-async function resolveAaScope(
+export async function resolveAaScope(
   req: Request,
   res: Response,
   pageKey: string,
