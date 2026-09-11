@@ -68,11 +68,23 @@ band** — there is no separate setting. Break duration grace is therefore ~2 mi
 (`adherence_phone_grace_before_sec`, default 120; `adherence_phone_grace_after_sec`,
 default 60). The two edges score separately: `PHONE_START = max(0, early − before)`
 (how far the phone went Break/Meal *before* the punch-in) and
-`PHONE_STOP = max(0, late − after)` (how far it stayed *after* the punch-out). The
-`START` edge is the dodge the feature exists to catch: going Break on the phone ten
-minutes early to duck calls, then taking the full break. Each break/lunch instance
-is matched to the phone span it **overlaps** (each used once), so a morning punch is
-never compared to an afternoon phone-Break.
+`PHONE_STOP = max(0, late − after − 59)` (how far it stayed *after* the punch-out).
+The `START` edge is the dodge the feature exists to catch: going Break on the phone
+ten minutes early to duck calls, then taking the full break. Each break/lunch
+instance is matched to the phone span it **overlaps** (each used once), so a morning
+punch is never compared to an afternoon phone-Break.
+
+**Why the extra 59 seconds on the STOP edge.** Paychex exports punches to the
+minute (every `punch_raw` row lands on `:00` seconds) while Genesys presence
+carries real seconds, so the true punch sits anywhere in
+`[recorded, recorded + 59s]`. The recorded punch is the *earliest* instant its
+minute allows, which makes the START gap a lower bound (already conservative,
+no allowance needed) and the STOP gap an over-statement of up to 59s. Without
+the allowance, a phone that came off Break one second into the minute after the
+punch-out reads as a full minute late and — with the bands starting at one
+second — is charged a whole minor band for a gap that may never have existed.
+Only the provable part is charged; the *raw* overhang is still reported in full
+on `phone_break_extra_sec` / `phone_lunch_extra_sec` (see Phone Overage below).
 
 ## Report-only switch
 

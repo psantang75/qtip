@@ -133,8 +133,9 @@ describe('phone match — the whole point of the feature', () => {
   });
 
   it('staying on phone Break after the punch-out minus grace is a STOP occurrence', () => {
-    // Punched break 10:00-10:15; phone Break 10:00-10:25 → 600s late, minus 60s
-    // grace = 540s → phone STOP occurrence, and no START (phone started with punch).
+    // Punched break 10:00-10:15; phone Break 10:00-10:25 → 600s late, minus the
+    // 59s the punch-out's own minute could hide = 541s proven, minus 60s grace =
+    // 481s → phone STOP occurrence, and no START (phone started with punch).
     const phone: PhonePresence = { breaks: [{ startSec: 36000, endSec: 36900 + 600 }], lunches: [] };
     const res = run(
       { breaks: [sched(36000, 900)], ...noLunch },
@@ -143,7 +144,7 @@ describe('phone match — the whole point of the feature', () => {
     );
     const stop = res!.occurrences.find((o) => o.kind === 'BREAK_PHONE_STOP');
     expect(stop).toBeDefined();
-    expect(stop?.deviation_seconds).toBe(540);
+    expect(stop?.deviation_seconds).toBe(481);
     expect(res!.occurrences.find((o) => o.kind === 'BREAK_PHONE_START')).toBeUndefined();
   });
 
@@ -167,6 +168,62 @@ describe('phone match — the whole point of the feature', () => {
       phone,
     );
     expect(res!.occurrences.some((o) => o.kind.startsWith('BREAK_PHONE'))).toBe(false);
+  });
+
+  // Paychex records punches to the minute, Genesys presence to the second, so a
+  // phone-off one second into the minute AFTER the punch-out reads as 61s late
+  // when the real gap may be as little as 1s. The punch-out gets the benefit of
+  // its own minute; anything past that is still charged in full.
+  describe('minute-resolution punches', () => {
+    // Punched break 10:00-10:15 (the real punch-out is somewhere in 10:15:00-59).
+    const stopAt = (phoneEndSec: number) => {
+      const phone: PhonePresence = { breaks: [{ startSec: 36000, endSec: phoneEndSec }], lunches: [] };
+      const res = run(
+        { breaks: [sched(36000, 900)], ...noLunch },
+        { breaks: [actual(36000, 900)], ...noLunchAct },
+        phone,
+      );
+      return { res: res!, stop: res!.occurrences.find((o) => o.kind === 'BREAK_PHONE_STOP') };
+    };
+
+    it('does not charge a phone-off one second into the next minute past grace', () => {
+      // Phone off at 10:16:01 — 61s after the recorded punch-out, but only 1s
+      // after 10:16:00, which the punch-out's minute could equally have been.
+      expect(stopAt(36900 + 61).stop).toBeUndefined();
+    });
+
+    it('still reports the raw overhang even when nothing is charged', () => {
+      expect(stopAt(36900 + 61).res.daily.phone_break_extra_sec).toBe(61);
+    });
+
+    it('charges once the overhang clears both the punch minute and the grace', () => {
+      // 10:17:00 — 120s out, 61s of which is proven, 1s past the 60s grace.
+      const { stop } = stopAt(36900 + 120);
+      expect(stop?.deviation_seconds).toBe(1);
+      expect(stop?.points).toBe(0.25);
+    });
+
+    it('leaves a genuinely long overhang in the band it was already in', () => {
+      // 10 minutes out → 541s proven, 481s past grace. 59s lighter than before
+      // the allowance, but still squarely the moderate band — the allowance
+      // clears the measurement artifact without discounting real lateness.
+      const { stop } = stopAt(36900 + 600);
+      expect(stop?.deviation_seconds).toBe(481);
+      expect(stop?.points).toBe(0.5);
+    });
+
+    it('gives the start edge no allowance — a late punch-in only widens the gap', () => {
+      // Phone on Break at 09:57:46, punch-in recorded 10:00 → 134s measured. The
+      // real punch-in can only be LATER, so the measured gap is already the floor
+      // and 14s past the 120s grace is charged as it stands.
+      const phone: PhonePresence = { breaks: [{ startSec: 36000 - 134, endSec: 36900 }], lunches: [] };
+      const res = run(
+        { breaks: [sched(36000, 900)], ...noLunch },
+        { breaks: [actual(36000, 900)], ...noLunchAct },
+        phone,
+      );
+      expect(res!.occurrences.find((o) => o.kind === 'BREAK_PHONE_START')?.deviation_seconds).toBe(14);
+    });
   });
 
   it('no phone data means no phone occurrence', () => {

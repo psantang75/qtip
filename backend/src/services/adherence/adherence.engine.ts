@@ -43,6 +43,14 @@ import { combineLocal, parseLocal, addDays, dateOnlyValue, dateStrFromDate } fro
 /** The policy scores CSRs only, exactly like attendance (role_id = 3). */
 const CSR_ROLE_ID = 3;
 
+/**
+ * Paychex exports punch times to the MINUTE — every punch_raw row lands on :00
+ * seconds — while Genesys presence carries real seconds. The true punch instant
+ * therefore sits anywhere in [recorded, recorded + 59s], and the two sides
+ * cannot be compared at a finer resolution than this without inventing a gap.
+ */
+const PUNCH_RESOLUTION_SEC = 60;
+
 /** Seconds since local (ET) midnight for a punch instant. Process is ET-pinned. */
 function secOfDay(d: Date): number {
   return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
@@ -181,7 +189,9 @@ function takeOverlappingPhone(
  *      (punch length vs scheduled length). There is no separate end check: the end
  *      is governed by duration. A scheduled instance with no punch is a MISS.
  *   2. PUNCH ↔ PHONE — phone start vs punch start and phone stop vs punch stop,
- *      beyond the admin before/after tolerance. Phone never touches the schedule.
+ *      beyond the admin before/after tolerance, and beyond what the punch's
+ *      minute resolution can prove (see PUNCH_RESOLUTION_SEC). Phone never
+ *      touches the schedule.
  */
 function scoreSegment(
   userId: number,
@@ -293,10 +303,23 @@ function scoreSegment(
     // none of it — the exception forgives the phone with the break.
     const ph = takeOverlappingPhone(act, phoneSorted, phoneUsed);
     if (ph && !excused) {
+      // Raw overhang, reported as-is on the daily row — it is the descriptive
+      // "how much phone Break/Meal fell outside the punched window" measure that
+      // the Phone Overage column and the phone/total adherence percentages read.
       const earlyExtra = Math.max(0, act.startSec - ph.startSec);
       const lateExtra = Math.max(0, ph.endSec - act.endSec);
       phoneExtraSec += earlyExtra + lateExtra;
 
+      // Charging points is a stricter question than reporting overhang: only the
+      // part the punch's own resolution can PROVE may be charged.
+      //
+      // The recorded punch is the earliest instant its minute allows, so the
+      // start edge (punch-in minus phone-on) is already a lower bound and needs
+      // no allowance. The stop edge (phone-off minus punch-out) is the mirror
+      // image and therefore OVERSTATES by up to 59s: an agent whose phone came
+      // off Break one second into the minute after their punch-out reads as a
+      // full minute late, and with the bands starting at one second that charged
+      // a whole minor band for a gap that may never have existed.
       const startDeviation = Math.max(0, earlyExtra - phoneGrace.beforeSec);
       const startBandPh = matchBand(rules, kinds.phoneStart, startDeviation, dateStr);
       if (startBandPh) {
@@ -311,7 +334,8 @@ function scoreSegment(
         });
       }
 
-      const stopDeviation = Math.max(0, lateExtra - phoneGrace.afterSec);
+      const provenLate = Math.max(0, lateExtra - (PUNCH_RESOLUTION_SEC - 1));
+      const stopDeviation = Math.max(0, provenLate - phoneGrace.afterSec);
       const stopBandPh = matchBand(rules, kinds.phoneStop, stopDeviation, dateStr);
       if (stopBandPh) {
         occurrences.push({
