@@ -489,6 +489,52 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     description: 'Average minutes per call — average handle time (talk minutes divided by total calls).',
     formulaPlain: 'SUM(call_mins) / SUM(call_count)', source: 'call activity (source phone system)',
   },
+  // ── Agent Activity · Call Length (CSR) ──────────────────────────────────────
+  // Distribution metrics over ie_fact_support_call (call grain). "Handle" here
+  // is talk + hold + wrap, so these do NOT tie to the Call Activity tiles above
+  // them, which measure talk time only.
+  csr_cl_total_calls: {
+    code: 'csr_cl_total_calls', name: 'Answered Calls',
+    format: 'NUMBER', direction: 'NEUTRAL', scope: 'department',
+    description: 'Answered calls in the range for the selected agents and departments. A call the agent never picked up has no handle time to measure and is excluded.',
+    formulaPlain: 'COUNT(support calls WHERE talk_secs > 0)',
+    source: 'ie_fact_support_call (source phone system)',
+  },
+  csr_cl_handle_hours: {
+    code: 'csr_cl_handle_hours', name: 'Handle Hours',
+    format: 'NUMBER', direction: 'NEUTRAL', scope: 'department',
+    description: 'Total handle time in hours — talk plus hold plus after-call wrap. This is the labor the call volume actually consumed.',
+    formulaPlain: 'SUM(talk_secs + hold_secs + wrap_secs) / 3600',
+    source: 'ie_fact_support_call (source phone system)',
+  },
+  csr_cl_avg_handle: {
+    code: 'csr_cl_avg_handle', name: 'Avg Handle Min',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD', scope: 'department',
+    description: 'Average minutes of handle time per answered call, including hold and after-call wrap. Higher than the Call Activity "Avg Min / Call" tile, which counts talk time only.',
+    formulaPlain: 'SUM(handle_secs) / COUNT(calls) / 60',
+    source: 'ie_fact_support_call (source phone system)',
+  },
+  csr_cl_calls_over_10: {
+    code: 'csr_cl_calls_over_10', name: 'Calls Over 10 Min',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD', scope: 'department',
+    description: 'Calls whose handle time landed in the 10-20 minute or 20 minute-plus buckets. This is the tail to review for coaching or process fixes.',
+    formulaPlain: 'COUNT(calls WHERE handle_secs >= 600)',
+    source: 'ie_fact_support_call (source phone system)',
+  },
+  csr_cl_pct_time_long: {
+    code: 'csr_cl_pct_time_long', name: '% Time on Long Calls',
+    format: 'PERCENT', direction: 'DOWN_IS_GOOD', scope: 'department',
+    description: 'Share of all handle time spent on calls of 5 minutes or more. Read it against the share of CALLS in those buckets — the two diverge sharply, and this figure is the one that sizes the opportunity.',
+    formulaPlain: 'SUM(handle_secs WHERE handle_secs >= 300) / SUM(handle_secs) * 100',
+    source: 'ie_fact_support_call (source phone system)',
+  },
+  csr_cl_wrap_share: {
+    code: 'csr_cl_wrap_share', name: '% Time in Wrap',
+    format: 'PERCENT', direction: 'DOWN_IS_GOOD', scope: 'department',
+    description: 'Share of handle time that is after-call work rather than customer contact. Where the wrap-up screen times out instead of being dispositioned, wrap runs far longer than when the agent closes it — making this the cheapest handle time to recover.',
+    formulaPlain: 'SUM(wrap_secs) / SUM(handle_secs) * 100',
+    source: 'ie_fact_support_call (source phone system)',
+  },
   // ── Agent Activity · Leads ──────────────────────────────────────────────────
   aa_total_leads: {
     code: 'aa_total_leads', name: 'Total Leads',
