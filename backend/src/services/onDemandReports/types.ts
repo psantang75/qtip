@@ -52,11 +52,17 @@ export interface OnDemandReportFilters {
   status?: string
   /** Numeric coaching_sessions.id (session number). */
   sessionId?: string
+  /**
+   * Handle-time band key from `insights/callLength/bands` (e.g. 'm10_20'),
+   * or 'all' for every band the report offers. Reports declaring this filter
+   * publish their own allowed values via `callLengthBandOptions`.
+   */
+  callLengthBand?: string
 }
 
 export type OnDemandFilterKey =
   | 'period' | 'departments' | 'forms' | 'agents' | 'submissionId'
-  | 'topics' | 'status' | 'sessionId'
+  | 'topics' | 'status' | 'sessionId' | 'callLengthBand'
 
 export interface OnDemandReportPage {
   page: number
@@ -66,11 +72,27 @@ export interface OnDemandReportPage {
 export interface OnDemandReportRowsResult {
   rows: Record<string, unknown>[]
   total: number
+  /**
+   * Optional one-line context about the run, shown next to the result count.
+   * For facts `total` alone can't express — e.g. that a cap trimmed the
+   * selection, or how many of the matched rows will actually produce output.
+   */
+  notice?: string
 }
 
-export interface OnDemandReportXlsxResult {
+/** MIME type served when a report doesn't name one — the xlsx most reports emit. */
+export const XLSX_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+export interface OnDemandReportDownloadResult {
   buffer: Buffer
   filename: string
+  /**
+   * MIME type for the response. Omit for xlsx; set it (with a matching
+   * filename extension) for reports that emit something else, e.g.
+   * `text/plain; charset=utf-8` for a transcript dump.
+   */
+  contentType?: string
 }
 
 export interface OnDemandReport {
@@ -94,16 +116,33 @@ export interface OnDemandReport {
    */
   defaultFilters?: Partial<Pick<OnDemandReportFilters,
     'departments' | 'forms' | 'agents' | 'submissionId'
-    | 'topics' | 'status' | 'sessionId'>>
+    | 'topics' | 'status' | 'sessionId' | 'callLengthBand'>>
+  /**
+   * Choices for the `callLengthBand` control, in display order. Required when
+   * the report declares that filter — the UI has no global band list, because
+   * which bands are worth offering is a per-report decision.
+   */
+  callLengthBandOptions?: ReadonlyArray<{ value: string; label: string }>
+  /**
+   * What the download produces, so the UI can label the button honestly
+   * ("Download Excel" vs "Download Text"). Defaults to xlsx.
+   */
+  downloadFormat?: 'xlsx' | 'txt'
+  /**
+   * Deadline for THIS report's download, when the shared 60s is too tight.
+   * Only raise it for a report whose cost is bounded by its own cap — an
+   * unbounded query wants a smaller deadline, not a larger one.
+   */
+  downloadTimeoutMs?: number
   getRows: (
     filters: OnDemandReportFilters,
     user: OnDemandReportUser,
     page: OnDemandReportPage,
   ) => Promise<OnDemandReportRowsResult>
-  getXlsx: (
+  getDownload: (
     filters: OnDemandReportFilters,
     user: OnDemandReportUser,
-  ) => Promise<OnDemandReportXlsxResult>
+  ) => Promise<OnDemandReportDownloadResult>
 }
 
 export interface OnDemandFilterOptions {
@@ -115,3 +154,9 @@ export interface OnDemandFilterOptions {
   /** Coaching-only: status enum values (always full enum, ordered). */
   statuses?: string[]
 }
+
+/**
+ * A report's metadata as the UI consumes it — everything except the two
+ * data-fetching functions, which never cross the wire.
+ */
+export type OnDemandReportSummary = Omit<OnDemandReport, 'getRows' | 'getDownload'>

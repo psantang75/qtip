@@ -12,7 +12,7 @@ export interface OnDemandReportColumn {
 
 export type OnDemandFilterKey =
   | 'period' | 'departments' | 'forms' | 'agents' | 'submissionId'
-  | 'topics' | 'status' | 'sessionId'
+  | 'topics' | 'status' | 'sessionId' | 'callLengthBand'
 
 /** Per-report default values for filter controls (e.g. coaching → status=CLOSED). */
 export interface OnDemandReportDefaults {
@@ -23,6 +23,7 @@ export interface OnDemandReportDefaults {
   topics?: string[]
   status?: string
   sessionId?: string
+  callLengthBand?: string
 }
 
 export interface OnDemandReportSummary {
@@ -34,6 +35,13 @@ export interface OnDemandReportSummary {
   supportedFilters: OnDemandFilterKey[]
   /** Optional defaults the UI should pre-populate the filter form with. */
   defaultFilters?: OnDemandReportDefaults
+  /**
+   * Choices for the call-length control. Reports own their own list, so this
+   * is empty unless `supportedFilters` includes `callLengthBand`.
+   */
+  callLengthBandOptions?: { value: string; label: string }[]
+  /** What the download produces, so the button can be labelled honestly. */
+  downloadFormat?: 'xlsx' | 'txt'
 }
 
 /**
@@ -52,6 +60,7 @@ export interface OnDemandReportFilterParams {
   topics?: string[]
   status?: string
   sessionId?: string
+  callLengthBand?: string
 }
 
 export interface OnDemandReportRunParams extends OnDemandReportFilterParams {
@@ -63,6 +72,11 @@ export interface OnDemandReportRunResult {
   columns: OnDemandReportColumn[]
   rows: Record<string, unknown>[]
   total: number
+  /**
+   * Context the count alone can't carry — e.g. that a cap trimmed the
+   * selection. Null when the report has nothing to add.
+   */
+  notice: string | null
   page: number
   pageSize: number
   appliedRange: { start_date: string; end_date: string }
@@ -91,12 +105,13 @@ function buildFilterPayload(params: OnDemandReportFilterParams): Record<string, 
   if (params.topics?.length) out.topics = params.topics
   if (params.status) out.status = params.status
   if (params.sessionId) out.sessionId = params.sessionId
+  if (params.callLengthBand) out.callLengthBand = params.callLengthBand
   return out
 }
 
 // Reports can scan a lot of data; bypass the global 10s axios timeout.
 const REPORT_RUN_TIMEOUT_MS = 5 * 60 * 1000   // 5 min for in-browser run
-const REPORT_DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000 // 10 min for xlsx download
+const REPORT_DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000 // 10 min for file download
 
 // ── API ─────────────────────────────────────────────────────────────────────
 
@@ -131,9 +146,10 @@ export async function runReport(
 }
 
 /**
- * Run the report and trigger a browser download of the resulting xlsx file.
- * Reads `Content-Disposition` for the server-supplied filename, falling back
- * to a sane default if missing.
+ * Run the report and trigger a browser download of the resulting file. The
+ * server decides the format and names the file, so this stays format-agnostic
+ * — it reads `Content-Disposition` and only uses `fallbackName` if that header
+ * is missing.
  */
 export async function downloadReport(
   id: string,

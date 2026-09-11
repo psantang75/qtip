@@ -4,6 +4,7 @@ export {
   listOnDemandReportsForRole,
 } from './registry'
 export { getOnDemandFilterOptions } from './filterOptions'
+export { XLSX_CONTENT_TYPE } from './types'
 export type {
   OnDemandReport,
   OnDemandReportColumn,
@@ -12,6 +13,7 @@ export type {
   OnDemandFilterKey,
   OnDemandReportPage,
   OnDemandReportRowsResult,
-  OnDemandReportXlsxResult,
+  OnDemandReportDownloadResult,
+  OnDemandReportSummary,
   OnDemandFilterOptions,
 } from './types'

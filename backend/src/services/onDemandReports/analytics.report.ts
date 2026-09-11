@@ -111,7 +111,7 @@ export const analyticsRawScoresReport: OnDemandReport = {
     const augmented = await augmentAnalyticsRowsWithAnswerText(pageSlice)
     return { rows: augmented.map(formatAnalyticsRow), total }
   },
-  async getXlsx(filters, user) {
+  async getDownload(filters, user) {
     const repoFilters = await buildAnalyticsRepoFilters(filters)
     const svc = getAnalyticsService()
     const repo = getAnalyticsRepository()

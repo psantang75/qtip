@@ -15,6 +15,7 @@ export {
   getOnDemandReport,
   listOnDemandReportsForRole,
   getOnDemandFilterOptions,
+  XLSX_CONTENT_TYPE,
 } from './onDemandReports'
 export type {
   OnDemandReport,
@@ -24,6 +25,7 @@ export type {
   OnDemandFilterKey,
   OnDemandReportPage,
   OnDemandReportRowsResult,
-  OnDemandReportXlsxResult,
+  OnDemandReportDownloadResult,
+  OnDemandReportSummary,
   OnDemandFilterOptions,
 } from './onDemandReports'

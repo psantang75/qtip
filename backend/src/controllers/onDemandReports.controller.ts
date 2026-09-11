@@ -4,6 +4,7 @@ import {
   getOnDemandReport,
   getOnDemandFilterOptions,
   listOnDemandReportsForRole,
+  XLSX_CONTENT_TYPE,
   type OnDemandReportFilters,
   type OnDemandReportUser,
 } from '../services/onDemandReportsRegistry';
@@ -119,6 +120,7 @@ function pickFilters(body: any, start_date: string, end_date: string): OnDemandR
     topics: arr(body?.topics),
     status: str(body?.status),
     sessionId: str(body?.sessionId),
+    callLengthBand: str(body?.callLengthBand),
   };
 }
 
@@ -131,6 +133,8 @@ function reportToSummary(r: ReturnType<typeof getOnDemandReport>) {
     columns: r.columns,
     supportedFilters: r.supportedFilters,
     defaultFilters: r.defaultFilters ?? {},
+    callLengthBandOptions: r.callLengthBandOptions ?? [],
+    downloadFormat: r.downloadFormat ?? 'xlsx',
   };
 }
 
@@ -179,6 +183,7 @@ export const getReportData = asyncHandler(async (req: Request, res: Response): P
         columns: report.columns,
         rows: result.rows,
         total: result.total,
+        notice: result.notice ?? null,
         page,
         pageSize,
         appliedRange: { start_date: resolved.filters.start_date, end_date: resolved.filters.end_date },
@@ -197,15 +202,16 @@ export const downloadReport = asyncHandler(async (req: Request, res: Response): 
     const resolved = resolveFilters(req.body);
     if (!resolved.ok) throw createValidationError(resolved.message);
 
-    const { buffer, filename } = await withQueryTimeout(
-      report.getXlsx(resolved.filters, user),
-      `on-demand-report.${report.id}.xlsx`,
+    const { buffer, filename, contentType } = await withQueryTimeout(
+      report.getDownload(resolved.filters, user),
+      `on-demand-report.${report.id}.download`,
       // Downloads can legitimately scan more rows than a screen view, so
-      // double the default deadline before failing the request.
-      60_000,
+      // double the default deadline before failing the request. A report whose
+      // volume is capped may raise its own ceiling past this.
+      report.downloadTimeoutMs ?? 60_000,
     );
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Type', contentType ?? XLSX_CONTENT_TYPE);
     res.setHeader('Content-Disposition', `attachment; ${escapeFilename(filename)}`);
     res.send(buffer);
 });

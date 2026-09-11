@@ -27,6 +27,8 @@ import {
   resolveFormIds,
 } from './helpers'
 import { COACHING_SESSION_STATUSES } from './coaching.report'
+import { CALL_TRANSCRIPTS_REPORT_ID } from './callTranscripts.report'
+import { transcriptFilterOptions } from './callTranscripts.data'
 import { getOnDemandReport } from './registry'
 import type {
   OnDemandFilterOptions,
@@ -51,6 +53,22 @@ interface FilterOptionsContext {
 /** Date window applied to every submission-scoped query. */
 function dateBetween(start: string, end: string): Prisma.Sql {
   return Prisma.sql`s.submitted_at BETWEEN ${start} AND ${`${end} 23:59:59`}`
+}
+
+/** `YYYY-MM-DD` → the YYYYMMDD integer the warehouse dimensions key on. */
+function toDateKey(iso: string): number {
+  return Number(iso.slice(0, 10).replace(/-/g, ''))
+}
+
+/**
+ * Options for warehouse-backed reports, which read `ie_fact_support_call` and
+ * the employee/department dimensions rather than submissions or coaching. Both
+ * lists come from one call so the two dropdowns can't disagree.
+ */
+async function warehouseOptions(
+  ctx: FilterOptionsContext,
+): Promise<{ departments: string[]; agents: string[] }> {
+  return transcriptFilterOptions(toDateKey(ctx.start_date), toDateKey(ctx.end_date))
 }
 
 /** Manager-scope clause for the analytics (submissions) flow. */
@@ -89,6 +107,10 @@ const STATUS_FILTER = Prisma.sql`AND s.status IN ('SUBMITTED', 'FINALIZED')`
 async function getDepartmentOptions(ctx: FilterOptionsContext): Promise<string[]> {
   const { reportId, user, csrRoleId, start_date, end_date, selection } = ctx
   const { formIds, agentIds, deptIds } = selection
+
+  if (reportId === CALL_TRANSCRIPTS_REPORT_ID) {
+    return (await warehouseOptions(ctx)).departments
+  }
 
   if (reportId === 'coaching-sessions') {
     const agentClause = agentIds.length > 0
@@ -156,6 +178,10 @@ async function getFormOptions(ctx: FilterOptionsContext): Promise<string[]> {
 async function getAgentOptions(ctx: FilterOptionsContext): Promise<string[]> {
   const { reportId, user, csrRoleId, start_date, end_date, selection } = ctx
   const { deptIds, formIds } = selection
+
+  if (reportId === CALL_TRANSCRIPTS_REPORT_ID) {
+    return (await warehouseOptions(ctx)).agents
+  }
 
   if (reportId === 'coaching-sessions') {
     const rows = await prisma.$queryRaw<{ username: string }[]>(Prisma.sql`

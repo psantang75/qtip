@@ -41,6 +41,7 @@ interface FilterState {
   topics: string[]
   status: string
   sessionId: string
+  callLengthBand: string
 }
 
 const EMPTY_STATE: FilterState = {
@@ -54,6 +55,7 @@ const EMPTY_STATE: FilterState = {
   topics: [],
   status: '',
   sessionId: '',
+  callLengthBand: '',
 }
 
 /** Merge per-report default filter values (e.g. coaching → status=CLOSED) on top of the empty state. */
@@ -69,7 +71,13 @@ function applyDefaults(meta?: OnDemandReportSummary | null): FilterState {
     topics: d.topics ?? EMPTY_STATE.topics,
     status: d.status ?? EMPTY_STATE.status,
     sessionId: d.sessionId ?? EMPTY_STATE.sessionId,
+    callLengthBand: d.callLengthBand ?? EMPTY_STATE.callLengthBand,
   }
+}
+
+/** Button label + fallback filename for the report's download format. */
+function downloadLabel(meta?: OnDemandReportSummary | null): string {
+  return meta?.downloadFormat === 'txt' ? 'Download Text' : 'Download Excel'
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -116,6 +124,8 @@ export default function OnDemandReportViewPage() {
   const showTopics = supported.includes('topics')
   const showStatus = supported.includes('status')
   const showSessionId = supported.includes('sessionId')
+  const showCallLength = supported.includes('callLengthBand')
+  const bandOptions = meta?.callLengthBandOptions ?? []
   const isCustom = draft.period === 'Custom'
   const customReady = !isCustom || (!!draft.customStart && !!draft.customEnd)
 
@@ -223,7 +233,8 @@ export default function OnDemandReportViewPage() {
     }
     try {
       setDownloading(true)
-      await downloadReport(reportId, toFilterParams(applied), `${reportId}.xlsx`)
+      const ext = meta?.downloadFormat ?? 'xlsx'
+      await downloadReport(reportId, toFilterParams(applied), `${reportId}.${ext}`)
     } catch (err) {
       toast({
         variant: 'destructive',
@@ -256,6 +267,7 @@ export default function OnDemandReportViewPage() {
     || draft.submissionId !== baseline.submissionId
     || draft.sessionId !== baseline.sessionId
     || draft.status !== baseline.status
+    || draft.callLengthBand !== baseline.callLengthBand
     || (draft.period && draft.period !== DEFAULT_PERIOD)
     || draft.customStart
     || draft.customEnd
@@ -332,6 +344,24 @@ export default function OnDemandReportViewPage() {
                   <SelectItem value="__all__">All Statuses</SelectItem>
                   {opts.statuses.map(s => (
                     <SelectItem key={s} value={s}>{formatStatusLabel(s)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </StickyFilterField>
+          )}
+
+          {showCallLength && (
+            <StickyFilterField label="Call Length">
+              <Select
+                value={draft.callLengthBand || bandOptions[0]?.value || ''}
+                onValueChange={v => setDraft(d => ({ ...d, callLengthBand: v }))}
+              >
+                <SelectTrigger className="h-8 text-xs w-[200px] bg-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {bandOptions.map(b => (
+                    <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -464,20 +494,25 @@ export default function OnDemandReportViewPage() {
         </div>
 
         {/* Download lives directly above the results table — only enabled
-            after a successful Run, so it always matches what's on screen. */}
-        <div className="flex items-center justify-end">
+            after a successful Run, so it always matches what's on screen. Any
+            notice the report returned sits beside it, because it qualifies
+            what the download will contain. */}
+        <div className="flex items-start justify-between gap-4">
+          {dataQuery.data?.notice ? (
+            <p className="text-[12.5px] text-slate-600">{dataQuery.data.notice}</p>
+          ) : <span />}
           <Button
             size="sm"
             variant="outline"
             onClick={handleDownload}
             disabled={downloading || !applied}
-            className="h-8 text-xs"
-            title={applied ? 'Download Excel' : 'Run the report first to download'}
+            className="h-8 shrink-0 text-xs"
+            title={applied ? downloadLabel(meta) : 'Run the report first to download'}
           >
             {downloading
               ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
               : <Download className="h-3.5 w-3.5 mr-1" />}
-            {downloading ? 'Generating…' : 'Download Excel'}
+            {downloading ? 'Generating…' : downloadLabel(meta)}
           </Button>
         </div>
 
@@ -564,6 +599,7 @@ function toFilterParams(state: FilterState): OnDemandReportFilterParams {
     topics: state.topics.length ? state.topics : undefined,
     status: state.status || undefined,
     sessionId: state.sessionId || undefined,
+    callLengthBand: state.callLengthBand || undefined,
   }
 }
 

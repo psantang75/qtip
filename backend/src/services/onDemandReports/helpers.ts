@@ -36,11 +36,11 @@ export function getAnalyticsService(): AnalyticsService {
   return _analyticsService
 }
 
-export function timestampedFilename(slug: string): string {
+export function timestampedFilename(slug: string, ext: 'xlsx' | 'txt' = 'xlsx'): string {
   const now = new Date()
   const dateStr = now.toISOString().split('T')[0]
   const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-')
-  return `QTIP_${slug}_${dateStr}_${timeStr}.xlsx`
+  return `QTIP_${slug}_${dateStr}_${timeStr}.${ext}`
 }
 
 export function isManager(user: OnDemandReportUser): boolean {

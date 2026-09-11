@@ -109,7 +109,7 @@ export const coachingSessionsReport: OnDemandReport = {
     }
     return { rows, total: csrIds.length > 1 ? rows.length : totalCount }
   },
-  async getXlsx(filters, user) {
+  async getDownload(filters, user) {
     const csrRoleId = await getCsrRoleId()
     if (!csrRoleId) throw new Error('CSR role not found')
     const { where, csrIds } = await buildCoachingFilters(filters, user, csrRoleId)

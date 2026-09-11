@@ -356,6 +356,40 @@ class PhoneSystemService {
   }
 
   /**
+   * Which of these conversations actually have a transcript.
+   *
+   * Selects the id column ONLY — never the LONGTEXT `Transcript`, which averages
+   * ~82KB and can reach 1MB. Use this whenever you need coverage rather than
+   * content (e.g. telling a user how many of their selected calls will produce
+   * text before they commit to a download).
+   *
+   * @param conversationIds - Array of conversation IDs
+   * @returns Promise with the subset of ids that have non-empty transcripts
+   */
+  async getTranscriptIdsByConversationIds(conversationIds: string[]): Promise<string[]> {
+    if (conversationIds.length === 0) {
+      return [];
+    }
+
+    try {
+      const placeholders = conversationIds.map(() => '?').join(',');
+      const query = `
+        SELECT DISTINCT ConversationID
+        FROM tblConversationTranscript
+        WHERE ConversationID IN (${placeholders})
+          AND Transcript IS NOT NULL
+          AND Transcript != ''
+      `;
+
+      const results = await executeQuery<{ ConversationID: string }>(query, conversationIds, 'phone');
+      return results.map(row => row.ConversationID);
+    } catch (error) {
+      logger.error('[PHONE SYSTEM SERVICE] Error probing transcript availability:', error);
+      throw new Error('Failed to probe transcript availability');
+    }
+  }
+
+  /**
    * Get multiple transcripts by conversation IDs
    * @param conversationIds - Array of conversation IDs
    * @returns Promise with array of conversation detail responses
