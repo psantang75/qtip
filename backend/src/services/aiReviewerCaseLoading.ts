@@ -54,7 +54,7 @@ export const TicketAdapter: InteractionAdapter<number> = {
     ticketId: number,
     auditCutoffAt?: Date | null
   ): Promise<InteractionMaterial> {
-    const header = await crmService.getTicketHeader(ticketId);
+    const header = await crmService.getTicketHeader(ticketId, { includeRollups: true });
     if (!header) {
       throw new AIReviewerServiceError(`Ticket ${ticketId} not found in CRM`, 'TICKET_NOT_FOUND', 404);
     }
