@@ -97,7 +97,7 @@ export interface ApiExceptionType {
   id: number; type_key: string; label: string; category: string | null; description: string | null
   paychex_pay_type: string | null
   is_excused: boolean; duration_mode: 'FULL_DAY' | 'WINDOW' | 'EITHER'
-  affects_arrival: boolean; affects_departure: boolean; is_system: boolean
+  is_system: boolean
   sort_order: number; is_active: boolean
 }
 export interface ApiCoverageWindow {

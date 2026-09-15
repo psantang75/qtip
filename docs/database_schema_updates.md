@@ -106,7 +106,7 @@ are `INT NULL` with no FK, matching existing convention. Dates are `@db.Date`
 | Table | Grain | Purpose |
 |-------|-------|---------|
 | `schedule_activity_type` | one per segment kind | Break / Lunch / … . `is_paid`, `counts_as_coverage`, `is_system`, `sort_order`. Generalizes breaks so new kinds are data, not schema. |
-| `schedule_exception_type` | one per exception kind | PTO - Approved / Holiday / Bereavement / … . Carries `is_excused`, `duration_mode` (`FULL_DAY`/`WINDOW`/`EITHER`), `affects_arrival`, `affects_departure`, and `paychex_pay_type` (see below). |
+| `schedule_exception_type` | one per exception kind | PTO - Approved / Holiday / Bereavement / … . Carries `is_excused`, `duration_mode` (`FULL_DAY`/`WINDOW`/`EITHER`), and `paychex_pay_type` (see below). The legacy `affects_arrival` / `affects_departure` columns are no longer read — `is_excused` plus the exception's own window decide forgiveness. |
 | `schedule_coverage_threshold` | one per department | `green_min` / `yellow_min` staffing minimums for the day-view heatmap. FK → `departments`. |
 | `schedule_template` | one per reusable week | `template_name`, `description`, `is_active`. **No** department or color column. |
 | `schedule_template_day` | one per template × weekday (0=Sun) | `is_day_off`, `start_time`/`end_time`. FK → `schedule_template` (ON DELETE CASCADE). |

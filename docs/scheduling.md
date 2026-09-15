@@ -176,7 +176,8 @@ that split are worth knowing while working in Scheduling:
 - **`schedule_exception` is the *only* way to forgive an attendance point.** The
   report has no waive button by design. Full-day excused removes the day from
   compliance entirely; a windowed excused exception forgives that much deviation
-  on the edge its type's `affects_arrival` / `affects_departure` flags name.
+  on whichever edge its window actually covers. `is_excused` is the only switch —
+  the window itself is what scopes forgiveness.
   A full-day *unexcused* type can also be bound to a point-bearing band (this is
   how No Call / No Show is expressible at all — punch data cannot detect it,
   because the distinguishing fact is that nobody called).

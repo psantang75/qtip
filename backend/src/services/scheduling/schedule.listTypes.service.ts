@@ -58,8 +58,6 @@ export async function createExceptionType(data: {
   paychex_pay_type?: string | null;
   is_excused?: boolean;
   duration_mode?: 'FULL_DAY' | 'WINDOW' | 'EITHER';
-  affects_arrival?: boolean;
-  affects_departure?: boolean;
 }) {
   const type_key = data.type_key?.trim() || (await uniqueTypeKey(data.label));
   const exists = await prisma.scheduleExceptionType.findUnique({ where: { type_key } });
@@ -74,8 +72,6 @@ export async function createExceptionType(data: {
       paychex_pay_type: normBlank(data.paychex_pay_type) ?? null,
       is_excused: data.is_excused ?? false,
       duration_mode: data.duration_mode ?? 'EITHER',
-      affects_arrival: data.affects_arrival ?? false,
-      affects_departure: data.affects_departure ?? false,
       sort_order: (max._max.sort_order ?? 0) + 10,
     },
   });
@@ -84,7 +80,7 @@ export async function createExceptionType(data: {
 export async function updateExceptionType(id: number, data: Record<string, unknown>) {
   const row = await prisma.scheduleExceptionType.findUnique({ where: { id } });
   if (!row) throw new ScheduleServiceError('Exception type not found', 404, 'NOT_FOUND');
-  const patch = pick(data, ['label', 'category', 'description', 'paychex_pay_type', 'is_excused', 'duration_mode', 'affects_arrival', 'affects_departure']);
+  const patch = pick(data, ['label', 'category', 'description', 'paychex_pay_type', 'is_excused', 'duration_mode']);
   if (patch.paychex_pay_type) {
     const clash = await prisma.scheduleExceptionType.findFirst({
       where: { paychex_pay_type: patch.paychex_pay_type as string, id: { not: id } },

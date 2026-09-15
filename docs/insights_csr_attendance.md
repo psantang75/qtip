@@ -108,7 +108,7 @@ forgive a day means two sources of truth.
 | Exception | Effect |
 |-----------|--------|
 | Full-day, excused | Day leaves **both** sides of compliance; all occurrences suppressed. This is the path protected leave takes. |
-| Windowed, excused | Forgives that many seconds off the arrival or departure deviation, per `affects_arrival` / `affects_departure`. The rest is still charged. |
+| Windowed, excused | Forgives that many seconds off the arrival or departure deviation, on whichever edge the window covers. The rest is still charged. |
 | Full-day, unexcused, bound to an EXCEPTION band | **Replaces** the derived absence (No Call / No Show scores 2.00, not 1.00 + 2.00). |
 | Windowed, unexcused | Forgives nothing, and does **not** earn its type's flat point — the deviation is banded as ordinary lateness or an early leave. |
 | Anything else | Ignored by scoring. |

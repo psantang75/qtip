@@ -61,8 +61,6 @@ function exception(o: Partial<ScheduledException> = {}): ScheduledException {
     label: 'PTO',
     isExcused: true,
     isFullDay: true,
-    affectsArrival: false,
-    affectsDeparture: false,
     start: null,
     end: null,
     ...o,
@@ -225,7 +223,7 @@ describe('scoreDay — forgiveness', () => {
   it('a windowed excused exception forgives that much lateness', () => {
     const appt = exception({
       typeKey: 'appt', label: 'Appointment', isFullDay: false,
-      affectsArrival: true, start: '09:00', end: '09:30',
+      start: '09:00', end: '09:30',
     });
     const r = scoreDay(USER, D, day({ exceptions: [appt] }), punches('09:25', '17:00'), RULES)!;
     expect(r.occurrences).toEqual([]);
@@ -235,7 +233,7 @@ describe('scoreDay — forgiveness', () => {
   it('charges only the lateness beyond the forgiven window', () => {
     const appt = exception({
       typeKey: 'appt', label: 'Appointment', isFullDay: false,
-      affectsArrival: true, start: '09:00', end: '09:10',
+      start: '09:00', end: '09:10',
     });
     // 20 minutes late, 10 forgiven, so 10 remain — the 3+ band, not the 16+ one.
     const r = scoreDay(USER, D, day({ exceptions: [appt] }), punches('09:20', '17:00'), RULES)!;
@@ -243,10 +241,14 @@ describe('scoreDay — forgiveness', () => {
     expect(r.occurrences[0]).toMatchObject({ rule_id: 1, points: 0.25 });
   });
 
-  it('does not let an arrival-side window forgive an early departure', () => {
+  it('does not let a morning window forgive an early departure', () => {
+    // The window is what scopes forgiveness, so a 09:00-09:30 appointment cannot
+    // reach a 16:00 departure. This is the guarantee that made the old per-type
+    // affects_arrival / affects_departure flags redundant: an excused window
+    // already forgives only the edge it physically covers.
     const appt = exception({
       typeKey: 'appt', label: 'Appointment', isFullDay: false,
-      affectsArrival: true, affectsDeparture: false, start: '09:00', end: '09:30',
+      start: '09:00', end: '09:30',
     });
     const r = scoreDay(USER, D, day({ exceptions: [appt] }), punches('09:00', '16:00'), RULES)!;
     expect(r.occurrences.map(o => o.kind)).toEqual(['EARLY_LEAVE']);
@@ -257,20 +259,20 @@ describe('scoreDay — forgiveness', () => {
     // length would erase 30 minutes of lateness it never covered.
     const appt = exception({
       typeKey: 'appt', label: 'Appointment', isFullDay: false,
-      affectsArrival: true, start: '14:00', end: '14:30',
+      start: '14:00', end: '14:30',
     });
     const r = scoreDay(USER, D, day({ exceptions: [appt] }), punches('09:20', '17:00'), RULES)!;
     expect(r.daily.late_seconds).toBe(1200);
     expect(r.occurrences.map((o) => o.kind)).toEqual(['LATE']);
   });
 
-  it('lets one both-edge type cover a full day or either edge without double-forgiving', () => {
+  it('lets one type cover a full day or either edge without double-forgiving', () => {
     // This is what allows a single Paychex-linked type to replace the old
     // FULL_DAY/WINDOW pair. A 13:00-17:00 PTO block sits on the departure side, so
     // it must excuse the early leave and leave the late arrival fully charged.
     const pto = exception({
       typeKey: 'scheduled_pto', label: 'PTO - Approved', isFullDay: false,
-      affectsArrival: true, affectsDeparture: true, start: '13:00', end: '17:00',
+      start: '13:00', end: '17:00',
     });
     const r = scoreDay(USER, D, day({ exceptions: [pto] }), punches('09:20', '13:00'), RULES)!;
     expect(r.daily.early_leave_seconds).toBe(0);
@@ -281,7 +283,7 @@ describe('scoreDay — forgiveness', () => {
   it('charges the part of a deviation the window leaves uncovered', () => {
     const pto = exception({
       typeKey: 'scheduled_pto', label: 'PTO - Approved', isFullDay: false,
-      affectsArrival: true, affectsDeparture: true, start: '14:00', end: '17:00',
+      start: '14:00', end: '17:00',
     });
     // Left at 13:30: four hours short, three of them excused by the block.
     const r = scoreDay(USER, D, day({ exceptions: [pto] }), punches('09:00', '13:30'), RULES)!;
@@ -289,10 +291,31 @@ describe('scoreDay — forgiveness', () => {
     expect(r.occurrences.map((o) => o.kind)).toEqual(['EARLY_LEAVE']);
   });
 
+  it('forgives an excused window on whichever edge it lands on', () => {
+    // "Excused Partial Day" is a generic window: it names no edge, so being
+    // excused has to be enough on its own. This shipped forgiving nothing —
+    // the day looked excused in List Management and still charged the point.
+    const partial = exception({
+      typeId: 8, typeKey: 'excused_partial', label: 'Excused Partial Day', isFullDay: false,
+      start: '09:00', end: '10:00',
+    });
+    const late = scoreDay(USER, D, day({ exceptions: [partial] }), punches('09:59', '17:00'), RULES)!;
+    expect(late.occurrences).toEqual([]);
+    expect(late.daily.late_seconds).toBe(0);
+
+    const early = exception({
+      typeId: 8, typeKey: 'excused_partial', label: 'Excused Partial Day', isFullDay: false,
+      start: '16:00', end: '17:00',
+    });
+    const left = scoreDay(USER, D, day({ exceptions: [early] }), punches('09:00', '16:00'), RULES)!;
+    expect(left.occurrences).toEqual([]);
+    expect(left.daily.early_leave_seconds).toBe(0);
+  });
+
   it('ignores an unexcused windowed exception', () => {
     const appt = exception({
       typeKey: 'late_notice', label: 'Called in late', isExcused: false, isFullDay: false,
-      affectsArrival: true, start: '09:00', end: '09:30',
+      start: '09:00', end: '09:30',
     });
     const r = scoreDay(USER, D, day({ exceptions: [appt] }), punches('09:20', '17:00'), RULES)!;
     expect(r.occurrences[0]).toMatchObject({ kind: 'LATE', points: 0.5 });
@@ -332,7 +355,7 @@ describe('scoreDay — point-bearing exceptions', () => {
     const partial = exception({
       typeId: 3, typeKey: 'ncns', label: 'No Call / No Show',
       isExcused: false, isFullDay: false,
-      affectsArrival: true, affectsDeparture: true, start: '09:00', end: '09:20',
+      start: '09:00', end: '09:20',
     });
     const r = scoreDay(USER, D, day({ exceptions: [partial] }), punches('09:20', '17:00'), RULES)!;
     expect(r.occurrences).toHaveLength(1);
@@ -363,7 +386,7 @@ describe('scoreDay — VTO and Jury Duty', () => {
   it('a morning in court forgives the late arrival it caused and nothing else', () => {
     const jury = exception({
       typeId: 13, typeKey: 'jury_duty', label: 'Jury Duty', isExcused: true, isFullDay: false,
-      affectsArrival: true, affectsDeparture: true, start: '09:00', end: '12:00',
+      start: '09:00', end: '12:00',
     });
     const r = scoreDay(USER, D, day({ exceptions: [jury] }), punches('12:00', '17:00'), RULES)!;
     expect(r.occurrences).toEqual([]);
@@ -375,7 +398,7 @@ describe('scoreDay — VTO and Jury Duty', () => {
     // forgiven, so the extra half hour is a late arrival on its own merits.
     const jury = exception({
       typeId: 13, typeKey: 'jury_duty', label: 'Jury Duty', isExcused: true, isFullDay: false,
-      affectsArrival: true, affectsDeparture: true, start: '09:00', end: '12:00',
+      start: '09:00', end: '12:00',
     });
     const r = scoreDay(USER, D, day({ exceptions: [jury] }), punches('12:30', '17:00'), RULES)!;
     expect(r.daily.late_seconds).toBe(1800);
@@ -406,7 +429,7 @@ describe('unapproved time short of a full day scores as lateness', () => {
     if (c.kind !== 'PARTIAL') throw new Error(`expected PARTIAL, got ${c.kind}`);
     return exception({
       typeId: 2, typeKey: 'unexcused_absence', label: 'Unpaid - Not Approved',
-      isExcused: false, isFullDay: false, affectsArrival: true, affectsDeparture: true,
+      isExcused: false, isFullDay: false,
       start: c.windows[0].start, end: c.windows[0].end,
     });
   }

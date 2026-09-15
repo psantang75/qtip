@@ -32,7 +32,7 @@ const segment = (start: string, end: string, countsAsCoverage: boolean) => ({
 
 const exception = (start: string | null, end: string | null, isFullDay: boolean) => ({
   id: 1, typeId: 1, typeKey: 'PTO', label: 'PTO', isExcused: true,
-  isFullDay, affectsArrival: false, affectsDeparture: false, start, end,
+  isFullDay, start, end,
 });
 
 describe('minute helpers', () => {

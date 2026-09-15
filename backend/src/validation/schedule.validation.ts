@@ -97,8 +97,6 @@ export const ExceptionTypeSchema = z.object({
   paychex_pay_type: z.string().max(100).nullish(),
   is_excused: z.boolean().optional(),
   duration_mode: z.enum(['FULL_DAY', 'WINDOW', 'EITHER']).optional(),
-  affects_arrival: z.boolean().optional(),
-  affects_departure: z.boolean().optional(),
 });
 
 export const ActivityTypeSchema = z.object({

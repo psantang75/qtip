@@ -148,26 +148,25 @@ function adherentMinutes(
  * exception is handled earlier and never reaches here; this is the partial case,
  * where forgiveness reduces the deviation instead of erasing the day.
  *
- * Only the part of the window that OVERLAPS the deviation counts — `[shift start,
- * first punch]` on arrival, `[last punch, shift end]` on departure. Crediting the
- * window's whole length instead would let a mid-shift appointment erase lateness
- * it never covered, and would let one type carrying both edge flags forgive the
- * same absence twice: an afternoon PTO block would also excuse a morning arrival.
- * That second case is what allows a single Paychex-linked type to serve both a
- * full day and either edge, rather than needing a matched pair of types.
+ * `isExcused` is the only switch: an excused window forgives whatever deviation it
+ * actually covers, on whichever edge it lands on. The WINDOW itself is what scopes
+ * forgiveness, because only the part that OVERLAPS the deviation counts —
+ * `[shift start, first punch]` on arrival, `[last punch, shift end]` on departure.
+ * Crediting the window's whole length instead would let a mid-shift appointment
+ * erase lateness it never covered, and would let one window forgive the same
+ * absence on both edges: an afternoon PTO block would also excuse a morning
+ * arrival. That is also what lets a single Paychex-linked type serve a full day or
+ * either edge rather than needing a matched pair of types.
  */
 function excusedSeconds(
   dateStr: string,
   day: ScheduledDay,
-  edge: 'arrival' | 'departure',
   deviationStart: number,
   deviationEnd: number,
 ): number {
   let seconds = 0;
   for (const ex of day.exceptions) {
     if (!ex.isExcused || ex.isFullDay || !ex.start || !ex.end) continue;
-    const applies = edge === 'arrival' ? ex.affectsArrival : ex.affectsDeparture;
-    if (!applies) continue;
     const start = combineLocal(dateStr, ex.start).getTime();
     let end = combineLocal(dateStr, ex.end).getTime();
     if (end <= start) end = combineLocal(addDays(dateStr, 1), ex.end).getTime();
@@ -270,7 +269,7 @@ export function scoreDay(
   const rawLate = Math.max(0, Math.round((punch.firstPunchAt.getTime() - bounds.start.getTime()) / 1000));
   const lateSeconds = Math.max(
     0,
-    rawLate - excusedSeconds(dateStr, day, 'arrival', bounds.start.getTime(), punch.firstPunchAt.getTime()),
+    rawLate - excusedSeconds(dateStr, day, bounds.start.getTime(), punch.firstPunchAt.getTime()),
   );
 
   // So late the LATE ladder no longer covers it: a 9-hour "late arrival" on an
@@ -287,8 +286,7 @@ export function scoreDay(
   const earlySeconds = punch.lastPunchAt
     ? Math.max(
         0,
-        rawEarly -
-          excusedSeconds(dateStr, day, 'departure', punch.lastPunchAt.getTime(), bounds.end.getTime()),
+        rawEarly - excusedSeconds(dateStr, day, punch.lastPunchAt.getTime(), bounds.end.getTime()),
       )
     : 0;
 

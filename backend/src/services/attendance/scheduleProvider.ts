@@ -38,8 +38,6 @@ export interface ScheduledException {
   label: string;
   isExcused: boolean;
   isFullDay: boolean;
-  affectsArrival: boolean;
-  affectsDeparture: boolean;
   start: string | null;
   end: string | null;
 }
@@ -148,8 +146,6 @@ export async function getScheduledShifts(
       label: e.exception_type.label,
       isExcused: e.exception_type.is_excused,
       isFullDay: e.is_full_day,
-      affectsArrival: e.exception_type.affects_arrival,
-      affectsDeparture: e.exception_type.affects_departure,
       start: e.starts_at ? hmFromDateTime(e.starts_at) : null,
       end: e.ends_at ? hmFromDateTime(e.ends_at) : null,
     };
