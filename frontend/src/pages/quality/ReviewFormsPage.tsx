@@ -1,7 +1,5 @@
-import { useNavigate, Navigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { PlayCircle, ClipboardList } from 'lucide-react'
-import { useAuth } from '@/hooks/useAuth'
-import { useQualityRole } from '@/hooks/useQualityRole'
 import { useActiveForms } from '@/hooks/useQualityQueries'
 import type { FormSummary } from '@/services/qaService'
 import { useFormListFilters } from '@/hooks/useFormListFilters'
@@ -24,9 +22,13 @@ import { ListLoadingSkeleton } from '@/components/common/ListLoadingSkeleton'
 import { RowActionButton } from '@/components/common/RowActionButton'
 import { formatQualityDate } from '@/utils/dateFormat'
 
+/**
+ * Who may open this page is owned by the `quality_review_forms` grant in
+ * `app_page_role_access` (admin Pages & Access screen) and enforced by the
+ * `RequirePageAccess` wrapper on the route — never re-check roles here.
+ */
 export default function ReviewFormsPage() {
-  const { user }  = useAuth()
-  const navigate  = useNavigate()
+  const navigate = useNavigate()
 
   const { data: rawForms = [], isLoading, isError, refetch } = useActiveForms()
 
@@ -45,11 +47,6 @@ export default function ReviewFormsPage() {
   const { sort, dir, toggle, sorted } = useListSort(filtered)
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
   const forms      = sorted.slice((page - 1) * pageSize, page * pageSize)
-
-  const { isAdminOrQA } = useQualityRole()
-  if (user && !isAdminOrQA) {
-    return <Navigate to="/app/quality/submissions" replace />
-  }
 
   return (
     <ListPageShell>
