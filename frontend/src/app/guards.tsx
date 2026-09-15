@@ -125,15 +125,22 @@ export function RequireInsightsAccess({
   children: React.ReactNode
 }): React.ReactElement | null {
   const { user } = useAuth()
-  const { data, isLoading } = useQuery({
+  // retry:false + no-redirect-on-error is deliberate. Treating a transient
+  // query error (429/5xx/network) as "not authorized" and calling <Navigate>
+  // remounts this guard, which re-fires the same access check — a redirect
+  // loop that hammers the rate limiter and produces the endless RW/Ps
+  // scheduler stacks seen in production. We only redirect on a real answer
+  // of `canAccess: false`.
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['insights-access', pageKey, user?.id],
     queryFn: () => getInsightsAccess(pageKey),
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   })
 
   if (!user) return null
-  if (isLoading) {
+  if (isLoading || isError) {
     return (
       <div className="flex items-center justify-center h-40">
         <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -178,15 +185,20 @@ export function RequirePageAccess({
   children: React.ReactNode
 }): React.ReactElement | null {
   const { user } = useAuth()
-  const { data, isLoading } = useQuery({
+  // See the RequireInsightsAccess note above: transient errors must NOT
+  // redirect (that creates a remount loop that re-hits the guard endpoint
+  // and locks the user out under the rate limiter). Only a real answer
+  // drives the navigation decision.
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['app-access', pageKey, user?.id],
     queryFn:  () => getAppAccess(pageKey),
     enabled:  !!user,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   })
 
   if (!user) return null
-  if (isLoading) {
+  if (isLoading || isError) {
     return (
       <div className="flex items-center justify-center h-40">
         <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />

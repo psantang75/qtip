@@ -154,7 +154,15 @@ export const apiLimiter = rateLimit({
       '/dashboard',
       '/insights/navigation',
       '/insights/kpi-config',
-      '/insights/data-freshness'
+      '/insights/data-freshness',
+      // Route guards call these on every route change. Throttling them
+      // makes RequireInsightsAccess / RequirePageAccess fail, and the
+      // failure path used to <Navigate> → remount → refire — a self-DOS
+      // redirect loop. Frontend now stops looping on error; excluding
+      // these cheap GETs keeps the limiter useful for the endpoints
+      // that actually need protection.
+      '/app-access/',
+      '/insights/access/',
     ];
     
     if (readOnlyEndpoints.some(endpoint => req.path.includes(endpoint) && req.method === 'GET')) {
