@@ -97,6 +97,7 @@ export const NAV_CONFIG: SectionConfig[] = [
       { label: 'Workload Validation', path: '/app/insights/workload-validation', icon: 'ListChecks', roles: [], pageKey: 'aa_sales_workload', group: 'Sales Agent Activity' },
       { label: 'Productivity',    path: '/app/insights/aa-productivity', icon: 'Gauge', roles: [], pageKey: 'aa_sales_productivity_report', group: 'Sales Agent Activity' },
       { label: 'Email Activity',  path: '/app/insights/aa-email',   icon: 'Mail',       roles: [], pageKey: 'aa_sales_email',   group: 'Sales Agent Activity' },
+      { label: 'Missed Opportunities', path: '/app/insights/aa-missed-opportunities', icon: 'Lightbulb', roles: [], pageKey: 'aa_sales_missed_opportunities', group: 'Sales Agent Activity' },
       // ── CSR Agent Activity ──
       { label: 'Call Activity',   path: '/app/insights/csr-call',       icon: 'Phone',         roles: [], pageKey: 'csr_call',       group: 'CSR Agent Activity' },
       { label: 'Call Length',     path: '/app/insights/csr-call-length', icon: 'BarChart3',    roles: [], pageKey: 'csr_call_length', group: 'CSR Agent Activity' },

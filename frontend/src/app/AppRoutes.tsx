@@ -27,6 +27,7 @@ import InsightsPageManagementPage from '../pages/admin/InsightsPageManagementPag
 import InsightsIngestionLogPage   from '../pages/admin/InsightsIngestionLogPage'
 import InsightsMonitoringPage     from '../pages/admin/InsightsMonitoringPage'
 import InsightsSourceReportsPage   from '../pages/admin/InsightsSourceReportsPage'
+import InsightsMissedOpportunitiesSettingsPage from '../pages/admin/InsightsMissedOpportunitiesSettingsPage'
 import ManualUploadPage            from '../pages/admin/ManualUploadPage'
 import SystemSettingsPage         from '../pages/admin/SystemSettingsPage'
 import UnlockRegisterPage         from '../pages/admin/UnlockRegisterPage'
@@ -129,6 +130,8 @@ const CollectionsCyclePerformancePage = React.lazy(() => import('../pages/insigh
 const CollectionsCycleInvoicesPage = React.lazy(() => import('../pages/insights/CollectionsCycleInvoicesPage'))
 const CollectionsFailedChargeInvoicesPage = React.lazy(() => import('../pages/insights/CollectionsFailedChargeInvoicesPage'))
 const CollectionsAgentPerformancePage = React.lazy(() => import('../pages/insights/CollectionsAgentPerformancePage'))
+const AAMissedOpportunitiesPage = React.lazy(() => import('../pages/insights/AAMissedOpportunitiesPage'))
+
 const NotFoundPage           = React.lazy(() => import('../pages/NotFoundPage'))
 
 const ON_DEMAND_REPORT_ROLES = [ROLE_IDS.ADMIN, ROLE_IDS.MANAGER]
@@ -214,6 +217,7 @@ export default function AppRoutes(): React.ReactElement {
           <Route path="insights/ingestion"  element={<InsightsIngestionLogPage />} />
           <Route path="insights/monitoring" element={<InsightsMonitoringPage />} />
           <Route path="insights/source-reports" element={<InsightsSourceReportsPage />} />
+          <Route path="insights/missed-opportunities" element={<InsightsMissedOpportunitiesSettingsPage />} />
           <Route path="insights/import"     element={<ManualUploadPage />} />
         </Route>
 
@@ -433,6 +437,7 @@ export default function AppRoutes(): React.ReactElement {
             <Route path="aa-productivity" element={<RequireInsightsAccess pageKey="aa_sales_productivity_report"><PageLoader><AAProductivityPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="workload-validation" element={<RequireInsightsAccess pageKey="aa_sales_workload"><PageLoader><WorkloadTouchValidationPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="aa-email"    element={<RequireInsightsAccess pageKey="aa_sales_email"><PageLoader><AAEmailActivityPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="aa-missed-opportunities" element={<RequireInsightsAccess pageKey="aa_sales_missed_opportunities"><PageLoader><AAMissedOpportunitiesPage /></PageLoader></RequireInsightsAccess>} />
             {/* Agent Activity - CSR */}
             <Route path="csr-call"       element={<RequireInsightsAccess pageKey="csr_call"><PageLoader><CSRCallActivityPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="csr-call-length" element={<RequireInsightsAccess pageKey="csr_call_length"><PageLoader><CSRCallLengthPage /></PageLoader></RequireInsightsAccess>} />

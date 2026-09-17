@@ -693,6 +693,46 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     formulaPlain: 'COUNT(open AR tasks in range)',
     source: 'ie_fact_collections_task (open outcomes)',
   },
+  // ── Missed Opportunities · Sales Agent Activity ────────────────────────────
+  // Produced by the nightly MissedOpportunitiesWorker, which applies the
+  // editable rule set (Settings tab) to each connected sales call. No goals are
+  // seeded: what counts as a miss is configurable, so a fixed target would be
+  // meaningless until a team has run against a stable rule set for a while.
+  mo_clean_call_rate: {
+    code: 'mo_clean_call_rate', name: 'Clean Calls',
+    format: 'PERCENT', direction: 'UP_IS_GOOD', scope: 'mixed',
+    description: 'Share of analyzed calls the review found nothing to coach on. A clean call is a real, expected outcome — the review returns no findings when the rep handled the call well, so this is the tile that says how much of the day went right. Read it before the miss counts. Analyzed excludes calls the review could not complete: no transcript, a failed transcript fetch, or a model response that could not be read.',
+    formulaPlain: '(calls_analyzed − calls with any finding) / calls_analyzed × 100, day-wide',
+    source: 'ie_missed_opportunity_run.calls_analyzed, ie_missed_opportunity_finding',
+  },
+  mo_total_misses: {
+    code: 'mo_total_misses', name: 'Missed Opportunities',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD', scope: 'department',
+    description: 'Total missed opportunities found across the selected period — one per rule that fired on a call. A call can carry more than one miss.',
+    formulaPlain: 'COUNT(findings in range)',
+    source: 'ie_missed_opportunity_finding (nightly LLM review of call transcripts + CRM notes)',
+  },
+  mo_high_severity: {
+    code: 'mo_high_severity', name: 'High Severity',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD', scope: 'department',
+    description: 'Misses on high-severity rules — the ones that cost or risk real revenue on the call (unclosed buying signal, uncaptured multi-location expansion, churn not routed to Customer Service, deal lost over a small blocker).',
+    formulaPlain: "COUNT(findings WHERE severity = 'high')",
+    source: 'ie_missed_opportunity_finding (severity from the rule, overridable per finding)',
+  },
+  mo_misses_per_call: {
+    code: 'mo_misses_per_call', name: 'Misses per Call',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD', scope: 'mixed',
+    description: 'Findings divided by the calls actually analyzed — the density measure. Denominator is analyzed calls, not all calls placed: short dials below the talk-time floor and calls with no transcript are never graded, so counting them would understate density. Both halves are day-wide, so this tile does not narrow with an agent or department filter.',
+    formulaPlain: 'findings / calls_analyzed, both day-wide',
+    source: 'ie_missed_opportunity_finding / ie_missed_opportunity_run.calls_analyzed',
+  },
+  mo_agents_affected: {
+    code: 'mo_agents_affected', name: 'Agents with Misses',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD', scope: 'department',
+    description: 'Salespeople with at least one missed opportunity in the period. Read next to the total: a high total across few agents is a coaching conversation, spread across everyone it is a process or training gap.',
+    formulaPlain: 'COUNT(DISTINCT agent_name WHERE findings > 0)',
+    source: 'ie_missed_opportunity_finding',
+  },
 }
 
 /** Resolves thresholds for a KPI tile — falls back to the static defaults from kpiDefs */

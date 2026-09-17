@@ -13,6 +13,8 @@
  *     :15 / :45   ie-rollup               ← KPI rollups (drives dashboards)
  *     :20 / :50   ie-source-dispatch      ← DB-driven source-report ingestion
  *     :25 / :55   ie-monitor              ← dataset health eval + alerts
+ *     05:20 daily ie-missed-opportunities ← LLM review of yesterday's sales calls
+ *     06:00 1st (monthly) ie-sales-plays-miner ← mine WON/LOST calls into plays
  *     00:00 UTC (monthly) ie-partition-manager ← partition housekeeping
  *
  * ie-source-dispatch is a fixed 30-min floor only; which reports actually run
@@ -111,6 +113,39 @@ module.exports = {
       name: 'ie-monitor',
       script: './backend/dist/workers/run-monitor.js',
       cron_restart: '25,55 * * * *',
+      watch: false,
+      autorestart: false,
+      env: { NODE_ENV: 'production' }
+    },
+    {
+      // Missed Opportunities: one LLM pass per connected sales call for the
+      // PRIOR business day, so the review is waiting when managers log in.
+      // Unlike the half-hourly workers this is a daily job — each run costs
+      // real money (capped by ie_config.missed_opps_daily_usd_cap), and the
+      // material it reads (yesterday's transcripts + CRM notes) does not
+      // change during the day. Runs at 05:20 so it lands after the overnight
+      // dimension syncs but well before the workday.
+      //
+      // Idempotent by run_date, so a manual re-run after a rule-set change
+      // replaces the day cleanly:
+      //   node backend/dist/workers/run-missed-opportunities.js 2026-09-04
+      name: 'ie-missed-opportunities',
+      script: './backend/dist/workers/run-missed-opportunities.js',
+      cron_restart: '20 5 * * *',
+      watch: false,
+      autorestart: false,
+      env: { NODE_ENV: 'production' }
+    },
+    {
+      // Sales Plays miner (Phase 2 learning loop): once a month, mine the active
+      // sales team's WON/LOST calls since the last mined day into 'proposed'
+      // plays for admin approval. Monthly (1st, 06:00) because it is incremental
+      // and budget-capped (missed_opps_plays_monthly_usd_cap) — running it more
+      // often just re-scans the same calls. The whole loop is also gated by
+      // missed_opps_plays_enabled, so the worker exits immediately when off.
+      name: 'ie-sales-plays-miner',
+      script: './backend/dist/workers/run-sales-plays-miner.js',
+      cron_restart: '0 6 1 * *',
       watch: false,
       autorestart: false,
       env: { NODE_ENV: 'production' }

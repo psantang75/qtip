@@ -84,25 +84,25 @@ model User {
   direct_reports User[]      @relation("UserManager")
 
   forms_created                         Form[]
-  performance_goals_created             PerformanceGoal[]           @relation("GoalCreatedBy")
-  performance_goals_updated             PerformanceGoal[]           @relation("GoalUpdatedBy")
-  performance_goal_users                PerformanceGoalUser[]       @relation("GoalUser")
-  performance_goal_users_assigned       PerformanceGoalUser[]       @relation("GoalAssignedBy")
-  performance_goal_departments_assigned PerformanceGoalDepartment[] @relation("DeptGoalAssignedBy")
-  department_managers_mgr               DepartmentManager[]         @relation("DeptManagerMgr")
-  department_managers_assigned          DepartmentManager[]         @relation("DeptManagerAssignedBy")
+  performance_goals_created             PerformanceGoal[]              @relation("GoalCreatedBy")
+  performance_goals_updated             PerformanceGoal[]              @relation("GoalUpdatedBy")
+  performance_goal_users                PerformanceGoalUser[]          @relation("GoalUser")
+  performance_goal_users_assigned       PerformanceGoalUser[]          @relation("GoalAssignedBy")
+  performance_goal_departments_assigned PerformanceGoalDepartment[]    @relation("DeptGoalAssignedBy")
+  department_managers_mgr               DepartmentManager[]            @relation("DeptManagerMgr")
+  department_managers_assigned          DepartmentManager[]            @relation("DeptManagerAssignedBy")
   courses_created                       Course[]
-  coaching_sessions_csr                 CoachingSession[]           @relation("CoachingCsr")
-  coaching_sessions_created             CoachingSession[]           @relation("CoachingCreatedBy")
+  coaching_sessions_csr                 CoachingSession[]              @relation("CoachingCsr")
+  coaching_sessions_created             CoachingSession[]              @relation("CoachingCreatedBy")
   calls                                 Call[]
   submissions_submitted                 Submission[]
   score_snapshots                       ScoreSnapshot[]
-  disputes_raised                       Dispute[]                   @relation("DisputeBy")
-  disputes_resolved                     Dispute[]                   @relation("DisputeResolvedBy")
-  dispute_score_history                 DisputeScoreHistory[]       @relation("ScoreHistoryRecordedBy")
+  disputes_raised                       Dispute[]                      @relation("DisputeBy")
+  disputes_resolved                     Dispute[]                      @relation("DisputeResolvedBy")
+  dispute_score_history                 DisputeScoreHistory[]          @relation("ScoreHistoryRecordedBy")
   audit_logs                            AuditLog[]
-  audit_assignments_created             AuditAssignment[]           @relation("AuditAssignmentCreatedBy")
-  audit_assignments_qa                  AuditAssignment[]           @relation("AuditAssignmentQA")
+  audit_assignments_created             AuditAssignment[]              @relation("AuditAssignmentCreatedBy")
+  audit_assignments_qa                  AuditAssignment[]              @relation("AuditAssignmentQA")
   agent_activity                        AgentActivity[]
   report_definitions_created            ReportDefinition[]
   import_logs                           ImportLog[]
@@ -124,19 +124,19 @@ model User {
   adherence_exceptions                  AdherenceException[]
   quiz_attempts                         QuizAttempt[]
   training_resources                    TrainingResource[]
-  write_ups_as_csr                      WriteUp[]          @relation("WriteUpCsr")
-  write_ups_created                     WriteUp[]          @relation("WriteUpCreatedBy")
-  write_ups_as_manager                  WriteUp[]          @relation("WriteUpManager")
-  write_ups_as_hr_witness               WriteUp[]          @relation("WriteUpHrWitness")
-  write_up_follow_ups                   WriteUp[]          @relation("WriteUpFollowUpAssignee")
-  insightsOverrides                     IePageUserOverride[] @relation("InsightsOverrideUser")
-  insightsOverridesGranted              IePageUserOverride[] @relation("InsightsOverrideGranter")
+  write_ups_as_csr                      WriteUp[]                      @relation("WriteUpCsr")
+  write_ups_created                     WriteUp[]                      @relation("WriteUpCreatedBy")
+  write_ups_as_manager                  WriteUp[]                      @relation("WriteUpManager")
+  write_ups_as_hr_witness               WriteUp[]                      @relation("WriteUpHrWitness")
+  write_up_follow_ups                   WriteUp[]                      @relation("WriteUpFollowUpAssignee")
+  insightsOverrides                     IePageUserOverride[]           @relation("InsightsOverrideUser")
+  insightsOverridesGranted              IePageUserOverride[]           @relation("InsightsOverrideGranter")
 
-  password_reset_tokens                 PasswordResetToken[]
-  email_templates_edited                EmailTemplate[]            @relation("EmailTemplateUpdatedBy")
-  email_template_versions_edited        EmailTemplateVersion[]     @relation("EmailTemplateVersionEditedBy")
-  email_logs_received                   EmailLog[]                 @relation("EmailLogToUser")
-  notification_queue_entries            NotificationQueueEntry[]   @relation("NotificationQueueUser")
+  password_reset_tokens          PasswordResetToken[]
+  email_templates_edited         EmailTemplate[]          @relation("EmailTemplateUpdatedBy")
+  email_template_versions_edited EmailTemplateVersion[]   @relation("EmailTemplateVersionEditedBy")
+  email_logs_received            EmailLog[]               @relation("EmailLogToUser")
+  notification_queue_entries     NotificationQueueEntry[] @relation("NotificationQueueUser")
 
   @@index([last_login])
   @@index([role_id, is_active, department_id], map: "idx_users_role_active_dept")
@@ -154,19 +154,18 @@ model ListItem {
   is_active  Boolean  @default(true)
   created_at DateTime @default(now()) @db.DateTime(0)
 
-  @@ignore
   @@map("list_items")
+  @@ignore
 }
 
-
 model Form {
-  id                Int                 @id @default(autoincrement())
-  form_name         String              @db.VarChar(100)
-  interaction_type  FormInteractionType @default(UNIVERSAL)
-  version           Int                 @default(1)
-  created_by        Int
-  created_at        DateTime            @default(now()) @db.DateTime(0)
-  is_active         Boolean             @default(true) @db.TinyInt
+  id                                 Int                 @id @default(autoincrement())
+  form_name                          String              @db.VarChar(100)
+  interaction_type                   FormInteractionType @default(UNIVERSAL)
+  version                            Int                 @default(1)
+  created_by                         Int
+  created_at                         DateTime            @default(now()) @db.DateTime(0)
+  is_active                          Boolean             @default(true) @db.TinyInt
   /// Non-public form lifecycle mode. NULL = normal form governed by
   /// `is_active` (Active/Inactive). 'INTERNAL' = hidden-capture form used for
   /// internal management research / testing a new form: it is excluded from
@@ -174,13 +173,13 @@ model Form {
   /// and surfaced only in the "Internal Research" Insights section. The
   /// column is a string (not an enum) so future modes (e.g. 'PILOT') need
   /// no migration.
-  access_mode       String?             @db.VarChar(24)
+  access_mode                        String?             @db.VarChar(24)
   /// When `access_mode` is set, the JSON array of role names (e.g.
   /// ["qa","manager"]) allowed to audit with this form AND view its
   /// captured results. `admin` is always allowed implicitly. NULL for
   /// normal forms.
-  access_roles      Json?
-  parent_form_id    Int?
+  access_roles                       Json?
+  parent_form_id                     Int?
   /// Stable identity of a form ACROSS all its versions. Every version of the
   /// same logical form shares one `form_group_id` (the id of the family's
   /// first version). `form_name`, `version`, and `parent_form_id` are all
@@ -190,46 +189,46 @@ model Form {
   /// single source of truth for "which form is this, regardless of version".
   /// Used to deactivate prior versions on save and to resolve the current
   /// audience for Internal forms. New versions inherit the parent's value.
-  form_group_id     Int?
-  user_version      Int?
-  user_version_date DateTime?           @db.Date
-  critical_cap_percent Decimal           @default(79.00) @db.Decimal(5, 2)
-  ai_enabled        Boolean             @default(false) @db.TinyInt
-  ai_review_guidance String?            @db.Text
-  ai_submit_as_draft Boolean            @default(false) @db.TinyInt
-  ai_sample_review_pct       Int        @default(10) @db.UnsignedInt
-  ai_sample_low_score_always Boolean    @default(true) @db.TinyInt
-  ai_sample_low_confidence_threshold Decimal? @db.Decimal(3, 2)
-  ai_calibration_auto_absorb_days  Int?     @default(180)
-  ai_monthly_cost_budget_usd       Decimal? @db.Decimal(8, 2)
-  ai_disagreement_route_threshold  Decimal? @db.Decimal(3, 2)
+  form_group_id                      Int?
+  user_version                       Int?
+  user_version_date                  DateTime?           @db.Date
+  critical_cap_percent               Decimal             @default(79.00) @db.Decimal(5, 2)
+  ai_enabled                         Boolean             @default(false) @db.TinyInt
+  ai_review_guidance                 String?             @db.Text
+  ai_submit_as_draft                 Boolean             @default(false) @db.TinyInt
+  ai_sample_review_pct               Int                 @default(10) @db.UnsignedInt
+  ai_sample_low_score_always         Boolean             @default(true) @db.TinyInt
+  ai_sample_low_confidence_threshold Decimal?            @db.Decimal(3, 2)
+  ai_calibration_auto_absorb_days    Int?                @default(180)
+  ai_monthly_cost_budget_usd         Decimal?            @db.Decimal(8, 2)
+  ai_disagreement_route_threshold    Decimal?            @db.Decimal(3, 2)
   /// Phase C (C2): max number of auto-attached secondary sources the
   /// case loader may pull in for combined ticket+call reviews. Default
   /// 3 keeps the prompt cost bounded; per-form override lets a noisy
   /// queue dial it down to 1 (primary-only effectively) or up to 10.
-  ai_max_attached_sources          Int      @default(3) @db.UnsignedTinyInt
+  ai_max_attached_sources            Int                 @default(3) @db.UnsignedTinyInt
   /// Optional per-form base prompt assignment. NULL means "use the default
   /// for the requested `prompt_kind`" (system.v3 today). Lets domain-specific
   /// forms (sales, warranty, etc.) opt into a non-default base authored
   /// through the Base Prompt Library.
-  ai_base_prompt_id                Int?
+  ai_base_prompt_id                  Int?
   /// Per-form AI model provider. Controls which LLM the synthesis pipeline
   /// (reasoning + answer chunks + verification) calls. Allowed values are
   /// "anthropic" (Claude — default, current behaviour) and "openai"
   /// (ChatGPT / GPT-5). Inherited across form versions through
   /// MySQLFormRepository.updateForm() so the choice survives Save Form.
-  ai_model_provider                String   @default("anthropic") @db.VarChar(32)
+  ai_model_provider                  String              @default("anthropic") @db.VarChar(32)
 
-  creator     User   @relation(fields: [created_by], references: [id], onDelete: Cascade)
-  parent_form Form?  @relation("FormVersions", fields: [parent_form_id], references: [id], onDelete: SetNull)
-  child_forms Form[] @relation("FormVersions")
+  creator        User          @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  parent_form    Form?         @relation("FormVersions", fields: [parent_form_id], references: [id], onDelete: SetNull)
+  child_forms    Form[]        @relation("FormVersions")
   ai_base_prompt AiBasePrompt? @relation(fields: [ai_base_prompt_id], references: [id], onDelete: SetNull)
 
-  form_metadata_fields   FormMetadataField[]
-  form_categories        FormCategory[]
-  audit_assignments      AuditAssignment[]
-  submissions            Submission[]
-  performance_goals_form PerformanceGoal[]   @relation("GoalTargetForm")
+  form_metadata_fields     FormMetadataField[]
+  form_categories          FormCategory[]
+  audit_assignments        AuditAssignment[]
+  submissions              Submission[]
+  performance_goals_form   PerformanceGoal[]          @relation("GoalTargetForm")
   ai_rule_pack_assignments AiFormRulePackAssignment[]
 
   @@index([interaction_type])
@@ -470,13 +469,11 @@ model Course {
   created_at  DateTime @default(now()) @db.DateTime(0)
   is_draft    Boolean  @default(true) @db.TinyInt
 
-  creator User    @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  creator User   @relation(fields: [created_by], references: [id], onDelete: Cascade)
   quizzes Quiz[]
 
   @@map("courses")
 }
-
-
 
 model Quiz {
   id         Int     @id @default(autoincrement())
@@ -506,19 +503,16 @@ model QuizQuestion {
   @@map("quiz_questions")
 }
 
-
-
-
 model QuizAttempt {
-  id                  Int              @id @default(autoincrement())
+  id                  Int      @id @default(autoincrement())
   quiz_id             Int
   user_id             Int
   coaching_session_id Int?
-  answers_json        String           @db.Text
-  score               Decimal          @db.Decimal(5, 2)
-  passed              Boolean          @db.TinyInt
-  attempt_number      Int              @default(1)
-  submitted_at        DateTime         @default(now()) @db.DateTime(0)
+  answers_json        String   @db.Text
+  score               Decimal  @db.Decimal(5, 2)
+  passed              Boolean  @db.TinyInt
+  attempt_number      Int      @default(1)
+  submitted_at        DateTime @default(now()) @db.DateTime(0)
 
   quiz             Quiz             @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
   user             User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
@@ -546,7 +540,7 @@ model TrainingResource {
   created_at     DateTime @default(now()) @db.DateTime(0)
   updated_at     DateTime @default(now()) @updatedAt @db.DateTime(0)
 
-  creator         User                    @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  creator           User              @relation(fields: [created_by], references: [id], onDelete: Cascade)
   coaching_sessions CoachingSession[]
 
   @@index([is_active])
@@ -558,8 +552,8 @@ model CoachingSession {
   batch_id             String?               @db.VarChar(36)
   csr_id               Int
   session_date         DateTime              @db.DateTime(0)
-  coaching_purpose     Int?                  // FK -> list_items.id (list_type='coaching_purpose')
-  coaching_format      Int?                  // FK -> list_items.id (list_type='coaching_format')
+  coaching_purpose     Int? // FK -> list_items.id (list_type='coaching_purpose')
+  coaching_format      Int? // FK -> list_items.id (list_type='coaching_format')
   notes                String?               @db.Text
   attachment_filename  String?               @db.VarChar(255)
   attachment_path      String?               @db.VarChar(500)
@@ -569,28 +563,28 @@ model CoachingSession {
   created_at           DateTime              @default(now()) @db.DateTime(0)
   created_by           Int?
 
-  source_type            Int?                 // FK -> list_items.id (list_type='coaching_source')
+  source_type            Int? // FK -> list_items.id (list_type='coaching_source')
   qa_audit_id            Int?
-  required_action        String?              @db.Text
+  required_action        String?   @db.Text
   kb_resource_id         Int?
-  kb_url                 String?              @db.VarChar(500)
+  kb_url                 String?   @db.VarChar(500)
   quiz_id                Int?
-  quiz_required          Boolean              @default(false) @db.TinyInt
-  require_acknowledgment Boolean              @default(true)  @db.TinyInt
-  require_action_plan    Boolean              @default(true)  @db.TinyInt
-  follow_up_required     Boolean              @default(false) @db.TinyInt
-  follow_up_date         DateTime?            @db.DateTime(0)
-  follow_up_notes        String?              @db.Text
-  delivered_at           DateTime?            @db.DateTime(0)
-  completed_at           DateTime?            @db.DateTime(0)
-  closed_at              DateTime?            @db.DateTime(0)
-  due_date               DateTime?            @db.DateTime(0)
-  behavior_flags         String?              @db.VarChar(1000)
-  internal_notes         String?              @db.Text
-  csr_action_plan        String?              @db.Text
-  csr_root_cause         String?              @db.VarChar(255)
-  csr_support_needed     String?              @db.VarChar(255)
-  csr_acknowledged_at    DateTime?            @db.DateTime(0)
+  quiz_required          Boolean   @default(false) @db.TinyInt
+  require_acknowledgment Boolean   @default(true) @db.TinyInt
+  require_action_plan    Boolean   @default(true) @db.TinyInt
+  follow_up_required     Boolean   @default(false) @db.TinyInt
+  follow_up_date         DateTime? @db.DateTime(0)
+  follow_up_notes        String?   @db.Text
+  delivered_at           DateTime? @db.DateTime(0)
+  completed_at           DateTime? @db.DateTime(0)
+  closed_at              DateTime? @db.DateTime(0)
+  due_date               DateTime? @db.DateTime(0)
+  behavior_flags         String?   @db.VarChar(1000)
+  internal_notes         String?   @db.Text
+  csr_action_plan        String?   @db.Text
+  csr_root_cause         String?   @db.VarChar(255)
+  csr_support_needed     String?   @db.VarChar(255)
+  csr_acknowledged_at    DateTime? @db.DateTime(0)
 
   is_legacy            Boolean @default(false) @db.TinyInt
   legacy_coaching_type String? @db.VarChar(50)
@@ -600,8 +594,8 @@ model CoachingSession {
   kb_resource TrainingResource? @relation(fields: [kb_resource_id], references: [id], onDelete: SetNull)
   quiz        Quiz?             @relation("CoachingSessionQuiz", fields: [quiz_id], references: [id], onDelete: SetNull)
 
-  quiz_attempts           QuizAttempt[]
-  write_ups               WriteUp[]
+  quiz_attempts QuizAttempt[]
+  write_ups     WriteUp[]
 
   @@index([created_by])
   @@index([csr_id, created_by])
@@ -616,48 +610,49 @@ model CoachingSession {
 }
 
 model WriteUp {
-  id                     Int            @id @default(autoincrement())
+  id                     Int                      @id @default(autoincrement())
   csr_id                 Int
   document_type          WriteUpType
-  status                 WriteUpStatus  @default(DRAFT)
-  meeting_date           DateTime?      @db.DateTime(0)
-  meeting_notes          String?        @db.Text
-  corrective_action      String?        @db.Text
-  correction_timeline    String?        @db.VarChar(255)
-  checkin_date           DateTime?      @db.Date
-  consequence            String?        @db.Text
-  internal_notes         String?        @db.Text
+  status                 WriteUpStatus            @default(DRAFT)
+  meeting_date           DateTime?                @db.DateTime(0)
+  meeting_notes          String?                  @db.Text
+  corrective_action      String?                  @db.Text
+  correction_timeline    String?                  @db.VarChar(255)
+  checkin_date           DateTime?                @db.Date
+  consequence            String?                  @db.Text
+  internal_notes         String?                  @db.Text
   linked_coaching_id     Int?
   manager_id             Int?
   hr_witness_id          Int?
-  follow_up_required     Boolean        @default(false) @db.TinyInt
-  follow_up_date         DateTime?      @db.Date
+  follow_up_required     Boolean                  @default(false) @db.TinyInt
+  follow_up_date         DateTime?                @db.Date
   follow_up_assigned_to  Int?
-  follow_up_checklist    String?        @db.Text
-  follow_up_notes        String?        @db.Text
-  follow_up_completed_at DateTime?      @db.DateTime(0)
-  signed_at              DateTime?      @db.DateTime(0)
-  signature_data         String?        @db.Text
-  signed_ip              String?        @db.VarChar(45)
-  acknowledged_at        DateTime?      @db.DateTime(0)
-  refusal_reason         String?        @db.Text
-  refused_at             DateTime?      @db.DateTime(0)
+  follow_up_checklist    String?                  @db.Text
+  follow_up_notes        String?                  @db.Text
+  follow_up_completed_at DateTime?                @db.DateTime(0)
+  signed_at              DateTime?                @db.DateTime(0)
+  signature_data         String?                  @db.Text
+  signed_ip              String?                  @db.VarChar(45)
+  acknowledged_at        DateTime?                @db.DateTime(0)
+  refusal_reason         String?                  @db.Text
+  refused_at             DateTime?                @db.DateTime(0)
   created_by             Int
-  created_at             DateTime       @default(now()) @db.DateTime(0)
-  updated_at             DateTime       @updatedAt @db.DateTime(0)
-  delivered_at           DateTime?      @db.DateTime(0)
-  closed_at              DateTime?      @db.DateTime(0)
-  is_legacy              Boolean        @default(false) @db.TinyInt
-  legacy_coaching_type   String?        @db.VarChar(50)
-  csr                    User           @relation("WriteUpCsr", fields: [csr_id], references: [id], onDelete: Cascade)
-  creator                User           @relation("WriteUpCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
-  manager                User?          @relation("WriteUpManager", fields: [manager_id], references: [id], onDelete: SetNull)
-  hr_witness             User?          @relation("WriteUpHrWitness", fields: [hr_witness_id], references: [id], onDelete: SetNull)
-  follow_up_assignee     User?          @relation("WriteUpFollowUpAssignee", fields: [follow_up_assigned_to], references: [id], onDelete: SetNull)
-  linked_coaching        CoachingSession? @relation(fields: [linked_coaching_id], references: [id], onDelete: SetNull)
+  created_at             DateTime                 @default(now()) @db.DateTime(0)
+  updated_at             DateTime                 @updatedAt @db.DateTime(0)
+  delivered_at           DateTime?                @db.DateTime(0)
+  closed_at              DateTime?                @db.DateTime(0)
+  is_legacy              Boolean                  @default(false) @db.TinyInt
+  legacy_coaching_type   String?                  @db.VarChar(50)
+  csr                    User                     @relation("WriteUpCsr", fields: [csr_id], references: [id], onDelete: Cascade)
+  creator                User                     @relation("WriteUpCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
+  manager                User?                    @relation("WriteUpManager", fields: [manager_id], references: [id], onDelete: SetNull)
+  hr_witness             User?                    @relation("WriteUpHrWitness", fields: [hr_witness_id], references: [id], onDelete: SetNull)
+  follow_up_assignee     User?                    @relation("WriteUpFollowUpAssignee", fields: [follow_up_assigned_to], references: [id], onDelete: SetNull)
+  linked_coaching        CoachingSession?         @relation(fields: [linked_coaching_id], references: [id], onDelete: SetNull)
   incidents              WriteUpIncident[]
   prior_discipline       WriteUpPriorDiscipline[]
   attachments            WriteUpAttachment[]
+
   @@index([csr_id])
   @@index([status])
   @@index([created_by])
@@ -668,24 +663,26 @@ model WriteUp {
 }
 
 model WriteUpIncident {
-  id             Int      @id @default(autoincrement())
-  write_up_id    Int
-  description    String   @db.Text
-  sort_order     Int      @default(0)
-  write_up       WriteUp  @relation(fields: [write_up_id], references: [id], onDelete: Cascade)
-  violations     WriteUpViolation[]
+  id          Int                @id @default(autoincrement())
+  write_up_id Int
+  description String             @db.Text
+  sort_order  Int                @default(0)
+  write_up    WriteUp            @relation(fields: [write_up_id], references: [id], onDelete: Cascade)
+  violations  WriteUpViolation[]
+
   @@index([write_up_id])
   @@map("write_up_incidents")
 }
 
 model WriteUpViolation {
-  id                 Int             @id @default(autoincrement())
+  id                 Int              @id @default(autoincrement())
   incident_id        Int
-  policy_violated    String          @db.VarChar(255)
-  reference_material String?         @db.VarChar(500)
-  sort_order         Int             @default(0)
-  incident           WriteUpIncident @relation(fields: [incident_id], references: [id], onDelete: Cascade)
+  policy_violated    String           @db.VarChar(255)
+  reference_material String?          @db.VarChar(500)
+  sort_order         Int              @default(0)
+  incident           WriteUpIncident  @relation(fields: [incident_id], references: [id], onDelete: Cascade)
   examples           WriteUpExample[]
+
   @@index([incident_id])
   @@map("write_up_violations")
 }
@@ -700,6 +697,7 @@ model WriteUpExample {
   qa_question_id   Int?
   sort_order       Int                  @default(0)
   violation        WriteUpViolation     @relation(fields: [violation_id], references: [id], onDelete: Cascade)
+
   @@index([violation_id])
   @@map("write_up_examples")
 }
@@ -710,6 +708,7 @@ model WriteUpPriorDiscipline {
   reference_type String  @db.VarChar(50)
   reference_id   Int
   write_up       WriteUp @relation(fields: [write_up_id], references: [id], onDelete: Cascade)
+
   @@unique([write_up_id, reference_type, reference_id], name: "unique_prior_discipline")
   @@index([write_up_id])
   @@map("write_up_prior_discipline")
@@ -727,6 +726,7 @@ model WriteUpAttachment {
   mime_type       String?  @db.VarChar(100)
   created_at      DateTime @default(now()) @db.DateTime(0)
   write_up        WriteUp  @relation(fields: [write_up_id], references: [id], onDelete: Cascade)
+
   @@index([write_up_id])
   @@map("write_up_attachments")
 }
@@ -757,24 +757,24 @@ model Call {
 }
 
 model Submission {
-  id           Int              @id @default(autoincrement())
-  form_id      Int
-  call_id      Int?
+  id                       Int              @id @default(autoincrement())
+  form_id                  Int
+  call_id                  Int?
   /// Phase C (C4): multi-source case the submission belongs to. Format
   /// `<KIND>:<external_id>` — the KIND/id of the primary source. Lets
   /// the inbox / calibration / readiness logic group multiple
   /// submissions (AI run + later sample-review run) under the same case.
-  case_id      String?          @db.VarChar(64)
+  case_id                  String?          @db.VarChar(64)
   /// AI Reviewer provider that authored this DRAFT (multi-source
   /// chunked-synthesis runs only). NULL for human-authored submissions
   /// AND for legacy AI rows created before this column existed. Used as
   /// part of the DRAFT dedup key so compare-mode runs (Claude vs ChatGPT
   /// on the same case) land in two distinct rows.
-  ai_provider  String?          @db.VarChar(16)
-  submitted_by Int
-  submitted_at DateTime         @default(now()) @db.DateTime(0)
-  total_score  Decimal?         @db.Decimal(5, 2)
-  status       SubmissionStatus @default(DRAFT)
+  ai_provider              String?          @db.VarChar(16)
+  submitted_by             Int
+  submitted_at             DateTime         @default(now()) @db.DateTime(0)
+  total_score              Decimal?         @db.Decimal(5, 2)
+  status                   SubmissionStatus @default(DRAFT)
   /// Snapshot of the form's `access_mode` at the moment this submission was
   /// created. NULL = normal audit (visible on all standard surfaces).
   /// 'INTERNAL' = captured under an Internal form; excluded from every
@@ -782,15 +782,15 @@ model Submission {
   /// Research. Snapshotting here (instead of deriving from the form's CURRENT
   /// mode) keeps historical visibility correct when a form's status later
   /// changes — e.g. an Internal form made Active only exposes NEW audits.
-  access_mode  String?          @db.VarChar(24)
-  critical_fail_count Int       @default(0)
-  score_capped Boolean          @default(false) @db.TinyInt
-  ai_overall_confidence    Decimal? @db.Decimal(3, 2)
-  ai_calibrated_confidence Decimal? @db.Decimal(3, 2)
-  ai_extras    Json?
+  access_mode              String?          @db.VarChar(24)
+  critical_fail_count      Int              @default(0)
+  score_capped             Boolean          @default(false) @db.TinyInt
+  ai_overall_confidence    Decimal?         @db.Decimal(3, 2)
+  ai_calibrated_confidence Decimal?         @db.Decimal(3, 2)
+  ai_extras                Json?
   /// How many times an admin has reopened this review. Denormalized from
   /// record_unlock so the reopen cap check and the list badge are one read.
-  reopen_count Int              @default(0)
+  reopen_count             Int              @default(0)
 
   form      Form  @relation(fields: [form_id], references: [id], onDelete: Cascade)
   call      Call? @relation(fields: [call_id], references: [id], onDelete: Cascade)
@@ -871,11 +871,11 @@ model SubmissionCall {
 }
 
 model SubmissionAnswer {
-  id            Int     @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   submission_id Int
   question_id   Int
-  answer        String? @db.Text
-  notes         String? @db.Text
+  answer        String?  @db.Text
+  notes         String?  @db.Text
   ai_confidence Decimal? @db.Decimal(3, 2)
 
   submission        Submission       @relation(fields: [submission_id], references: [id], onDelete: Cascade)
@@ -1110,8 +1110,8 @@ model ReportDefinition {
   created_at     DateTime      @default(now()) @db.DateTime(0)
   updated_at     DateTime      @default(now()) @updatedAt @db.DateTime(0)
 
-  creator              User                         @relation(fields: [created_by], references: [id], onDelete: Cascade)
-  report_departments   ReportDefinitionDepartment[]
+  creator            User                         @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  report_departments ReportDefinitionDepartment[]
 
   @@map("report_definitions")
 }
@@ -1706,6 +1706,140 @@ model IeDatasetHealth {
   @@map("ie_dataset_health")
 }
 
+// ── Missed Opportunities (Insights → Sales Agent Activity) ─────────────────
+// Small operational tables produced by MissedOpportunitiesWorker, which asks
+// the configured LLM to apply an editable rule set to each connected sales
+// call. Unlike ie_fact_* these are unpartitioned with real primary keys, so
+// they can be modeled here and used through Prisma Client. They are NOT
+// registered in ie_source_report — that registry only runs extract/transform
+// SQL pairs and cannot invoke a model. See migration
+// 20260908170000_create_missed_opportunity.
+
+// The rule set editable from the report's Settings tab. body_md tells the model
+// what to look for; guidance_md steers how the recommended approach is worded.
+model IeMissedOpportunityRule {
+  rule_id     Int                         @id @default(autoincrement())
+  rule_key    String                      @unique(map: "uq_mo_rule_key") @db.VarChar(64)
+  rule_name   String                      @db.VarChar(160)
+  category    String                      @db.VarChar(64)
+  severity    IeMissedOpportunitySeverity @default(medium)
+  body_md     String                      @db.MediumText
+  guidance_md String?                     @db.MediumText
+  is_active   Boolean                     @default(true)
+  // False when the miss is graded on the CONTENT of something the rep did
+  // (voicemail wording, a compliance lapse) rather than on a step they skipped.
+  // Those rules are exempt from the verification pass, whose only question —
+  // "does the transcript show the rep attempting this?" — has no useful answer
+  // for them. Added by 20260910130000_missed_opportunity_rule_is_omission.
+  is_omission Boolean                     @default(true)
+  sort_order  Int                         @default(100) @db.SmallInt
+  updated_by  Int?
+  created_at  DateTime                    @default(now()) @db.DateTime(0)
+  updated_at  DateTime                    @default(now()) @updatedAt @db.DateTime(0)
+
+  @@index([is_active, sort_order], map: "idx_mo_rule_active")
+  @@map("ie_missed_opportunity_rule")
+}
+
+// Sales plays (Phase 2). Winning tactics/lines mined from prior WON/LOST calls;
+// admin-approved (status='active') plays ground the recommended-approach wording.
+// String-typed status/category/outcome (not Prisma enums) keep the table light
+// and validated in code. Created by 20260909120000_create_sales_play.
+model IeSalesPlay {
+  play_id                BigInt   @id @default(autoincrement())
+  category               String   @db.VarChar(32)
+  title                  String   @db.VarChar(240)
+  body_md                String   @db.MediumText
+  evidence_quote         String?  @db.VarChar(1200)
+  evidence_speaker       String?  @db.VarChar(16)
+  source_outcome         String   @db.VarChar(8)
+  source_conversation_id String?  @db.VarChar(64)
+  source_agent_name      String?  @db.VarChar(160)
+  est_value_note         String?  @db.VarChar(240)
+  status                 String   @default("proposed") @db.VarChar(16)
+  sort_order             Int      @default(100)
+  support_count          Int?
+  created_at             DateTime @default(now()) @db.DateTime(0)
+  updated_by             Int?
+  updated_at             DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  @@index([status, sort_order], map: "idx_sales_play_status")
+  @@index([source_conversation_id], map: "idx_sales_play_conv")
+  @@map("ie_sales_play")
+}
+
+// One row per analyzed business day. Drives freshness on the report, day-level
+// idempotency (a re-run updates in place), and cost tracking against the
+// missed_opps_daily_usd_cap ie_config key.
+model IeMissedOpportunityRun {
+  run_id           Int                          @id @default(autoincrement())
+  run_date         DateTime                     @unique(map: "uq_mo_run_date") @db.Date
+  status           IeMissedOpportunityRunStatus @default(RUNNING)
+  calls_considered Int                          @default(0)
+  calls_analyzed   Int                          @default(0)
+  calls_failed     Int                          @default(0)
+  calls_skipped    Int                          @default(0)
+  findings_count   Int                          @default(0)
+  tokens_in        Int                          @default(0)
+  tokens_out       Int                          @default(0)
+  usd_cost         Decimal                      @default(0) @db.Decimal(10, 4)
+  model_used       String?                      @db.VarChar(80)
+  error_text       String?                      @db.VarChar(500)
+  started_at       DateTime                     @default(now()) @db.DateTime(0)
+  finished_at      DateTime?                    @db.DateTime(0)
+
+  @@index([finished_at], map: "idx_mo_run_finished")
+  @@map("ie_missed_opportunity_run")
+}
+
+// One row per detected miss. date_key is the call's YYYYMMDD so reads join
+// ie_dim_date / ie_dim_employee like every other Insights report.
+model IeMissedOpportunityFinding {
+  finding_id           BigInt                      @id @default(autoincrement())
+  date_key             Int
+  run_date             DateTime                    @db.Date
+  employee_key         Int?
+  agent_email          String?                     @db.VarChar(190)
+  agent_name           String?                     @db.VarChar(160)
+  conversation_id      String?                     @db.VarChar(64)
+  call_started_at      DateTime?                   @db.DateTime(0)
+  talk_secs            Int?
+  direction            String?                     @db.VarChar(16)
+  customer_name        String?                     @db.VarChar(200)
+  customer_id          Int?
+  // The CRM work item the model cited from the rep's same-day notes, validated
+  // against the ids actually shown to it. Kind is needed because task ids
+  // (tblAction/tblTask) and ticket ids (tblTicketNote/tblTicket) are separate
+  // id spaces. Null means no record was cited. See migration
+  // 20260908190000_missed_opportunity_crm_ref.
+  crm_task_kind        String?                     @db.VarChar(16)
+  crm_task_id          Int?
+  rule_key             String                      @db.VarChar(64)
+  severity             IeMissedOpportunitySeverity @default(medium)
+  title                String                      @db.VarChar(240)
+  what_happened        String                      @db.Text
+  evidence_quote       String?                     @db.Text
+  // Who said evidence_quote: 'CUSTOMER' or 'AGENT' (a quote from the rep's own
+  // CRM notes is 'AGENT'). Null when the model did not attribute it. See
+  // migration 20260908200000_missed_opportunity_evidence_speaker.
+  evidence_speaker     String?                     @db.VarChar(16)
+  recommended_approach String                      @db.Text
+  // Morning-after action to save THIS account, when the deal is still live.
+  // Null when there is nothing to recover (coaching-only miss, deal already
+  // won or dead, or rows graded before this column shipped). See migration
+  // 20260908220000_missed_opportunity_recovery_action.
+  recovery_action      String?                     @db.Text
+  est_value_note       String?                     @db.VarChar(240)
+  created_at           DateTime                    @default(now()) @db.DateTime(0)
+
+  @@index([date_key], map: "idx_mo_find_date")
+  @@index([employee_key, date_key], map: "idx_mo_find_emp")
+  @@index([rule_key, date_key], map: "idx_mo_find_rule")
+  @@index([run_date], map: "idx_mo_find_run")
+  @@index([conversation_id], map: "idx_mo_find_conv")
+  @@map("ie_missed_opportunity_finding")
+}
+
 // ── Enums ──────────────────────────────────────────────────────────────────
 
 enum FormInteractionType {
@@ -1791,7 +1925,6 @@ enum AuditAssignmentTargetType {
   USER
   DEPARTMENT
 }
-
 
 // CoachingPurpose / CoachingFormat enums removed in migration
 // 20260629150000_coaching_lists_to_listitem_fk — these fields are now INT
@@ -1894,6 +2027,19 @@ enum IeSourceLastStatus {
   FAILED
 }
 
+enum IeMissedOpportunitySeverity {
+  low
+  medium
+  high
+}
+
+enum IeMissedOpportunityRunStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
 enum WriteUpType {
   VERBAL_WARNING
   WRITTEN_WARNING
@@ -1922,42 +2068,42 @@ enum WriteUpExampleSource {
 // AI Reviewer Maturity Rollout). Inserts are fire-and-forget — a logging
 // failure must never bubble up into the LLM call path.
 model AiCallLog {
-  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  created_at      DateTime @default(now()) @db.DateTime(3)
-  provider        String   @db.VarChar(32)
-  model           String   @db.VarChar(64)
-  purpose         String   @db.VarChar(64)
+  id             BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  created_at     DateTime @default(now()) @db.DateTime(3)
+  provider       String   @db.VarChar(32)
+  model          String   @db.VarChar(64)
+  purpose        String   @db.VarChar(64)
   /**
    * Cross-cutting (X1): which two-pass stage produced this row.
-   *   - 'classification' — Sonnet topic classifier mini-call (Phase B)
-   *   - 'trace'          — Pass 1 per-source trace (Sonnet)
-   *   - 'synthesis'      — Pass 2 cross-source synthesis (Opus)
-   *   - 'verification'   — Phase A self-consistency re-check (Opus)
-   *   - 'single_pass'    — legacy single-call path (pre-C3)
+   * - 'classification' — Sonnet topic classifier mini-call (Phase B)
+   * - 'trace'          — Pass 1 per-source trace (Sonnet)
+   * - 'synthesis'      — Pass 2 cross-source synthesis (Opus)
+   * - 'verification'   — Phase A self-consistency re-check (Opus)
+   * - 'single_pass'    — legacy single-call path (pre-C3)
    * Backfilled to 'single_pass' on the existing fleet so historical
    * rollups keep working until callers migrate to the two-pass path.
    */
-  pass            String   @default("single_pass") @db.VarChar(16)
-  ticket_id       Int?     @db.UnsignedInt
-  submission_id   Int?     @db.UnsignedInt
-  form_id         Int?     @db.UnsignedInt
+  pass           String   @default("single_pass") @db.VarChar(16)
+  ticket_id      Int?     @db.UnsignedInt
+  submission_id  Int?     @db.UnsignedInt
+  form_id        Int?     @db.UnsignedInt
   /**
    * Cross-cutting (X1): groups every LLM call belonging to the same
    * multi-source review (matches submissions.case_id). NULL for legacy
    * rows and one-off calls (e.g. preview prompts) that don't belong
    * to a case.
    */
-  case_id         String?  @db.VarChar(64)
-  prompt_hash     String   @db.Char(64)
-  prompt_chars    Int      @db.UnsignedInt
-  response_chars  Int      @db.UnsignedInt
-  tokens_in       Int?     @db.UnsignedInt
-  tokens_out      Int?     @db.UnsignedInt
-  elapsed_ms      Int      @db.UnsignedInt
-  retried         Boolean  @default(false) @db.TinyInt
-  success         Boolean  @db.TinyInt
-  error_code      String?  @db.VarChar(64)
-  error_message   String?  @db.Text
+  case_id        String?  @db.VarChar(64)
+  prompt_hash    String   @db.Char(64)
+  prompt_chars   Int      @db.UnsignedInt
+  response_chars Int      @db.UnsignedInt
+  tokens_in      Int?     @db.UnsignedInt
+  tokens_out     Int?     @db.UnsignedInt
+  elapsed_ms     Int      @db.UnsignedInt
+  retried        Boolean  @default(false) @db.TinyInt
+  success        Boolean  @db.TinyInt
+  error_code     String?  @db.VarChar(64)
+  error_message  String?  @db.Text
 
   @@index([ticket_id], map: "idx_ai_call_logs_ticket")
   @@index([submission_id], map: "idx_ai_call_logs_submit")
@@ -1971,26 +2117,26 @@ model AiCallLog {
 // (ai_answers, human_answers) for one ticket on one form so we can compute
 // rolling agreement and per-question drift. See backend/src/services/AICalibrationService.ts.
 model AiCalibrationData {
-  id                   BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  created_at           DateTime @default(now()) @db.DateTime(3)
-  form_id              Int      @db.UnsignedInt
-  ticket_id            Int      @db.UnsignedInt
+  id                  BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  created_at          DateTime  @default(now()) @db.DateTime(3)
+  form_id             Int       @db.UnsignedInt
+  ticket_id           Int       @db.UnsignedInt
   /// Phase B (B4): kind of external source `ticket_id` refers to —
   /// 'TICKET' (CRM ticket id, the historical default) or 'CALL'
   /// (Genesys call id, used by the CALL adapter). Backfilled to
   /// 'TICKET' for every existing row.
-  source_kind          String   @default("TICKET") @db.VarChar(16)
-  source               String   @db.VarChar(32)
-  ai_submission_id     Int?     @db.UnsignedInt
-  human_submission_id  Int?     @db.UnsignedInt
-  ai_answers           Json?
-  human_answers        Json
-  graded_by            Int?     @db.UnsignedInt
-  in_rolling_set       Boolean  @default(true) @db.TinyInt
-  notes                String?  @db.Text
-  absorbed_at          DateTime? @db.DateTime(3)
-  absorbed_by          Int?      @db.UnsignedInt
-  absorbed_reason      String?   @db.VarChar(255)
+  source_kind         String    @default("TICKET") @db.VarChar(16)
+  source              String    @db.VarChar(32)
+  ai_submission_id    Int?      @db.UnsignedInt
+  human_submission_id Int?      @db.UnsignedInt
+  ai_answers          Json?
+  human_answers       Json
+  graded_by           Int?      @db.UnsignedInt
+  in_rolling_set      Boolean   @default(true) @db.TinyInt
+  notes               String?   @db.Text
+  absorbed_at         DateTime? @db.DateTime(3)
+  absorbed_by         Int?      @db.UnsignedInt
+  absorbed_reason     String?   @db.VarChar(255)
 
   @@index([form_id, created_at], map: "idx_calib_form_created")
   @@index([ticket_id], map: "idx_calib_ticket")
@@ -2032,13 +2178,13 @@ model KbPageEmbedding {
 /// trace prompt can inject the canonical step list directly instead of
 /// asking the model to re-derive it from page bodies.
 model KbPageMeta {
-  page_id          Int      @id @db.UnsignedInt
-  qtip_role        String?  @db.VarChar(64)
-  qtip_applies_to  Json?
-  qtip_steps       Json?
-  qtip_authority   String?  @db.VarChar(64)
-  playbook_steps   Json?
-  parsed_at        DateTime @db.DateTime(3)
+  page_id         Int      @id @db.UnsignedInt
+  qtip_role       String?  @db.VarChar(64)
+  qtip_applies_to Json?
+  qtip_steps      Json?
+  qtip_authority  String?  @db.VarChar(64)
+  playbook_steps  Json?
+  parsed_at       DateTime @db.DateTime(3)
 
   @@index([qtip_authority], map: "idx_kb_meta_authority")
   @@map("kb_pages_meta")
@@ -2192,17 +2338,17 @@ model AiFormRulePackAssignment {
 /// to that default. Soft-deleted via `is_archived` so historical eval
 /// runs can still resolve the base a submission ran against.
 model AiBasePrompt {
-  id                   Int      @id @default(autoincrement())
-  key                  String   @unique(map: "uk_base_prompt_key") @db.VarChar(64)
-  name                 String   @db.VarChar(255)
-  description          String?  @db.Text
-  prompt_kind          String   @db.VarChar(32)
-  current_version_id   Int?
-  is_default           Boolean  @default(false) @db.TinyInt
-  is_archived          Boolean  @default(false) @db.TinyInt
-  updated_by           Int?
-  created_at           DateTime @default(now()) @db.DateTime(3)
-  updated_at           DateTime @default(now()) @updatedAt @db.DateTime(3)
+  id                 Int      @id @default(autoincrement())
+  key                String   @unique(map: "uk_base_prompt_key") @db.VarChar(64)
+  name               String   @db.VarChar(255)
+  description        String?  @db.Text
+  prompt_kind        String   @db.VarChar(32)
+  current_version_id Int?
+  is_default         Boolean  @default(false) @db.TinyInt
+  is_archived        Boolean  @default(false) @db.TinyInt
+  updated_by         Int?
+  created_at         DateTime @default(now()) @db.DateTime(3)
+  updated_at         DateTime @default(now()) @updatedAt @db.DateTime(3)
 
   current_version AiBasePromptVersion?  @relation("CurrentBaseVersion", fields: [current_version_id], references: [id], onDelete: SetNull)
   versions        AiBasePromptVersion[] @relation("BaseVersions")
@@ -2225,8 +2371,8 @@ model AiBasePromptVersion {
   created_by     Int?
   created_at     DateTime @default(now()) @db.DateTime(3)
 
-  base_prompt    AiBasePrompt   @relation("BaseVersions", fields: [base_prompt_id], references: [id], onDelete: Cascade, map: "fk_base_prompt_version_parent")
-  current_for    AiBasePrompt[] @relation("CurrentBaseVersion")
+  base_prompt AiBasePrompt   @relation("BaseVersions", fields: [base_prompt_id], references: [id], onDelete: Cascade, map: "fk_base_prompt_version_parent")
+  current_for AiBasePrompt[] @relation("CurrentBaseVersion")
 
   @@unique([base_prompt_id, version], map: "uk_base_prompt_version")
   @@index([base_prompt_id, version(sort: Desc)], map: "idx_base_prompt_version_history")
@@ -2243,13 +2389,13 @@ model AiBasePromptVersion {
 // =====================================================================
 
 model PasswordResetToken {
-  id          Int       @id @default(autoincrement())
-  user_id     Int
-  token_hash  String    @db.Char(64)
-  expires_at  DateTime  @db.DateTime(0)
-  used_at     DateTime? @db.DateTime(0)
-  ip_address  String?   @db.VarChar(45)
-  created_at  DateTime  @default(now()) @db.DateTime(0)
+  id         Int       @id @default(autoincrement())
+  user_id    Int
+  token_hash String    @db.Char(64)
+  expires_at DateTime  @db.DateTime(0)
+  used_at    DateTime? @db.DateTime(0)
+  ip_address String?   @db.VarChar(45)
+  created_at DateTime  @default(now()) @db.DateTime(0)
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -2271,26 +2417,26 @@ enum EmailDigestFilter {
 }
 
 model EmailTemplate {
-  id                 Int               @id @default(autoincrement())
-  template_key       String            @unique @db.VarChar(100)
-  category           String            @db.VarChar(50)
-  name               String            @db.VarChar(255)
-  description        String?           @db.Text
-  subject            String            @db.Text
-  body_html          String            @db.LongText
-  body_text          String?           @db.Text
-  cadence            EmailCadence      @default(IMMEDIATE)
-  digest_filter      EmailDigestFilter @default(ALL)
-  is_enabled         Boolean           @default(true) @db.TinyInt
-  is_locked          Boolean           @default(false) @db.TinyInt
-  allowed_variables  Json
-  available_roles    Json
-  recipient_roles    Json
-  recipient_summary  String            @db.VarChar(500)
-  version            Int               @default(1)
-  updated_by         Int?
-  updated_at         DateTime          @default(now()) @updatedAt @db.DateTime(0)
-  created_at         DateTime          @default(now()) @db.DateTime(0)
+  id                Int               @id @default(autoincrement())
+  template_key      String            @unique @db.VarChar(100)
+  category          String            @db.VarChar(50)
+  name              String            @db.VarChar(255)
+  description       String?           @db.Text
+  subject           String            @db.Text
+  body_html         String            @db.LongText
+  body_text         String?           @db.Text
+  cadence           EmailCadence      @default(IMMEDIATE)
+  digest_filter     EmailDigestFilter @default(ALL)
+  is_enabled        Boolean           @default(true) @db.TinyInt
+  is_locked         Boolean           @default(false) @db.TinyInt
+  allowed_variables Json
+  available_roles   Json
+  recipient_roles   Json
+  recipient_summary String            @db.VarChar(500)
+  version           Int               @default(1)
+  updated_by        Int?
+  updated_at        DateTime          @default(now()) @updatedAt @db.DateTime(0)
+  created_at        DateTime          @default(now()) @db.DateTime(0)
 
   updater  User?                  @relation("EmailTemplateUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
   versions EmailTemplateVersion[]
@@ -2300,17 +2446,17 @@ model EmailTemplate {
 }
 
 model EmailTemplateVersion {
-  id            Int          @id @default(autoincrement())
+  id            Int               @id @default(autoincrement())
   template_id   Int
   version       Int
-  subject       String       @db.Text
-  body_html     String       @db.LongText
-  body_text     String?      @db.Text
+  subject       String            @db.Text
+  body_html     String            @db.LongText
+  body_text     String?           @db.Text
   cadence       EmailCadence
   digest_filter EmailDigestFilter @default(ALL)
-  is_enabled    Boolean      @db.TinyInt
+  is_enabled    Boolean           @db.TinyInt
   edited_by     Int?
-  edited_at     DateTime     @default(now()) @db.DateTime(0)
+  edited_at     DateTime          @default(now()) @db.DateTime(0)
 
   template EmailTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
   editor   User?         @relation("EmailTemplateVersionEditedBy", fields: [edited_by], references: [id], onDelete: SetNull)
@@ -2332,19 +2478,19 @@ enum EmailSendStatus {
 }
 
 model EmailLog {
-  id                   Int             @id @default(autoincrement())
-  template_key         String          @db.VarChar(100)
-  to_email             String          @db.VarChar(255)
-  to_user_id           Int?
-  subject              String          @db.Text
-  status               EmailSendStatus
-  error_message        String?         @db.Text
-  message_id           String?         @db.VarChar(255)
-  dedupe_key           String          @unique @db.VarChar(255)
-  related_entity_type  String?         @db.VarChar(50)
-  related_entity_id    Int?
-  sent_at              DateTime?       @db.DateTime(0)
-  created_at           DateTime        @default(now()) @db.DateTime(0)
+  id                  Int             @id @default(autoincrement())
+  template_key        String          @db.VarChar(100)
+  to_email            String          @db.VarChar(255)
+  to_user_id          Int?
+  subject             String          @db.Text
+  status              EmailSendStatus
+  error_message       String?         @db.Text
+  message_id          String?         @db.VarChar(255)
+  dedupe_key          String          @unique @db.VarChar(255)
+  related_entity_type String?         @db.VarChar(50)
+  related_entity_id   Int?
+  sent_at             DateTime?       @db.DateTime(0)
+  created_at          DateTime        @default(now()) @db.DateTime(0)
 
   to_user User? @relation("EmailLogToUser", fields: [to_user_id], references: [id], onDelete: SetNull)
 
@@ -2491,10 +2637,10 @@ model ScheduleTemplate {
 }
 
 model ScheduleTemplateDay {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   template_id Int
-  day_of_week Int      @db.TinyInt
-  is_day_off  Boolean  @default(false)
+  day_of_week Int       @db.TinyInt
+  is_day_off  Boolean   @default(false)
   start_time  DateTime? @db.Time(0)
   end_time    DateTime? @db.Time(0)
 
@@ -2537,12 +2683,12 @@ model ScheduleShift {
   created_at  DateTime            @default(now()) @db.DateTime(0)
   updated_at  DateTime            @default(now()) @updatedAt @db.DateTime(0)
 
-  user     User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  template ScheduleTemplate?  @relation(fields: [template_id], references: [id], onDelete: SetNull)
-  segments ScheduleShiftSegment[]
-  exceptions ScheduleException[]
+  user             User                   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  template         ScheduleTemplate?      @relation(fields: [template_id], references: [id], onDelete: SetNull)
+  segments         ScheduleShiftSegment[]
+  exceptions       ScheduleException[]
   attendance_daily AttendanceDaily[]
-  adherence_daily AdherenceDaily[]
+  adherence_daily  AdherenceDaily[]
 
   @@unique([user_id, shift_date], map: "uq_schedule_shift_user_date")
   @@index([shift_date], map: "idx_schedule_shift_date")
@@ -2566,19 +2712,19 @@ model ScheduleShiftSegment {
 }
 
 model ScheduleException {
-  id                Int      @id @default(autoincrement())
+  id                Int       @id @default(autoincrement())
   user_id           Int
-  exception_date    DateTime @db.Date
+  exception_date    DateTime  @db.Date
   exception_type_id Int
   shift_id          Int?
-  is_full_day       Boolean  @default(false)
+  is_full_day       Boolean   @default(false)
   starts_at         DateTime? @db.DateTime(0)
   ends_at           DateTime? @db.DateTime(0)
-  notes             String?  @db.VarChar(500)
-  paychex_reference String?  @db.VarChar(100)
+  notes             String?   @db.VarChar(500)
+  paychex_reference String?   @db.VarChar(100)
   entered_by        Int?
-  created_at        DateTime @default(now()) @db.DateTime(0)
-  updated_at        DateTime @default(now()) @updatedAt @db.DateTime(0)
+  created_at        DateTime  @default(now()) @db.DateTime(0)
+  updated_at        DateTime  @default(now()) @updatedAt @db.DateTime(0)
 
   user           User                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
   exception_type ScheduleExceptionType @relation(fields: [exception_type_id], references: [id], onDelete: Restrict)
@@ -2769,18 +2915,18 @@ model AdherenceWarningThreshold {
 // a scannable adherence_pct. Points are summed from adherence_occurrence, never
 // denormalised here.
 model AdherenceDaily {
-  id                    Int       @id @default(autoincrement())
+  id                    Int      @id @default(autoincrement())
   user_id               Int
-  work_date             DateTime  @db.Date
+  work_date             DateTime @db.Date
   shift_id              Int?
-  break_scheduled_sec   Int       @default(0)
-  break_actual_sec      Int       @default(0)
-  lunch_scheduled_sec   Int       @default(0)
-  lunch_actual_sec      Int       @default(0)
-  phone_break_extra_sec Int       @default(0)
-  phone_lunch_extra_sec Int       @default(0)
-  adherence_pct         Decimal?  @db.Decimal(5, 2)
-  computed_at           DateTime  @default(now()) @db.DateTime(0)
+  break_scheduled_sec   Int      @default(0)
+  break_actual_sec      Int      @default(0)
+  lunch_scheduled_sec   Int      @default(0)
+  lunch_actual_sec      Int      @default(0)
+  phone_break_extra_sec Int      @default(0)
+  phone_lunch_extra_sec Int      @default(0)
+  adherence_pct         Decimal? @db.Decimal(5, 2)
+  computed_at           DateTime @default(now()) @db.DateTime(0)
 
   user  User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
   shift ScheduleShift? @relation(fields: [shift_id], references: [id], onDelete: SetNull)
@@ -2793,22 +2939,22 @@ model AdherenceDaily {
 // Point-bearing detail. Unique on (user, date, kind, seq): seq distinguishes the
 // first break from the second on a multi-break day.
 model AdherenceOccurrence {
-  id                Int               @id @default(autoincrement())
-  user_id           Int
-  work_date         DateTime          @db.Date
-  seq               Int               @default(1) @db.TinyInt
-  rule_id           Int?
-  kind              AdherenceRuleKind
-  deviation_seconds Int               @default(0)
+  id                  Int               @id @default(autoincrement())
+  user_id             Int
+  work_date           DateTime          @db.Date
+  seq                 Int               @default(1) @db.TinyInt
+  rule_id             Int?
+  kind                AdherenceRuleKind
+  deviation_seconds   Int               @default(0)
   scheduled_start_sec Int?
   scheduled_end_sec   Int?
   actual_start_sec    Int?
   actual_end_sec      Int?
   phone_start_sec     Int?
   phone_end_sec       Int?
-  points            Decimal           @default(0) @db.Decimal(4, 2)
-  reason_label      String            @db.VarChar(100)
-  computed_at       DateTime          @default(now()) @db.DateTime(0)
+  points              Decimal           @default(0) @db.Decimal(4, 2)
+  reason_label        String            @db.VarChar(100)
+  computed_at         DateTime          @default(now()) @db.DateTime(0)
 
   user User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
   rule AdherencePointRule? @relation(fields: [rule_id], references: [id], onDelete: SetNull)
@@ -2914,9 +3060,9 @@ model CampaignItem {
   created_at         DateTime           @default(now()) @db.DateTime(0)
   updated_at         DateTime           @default(now()) @updatedAt @db.DateTime(0)
 
-  category      CampaignCategory           @relation(fields: [category_id], references: [id], onDelete: Cascade)
-  anchor_ref    CampaignItem?              @relation("CampaignItemRef", fields: [anchor_ref_item_id], references: [id], onDelete: SetNull)
-  referenced_by CampaignItem[]             @relation("CampaignItemRef")
+  category       CampaignCategory           @relation(fields: [category_id], references: [id], onDelete: Cascade)
+  anchor_ref     CampaignItem?              @relation("CampaignItemRef", fields: [anchor_ref_item_id], references: [id], onDelete: SetNull)
+  referenced_by  CampaignItem[]             @relation("CampaignItemRef")
   schedule_items CampaignScheduleItem[]
   overrides      CampaignScheduleOverride[]
 
@@ -2940,7 +3086,7 @@ model CampaignSchedule {
   created_at    DateTime              @default(now()) @db.DateTime(0)
   updated_at    DateTime              @default(now()) @updatedAt @db.DateTime(0)
 
-  department  Department                    @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  department  Department                   @relation(fields: [department_id], references: [id], onDelete: Cascade)
   departments CampaignScheduleDepartment[]
   items       CampaignScheduleItem[]
   overrides   CampaignScheduleOverride[]
@@ -3071,8 +3217,8 @@ model PhoneQueueDepartment {
   created_at    DateTime @default(now()) @db.DateTime(0)
   updated_at    DateTime @default(now()) @updatedAt @db.DateTime(0)
 
-  queue      PhoneQueue           @relation(fields: [queue_id], references: [id], onDelete: Cascade)
-  department Department           @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  queue      PhoneQueue         @relation(fields: [queue_id], references: [id], onDelete: Cascade)
+  department Department         @relation(fields: [department_id], references: [id], onDelete: Cascade)
   windows    PhoneQueueWindow[]
 
   @@unique([queue_id, department_id], map: "uq_phone_queue_department")
@@ -3119,19 +3265,19 @@ model PhoneQueueMember {
 }
 
 model PhoneQueuePolicy {
-  id                        Int      @id @default(autoincrement())
-  department_id             Int      @unique(map: "uq_phone_queue_policy_dept")
-  is_enabled                Boolean  @default(true)
-  max_queues_per_person     Int      @default(1)
+  id                        Int                    @id @default(autoincrement())
+  department_id             Int                    @unique(map: "uq_phone_queue_policy_dept")
+  is_enabled                Boolean                @default(true)
+  max_queues_per_person     Int                    @default(1)
   // The floor rule: every active queue gets a body before any queue is filled to
   // its minimum, because a queue with nobody in it does not ring.
-  require_min_one_per_queue Boolean  @default(true)
-  respect_pins              Boolean  @default(true)
+  require_min_one_per_queue Boolean                @default(true)
+  respect_pins              Boolean                @default(true)
   // Who covers when several people could: person_priority order, or the person
   // who has served the fewest cover-minutes so far that day.
   fill_strategy             PhoneQueueFillStrategy @default(PRIORITY)
-  created_at                DateTime @default(now()) @db.DateTime(0)
-  updated_at                DateTime @default(now()) @updatedAt @db.DateTime(0)
+  created_at                DateTime               @default(now()) @db.DateTime(0)
+  updated_at                DateTime               @default(now()) @updatedAt @db.DateTime(0)
 
   department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
 

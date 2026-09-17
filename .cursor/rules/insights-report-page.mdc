@@ -42,3 +42,20 @@ schema-change rule) so it is actively monitored — a page with no monitor row i
 invisible to alerting.
 
 Backend evaluator + shape: [backend/src/services/insights/datasetMonitor.ts](mdc:backend/src/services/insights/datasetMonitor.ts).
+
+## 3. Engine settings live in Admin → Insights Engine, never on the report page
+
+A report page under `frontend/src/pages/insights/**` renders **data**, not the
+knobs that produce it. Anything that configures how a dataset is generated —
+rule sets, scoring/model config, run thresholds, cost caps, exclusion lists, or
+a manual re-run/re-grade — belongs under **Admin → Insights Engine**
+(`frontend/src/pages/admin/Insights*Page.tsx`, added to `INSIGHTS_NAV` in
+[frontend/src/components/shell/AdminLayout.tsx](mdc:frontend/src/components/shell/AdminLayout.tsx)
+and routed under `/app/admin/insights/*`), and every write MUST be re-checked
+Admin-side on the server.
+
+Do NOT put a "Settings" tab on the reporting page. Reference: the Missed
+Opportunities engine settings live at
+[frontend/src/pages/admin/InsightsMissedOpportunitiesSettingsPage.tsx](mdc:frontend/src/pages/admin/InsightsMissedOpportunitiesSettingsPage.tsx),
+reusing the shared `SettingsTab` component; the report page
+(`AAMissedOpportunitiesPage.tsx`) only reads and displays findings.

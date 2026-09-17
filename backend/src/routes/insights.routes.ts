@@ -9,6 +9,22 @@ import {
 import { getAgentActivityStatus, getDatasetFreshness, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDueToday, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getProductivityRoster, getProductivityDay, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
 import { getServiceCountsReport } from '../controllers/insightsCompanyReporting.controller';
 import {
+  getReport as getMissedOpportunities,
+  exportReport as exportMissedOpportunities,
+  getRules as getMissedOpportunityRules,
+  postRule as postMissedOpportunityRule,
+  patchRule as patchMissedOpportunityRule,
+  patchSettings as patchMissedOpportunitySettings,
+  postRun as postMissedOpportunityRun,
+  getRunStatusController as getMissedOpportunityRunStatus,
+} from '../controllers/insightsMissedOpportunities.controller';
+import {
+  getPlays as getSalesPlays,
+  patchPlaysSettings as patchSalesPlaysSettings,
+  patchPlay as patchSalesPlay,
+  postMineNow as postSalesPlaysMine,
+} from '../controllers/insightsSalesPlays.controller';
+import {
   getCampaignTouch as getCollectionsCampaignTouch,
   getAgentPerformance as getCollectionsAgentPerformance,
   getCyclePerformance as getCollectionsCyclePerformance,
@@ -117,6 +133,73 @@ router.get('/agent-activity/leads',
 router.get('/agent-activity/margin',
   authenticate as unknown as RequestHandler,
   getMargin as unknown as RequestHandler
+);
+
+// Missed Opportunities — nightly LLM review of the prior day's sales calls.
+// Reads use the page grant; rule/threshold writes and the manual re-run are
+// additionally Admin-only inside the controller (the rules are the report's
+// methodology, and a re-run spends money).
+router.get('/agent-activity/missed-opportunities',
+  authenticate as unknown as RequestHandler,
+  getMissedOpportunities as unknown as RequestHandler
+);
+
+router.get('/agent-activity/missed-opportunities/export',
+  authenticate as unknown as RequestHandler,
+  exportMissedOpportunities as unknown as RequestHandler
+);
+
+router.get('/agent-activity/missed-opportunities/rules',
+  authenticate as unknown as RequestHandler,
+  getMissedOpportunityRules as unknown as RequestHandler
+);
+
+router.post('/agent-activity/missed-opportunities/rules',
+  authenticate as unknown as RequestHandler,
+  postMissedOpportunityRule as unknown as RequestHandler
+);
+
+router.patch('/agent-activity/missed-opportunities/rules/:ruleId',
+  authenticate as unknown as RequestHandler,
+  patchMissedOpportunityRule as unknown as RequestHandler
+);
+
+router.patch('/agent-activity/missed-opportunities/settings',
+  authenticate as unknown as RequestHandler,
+  patchMissedOpportunitySettings as unknown as RequestHandler
+);
+
+router.post('/agent-activity/missed-opportunities/run',
+  authenticate as unknown as RequestHandler,
+  postMissedOpportunityRun as unknown as RequestHandler
+);
+
+router.get('/agent-activity/missed-opportunities/run-status',
+  authenticate as unknown as RequestHandler,
+  getMissedOpportunityRunStatus as unknown as RequestHandler
+);
+
+// Sales Plays (Phase 2 learning loop) — read with the page grant, mutate as
+// Admin only (enforced in the controller). Mining spends money and plays shape
+// the report's recommendations, so writes match the rules/settings gate.
+router.get('/agent-activity/missed-opportunities/plays',
+  authenticate as unknown as RequestHandler,
+  getSalesPlays as unknown as RequestHandler
+);
+
+router.patch('/agent-activity/missed-opportunities/plays/settings',
+  authenticate as unknown as RequestHandler,
+  patchSalesPlaysSettings as unknown as RequestHandler
+);
+
+router.patch('/agent-activity/missed-opportunities/plays/:playId',
+  authenticate as unknown as RequestHandler,
+  patchSalesPlay as unknown as RequestHandler
+);
+
+router.post('/agent-activity/missed-opportunities/plays/mine',
+  authenticate as unknown as RequestHandler,
+  postSalesPlaysMine as unknown as RequestHandler
 );
 
 // Company Reporting (admin-only) — Service Counts subscription report.
