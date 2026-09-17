@@ -3,6 +3,7 @@ import { RowDataPacket } from 'mysql2';
 import logger from '../config/logger';
 import { SourceReportSyncWorker, SourceReportConfig } from './SourceReportSyncWorker';
 import { notifyIngestionFailure } from '../services/notifications/ingestionAlerts';
+import { runCyclePipeline, splitCycleDue } from '../services/insights/collections/cyclePipeline';
 
 const SERVICE = 'SourceReportDispatcher';
 
@@ -26,11 +27,21 @@ export class SourceReportDispatcher {
       return;
     }
 
+    const { runCycle, rest } = splitCycleDue(due);
     logger.info('Dispatching source reports', {
-      service: SERVICE, count: due.length, reports: due.map((r) => r.report_code),
+      service: SERVICE,
+      count: rest.length + (runCycle ? 1 : 0),
+      reports: [
+        ...(runCycle ? ['cycle-pipeline'] : []),
+        ...rest.map((r) => r.report_code),
+      ],
     });
 
-    for (const cfg of due) {
+    // The five Cycle Performance facts are one load. If any member is due, run
+    // them in order rather than whichever happened to be due this tick.
+    if (runCycle) await runCyclePipeline();
+
+    for (const cfg of rest) {
       let status: 'SUCCESS' | 'FAILED' = 'SUCCESS';
       try {
         await new SourceReportSyncWorker(cfg).run();

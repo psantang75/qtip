@@ -8,6 +8,7 @@ import {
 import logger from '../config/logger';
 import { SourceReportSyncWorker, SourceReportConfig } from '../workers/SourceReportSyncWorker';
 import { notifyIngestionFailure } from '../services/notifications/ingestionAlerts';
+import { isCyclePipelineCode, runCyclePipeline } from '../services/insights/collections/cyclePipeline';
 
 /**
  * Insights Admin Source Report controller — manages the scheduling fields of
@@ -151,19 +152,49 @@ export const updateSourceReport = asyncHandler(async (req: Request, res: Respons
   }
 });
 
+function startCyclePipeline(): void {
+  void runCyclePipeline().then((result) => {
+    if (result.status === 'FAILED') {
+      logger.error('runCyclePipelineNow finished failed', {
+        failed: result.steps.find((s) => s.status === 'FAILED')?.code,
+      });
+    }
+  }).catch((err) => {
+    logger.error('runCyclePipelineNow background run failed', { error: (err as Error)?.message });
+  });
+}
+
+/**
+ * POST /api/insights/admin/source-reports/cycle-pipeline/run-now
+ *
+ * One trigger for the five Cycle Performance facts, in load order. A Run now
+ * on any of those five members is redirected here — they cannot be loaded
+ * alone without the page's numbers depending on click order.
+ */
+export const runCyclePipelineNow = asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+  res.status(202).json({ started: true, pipeline: 'cycle' });
+  startCyclePipeline();
+});
+
 /**
  * POST /api/insights/admin/source-reports/:id/run-now
- * Runs the ingestion immediately, in-process, using the same worker the
- * dispatcher uses (which handles its own per-report lock + run logging). The
- * run is fired asynchronously and we return 202 right away, because a full
- * reload can take a while; the report's `last_status` / `last_run_at` update
- * when it finishes (watch the Ingestion Log, or Refresh this page).
+ *
+ * A Cycle Performance member cannot run alone — see runCyclePipelineNow.
+ * Every other report runs immediately in-process via the same worker the
+ * dispatcher uses. We return 202 at once; last_status updates when it finishes.
  */
 export const runSourceReportNow = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const id = parseId(req.params.id);
 
   const row = await prisma.ieSourceReport.findUnique({ where: { id } });
   if (!row) throw createNotFoundError('Source report not found');
+
+  if (isCyclePipelineCode(row.report_code)) {
+    res.status(202).json({ started: true, pipeline: 'cycle' });
+    startCyclePipeline();
+    return;
+  }
+
   const cfg = toConfig(row);
 
   // Push next_run_at out now so the periodic dispatcher won't also fire this

@@ -2,8 +2,7 @@
  * Bucket-oriented panels for Insights → Agent Activity - CSR → Call Length.
  *
  * Split out of the page so it stays layout + data-fetch only (200-300 line
- * rule), mirroring how ChannelFunnelPanels backs the Channel Effectiveness
- * report.
+ * rule), mirroring how CampaignTouchPanels backs the Campaign × Touch report.
  *
  * The pair below is the core of the report: `BandTotalsChart` shows where the
  * CALLS are, `BandTimeSplit` shows where the HOURS are, and the gap between

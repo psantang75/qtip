@@ -645,8 +645,14 @@ export const updateSourceReport = async (id: number, data: SourceReportUpdate): 
   return response.data
 }
 
-export const runSourceReportNow = async (id: number): Promise<{ started: boolean }> => {
+export const runSourceReportNow = async (id: number): Promise<{ started: boolean; pipeline?: string }> => {
   const response = await api.post(`/insights/admin/source-reports/${id}/run-now`)
+  return response.data
+}
+
+/** One trigger for the five Cycle Performance facts, loaded in order. */
+export const runCyclePipelineNow = async (): Promise<{ started: boolean; pipeline: string }> => {
+  const response = await api.post('/insights/admin/source-reports/cycle-pipeline/run-now')
   return response.data
 }
 

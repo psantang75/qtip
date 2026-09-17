@@ -11,17 +11,8 @@ import crmService, {
   type CRMNote,
 } from '@/services/crmService'
 import { formatCrmDateTime } from '@/utils/dateFormat'
+import { buildCrmUrl } from '@/utils/crmLinks'
 import { RichTextDisplay } from '@/components/common/RichTextDisplay'
-
-/** Build the deep-link URL into the CRM for a given record. */
-function buildCrmUrl(kind: TicketTaskKind, externalId: number): string {
-  if (kind === 'TASK') {
-    return `https://crm.dm-us.com/TaskManager/AccountsReceivableManager?TaskID=${externalId}`
-  }
-  // Ticket edit page. CustomerID/JobID are populated server-side from the
-  // ticket once it loads, so passing 0 for both is the canonical entry URL.
-  return `https://crm.dm-us.com/Tickets/Edit?CustomerID=0&JobID=0&TicketID=${externalId}`
-}
 
 /**
  * Linked CRM ticket/task selector. Mirrors the structural pattern of

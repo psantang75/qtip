@@ -3,6 +3,7 @@ import {
   getSourceReports,
   updateSourceReport,
   runSourceReportNow,
+  runCyclePipelineNow,
   getEmailFeeds,
   createEmailFeed,
   updateEmailFeed,
@@ -44,6 +45,18 @@ export function useRunSourceReportNow() {
   return useMutation({
     mutationFn: (id: number) => runSourceReportNow(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }) },
+  })
+}
+
+/** Mutation to load all five Cycle Performance facts, in order. */
+export function useRunCyclePipelineNow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => runCyclePipelineNow(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEY })
+      qc.invalidateQueries({ queryKey: ['insights', 'collections'] })
+    },
   })
 }
 

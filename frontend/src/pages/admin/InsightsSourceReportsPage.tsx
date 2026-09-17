@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { Clock, Pencil, Play, RefreshCw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
-  useSourceReports, useUpdateSourceReport, useRunSourceReportNow, type SourceReport,
+  useSourceReports, useUpdateSourceReport, useRunSourceReportNow, useRunCyclePipelineNow,
 } from '@/hooks/useSourceReports'
+import { buildDisplayRows, type DisplayRow } from './sourceReportDisplay'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -63,84 +64,12 @@ function formatDateTime(iso: string | null): string {
   })
 }
 
-// Tickets & Tasks are two ingestion jobs (ticket_open + task_open) that both
-// load ie_fact_ticket_task — split only to stay under the CRM source's 25s
-// session cap. To the user it's ONE report, so we collapse the two registry
-// rows into a single scheduler row here. Edits / Run-now fan out to both ids
-// (see `ids`), keeping their cadence in lockstep. Timing fields use the
-// `ticket_open` member as representative so this row matches the Tickets &
-// Tasks report header (which sources freshness from `ticket_open`).
-const MERGED_GROUP = {
-  codes: ['ticket_open', 'task_open'],
-  representativeCode: 'ticket_open',
-  name: 'Tickets & Tasks',
-}
-
-/** A scheduler table row — either a single report or a merged group (>1 id). */
-interface DisplayRow {
-  key: string
-  ids: number[]
-  report_name: string
-  load_mode: SourceReport['load_mode']
-  frequency_minutes: number
-  run_only_hours: string | null
-  last_run_at: string | null
-  next_run_at: string | null
-  last_status: SourceReport['last_status']
-}
-
-/** Worst-case roll-up of the members' statuses so a failure in either job shows. */
-function combineStatus(statuses: SourceReport['last_status'][]): SourceReport['last_status'] {
-  if (statuses.some(s => s === 'FAILED')) return 'FAILED'
-  if (statuses.some(s => s === 'PARTIAL')) return 'PARTIAL'
-  if (statuses.length > 0 && statuses.every(s => s === 'SUCCESS')) return 'SUCCESS'
-  return null
-}
-
-function buildDisplayRows(reports: SourceReport[]): DisplayRow[] {
-  const rows: DisplayRow[] = []
-  let groupEmitted = false
-
-  for (const r of reports) {
-    if (MERGED_GROUP.codes.includes(r.report_code)) {
-      if (groupEmitted) continue
-      groupEmitted = true
-      const members = reports.filter(m => MERGED_GROUP.codes.includes(m.report_code))
-      const rep = members.find(m => m.report_code === MERGED_GROUP.representativeCode) ?? members[0]
-      rows.push({
-        key: MERGED_GROUP.codes.join('+'),
-        ids: members.map(m => m.id),
-        report_name: MERGED_GROUP.name,
-        load_mode: rep.load_mode,
-        frequency_minutes: rep.frequency_minutes,
-        run_only_hours: rep.run_only_hours,
-        last_run_at: rep.last_run_at,
-        next_run_at: rep.next_run_at,
-        last_status: combineStatus(members.map(m => m.last_status)),
-      })
-    } else {
-      rows.push({
-        key: r.report_code,
-        ids: [r.id],
-        report_name: r.report_name,
-        load_mode: r.load_mode,
-        frequency_minutes: r.frequency_minutes,
-        run_only_hours: r.run_only_hours,
-        last_run_at: r.last_run_at,
-        next_run_at: r.next_run_at,
-        last_status: r.last_status,
-      })
-    }
-  }
-
-  return rows
-}
-
 export default function InsightsSourceReportsPage() {
   const { toast } = useToast()
   const { data: reports = [], isLoading, refetch, dataUpdatedAt } = useSourceReports()
   const updateMut = useUpdateSourceReport()
   const runNowMut = useRunSourceReportNow()
+  const runCycleMut = useRunCyclePipelineNow()
 
   const displayRows = useMemo(() => buildDisplayRows(reports), [reports])
 
@@ -171,8 +100,7 @@ export default function InsightsSourceReportsPage() {
       return
     }
     try {
-      // A merged row (Tickets & Tasks) carries >1 id — update both so the two
-      // underlying jobs stay on the same cadence.
+      // A merged row carries every underlying id so the jobs stay on one cadence.
       await Promise.all(
         editing.ids.map((id) =>
           updateMut.mutateAsync({
@@ -200,8 +128,12 @@ export default function InsightsSourceReportsPage() {
     if (!runTarget) return
     const name = runTarget.report_name
     try {
-      // Fan out to every underlying job (Tickets & Tasks = two ids).
-      await Promise.all(runTarget.ids.map((id) => runNowMut.mutateAsync(id)))
+      if (runTarget.kind === 'cycle') {
+        // One backend call — the five facts load in order. Fan-out would race them.
+        await runCycleMut.mutateAsync()
+      } else {
+        await Promise.all(runTarget.ids.map((id) => runNowMut.mutateAsync(id)))
+      }
       toast({ title: 'Running now', description: `${name} is re-ingesting. Status updates when it finishes — Refresh in a moment.` })
       // Pull updated last_run/status once the run has had time to finish.
       window.setTimeout(() => { void refetch() }, 8000)
@@ -343,13 +275,18 @@ export default function InsightsSourceReportsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Run {runTarget?.report_name} now?</AlertDialogTitle>
             <AlertDialogDescription>
-              This re-ingests the report immediately (re-extract → stage → load). For a full reload it may take a little while; the report&apos;s normal cadence is unchanged.
+              {runTarget?.kind === 'cycle'
+                ? 'This loads the five Cycle Performance inputs in order — tasks, invoices, gateway results, touches, then payments — and reports one result. They cannot be run separately: a later fact joins an earlier one.'
+                : 'This re-ingests the report immediately (re-extract → stage → load). For a full reload it may take a little while; the report\'s normal cadence is unchanged.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRunNow} disabled={runNowMut.isPending}>
-              {runNowMut.isPending ? 'Queuing…' : 'Run now'}
+            <AlertDialogAction
+              onClick={confirmRunNow}
+              disabled={runNowMut.isPending || runCycleMut.isPending}
+            >
+              {runNowMut.isPending || runCycleMut.isPending ? 'Queuing…' : 'Run now'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

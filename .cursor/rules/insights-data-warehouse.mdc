@@ -54,6 +54,46 @@ If a fact/stg table is created WITHOUT this partitioning, partition-manager's
 `REORGANIZE PARTITION p_future` errors for that table (caught + logged, not fatal),
 and the table never ages out — so always partition up front.
 
+## Re-ingesting after a SQL change — reload only what changed
+
+`run-source-backfill <code> <from> <to> [chunkDays]` re-extracts in day chunks, and the
+chunking is what keeps each extract inside the statement timeout. That makes it the
+right tool for a **real historical rebuild** — a changed extract, a new column, a first
+load on stage/prod — and the wrong one for a value that some facts merely COPY.
+
+Before reloading, ask per fact: does it DERIVE the changed column, or inherit it?
+
+- **Derives it** (its own extract/transform logic changed) → needs the chunked backfill.
+- **Inherits it** through a key already stored in the fact → one indexed `UPDATE`
+  carrying the value across reproduces its transform exactly, in seconds. Re-extracting
+  from the source to change a copied value is pure cost.
+
+The collections facts are the worked example: `touch`, `subscription` and `call` all copy
+`campaign_key` off `ie_fact_collections_task` via a stored `task_id`, so a campaign-key
+rename needs `task`/`billing`/`invoice`/`recovery` re-extracted and the other three
+merely carried across. Reloading all seven re-derived ~800k rows from CRM and the phone
+system to change one column on ~3% of them, and `collections_call` alone re-extracts
+~243k call rows. Full write-up: [docs/collections_data_retrieval_plan.md](mdc:docs/collections_data_retrieval_plan.md) 4b-13.
+
+Two traps when running or stopping one of these by hand:
+
+- **Don't pipe a long backfill through `Select-Object -Last N`.** It buffers until the
+  process exits, so progress is invisible for the entire run. Filter with `Select-String`
+  alone, or read the log file.
+- **Killing the node process does NOT stop the query.** MySQL keeps executing the
+  in-flight statement on the orphaned connection, still holding its locks, so the next
+  writer gets `ERROR 1213 deadlock`. After stopping a backfill, kill the server-side
+  session and clear the lock row it left behind:
+
+```sql
+SELECT id, time, LEFT(info,60) FROM information_schema.processlist
+ WHERE command <> 'Sleep' AND info LIKE '%<fact table>%';   -- then KILL <id>;
+DELETE FROM ie_ingestion_lock WHERE worker_name = 'source-<code>' OR expires_at < NOW();
+```
+
+  The transform runs inside a transaction, so the interrupted chunk rolls back whole —
+  verify with a row count per month rather than assuming rows were lost.
+
 ## Adding a new report — checklist
 
 1. New migration (mirror `2026061814.._create_call_activity_facts`), idempotent

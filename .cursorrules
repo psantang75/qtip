@@ -1,5 +1,7 @@
 # QTIP + Insights Platform — Cursor Rules
 
+Mandatory runtime configuration and editable-business-content guardrail: [.cursor/rules/runtime-configuration.mdc](.cursor/rules/runtime-configuration.mdc).
+
 ## Project Overview
 This is a unified QA + Training + Reporting platform 
 built with React 19 + TypeScript frontend and 

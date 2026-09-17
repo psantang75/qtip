@@ -8,6 +8,13 @@ import {
 } from '../controllers/insights.controller';
 import { getAgentActivityStatus, getDatasetFreshness, getEmailActivity, getCallActivity, getTicketsTasks, getTicketsPastDue, getTicketsDueToday, getTicketsDailyHistory, getTicketsProductivity, getTicketTouchDetail, getProductivityRoster, getProductivityDay, getLeads, getMargin } from '../controllers/insightsAgentActivity.controller';
 import { getServiceCountsReport } from '../controllers/insightsCompanyReporting.controller';
+import {
+  getCampaignTouch as getCollectionsCampaignTouch,
+  getAgentPerformance as getCollectionsAgentPerformance,
+  getCyclePerformance as getCollectionsCyclePerformance,
+  getCycleInvoices as getCollectionsCycleInvoices,
+  getFailedChargeInvoices as getCollectionsFailedChargeInvoices,
+} from '../controllers/insightsCollections.controller';
 import qcRouter from './insightsQC.routes';
 import irRouter from './insightsIR.routes';
 import csrRouter from './insightsCsr.routes';
@@ -116,6 +123,30 @@ router.get('/agent-activity/margin',
 router.get('/company-reporting/service-counts',
   authenticate as unknown as RequestHandler,
   getServiceCountsReport as unknown as RequestHandler
+);
+
+// Collections (AR campaign performance) — access resolved per-page through
+// ie_page_role_access inside each controller (InsightsPermissionService), the
+// same DB-driven model as every other Insights page. Reads ie_fact_collections_*.
+router.get('/collections/campaign-touch',
+  authenticate as unknown as RequestHandler,
+  getCollectionsCampaignTouch as unknown as RequestHandler
+);
+router.get('/collections/agent-performance',
+  authenticate as unknown as RequestHandler,
+  getCollectionsAgentPerformance as unknown as RequestHandler
+);
+router.get('/collections/cycle-performance',
+  authenticate as unknown as RequestHandler,
+  getCollectionsCyclePerformance as unknown as RequestHandler
+);
+router.get('/collections/cycle-invoices',
+  authenticate as unknown as RequestHandler,
+  getCollectionsCycleInvoices as unknown as RequestHandler
+);
+router.get('/collections/failed-charge-invoices',
+  authenticate as unknown as RequestHandler,
+  getCollectionsFailedChargeInvoices as unknown as RequestHandler
 );
 
 // QC analytics — authenticate applied per-handler (via qcHandler wrapper)

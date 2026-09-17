@@ -8,6 +8,7 @@ import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import logger from '../config/logger';
 import { SourceReportSyncWorker, SourceReportConfig } from './SourceReportSyncWorker';
+import { CYCLE_LOAD_ORDER, isCyclePipelineCode } from '../services/insights/collections/cyclePipeline';
 
 const SERVICE = 'SourceReportBackfill';
 
@@ -55,6 +56,22 @@ async function main(): Promise<void> {
   }
   const chunkDays = Math.max(1, Number(chunkStr) || 10);
 
+  // Naming any Cycle Performance member backfills all five, in load order. A
+  // windowed reload of invoices without tasks (or recovery without invoices) is
+  // the same accuracy hole as clicking Run now on one row.
+  const codes = isCyclePipelineCode(reportCode) ? [...CYCLE_LOAD_ORDER] : [reportCode];
+  if (codes.length > 1) {
+    logger.info('Expanding to the Cycle Performance pipeline', { service: SERVICE, codes });
+  }
+
+  for (const code of codes) {
+    await backfillOne(code, fromStr, toStr, chunkDays);
+  }
+}
+
+async function backfillOne(
+  reportCode: string, fromStr: string, toStr: string, chunkDays: number,
+): Promise<void> {
   const cfg = await loadConfig(reportCode);
   if (!cfg) {
     logger.error('No ie_source_report row for report_code', { service: SERVICE, reportCode });
@@ -79,6 +96,19 @@ async function main(): Promise<void> {
     });
     cursor = addDays(chunkEnd, 1);
   }
+
+  // Stamp the registry exactly as the dispatcher does. A backfill refreshes the fact
+  // just as a scheduled run does, so leaving last_run_at untouched made the reports that
+  // are ONLY ever backfilled look like they had never loaded — all seven collections
+  // schedules read NULL, and Cycle Performance had no honest freshness to publish.
+  await pool.execute(
+    `UPDATE ie_source_report
+        SET last_run_at = NOW(),
+            next_run_at = DATE_ADD(NOW(), INTERVAL frequency_minutes MINUTE),
+            last_status = 'SUCCESS'
+      WHERE id = ?`,
+    [cfg.id],
+  );
 
   logger.info('Backfill complete', { service: SERVICE, report: reportCode, totalRowsExtracted: totalRows });
 }

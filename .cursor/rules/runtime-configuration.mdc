@@ -1,0 +1,30 @@
+---
+description: Mandatory ownership of editable business configuration and AI guidance
+alwaysApply: true
+---
+
+# Runtime configuration and editable business content — mandatory
+
+- Store operator-editable business content in the database: prompts/personas,
+  QA forms and rubrics, sales plays, coaching guidance, thresholds, mappings,
+  reference selections, applicability settings and approval/version metadata.
+  Reuse existing tables and authorized admin editors before proposing new ones.
+- Application code owns algorithms, validation, output contracts, permissions
+  and fixed technical safety invariants. Do not hide editable business policy
+  in code constants or require a deployment to change approved business content.
+- Do not load Markdown or other loose reference/configuration files as the
+  application's source of business rules or AI guidance. Markdown formatting
+  inside a database text field such as `body_md` is allowed; a runtime `.md`
+  file dependency is not. Existing approved KB integrations remain valid.
+- Database seeds/migrations are code for initializing approved database content,
+  not a parallel runtime policy source. Make seeds idempotent and preserve
+  existing operator edits. Never auto-seed or overwrite policy during reads,
+  application startup or builds. Apply database changes only with the explicit
+  approval required by [AGENTS.md](mdc:AGENTS.md#hard-constraints-do-not-violate).
+- Keep credentials and deployment/infrastructure settings in the established
+  environment configuration mechanism. This rule does not move secrets into
+  business-policy tables or prohibit ordinary code-owned infrastructure config.
+- Documentation, audit reports, KB work lists, `AGENTS.md` and agent skills
+  remain valid Markdown documents. They are not runtime application policy.
+- Respect the authorized scope. Correct the implementation being worked on;
+  report unrelated legacy exceptions rather than rewriting other subsystems.

@@ -13,7 +13,7 @@ import {
 } from '../controllers/insightsAdminEmailFeed.controller';
 import { getCalendar, updateCalendarDay, saveCalendarMonth } from '../controllers/insightsAdminCalendar.controller';
 import {
-  listSourceReportsAdmin, updateSourceReport, runSourceReportNow,
+  listSourceReportsAdmin, updateSourceReport, runSourceReportNow, runCyclePipelineNow,
 } from '../controllers/insightsAdminSourceReport.controller';
 import {
   getAttendanceConfig, savePointRules, saveWarningThresholds, recalculateAttendance,
@@ -53,6 +53,7 @@ router.delete('/email-feeds/:id', authenticate as unknown as RequestHandler, aut
 
 router.get('/source-reports', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, listSourceReportsAdmin as unknown as RequestHandler);
 router.put('/source-reports/:id', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, updateSourceReport as unknown as RequestHandler);
+router.post('/source-reports/cycle-pipeline/run-now', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, runCyclePipelineNow as unknown as RequestHandler);
 router.post('/source-reports/:id/run-now', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, runSourceReportNow as unknown as RequestHandler);
 
 // ── Business Calendar ─────────────────────────────────────────────────────────

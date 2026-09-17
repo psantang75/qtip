@@ -4,7 +4,7 @@ import axios, {
   type AxiosResponse,
 } from 'axios';
 import { getCookie } from '../utils/apiHelpers';
-import { logError, logWarn } from '../utils/errorHandling';
+import { logError } from '../utils/errorHandling';
 
 /**
  * Single shared axios instance for the whole app.
@@ -66,9 +66,6 @@ apiClient.get = function dedupedGet<T = unknown>(
   const existing = inflightGetMap.get(signature);
 
   if (existing) {
-    if (import.meta.env.DEV) {
-      logWarn('apiClient', `[DEDUP] Reusing in-flight GET: ${url}`);
-    }
     return existing as Promise<AxiosResponse<T>>;
   }
 

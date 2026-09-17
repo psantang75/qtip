@@ -82,9 +82,11 @@ a one-line pointer, never a second copy that can drift out of sync:
 | 200–300 line refactor + no-duplication | this file (Hard constraints below) |
 | Deploy / promote (stage + prod) | [docs/deployment_runbook.md](docs/deployment_runbook.md) |
 | DB schema change process | [docs/database_schema_updates.md](docs/database_schema_updates.md) |
+| Editable business content and runtime configuration | [.cursor/rules/runtime-configuration.mdc](.cursor/rules/runtime-configuration.mdc) |
 
 ## Hard constraints (do not violate)
 
+- Follow the mandatory [database ownership and no-file-runtime-reference guardrail](.cursor/rules/runtime-configuration.mdc) for editable business content and AI guidance.
 - Ask first before adding a table or altering the database: propose the change (why a table is the best approach, plus the additive/idempotent migration) and get explicit approval before applying. Unprompted DB reviews are observations only — never alter schema off the back of one.
 - PowerShell shell: chain with `;`, never `&&`.
 - Iterate on existing patterns before introducing new ones; if you add a new pattern, remove the old one (no duplicate logic).

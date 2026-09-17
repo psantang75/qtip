@@ -27,6 +27,13 @@ vi.mock('../../workers/SourceReportSyncWorker', () => ({
   SourceReportSyncWorker: vi.fn(),
 }));
 
+const { runCyclePipeline } = vi.hoisted(() => ({ runCyclePipeline: vi.fn() }));
+vi.mock('../../services/insights/collections/cyclePipeline', () => ({
+  isCyclePipelineCode: (code: string) => code.startsWith('collections_')
+    && !['collections_call', 'collections_subscription'].includes(code),
+  runCyclePipeline: (...args: unknown[]) => runCyclePipeline(...args),
+}));
+
 vi.mock('../../services/notifications/ingestionAlerts', () => ({
   notifyIngestionFailure: vi.fn(),
 }));
@@ -36,6 +43,7 @@ import {
   listSourceReportsAdmin,
   updateSourceReport,
   runSourceReportNow,
+  runCyclePipelineNow,
 } from '../insightsAdminSourceReport.controller';
 
 const db = prisma as unknown as {
@@ -214,5 +222,38 @@ describe('runSourceReportNow', () => {
     expect(next).toHaveBeenCalledTimes(1);
     expect((next.mock.calls[0][0] as { statusCode: number }).statusCode).toBe(404);
     expect(db.ieSourceReport.update).not.toHaveBeenCalled();
+  });
+
+  it('starts the cycle pipeline instead of loading one of the five facts alone', async () => {
+    runCyclePipeline.mockResolvedValue({ status: 'SUCCESS', steps: [] });
+    db.ieSourceReport.findUnique.mockResolvedValue(makeRow({
+      id: 9, report_code: 'collections_invoice',
+    }));
+    const res = mockRes();
+    const next = vi.fn();
+
+    await runSourceReportNow({ params: { id: '9' } } as never, res as never, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(202);
+    expect(res.body).toEqual({ started: true, pipeline: 'cycle' });
+    expect(runCyclePipeline).toHaveBeenCalledTimes(1);
+    // A solo bump of this one row would let the other four stay stale.
+    expect(db.ieSourceReport.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('runCyclePipelineNow', () => {
+  it('returns 202 and starts the ordered load', async () => {
+    runCyclePipeline.mockResolvedValue({ status: 'SUCCESS', steps: [] });
+    const res = mockRes();
+    const next = vi.fn();
+
+    await runCyclePipelineNow({} as never, res as never, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(202);
+    expect(res.body).toEqual({ started: true, pipeline: 'cycle' });
+    expect(runCyclePipeline).toHaveBeenCalledTimes(1);
   });
 });

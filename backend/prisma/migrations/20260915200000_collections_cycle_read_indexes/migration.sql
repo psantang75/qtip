@@ -1,0 +1,72 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Collections Cycle Performance: read-path indexes
+--
+-- Companion to the scoping change in `services/insights/collections/cycle/`,
+-- which bounded every derived table to the selected window. That change is what
+-- moved the page from ~11s to under a second; these two indexes are what keep it
+-- there once the window widens, because the remaining cost is concentrated in two
+-- aggregates over `ie_fact_collections_billing` (253k rows) that group by columns
+-- no existing index leads on.
+--
+-- MEASURED END TO END (dev warehouse, service called directly, bounded SQL in
+-- both columns — so this isolates the indexes, not the scoping):
+--
+--                                         no indexes    with these two
+--   Half-month, All Declined, cold            1,287ms           908ms
+--   Half-month, Declined CC (1st)             1,914ms           795ms
+--   Half-month, cycle-invoices page 1         2,206ms           925ms
+--   Full year,  All Declined                 17,870ms         5,154ms
+--   Full year,  cycle-invoices page 1        14,082ms         8,367ms
+--
+-- ORDERING RATIONALE:
+--
+--  idx_fcb_bg_card_date (billing_group_id, charge_last4, date_key)
+--    Leading billing_group_id serves PAYING_GROUP_JOIN's grouping, and the full
+--    triple covers REKEY_JOIN and ORIGINAL_STILL_JOIN, which group by
+--    (billing_group_id, charge_last4) with MAX(date_key) as the measure — every
+--    column in the index, so the aggregate resolves in index order with no
+--    temporary table and no row lookups. Before this, that shape was a FULL TABLE
+--    SCAN plus a temp-table aggregate (396ms per copy, and each of the nine
+--    parallel queries built its own). This is the index the comment at
+--    `recoveryJoins.ts` names as missing: `uq_fcb_bg` leads on `date_key`, so the
+--    billing group cannot be reached through it.
+--
+--  idx_fcb_result_bg_date (first_result, billing_group_id, date_key)
+--    REPEAT_JOIN runs LAG(date_key) OVER (PARTITION BY billing_group_id ORDER BY
+--    date_key) across the declined rows. Filtering on first_result, then carrying
+--    the partition key and the sort key in that order, hands the window function
+--    input that is already grouped and already sorted, so the filesort goes away.
+--    Column order is load-bearing: (first_result, date_key, billing_group_id)
+--    serves the filter but still sorts.
+--
+-- DELIBERATELY NOT ADDED. Two further indexes were measured and rejected rather
+-- than assumed, because an unused index on a fact table is not free — the
+-- ingestion pipeline reloads these tables, and every index is maintained on write:
+--
+--  * ie_fact_collections_invoice (date_key, campaign_key, currency_code) and
+--    ie_fact_collections_recovery (is_reversed, order_id) together made the page
+--    SLOWER than these two alone (full year 6,840ms vs 5,154ms; cycle-invoices
+--    11,568ms vs 8,367ms) by giving the optimiser worse candidates than the
+--    indexes already present.
+--  * `is_reversed` is 100% zeros in the recovery fact (48,199 of 48,199 rows), so
+--    leading an index with it filters nothing at all.
+--
+-- Both indexes here are NON-UNIQUE secondary indexes. The table is RANGE-
+-- partitioned on `date_key`, which constrains unique keys only, so `date_key` is
+-- not required as a member column (same reasoning as
+-- 20260915160000_task_fact_customer_created_index).
+--
+-- Additive only: no column, row or existing index is altered or dropped.
+--
+-- Idempotent via the SET @sql / PREPARE / EXECUTE pattern established in
+-- 20260423120000_add_qc_performance_indexes ('SELECT 1' is the no-op branch).
+-- Hand-authored SQL applied with `prisma migrate deploy` because the Insights
+-- `ie_fact_*` / `ie_stg_*` warehouse layer is unmodeled in schema.prisma by
+-- design, so `prisma migrate dev` cannot be used here.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+SET @sql := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'ie_fact_collections_billing' AND index_name = 'idx_fcb_bg_card_date') = 0, 'CREATE INDEX `idx_fcb_bg_card_date` ON `ie_fact_collections_billing` (`billing_group_id`, `charge_last4`, `date_key`)', 'SELECT 1');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+SET @sql := IF((SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'ie_fact_collections_billing' AND index_name = 'idx_fcb_result_bg_date') = 0, 'CREATE INDEX `idx_fcb_result_bg_date` ON `ie_fact_collections_billing` (`first_result`, `billing_group_id`, `date_key`)', 'SELECT 1');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;

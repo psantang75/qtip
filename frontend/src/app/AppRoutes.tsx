@@ -3,7 +3,7 @@ import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 
 import { ROLE_IDS } from '../hooks/useQualityRole'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuth } from '../hooks/useAuth'
 import { getAppAccess } from '../services/appAccessService'
 
 // Shell components — NOT lazy (load immediately)
@@ -124,7 +124,11 @@ const CSRTicketsTasksPage    = React.lazy(() => import('../pages/insights/CSRTic
 const CSRWorkloadPage        = React.lazy(() => import('../pages/insights/CSRWorkloadPage'))
 const CSRProductivityPage    = React.lazy(() => import('../pages/insights/CSRProductivityPage'))
 const CompanyServiceCountsPage = React.lazy(() => import('../pages/insights/CompanyServiceCountsPage'))
-
+const CollectionsCampaignTouchPage   = React.lazy(() => import('../pages/insights/CollectionsCampaignTouchPage'))
+const CollectionsCyclePerformancePage = React.lazy(() => import('../pages/insights/CollectionsCyclePerformancePage'))
+const CollectionsCycleInvoicesPage = React.lazy(() => import('../pages/insights/CollectionsCycleInvoicesPage'))
+const CollectionsFailedChargeInvoicesPage = React.lazy(() => import('../pages/insights/CollectionsFailedChargeInvoicesPage'))
+const CollectionsAgentPerformancePage = React.lazy(() => import('../pages/insights/CollectionsAgentPerformancePage'))
 const NotFoundPage           = React.lazy(() => import('../pages/NotFoundPage'))
 
 const ON_DEMAND_REPORT_ROLES = [ROLE_IDS.ADMIN, ROLE_IDS.MANAGER]
@@ -439,6 +443,13 @@ export default function AppRoutes(): React.ReactElement {
             <Route path="csr-productivity" element={<RequireInsightsAccess pageKey="csr_productivity_report"><PageLoader><CSRProductivityPage /></PageLoader></RequireInsightsAccess>} />
             {/* Company Reporting (admin-only via ie_page_role_access) */}
             <Route path="company-service-counts" element={<RequireInsightsAccess pageKey="company_service_counts"><PageLoader><CompanyServiceCountsPage /></PageLoader></RequireInsightsAccess>} />
+            {/* Collections (AR campaign performance) — DB-driven access via
+                ie_page_role_access (seeded Admin+Manager), same as all Insights pages. */}
+            <Route path="collections-cycle" element={<RequireInsightsAccess pageKey="collections_cycle"><PageLoader><CollectionsCyclePerformancePage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="collections-cycle-invoices" element={<RequireInsightsAccess pageKey="collections_cycle_invoices"><PageLoader><CollectionsCycleInvoicesPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="collections-failed-charges" element={<RequireInsightsAccess pageKey="collections_failed_charges"><PageLoader><CollectionsFailedChargeInvoicesPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="collections-campaign" element={<RequireInsightsAccess pageKey="collections_campaign"><PageLoader><CollectionsCampaignTouchPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="collections-agents" element={<RequireInsightsAccess pageKey="collections_agents"><PageLoader><CollectionsAgentPerformancePage /></PageLoader></RequireInsightsAccess>} />
             <Route path="dashboard" element={<PageLoader><DashboardPage /></PageLoader>} />
             <Route path="team"      element={<PageLoader><TeamDashboardPage /></PageLoader>} />
             <Route path="builder"   element={<PageLoader><ReportBuilderPage /></PageLoader>} />

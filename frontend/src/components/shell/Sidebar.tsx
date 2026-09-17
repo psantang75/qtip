@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import * as LucideIcons from 'lucide-react'
 import type { LucideProps } from 'lucide-react'
-import { ChevronDown } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import {
@@ -90,9 +89,6 @@ export default function Sidebar() {
 
   const originPath = (location.state as { fromPath?: string } | null)?.fromPath
 
-  // Track which groups are collapsed — all expanded by default
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-
   const grouped = navItems.reduce((acc: Record<string, typeof navItems>, item) => {
     const key = item.group ?? '__ungrouped__'
     if (!acc[key]) acc[key] = []
@@ -100,9 +96,28 @@ export default function Sidebar() {
     return acc
   }, {})
 
-  function toggleGroup(group: string) {
-    setCollapsed(prev => ({ ...prev, [group]: !prev[group] }))
-  }
+  const renderItem = (item: SidebarItem) => (
+    <NavLink
+      key={item.label}
+      to={item.path}
+      end
+      className={({ isActive }) => {
+        const active = originPath ? item.path === originPath : isActive
+        return cn(
+          'flex items-center gap-2.5 px-3 py-2.5 rounded-r-md text-[13.5px] transition-colors',
+          active ? ACTIVE_ITEM_CLASS : INACTIVE_ITEM_CLASS,
+        )
+      }}
+    >
+      <DynamicIcon name={item.icon} size={15} />
+      <span className="flex-1 truncate">{item.label}</span>
+      {item.badge && (
+        <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
+          {item.badge}
+        </span>
+      )}
+    </NavLink>
+  )
 
   return (
     <aside className="fixed left-0 top-[72px] bottom-0 w-[280px] bg-white border-r border-slate-200 flex flex-col z-30 overflow-y-auto">
@@ -117,87 +132,18 @@ export default function Sidebar() {
         </span>
       </div>
 
-      {/* Nav items */}
-      <nav className="flex-1 px-2 pb-4 space-y-1.5">
+      {/* Nav items — groups render as static subheadings, never collapsible. */}
+      <nav className="flex-1 px-2 pb-4 space-y-2">
         {Object.entries(grouped).map(([group, items]) => {
-          const isUngrouped = group === '__ungrouped__'
-          const isCollapsed = collapsed[group] ?? false
-
-          if (isUngrouped) {
-            return (
-              <div key={group} className="space-y-0.5">
-                {items.map(item => (
-                  <NavLink
-                    key={item.label}
-                    to={item.path}
-                    end
-                    className={({ isActive }) => {
-                      const active = originPath ? item.path === originPath : isActive
-                      return cn(
-                        'flex items-center gap-2.5 px-3 py-2.5 rounded-r-md text-[13.5px] transition-colors',
-                        active ? ACTIVE_ITEM_CLASS : INACTIVE_ITEM_CLASS,
-                      )
-                    }}
-                  >
-                    <DynamicIcon name={item.icon} size={15} />
-                    <span className="flex-1 truncate">{item.label}</span>
-                    {item.badge && (
-                      <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
-                        {item.badge}
-                      </span>
-                    )}
-                  </NavLink>
-                ))}
-              </div>
-            )
-          }
-
+          const showHeading = group !== '__ungrouped__' && group.trim() !== ''
           return (
-            <div key={group} className="rounded-lg border border-slate-200 overflow-hidden">
-              {/* Group heading — acts as collapse toggle */}
-              <button
-                onClick={() => toggleGroup(group)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
-              >
-                <span className="flex-1 text-[12px] font-bold text-slate-700 leading-tight">
+            <div key={group} className="space-y-0.5">
+              {showHeading && (
+                <div className="mt-2 mb-1 px-3 py-1.5 rounded bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-600">
                   {group}
-                </span>
-                <ChevronDown
-                  size={14}
-                  className={cn(
-                    'text-slate-400 shrink-0 transition-transform duration-200',
-                    isCollapsed && '-rotate-90',
-                  )}
-                />
-              </button>
-
-              {/* Collapsible items */}
-              {!isCollapsed && (
-                <div className="py-1 space-y-0.5">
-                  {items.map(item => (
-                    <NavLink
-                      key={item.label}
-                      to={item.path}
-                      end
-                      className={({ isActive }) => {
-                        const active = originPath ? item.path === originPath : isActive
-                        return cn(
-                          'flex items-center gap-2.5 px-3 py-2.5 rounded-r-md text-[13.5px] transition-colors',
-                          active ? ACTIVE_ITEM_CLASS : INACTIVE_ITEM_CLASS,
-                        )
-                      }}
-                    >
-                      <DynamicIcon name={item.icon} size={15} />
-                      <span className="flex-1 truncate">{item.label}</span>
-                      {item.badge && (
-                        <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
-                          {item.badge}
-                        </span>
-                      )}
-                    </NavLink>
-                  ))}
                 </div>
               )}
+              {items.map(renderItem)}
             </div>
           )
         })}

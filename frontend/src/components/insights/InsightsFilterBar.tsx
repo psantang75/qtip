@@ -29,6 +29,8 @@ interface InsightsFilterBarProps {
   hidePeriod?: boolean
   /** Override the Period dropdown choices (e.g. single-day reports). Defaults to PERIOD_OPTIONS. */
   periodOptions?: readonly string[]
+  /** Override the Period field label (e.g. "Campaign Start" on cohort-scoped reports). */
+  periodLabel?: string
   /**
    * Render "Custom" as a single date picker (bound to customStart) instead of a
    * start–end range. For day-scoped reports that pick one day, not a period.
@@ -38,10 +40,23 @@ interface InsightsFilterBarProps {
   customEnd?: string
   onCustomStartChange?: (v: string) => void
   onCustomEndChange?: (v: string) => void
+  /**
+   * Selectable bounds (ISO YYYY-MM-DD) for the Custom date inputs. Reports whose
+   * data only exists for a known window pass these so the picker can't offer a
+   * day that has none — e.g. Missed Opportunities, which starts at its first
+   * nightly run and never covers today.
+   */
+  customDateMin?: string
+  customDateMax?: string
   showFormFilter?: boolean
   selectedForms?: string[]
   onFormsChange?: (v: string[]) => void
   availableForms?: string[]
+  /** Show a single-select Campaign filter (Collections) between Department and Period. */
+  showCampaignFilter?: boolean
+  campaign?: string
+  onCampaignChange?: (v: string) => void
+  availableCampaigns?: readonly string[]
   showBackButton?: boolean
   onBack?: () => void
   businessDays?: number
@@ -69,15 +84,22 @@ export default function InsightsFilterBar({
   onPeriodChange,
   hidePeriod = false,
   periodOptions,
+  periodLabel = 'Period',
   singleDayCustom = false,
   customStart,
   customEnd,
   onCustomStartChange,
   onCustomEndChange,
+  customDateMin,
+  customDateMax,
   showFormFilter = false,
   selectedForms = [],
   onFormsChange,
   availableForms = [],
+  showCampaignFilter = false,
+  campaign,
+  onCampaignChange,
+  availableCampaigns = [],
   showBackButton = false,
   onBack,
   businessDays,
@@ -179,8 +201,23 @@ export default function InsightsFilterBar({
           </StickyFilterField>
         )}
 
+        {showCampaignFilter && (
+          <StickyFilterField label="Campaign">
+            <Select value={campaign} onValueChange={(v) => onCampaignChange?.(v)}>
+              <SelectTrigger className="h-8 text-xs w-[200px] bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableCampaigns.map(c => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </StickyFilterField>
+        )}
+
         {!hidePeriod && (
-          <StickyFilterField label="Period">
+          <StickyFilterField label={periodLabel}>
             <Select value={period} onValueChange={onPeriodChange}>
               <SelectTrigger className="h-8 text-xs w-[175px] bg-white">
                 <SelectValue />
@@ -199,6 +236,8 @@ export default function InsightsFilterBar({
             <Input
               type="date"
               value={customStart ?? ''}
+              min={customDateMin}
+              max={customDateMax}
               onChange={(e) => onCustomStartChange?.(e.target.value)}
               className="h-8 text-xs w-[150px] bg-white"
             />
@@ -207,6 +246,8 @@ export default function InsightsFilterBar({
               <Input
                 type="date"
                 value={customStart ?? ''}
+                min={customDateMin}
+                max={customDateMax}
                 onChange={(e) => onCustomStartChange?.(e.target.value)}
                 className="h-8 text-xs w-[150px] bg-white"
               />
@@ -214,6 +255,8 @@ export default function InsightsFilterBar({
               <Input
                 type="date"
                 value={customEnd ?? ''}
+                min={customDateMin}
+                max={customDateMax}
                 onChange={(e) => onCustomEndChange?.(e.target.value)}
                 className="h-8 text-xs w-[150px] bg-white"
               />

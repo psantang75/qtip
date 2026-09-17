@@ -1,4 +1,4 @@
-export type KpiFormat    = 'PERCENT' | 'NUMBER'
+export type KpiFormat    = 'PERCENT' | 'NUMBER' | 'CURRENCY'
 export type KpiDirection = 'UP_IS_GOOD' | 'DOWN_IS_GOOD' | 'NEUTRAL'
 
 /**
@@ -618,6 +618,81 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     formulaPlain: 'COUNT(calls offered WHERE never answered)',
     source: 'call activity (source phone system)',
   },
+  // ── Collections · AR Campaign Performance ──────────────────────────────────
+  // Live KPIs for the Collections dashboards, served from the ie_fact_collections_*
+  // warehouse facts. Goals are seeded from published industry benchmarks
+  // (subscription dunning recovery + collections/ARM) so the tiles read as
+  // actual-vs-benchmark until real thresholds are tuned in ie_kpi.
+  col_total_collected: {
+    code: 'col_total_collected', name: 'Total Collected',
+    format: 'CURRENCY', direction: 'UP_IS_GOOD', scope: 'department',
+    description: 'Total dollars collected on AR / declined-account tasks in the period — agent-processed payments plus no-agent (self-service portal) recovery. Cash only: Payment, Credit, and Overpayment (approved).',
+    formulaPlain: 'SUM(amount) over approved cash payments (Payment/Credit/Overpayment) attributed to AR tasks in range',
+    source: 'ie_fact_collections_recovery (from CRM tblPaymentsCredits + tblTask)',
+  },
+  col_agent_collected: {
+    code: 'col_agent_collected', name: 'Agent-Collected',
+    format: 'CURRENCY', direction: 'UP_IS_GOOD', scope: 'department',
+    description: 'Dollars collected on payments processed by an agent (credited to the agent who processed the payment). Excludes no-agent self-service recovery.',
+    formulaPlain: 'SUM(amount) WHERE processor_kind = AGENT',
+    source: 'ie_fact_collections_recovery (processor_kind = AGENT)',
+  },
+  col_no_agent_collected: {
+    code: 'col_no_agent_collected', name: 'No-Agent Recovery',
+    format: 'CURRENCY', direction: 'NEUTRAL', scope: 'department',
+    description: 'Dollars recovered with no agent involvement — the customer received a dunning email and self-served on the portal. (We do not auto-retry declined payments.) Broken out separately so agent effectiveness is never inflated by self-service recovery.',
+    formulaPlain: 'SUM(amount) WHERE processor_kind = NO_AGENT',
+    source: 'ie_fact_collections_recovery (processor_kind = NO_AGENT)',
+  },
+  col_recovery_rate: {
+    code: 'col_recovery_rate', name: 'Collection Rate',
+    format: 'PERCENT', direction: 'UP_IS_GOOD', goal: 47.6, warn: 40, crit: 30, scope: 'department',
+    description: 'Share of declined / AR accounts worked in the period that were collected. Goal reflects the subscription-industry median failed-payment recovery rate (47.6%).',
+    formulaPlain: 'collected_accounts / accounts_worked × 100',
+    source: 'ie_fact_collections_task + ie_fact_collections_invoice',
+  },
+  col_first_touch_success: {
+    code: 'col_first_touch_success', name: 'First-Touch Success',
+    format: 'PERCENT', direction: 'UP_IS_GOOD', goal: 30, warn: 20, crit: 10, scope: 'department',
+    description: 'Share of accounts collected on or after the first touch but before a second touch was needed. Industry best-in-class first-attempt recovery is ~30-35%.',
+    formulaPlain: 'accounts_collected_before_touch_2 / accounts_reaching_touch_1 × 100',
+    source: 'ie_fact_collections_touch + ie_fact_collections_recovery',
+  },
+  col_avg_touches_to_collect: {
+    code: 'col_avg_touches_to_collect', name: 'Avg Touches to Collect',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD', goal: 2, warn: 3, crit: 4, scope: 'department',
+    description: 'Average number of touches (task status changes) before a payment landed, across collected accounts. Lower is better — recovery is front-loaded, so most value is in the first two touches.',
+    formulaPlain: 'AVG(attributed_touch_seq of the qualifying payment)',
+    source: 'ie_fact_collections_recovery (attributed_touch_seq)',
+  },
+  col_time_to_recovery: {
+    code: 'col_time_to_recovery', name: 'Avg Time to Recovery',
+    format: 'NUMBER', direction: 'DOWN_IS_GOOD', goal: 5, warn: 7, crit: 14, scope: 'department',
+    description: 'Average days from the decline / first touch to the collected payment. Industry benchmark is 3-7 days.',
+    formulaPlain: 'AVG(DATEDIFF(applied_on, task.created_on)) over collected accounts',
+    source: 'ie_fact_collections_recovery + ie_fact_collections_task',
+  },
+  col_term_rate: {
+    code: 'col_term_rate', name: 'Termination Rate',
+    format: 'PERCENT', direction: 'DOWN_IS_GOOD', goal: 15, warn: 25, crit: 40, scope: 'department',
+    description: 'Share of worked accounts that reached a shut-off / termed-for-nonpay status in the period.',
+    formulaPlain: 'accounts_reaching_term_status / accounts_worked × 100',
+    source: 'ie_fact_collections_task',
+  },
+  col_dollars_per_talk_hour: {
+    code: 'col_dollars_per_talk_hour', name: '$ / Talk Hour',
+    format: 'CURRENCY', direction: 'UP_IS_GOOD', scope: 'department',
+    description: 'Agent-collected dollars per hour of talk time — a cost-per-dollar-collected efficiency proxy (industry cost-per-dollar target is under $0.10).',
+    formulaPlain: 'agent_collected / (talk_minutes / 60)',
+    source: 'ie_fact_collections_recovery + ie_fact_call_activity (talk minutes)',
+  },
+  col_open_declines: {
+    code: 'col_open_declines', name: 'Open Declines',
+    format: 'NUMBER', direction: 'NEUTRAL', scope: 'department',
+    description: 'Count of open declined / AR tasks still being worked at period end — the outstanding collection workload (toil).',
+    formulaPlain: 'COUNT(open AR tasks in range)',
+    source: 'ie_fact_collections_task (open outcomes)',
+  },
 }
 
 /** Resolves thresholds for a KPI tile — falls back to the static defaults from kpiDefs */
@@ -635,6 +710,9 @@ export function getKpiScope(code: string): KpiScope {
 /** Format a raw KPI value to display string */
 export function formatKpiValue(value: number | null, format: KpiFormat, decimals = 1): string {
   if (value === null || value === undefined) return '—'
+  if (format === 'CURRENCY') {
+    return '$' + value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+  }
   const fixed = value.toFixed(decimals)
   return format === 'PERCENT' ? `${fixed}%` : fixed
 }

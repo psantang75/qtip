@@ -118,6 +118,17 @@ export const NAV_CONFIG: SectionConfig[] = [
       // 20260825170000_seed_company_reporting_service_counts).
       { label: 'Service Counts', path: '/app/insights/company-service-counts', icon: 'Radio', roles: [], pageKey: 'company_service_counts', group: 'Company Reporting' },
 
+      // ── Collections (AR campaign performance) ──
+      // DB-driven like the rest of Insights: `roles` is ignored because `pageKey`
+      // is set — visibility comes from ie_page_role_access via
+      // /api/insights/navigation (seeded Admin+Manager in
+      // 20260907190000_seed_collections_pages).
+      { label: 'Cycle Performance',   path: '/app/insights/collections-cycle',    icon: 'Receipt',         roles: [], pageKey: 'collections_cycle', group: 'Collections' },
+      { label: 'Cycle Invoices',      path: '/app/insights/collections-cycle-invoices', icon: 'List',     roles: [], pageKey: 'collections_cycle_invoices', group: 'Collections' },
+      { label: 'Failed Charge Invoices', path: '/app/insights/collections-failed-charges', icon: 'CreditCard', roles: [], pageKey: 'collections_failed_charges', group: 'Collections' },
+      { label: 'Campaign × Touch',    path: '/app/insights/collections-campaign', icon: 'BarChart2',       roles: [], pageKey: 'collections_campaign', group: 'Collections' },
+      { label: 'Agent Performance',   path: '/app/insights/collections-agents',   icon: 'Users',           roles: [], pageKey: 'collections_agents', group: 'Collections' },
+
       // Internal Research (Internal forms) — reuses the QC Overview / Quality /
       // Agent Performance dashboards in INTERNAL scope. `pageKey` gates visibility
       // via ie_page_role_access (/api/insights/navigation); the whole group only

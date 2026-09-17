@@ -104,7 +104,11 @@ export default function KpiTile({
   }
 
   const goalDisplay = thresholds.goal != null
-    ? `Goal: ${format === 'PERCENT' ? `${thresholds.goal}%` : thresholds.goal}`
+    ? `Goal: ${
+        format === 'PERCENT'  ? `${thresholds.goal}%` :
+        format === 'CURRENCY' ? formatKpiValue(thresholds.goal, 'CURRENCY', decimals) :
+        thresholds.goal
+      }`
     : null
 
   const isClickable = typeof onClick === 'function'
