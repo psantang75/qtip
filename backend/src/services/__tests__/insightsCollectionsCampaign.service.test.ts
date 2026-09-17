@@ -68,14 +68,17 @@ const isRungSubs = (s: string) =>
 const isMemoWrittenOff = (s: string) =>
   s.includes('credit_memo_amount > 0') && s.includes('COUNT(DISTINCT ci.task_id) AS `tasks`');
 const isMemoWorkedAfter = (s: string) => s.includes('tc.created_on > ci.credit_memo_on');
-/** The two reads over reactivation invoices differ by whether they place a rung. */
+/**
+ * The two reads over reactivation invoices share one subquery — reached through the
+ * service that returned — and differ only by whether they place it on a rung.
+ */
 const isReactivationRungs = (s: string) =>
-  s.includes('ni.is_reactivation = 1') && s.includes('tc.touch_seq');
+  s.includes('sb.successor_order_id') && s.includes('GROUP BY z.seq');
 /** Win-back SERVICES, placed at the termination that lost them. */
 const isReactivationSubs = (s: string) =>
   s.includes("s.outcome = 'REACTIVATED'") && s.includes('s.term_recorded_on');
 const isMemoReactivation = (s: string) =>
-  s.includes('ni.is_reactivation = 1') && !s.includes('tc.touch_seq');
+  s.includes('sb.successor_order_id') && !s.includes('GROUP BY z.seq');
 /**
  * Recovery reads that MEASURE — identified by the cohort join every measure carries.
  * The filter dropdowns read the same fact for the list of agent and department names,
@@ -466,8 +469,8 @@ describe('getCampaignTouch — the ladder subscription column partitions', () =>
 
 /**
  * The page ended at the credit memo, as though the work did too. Across 2025-06..2026-09
- * the four runs memoed $333,269.79, kept working 79% of those tasks afterwards, and took
- * $27,352.87 back on reactivation invoices — none of it reported anywhere.
+ * the four runs memoed $333,269.79 and kept working 79% of those tasks afterwards, taking
+ * real cash back on reactivation invoices — none of it reported anywhere.
  */
 describe('getCampaignTouch — recovery after a write-off', () => {
   it('reports the effort and the cash that followed the memo', async () => {
@@ -508,8 +511,8 @@ describe('getCampaignTouch — recovery after a write-off', () => {
     expect(r1.reactivationDollars).toBe(500);
     // Counted off the cohort's own subscriptions, so the column sums to the Starting
     // Point tile. The reactivation INVOICE cannot supply them: September holds 15
-    // reactivated services behind 3 such invoices, and that invoice is order type 6,
-    // which the subscription fact excludes entirely.
+    // reactivated services behind 7 such invoices, because one replacement commonly
+    // stands in for several shut-off services.
     expect(r1.reactivationSubs).toBe(4);
     // A win-back with no preceding touch opens the curve, exactly as untouched cash does.
     expect(res.cohort!.noTouch.reactivationDollars).toBe(100);
@@ -536,6 +539,30 @@ describe('getCampaignTouch — recovery after a write-off', () => {
     // Counting a part-paid, part-memoed invoice here would claim recovery against an
     // invoice the Starting Point tile has already reported as collected.
     expect(sqlFor(isMemoWrittenOff)[0]).toContain('ci.cash_collected = 0');
+  });
+
+  it('reaches win-back cash through the service that returned, not the billing group', async () => {
+    mockQueries();
+
+    await getCampaignTouch(filters);
+
+    const sql = sqlFor(isMemoReactivation)[0];
+    // A reactivation is normally paid by a NEW card, so the replacement sits on a
+    // DIFFERENT billing group from the invoice written off. On the 60 declined and memoed
+    // September CC invoices the group match found 3 invoices and $605.71 where the
+    // service link finds 7 and $3,202.80.
+    expect(sql).toContain('ni.order_id = sb.successor_order_id');
+    expect(sql).not.toContain('ni.billing_group_id = ci.billing_group_id');
+    // Type 3 is the recurring run's own output — counting it would report ordinary
+    // renewal billing as recovery and break the tie to Cycle Performance.
+    expect(sql).toContain('ni.order_type_id IN (1, 6)');
+    // Anchored on the shut-off, not the memo posting: `> credit_memo_on` discarded every
+    // same-day comeback, 2 invoices and $1,197.29 of that $3,202.80.
+    expect(sql).toContain('ni.order_date >= DATE(sb.term_recorded_on)');
+    expect(sql).not.toContain('ni.order_date > DATE(ci.credit_memo_on)');
+    // One replacement invoice can be reached by every service it brought back, so cash is
+    // aggregated per successor invoice rather than over the join.
+    expect(sql).toContain('GROUP BY ni.order_id');
   });
 });
 

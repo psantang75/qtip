@@ -67,15 +67,18 @@ SELECT /*+ MAX_EXECUTION_TIME(180000) */
   -- The radio was the other candidate and is deliberately not used. RadioID is on
   -- 99.9% of rows and finds 3,826 comebacks, but hardware gets swapped, so the key
   -- is not stable across the very event being tracked — and it finds FEWER than the
-  -- service links do.
+  -- service links do. Re-tested against a radio-matching chain on 2026-09-17: every
+  -- service it found that the links did not (5 on the 2026-09-01 run) already had a
+  -- resolving NextServiceID, so radio matching adds reach the links do not have and
+  -- costs an unstable key. Those 5 are absent here for an unrelated and correct
+  -- reason — they sit on an invoice that never declined, so it is outside the
+  -- cohort the transform keeps.
   --
-  -- EXISTS rather than a join: several services can point back at one predecessor,
-  -- and joining them would multiply every row for that subscription.
+  -- RESOLVED ONCE, BY THE JOINS BELOW, and read here and by successor_service_id
+  -- from the same expression, so the outcome and the successor cannot disagree.
   CASE
     WHEN term.CreatedOn IS NOT NULL
-     AND (EXISTS (SELECT 1 FROM tblService nx WHERE nx.ServiceID = s.NextServiceID)
-       OR EXISTS (SELECT 1 FROM tblService rv WHERE rv.ReactivatedID = s.ServiceID))
-                                                                         THEN 'REACTIVATED'
+     AND COALESCE(nx.ServiceID, rv.ServiceID) IS NOT NULL                THEN 'REACTIVATED'
     WHEN term.CreatedOn IS NOT NULL                                      THEN 'TERMINATED'
     ELSE 'RETAINED'
   END                                          AS outcome,
@@ -86,6 +89,26 @@ SELECT /*+ MAX_EXECUTION_TIME(180000) */
   term.TerminationOn                           AS term_effective_on,
   term.CreatedBy                               AS terminated_by_crm_id,
   CASE WHEN s.ReactivatedDate > '2001-01-01' THEN s.ReactivatedDate END AS reactivated_on,
+  -- WHAT it came back as, and the order that sold that successor. Unlike `order_id`
+  -- above — which names the invoice THIS run billed — successor_order_id is a join
+  -- key to ie_fact_collections_invoice, and it is how reactivation cash is now
+  -- attributed. It replaces a billing-group match that found under a fifth of that
+  -- cash, because a win-back is normally paid by a new card and so lands on a
+  -- different billing group; migration
+  -- 20260917210000_collections_subscription_successor carries the measurement.
+  --
+  -- GATED ON THE TERMINATION, so these describe a service that LEFT and came back —
+  -- never a live one. A retained service can also carry a NextServiceID (an upgrade
+  -- or hardware swap changes the service line without it ever lapsing), and letting
+  -- that populate would invite a reader to credit recovery for a subscription that
+  -- never went away. With the gate, `successor_service_id IS NOT NULL` is exactly
+  -- `outcome = 'REACTIVATED'` in both directions. successor_order_id can still be
+  -- NULL on a REACTIVATED row when the successor's part names no order, so it is the
+  -- weaker test of the two — join on it, do not count on it.
+  CASE WHEN term.CreatedOn IS NOT NULL
+       THEN COALESCE(nx.ServiceID, rv.ServiceID) END AS successor_service_id,
+  CASE WHEN term.CreatedOn IS NOT NULL
+       THEN sop.OrderID END                          AS successor_order_id,
   -- True MRR, unchanged: the billed line normalized to ONE month by the PART's own
   -- billing cycle (tblParts.PartCycleMode via tblOrderParts.PartID) — never by the
   -- billing group, which bills monthly even when its parts do not. Modes validated
@@ -106,6 +129,21 @@ LEFT JOIN tblOrderParts op
   ON op.OrderPartID = ri.newOrderPartID
 LEFT JOIN tblParts prt
   ON prt.PartID = op.PartID
+-- ── The successor, the two ways CRM records one ────────────────────────────────
+-- Forward pointer first, then a service pointing back, matching the precedence the
+-- outcome above documents. Neither join can fan out: ServiceID is the primary key
+-- and each side resolves to at most one row, which is why the reverse arm picks
+-- MIN(ServiceID) — several services can point back at one predecessor, and joining
+-- all of them would multiply every row for that subscription.
+LEFT JOIN tblService nx
+  ON nx.ServiceID = s.NextServiceID
+LEFT JOIN tblService rv
+  ON rv.ServiceID = (SELECT MIN(r2.ServiceID)
+                       FROM tblService r2
+                      WHERE r2.ReactivatedID = s.ServiceID)
+-- The successor's activating part names the order that sold it.
+LEFT JOIN tblOrderParts sop
+  ON sop.OrderPartID = COALESCE(nx.OrderPartID, rv.OrderPartID)
 -- NO TASK IS JOINED HERE. status_at_outcome is the chasing task's status, and the
 -- transform reads it from ie_fact_collections_task via the invoice's own task link.
 -- Matching a task in CRM on billing group + day would fan this result set out

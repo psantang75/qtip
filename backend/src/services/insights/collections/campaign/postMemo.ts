@@ -5,8 +5,21 @@
  * service off is what raises the memo, but the task stays open and keeps being worked:
  * across 2025-06..2026-09 the four recurring runs memoed 2,057 invoices worth
  * $333,269.79, and 1,605 of those tasks (79%) were touched AGAIN afterwards, 4,679
- * times in total. 275 of them came back on a reactivation invoice carrying $27,352.87
- * of cash. None of that effort or recovery was visible anywhere on the report.
+ * times in total. 121 reactivation invoices then took $58,586.29 back. None of that
+ * effort or recovery was visible anywhere on the report.
+ *
+ * THAT CASH IS REACHED THROUGH THE SERVICE THAT RETURNED, not through the billing group
+ * — see `reactivationInvoicesSql`. Matching on the group was wrong in BOTH directions
+ * over that same history: it returned 227 invoices totalling only $19,534.67, because it
+ * swept in every reactivation that happened to sit on the same card whether or not it
+ * related to the memoed invoice, while missing the real win-backs — which move to a NEW
+ * card, that being much of why they could be won back at all.
+ *
+ * These figures therefore depend on
+ * `ie_fact_collections_subscription.successor_order_id`, which populates per window as
+ * that window is ingested; a window loaded before migration
+ * 20260917210000_collections_subscription_successor reports no reactivation cash until
+ * it is reloaded.
  *
  * MEASURED FROM `credit_memo_on`, which the invoice fact populates on every memoed row
  * (2,057 of 2,057), so "after the memo" is an exact comparison rather than an estimate.
@@ -25,7 +38,59 @@ import {
   DEFAULT_CURRENCY,
   num,
 } from '../../../insightsCollections.shared';
-import { basisOrdersSql } from '../declinedBasis';
+import { basisOrdersSql, type SqlFragment } from '../declinedBasis';
+
+/**
+ * The memoed cohort, against alias `ci`: written off with no cash against it, inside
+ * the declined basis. Every read in this file measures exactly this population.
+ */
+const memoedWhere = (scope: SqlFragment): string =>
+  `ci.credit_memo_amount > 0 AND ci.cash_collected = 0
+     AND ci.order_id IN (${scope.sql})`;
+
+/**
+ * One row per reactivation invoice the memoed cohort brought back — the invoice, the
+ * cash on it, and the rung that was working the task when it arrived. Both reads below
+ * share it so the tile total and the chart cannot disagree.
+ *
+ * REACHED THROUGH THE SERVICE THAT CAME BACK (`successor_order_id`), because the
+ * memoed invoice and its replacement share no other honest key: a win-back is normally
+ * paid by a new card, so matching on billing group missed most of it.
+ *
+ * GROUPED BY THE SUCCESSOR INVOICE so its cash is counted once however many services
+ * it brought back, and however many memoed invoices reach it. One replacement invoice
+ * standing in for three shut-off services is ordinary, not an edge case.
+ *
+ * ANCHORED ON THE SHUT-OFF, NOT ON THE MEMO POSTING. The termination is the event this
+ * section is about; the memo is the bookkeeping that follows it, and `>` against
+ * `credit_memo_on` silently discarded every SAME-DAY comeback — the fastest and best
+ * saves there are. On the September CC cohort that was 2 invoices and $1,197.29 of
+ * $3,202.80, including one where memo, shut-off and replacement all fell on 2026-09-14.
+ * `term_recorded_on` is never NULL on a REACTIVATED row: the extract only reaches that
+ * outcome when a termination exists.
+ *
+ * Order types 1 and 6 only — type 3 is the recurring run's own output, and counting it
+ * would report renewal billing as recovery.
+ */
+const reactivationInvoicesSql = (memoed: string): string =>
+  `SELECT ni.order_id,
+          MAX(ni.cash_collected) AS cash,
+          MAX((SELECT MAX(tc.touch_seq)
+                 FROM ie_fact_collections_touch tc
+                WHERE tc.task_id = ci.task_id
+                  AND tc.touch_seq > 0
+                  AND tc.created_on <= ni.order_date)) AS seq
+     FROM ie_fact_collections_invoice ci
+     JOIN ie_fact_collections_subscription sb
+       ON sb.order_id = ci.order_id
+      AND sb.outcome = 'REACTIVATED'
+      AND sb.successor_order_id IS NOT NULL
+     JOIN ie_fact_collections_invoice ni
+       ON ni.order_id = sb.successor_order_id
+      AND ni.order_type_id IN (1, 6)
+      AND ni.order_date >= DATE(sb.term_recorded_on)
+    WHERE ${memoed} AND ci.credit_memo_on IS NOT NULL
+    GROUP BY ni.order_id`;
 
 export interface PostMemoRecovery {
   /** Invoices written off with no cash against them. */
@@ -38,7 +103,7 @@ export interface PostMemoRecovery {
   tasksWorkedAfter: number;
   /** Touches logged after the memo — effort the ladder above cannot show. */
   touchesAfter: number;
-  /** Reactivation invoices raised on the same billing group after the memo. */
+  /** Reactivation invoices that brought one of the cohort's own services back. */
   reactivationInvoices: number;
   /** Cash collected on those reactivation invoices. */
   reactivationCash: number;
@@ -71,9 +136,6 @@ export interface ReactivationRung {
  *
  * Reactivations with no preceding touch return `seq: null` and belong to the no-touch
  * baseline, exactly as untouched payments do.
- *
- * DEDUPED TO ONE ROW PER REACTIVATION INVOICE. A billing group that was memoed twice
- * matches the same replacement invoice from both, which would count its cash twice.
  */
 export async function loadReactivationRungs(
   filters: CollectionsFilters,
@@ -86,24 +148,7 @@ export async function loadReactivationRungs(
     `SELECT z.seq AS \`seq\`,
             COUNT(*)      AS \`invoices\`,
             SUM(z.cash)   AS \`dollars\`
-       FROM (
-         SELECT ni.order_id,
-                MAX(ni.cash_collected) AS cash,
-                MAX((SELECT MAX(tc.touch_seq)
-                       FROM ie_fact_collections_touch tc
-                      WHERE tc.task_id = ci.task_id
-                        AND tc.touch_seq > 0
-                        AND tc.created_on <= ni.order_date)) AS seq
-           FROM ie_fact_collections_invoice ci
-           JOIN ie_fact_collections_invoice ni
-             ON ni.billing_group_id = ci.billing_group_id
-            AND ni.order_date > DATE(ci.credit_memo_on)
-            AND ni.is_reactivation = 1
-          WHERE ci.credit_memo_amount > 0 AND ci.cash_collected = 0
-            AND ci.credit_memo_on IS NOT NULL
-            AND ci.order_id IN (${scope.sql})
-          GROUP BY ni.order_id
-       ) z
+       FROM (${reactivationInvoicesSql(memoedWhere(scope))}) z
       GROUP BY z.seq`,
     scope.params,
   );
@@ -170,8 +215,7 @@ export async function loadPostMemo(
   // before, which admitted memos on invoices that never declined on the run and so
   // claimed write-offs the page's own invoice split did not contain.
   const scope = basisOrdersSql(filters, fromKey, toKey, callLadderCampaigns(), currency);
-  const memoed = `ci.credit_memo_amount > 0 AND ci.cash_collected = 0
-                    AND ci.order_id IN (${scope.sql})`;
+  const memoed = memoedWhere(scope);
 
   const [[wrote]] = await pool.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS \`invoices\`,
@@ -193,18 +237,25 @@ export async function loadPostMemo(
     scope.params,
   );
 
-  // Linked by billing group, the only key the memoed invoice and its replacement share
-  // — a reactivation is a NEW order, so it carries neither the old order id nor the old
-  // task. `is_reactivation` is the invoice fact's own flag, not an inference.
+  // LINKED BY THE SERVICE THAT CAME BACK, through the subscription fact's
+  // `successor_order_id`. A reactivation is a NEW order carrying neither the old order
+  // id nor the old task, so this used to match on billing group — the only key the two
+  // invoices appeared to share. That key is wrong for this event: a win-back is
+  // normally paid by a new card and so lands on a DIFFERENT billing group. On the 60
+  // declined and memoed September CC invoices it found 3 invoices and $605.71 where the
+  // service link finds 7 and $3,202.80 (migration
+  // 20260917210000_collections_subscription_successor).
+  //
+  // Order types 1 and 6 only. Type 3 is the recurring run's own output, so counting it
+  // would report ordinary renewal billing as recovery and break the page's tie to Cycle
+  // Performance. Types the invoice fact does not ingest simply fail the join.
+  //
+  // AGGREGATED OVER DISTINCT SUCCESSOR INVOICES, not over the join. One invoice can be
+  // reached by every service it brought back — five services on one replacement is
+  // ordinary — and summing the join would multiply its cash by that count.
   const [[back]] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(DISTINCT ni.order_id) AS \`invoices\`,
-            SUM(ni.cash_collected) AS \`cash\`
-       FROM ie_fact_collections_invoice ci
-       JOIN ie_fact_collections_invoice ni
-         ON ni.billing_group_id = ci.billing_group_id
-        AND ni.order_date > DATE(ci.credit_memo_on)
-        AND ni.is_reactivation = 1
-      WHERE ${memoed} AND ci.credit_memo_on IS NOT NULL`,
+    `SELECT COUNT(*) AS \`invoices\`, SUM(z.cash) AS \`cash\`
+       FROM (${reactivationInvoicesSql(memoed)}) z`,
     scope.params,
   );
 

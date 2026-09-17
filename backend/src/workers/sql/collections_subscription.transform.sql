@@ -33,7 +33,8 @@ INSERT INTO ie_fact_collections_subscription
   (date_key, service_id, billing_group_id, customer_id, task_id, campaign_key,
    order_part_id, order_id, service_status, outcome, term_reason_id, term_reason_text,
    is_ar_reason, term_recorded_on, term_effective_on, terminated_by_crm_id,
-   status_at_outcome, reactivated_on, mrr_amount, load_batch_id)
+   status_at_outcome, reactivated_on, successor_service_id, successor_order_id,
+   mrr_amount, load_batch_id)
 -- STRAIGHT_JOIN because staging carries no indexes. Left to its own devices the
 -- optimizer drove this from ie_fact_collections_invoice and re-scanned the staging
 -- table for every invoice row, which took one 15-day chunk past 25 minutes without
@@ -59,6 +60,9 @@ SELECT STRAIGHT_JOIN
   -- The chasing task's status, from the task fact rather than a second CRM lookup.
   tk.final_status_label,
   s.reactivated_on,
+  -- Carried, not re-derived: the extract resolved the successor alongside `outcome`.
+  s.successor_service_id,
+  s.successor_order_id,
   IFNULL(s.mrr_amount, 0),
   CONCAT('collections_subscription:', :pFromDate, '..', :pToDate)
 FROM ie_stg_collections_subscription s
