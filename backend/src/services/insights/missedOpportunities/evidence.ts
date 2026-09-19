@@ -63,6 +63,42 @@ export function normalizeForMatch(text: string): string {
  */
 const TURN_LINE_RE = /^\s*\[([^\]]*)\]\s*(.*)$/;
 
+/**
+ * The older `Agent: text` line form, which `formatTranscriptContent` passes
+ * through verbatim when a provider's payload is already plain text. Recognising
+ * it matters for attribution: an unparsed line has no speaker, and a transcript
+ * with no speakers can attribute nothing, so without this the verification pass
+ * would go silent on every plain-text provider and let false positives back in.
+ * The label is bounded and word-ish so an ordinary mid-sentence colon does not
+ * become a speaker.
+ */
+const PLAIN_TURN_RE = /^\s*([A-Za-z][A-Za-z0-9 ._-]{0,30}?)\s*:\s+(.*)$/;
+
+interface Turn { speaker: string; text: string }
+
+/** Every speaker-labelled line in a source, in either rendered form. */
+function turnsOf(source: string): Turn[] {
+  const turns: Turn[] = [];
+  for (const line of source.split('\n')) {
+    const bracketed = TURN_LINE_RE.exec(line);
+    if (bracketed) {
+      turns.push({ speaker: speakerOf(bracketed[1]), text: bracketed[2] });
+      continue;
+    }
+    const plain = PLAIN_TURN_RE.exec(line);
+    if (plain) turns.push({ speaker: plain[1].trim().toLowerCase(), text: plain[2] });
+  }
+  return turns;
+}
+
+/**
+ * Speaker labels `formatTranscriptContent` renders for OUR side of the line.
+ * Note that it collapses agent, ACD, IVR and system into one label, so an
+ * internal turn identifies the COMPANY, never a particular employee — which is
+ * why attribution needs the participant count as well as the label.
+ */
+const INTERNAL_SPEAKERS = ['agent', 'internal', 'rep', 'salesperson'];
+
 /** The speaker is the last dash-separated part of the label. */
 function speakerOf(label: string): string {
   const parts = label.split(/[\u2010-\u2015-]/);
@@ -80,11 +116,7 @@ function speakerOf(label: string): string {
  */
 function haystacksFor(source: string): string[] {
   const asRendered = normalizeForMatch(source);
-  const turns: Array<{ speaker: string; text: string }> = [];
-  for (const line of source.split('\n')) {
-    const m = TURN_LINE_RE.exec(line);
-    if (m) turns.push({ speaker: speakerOf(m[1]), text: m[2] });
-  }
+  const turns = turnsOf(source);
   if (turns.length === 0) return [asRendered];
 
   const bySpeaker = new Map<string, string[]>();
@@ -119,14 +151,103 @@ export function quoteResolves(quote: string | null, ...sources: Array<string | n
     .filter((s) => s.length > 0);
   if (haystacks.length === 0) return true;
 
+  return matchesAny(quote, normQuote, haystacks, true);
+}
+
+/**
+ * Shared span/elision test against a prepared set of haystacks.
+ *
+ * `undecidable` is what to answer when the quote carries no testable span — the
+ * two callers want opposite answers there, because one is deciding whether to
+ * keep a finding and the other whether to delete one.
+ */
+function matchesAny(
+  quote: string | null,
+  normQuote: string,
+  haystacks: string[],
+  undecidable: boolean,
+): boolean {
   const spans = (quote ?? '').split(ELISION_RE).map(normalizeForMatch);
   if (spans.length > 1) {
-    // Only the distinctive halves are testable; if the model stitched together
-    // nothing but short interjections there is no claim here to disconfirm.
     const testable = spans.filter((s) => s.length >= MIN_RESOLVABLE_CHARS);
-    if (testable.length === 0) return true;
+    if (testable.length === 0) return undecidable;
     return haystacks.some((hay) => testable.every((span) => hay.includes(span)));
   }
-
   return haystacks.some((hay) => hay.includes(normQuote));
+}
+
+/**
+ * True when `quote` resolves to a turn spoken by OUR side of the line.
+ *
+ * DELIBERATELY STRICT, UNLIKE `quoteResolves`. That function fails open because
+ * its job is to avoid discarding a real finding over a punctuation difference.
+ * This one is used to decide whether to DELETE a finding on the grounds that the
+ * salesperson already did the thing, so every ambiguity has to answer "no":
+ *
+ *   - a transcript with no speaker labels cannot attribute anything, so false;
+ *   - a quote short enough to appear anywhere proves no attribution, so false;
+ *   - a line the CUSTOMER spoke is not the salesperson making an offer, so the
+ *     customer's turns are never in the haystack.
+ *
+ * It still cannot tell one employee from another — `formatTranscriptContent`
+ * collapses agent, ACD, IVR and system into a single "Agent" label — which is
+ * exactly why callers must also check how many internal parties were on the
+ * conversation before trusting a positive result.
+ */
+export function quoteResolvesAsInternalSpeaker(
+  quote: string | null,
+  transcript: string | null,
+): boolean {
+  const normQuote = normalizeForMatch(quote ?? '');
+  if (normQuote.length < MIN_RESOLVABLE_CHARS) return false;
+
+  const internal = turnsOf(transcript ?? '')
+    .filter((t) => INTERNAL_SPEAKERS.includes(t.speaker))
+    .map((t) => t.text);
+  if (internal.length === 0) return false;
+
+  // Both forms: each turn on its own, and the speaker's turns joined, so a
+  // sentence a phrase-level provider split across turns still resolves.
+  const haystacks = [
+    normalizeForMatch(internal.join(' ')),
+    ...internal.map(normalizeForMatch),
+  ].filter((s) => s.length > 0);
+  return matchesAny(quote, normQuote, haystacks, false);
+}
+
+/** `by Jamie Smith` inside a rendered note header. See crmThread.renderAction. */
+const NOTE_AUTHOR_RE = /(?:^|·)\s*by\s+([^·\]]+)/i;
+
+/**
+ * The authors of the rendered note lines a quote actually appears in.
+ *
+ * A record's history legitimately contains other employees' notes, so "the quote
+ * is somewhere in the CRM block" cannot establish that the reviewed salesperson
+ * wrote it — and attributing a colleague's note to them is how one person's work
+ * became another's credit. Rendered lines carry `by <author>` in the header
+ * (crmThread), so the author of the specific matched line is checkable here
+ * without another model call.
+ *
+ * Returns an empty array when the quote matches no single line, which callers must
+ * read as "not attributable", never as "attributable to anyone".
+ */
+export function quoteAuthors(quote: string | null, notes: string | null): string[] {
+  const normQuote = normalizeForMatch(quote ?? '');
+  if (normQuote.length < MIN_RESOLVABLE_CHARS) return [];
+  const authors: string[] = [];
+  for (const line of (notes ?? '').split('\n')) {
+    const m = TURN_LINE_RE.exec(line);
+    if (!m) continue;
+    if (!normalizeForMatch(m[2]).includes(normQuote)) continue;
+    const author = NOTE_AUTHOR_RE.exec(m[1])?.[1]?.trim();
+    if (author) authors.push(author);
+  }
+  return authors;
+}
+
+/** True when one of `authors` is the named person, compared on normalised form. */
+export function isSamePerson(authors: readonly string[], name: string): boolean {
+  const target = normalizeForMatch(name);
+  if (!target) return false;
+  return authors.some((a) => normalizeForMatch(a) === target);
 }

@@ -201,13 +201,38 @@ beforeEach(() => {
     new Map([['Jane Rep', '[LEAD 4455 · TASK 999] Second Location']]),
   );
   loadCallMaterialMock.mockImplementation(
-    async (c: CallCandidate, crm: unknown, leadsCreated: unknown) =>
-      ({ ...c, transcript: 'Agent: hello', crm, leadsCreated }),
+    async (c: CallCandidate, crm: unknown, leadsCreated: unknown, attribution: unknown) =>
+      ({ ...c, transcript: 'Agent: hello', crm, leadsCreated, attribution }),
   );
-  // Default: the call's number does not resolve to one record, so the worker
-  // falls back to day-wide notes and the model's own citation (matches the
-  // pre-existing assertions below).
+  // Default: the resolver itself threw, so the worker falls back to day-wide
+  // notes and the model's own citation (matches the assertions below).
   resolveCallCrmRecordMock.mockResolvedValue(null);
+});
+
+/** A resolver answer, in the shape crmLink now returns. */
+const resolved = (over: Record<string, unknown> = {}) => ({
+  kind: 'TICKET',
+  id: 987,
+  outcome: 'verified',
+  attribution: { internalPartyCount: 1, soleInternalParty: true },
+  crm: {
+    notes: 'prior thread',
+    refs: ['TICKET 987'],
+    scope: 'record',
+    recordLabel: 'TICKET 987 — Acme',
+    resolution: {
+      outcome: 'verified',
+      reason: 'one open lead on the verified account',
+      primaryRef: 'TICKET 987',
+      salesRefs: ['TICKET 987'],
+      ticketRefs: [],
+      duplicatePath: [],
+      rejected: [],
+      numbers: [],
+      crossAccount: false,
+    },
+  },
+  ...over,
 });
 
 describe('MissedOpportunitiesWorker — idempotency', () => {
@@ -295,17 +320,12 @@ describe('MissedOpportunitiesWorker — idempotency', () => {
     selectCandidateCallsMock.mockResolvedValue([candidate()]);
     // The call resolved to a specific ticket whose thread differs from the
     // agent's day-wide notes and from the model's own guess (TASK 12345).
-    resolveCallCrmRecordMock.mockResolvedValue({
-      kind: 'TICKET',
-      id: 987,
-      confidence: 'strong',
-      crm: { notes: 'prior thread', refs: ['TICKET 987'], scope: 'record', recordLabel: 'TICKET 987 — Acme' },
-    });
+    resolveCallCrmRecordMock.mockResolvedValue(resolved());
     analyzeCallMock.mockResolvedValue(result({ findings: [aFinding()] }));
 
     await new MissedOpportunitiesWorker(RUN_DATE).run();
 
-    // The resolved record wins over the model's citation for the deep link.
+    // A verified record wins over the model's citation for the deep link.
     const [row] = findingCreateMany.mock.calls[0][0].data;
     expect(row.crm_task_kind).toBe('TICKET');
     expect(row.crm_task_id).toBe(987);
@@ -315,38 +335,31 @@ describe('MissedOpportunitiesWorker — idempotency', () => {
     expect(crmArg.notes).toBe('prior thread');
   });
 
-  // A WEAK match is the closest of SEVERAL candidate records on a shared
-  // number. Overriding with it replaced a citation the analyzer had already
-  // validated against the refs the model was shown, deep-linking the manager
-  // into a different account on the same phone number.
-  it('keeps the model\'s validated citation when the phone match is only weak', async () => {
-    selectCandidateCallsMock.mockResolvedValue([candidate()]);
-    resolveCallCrmRecordMock.mockResolvedValue({
-      kind: 'TICKET',
-      id: 987,
-      confidence: 'weak',
-      crm: { notes: 'prior thread', refs: ['TICKET 987'], scope: 'record' },
-    });
-    analyzeCallMock.mockResolvedValue(result({ findings: [aFinding()] }));
+  // Overriding on anything short of `verified` is what deep-linked Lakeland and
+  // Keys into an unrelated La Mesa account: one candidate came back on a shared
+  // number and the worker stored it over a citation the analyzer had already
+  // checked against the refs the model was actually shown. Candidate count is
+  // not identity, so only `verified` may overwrite.
+  it.each(['provisional', 'ambiguous', 'unmatched', 'unavailable'])(
+    'keeps the model\'s validated citation when the resolution is only %s', async (outcome) => {
+      selectCandidateCallsMock.mockResolvedValue([candidate()]);
+      resolveCallCrmRecordMock.mockResolvedValue(resolved({ outcome }));
+      analyzeCallMock.mockResolvedValue(result({ findings: [aFinding()] }));
 
-    await new MissedOpportunitiesWorker(RUN_DATE).run();
+      await new MissedOpportunitiesWorker(RUN_DATE).run();
 
-    const [row] = findingCreateMany.mock.calls[0][0].data;
-    expect(row.crm_task_kind).toBe('TASK');
-    expect(row.crm_task_id).toBe(12345);
-  });
+      const [row] = findingCreateMany.mock.calls[0][0].data;
+      expect(row.crm_task_kind).toBe('TASK');
+      expect(row.crm_task_id).toBe(12345);
+    },
+  );
 
-  it('still feeds the weak match\'s record history to the model', async () => {
+  it('still feeds an unverified match\'s record history to the model', async () => {
     // The link is untrusted for the stored citation, not for the context: that
-    // thread is still the best guess at the account, and the model judges the
-    // call against it and cites only what it was shown.
+    // thread is still the best-supported account, the prompt labels how well it
+    // is established, and the model cites only what it was shown.
     selectCandidateCallsMock.mockResolvedValue([candidate()]);
-    resolveCallCrmRecordMock.mockResolvedValue({
-      kind: 'TICKET',
-      id: 987,
-      confidence: 'weak',
-      crm: { notes: 'prior thread', refs: ['TICKET 987'], scope: 'record' },
-    });
+    resolveCallCrmRecordMock.mockResolvedValue(resolved({ outcome: 'provisional' }));
     analyzeCallMock.mockResolvedValue(result({ findings: [] }));
 
     await new MissedOpportunitiesWorker(RUN_DATE).run();
@@ -355,14 +368,56 @@ describe('MissedOpportunitiesWorker — idempotency', () => {
     expect(crmArg.notes).toBe('prior thread');
   });
 
-  it('leaves the citation null when a weak match is all the model had', async () => {
+  // A CRM outage must not promote another customer's day-wide notes into the
+  // packet as though they were this account's history.
+  it('does not substitute day-wide agent notes when the account is unmatched', async () => {
     selectCandidateCallsMock.mockResolvedValue([candidate()]);
-    resolveCallCrmRecordMock.mockResolvedValue({
-      kind: 'TICKET',
-      id: 987,
-      confidence: 'weak',
-      crm: { notes: 'prior thread', refs: ['TICKET 987'], scope: 'record' },
+    resolveCallCrmRecordMock.mockResolvedValue(resolved({
+      kind: null,
+      id: null,
+      outcome: 'unmatched',
+      crm: { notes: '', refs: [], scope: 'record' },
+    }));
+    analyzeCallMock.mockResolvedValue(result({ findings: [] }));
+
+    await new MissedOpportunitiesWorker(RUN_DATE).run();
+
+    const crmArg = loadCallMaterialMock.mock.calls[0][1] as { notes?: string; scope?: string };
+    expect(crmArg.scope).toBe('record');
+    expect(crmArg.notes).toBe('');
+  });
+
+  it('falls back to day-wide notes only when the resolver returned nothing at all', async () => {
+    selectCandidateCallsMock.mockResolvedValue([candidate()]);
+    resolveCallCrmRecordMock.mockResolvedValue(null);
+    analyzeCallMock.mockResolvedValue(result({ findings: [] }));
+
+    await new MissedOpportunitiesWorker(RUN_DATE).run();
+
+    const crmArg = loadCallMaterialMock.mock.calls[0][1] as { scope?: string };
+    expect(crmArg.scope).toBe('day');
+  });
+
+  // Whether the reviewed salesperson was the only employee on the line decides
+  // whether an "Agent:" turn can be credited to them at all, so it has to reach
+  // the analyzer with the material rather than being inferred downstream.
+  it('hands the analyzer the call\'s attribution alongside the material', async () => {
+    selectCandidateCallsMock.mockResolvedValue([candidate()]);
+    resolveCallCrmRecordMock.mockResolvedValue(resolved({
+      attribution: { internalPartyCount: 2, soleInternalParty: false },
+    }));
+    analyzeCallMock.mockResolvedValue(result({ findings: [] }));
+
+    await new MissedOpportunitiesWorker(RUN_DATE).run();
+
+    expect(loadCallMaterialMock.mock.calls[0][3]).toEqual({
+      internalPartyCount: 2, soleInternalParty: false,
     });
+  });
+
+  it('leaves the citation null when an unverified match is all the model had', async () => {
+    selectCandidateCallsMock.mockResolvedValue([candidate()]);
+    resolveCallCrmRecordMock.mockResolvedValue(resolved({ outcome: 'provisional' }));
     analyzeCallMock.mockResolvedValue(result({
       findings: [{ ...aFinding(), crmRefKind: null, crmRefId: null }],
     }));
@@ -379,12 +434,7 @@ describe('MissedOpportunitiesWorker — idempotency', () => {
     // opened for a sibling location is invisible there. It has to ride alongside
     // the notes or the expansion rule has nothing to check its claim against.
     selectCandidateCallsMock.mockResolvedValue([candidate()]);
-    resolveCallCrmRecordMock.mockResolvedValue({
-      kind: 'TASK',
-      id: 500,
-      confidence: 'strong',
-      crm: { notes: 'prior thread', refs: ['TASK 500'], scope: 'record' },
-    });
+    resolveCallCrmRecordMock.mockResolvedValue(resolved({ kind: 'TASK', id: 500 }));
     analyzeCallMock.mockResolvedValue(result({ findings: [] }));
 
     await new MissedOpportunitiesWorker(RUN_DATE).run();

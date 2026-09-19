@@ -1,0 +1,48 @@
+---
+description: Make every LLM call as cheap as it can be without losing evidence or quality
+globs: backend/src/services/ai/**,backend/src/services/aiCallLogger.ts,backend/src/services/aiCostEstimator.ts,backend/src/services/insights/missedOpportunities/**,backend/src/services/AIReviewer*.ts,backend/src/services/aiReviewer*.ts
+alwaysApply: false
+---
+
+# AI call cost efficiency — always the cheapest correct call
+
+Input tokens dominate this platform's LLM bill (~95% of a missed-opportunities
+run). A prompt that re-sends the same large instruction block on every call is
+the single biggest waste. When you add or change any LLM call, make it efficient
+by default — but **never** by cutting evidence, coverage, or quality controls
+(that trade is forbidden by [runtime-configuration](mdc:.cursor/rules/runtime-configuration.mdc)
+and the cost brief in `docs/cursor_missed_opportunities_cost_efficiency.md`).
+
+## Non-negotiables
+
+- **Cache the stable prefix.** If a large system prompt (persona, rules, KB
+  grounding, fixed instructions) is reused across many calls in a run, pass
+  `cacheSystem: true` to `callChatModel`. Keep the `system` block byte-identical
+  across calls and put everything per-call (transcript, IDs, timestamps, CRM
+  evidence) in `user` — otherwise the prefix won't match and nothing caches.
+
+```typescript
+// ✅ GOOD — constant prefix cached, per-call data after the boundary
+await callChatModel(provider, { system: sharedSystemPrompt, user: perCallEvidence, cacheSystem: true });
+
+// ❌ BAD — per-call data folded into system defeats the cache and re-bills the prefix
+await callChatModel(provider, { system: `${sharedSystemPrompt}\nCALL: ${conversationId}`, user });
+```
+
+- **Account for cache tokens in cost.** Anthropic reports cache write/read
+  separately; price them via `estimateUsdCost(model, uncachedIn, out, cacheRead,
+  cacheWrite)`. Thread `cacheReadTokens`/`cacheWriteTokens` from the result into
+  `withCallLog`'s `CallLogResult`. Never charge cached reads at the full input
+  rate. `tokens_in` stays TOTAL input (no DB column change).
+- **Right-size the model and output.** Use the cheap tier unless the task needs
+  the reasoning model; set `maxTokens` to the real output ceiling. Don't add a
+  second model pass unless measured end-to-end savings justify it.
+- **Don't re-send or duplicate context.** Do identity/date/dedupe/label work in
+  code, not by asking the model. Reuse valid unchanged results instead of paying
+  for identical inference again.
+
+## Verify, don't assume
+
+Confirm real cache hits from the provider usage fields (`cache_read_input_tokens`),
+not from the request flag. A cost cut is only acceptable with the same evidence
+coverage and no quality regression — measure both before claiming the saving.

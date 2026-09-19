@@ -171,10 +171,19 @@ export class MissedOpportunitiesWorker extends BaseInsightsWorker {
         // the call against what was already done. Falls back to the agent's
         // day-wide notes when the number can't be resolved to a record.
         const resolved = await resolveCallCrmRecord(candidate).catch(() => null);
+        // A resolution that did not land on a record must NOT fall back to the
+        // agent's day-wide notes: those are other customers' histories, and
+        // presenting them as this account's is how a lookup failure became
+        // "there is no documentation of a warranty offer". The resolver's own
+        // block already says why it found nothing, which is the honest input.
+        const crm = resolved
+          ? resolved.crm
+          : crmByAgent.get(candidate.agentName) ?? { notes: '', refs: [] };
         const material = await loadCallMaterial(
           candidate,
-          resolved?.crm ?? crmByAgent.get(candidate.agentName) ?? { notes: '', refs: [] },
+          crm,
           leadsByAgent.has(candidate.agentName) ? leadsByAgent.get(candidate.agentName)! : null,
+          resolved?.attribution,
         );
         const result = await analyzeCall({
           material,
@@ -197,18 +206,26 @@ export class MissedOpportunitiesWorker extends BaseInsightsWorker {
           skipped += 1;
         } else {
           analyzed += 1;
-          // A STRONG phone match is authoritative for the link — it is the one
-          // open lead-task on the account the call was about, so it beats the
-          // model's citation. A WEAK match is the opposite: it is the closest of
-          // several candidate records on a shared number, and overriding with it
-          // replaced a citation already validated against the refs the model was
-          // shown with a guess, deep-linking managers into the wrong account.
-          const strongLink = resolved?.confidence === 'strong' ? resolved : null;
+          // Only a VERIFIED resolution may overwrite the model's citation. The
+          // model's ref was at least checked against the tokens it was shown; a
+          // resolution that is merely provisional is the closest of several
+          // records on a shared phone number, and letting that win is what
+          // deep-linked managers into an unrelated La Mesa account. Verified
+          // means the phone match was corroborated by something else about the
+          // call, so it is the better of the two answers.
+          const authoritative = resolved?.outcome === 'verified' ? resolved : null;
+          if (resolved && resolved.outcome !== 'verified') {
+            logger.info(
+              `[MISSED OPPS] ${candidate.conversationId}: CRM resolution `
+                + `${resolved.outcome} (${resolved.crm.resolution?.reason ?? 'no reason recorded'}) `
+                + '— keeping the model\'s citation',
+            );
+          }
           for (const f of result.findings) {
             findings.push({
               ...f,
-              crmRefKind: strongLink?.kind ?? f.crmRefKind,
-              crmRefId: strongLink?.id ?? f.crmRefId,
+              crmRefKind: authoritative?.kind ?? f.crmRefKind,
+              crmRefId: authoritative?.id ?? f.crmRefId,
               candidate,
               employeeKey: employeeKeys.get((candidate.agentEmail ?? '').toLowerCase()) ?? null,
             });

@@ -11,7 +11,8 @@ vi.mock('../../../../config/logger', () => ({ default: { warn: vi.fn(), info: vi
 
 import { listActiveRules, listRules, createRule, updateRule } from '../rules.service';
 import { buildSystemPrompt, buildUserPrompt } from '../prompt';
-import { loadThread, loadSalesThreads } from '../crmLinkThread';
+import { renderSalesThread } from '../crmThread';
+import type { SalesRecord } from '../crmSelect';
 import { parseFindings } from '../parse';
 import type { CallMaterial } from '../types';
 
@@ -63,50 +64,99 @@ describe('database-owned Sales QA rules', () => {
 
 describe('CRM history evidence', () => {
   const cutoff = '2026-09-04 23:59:59';
-  it('marks a failed thread read as unavailable, not empty proof', async () => {
+  const callAt = new Date(2026, 8, 4, 14, 30);
+
+  const record = (over: Partial<SalesRecord> = {}): SalesRecord => ({
+    taskId: 123,
+    taskType: 'Lead Manager',
+    role: 'primary_sales',
+    customerId: 200,
+    customerLeadId: 100,
+    accountName: 'Acme',
+    open: 'open',
+    statusTitle: 'Working',
+    ownerName: 'AE',
+    dueOn: null,
+    lastActionAt: null,
+    actionCount: 0,
+    matchedBy: ['contact'],
+    ...over,
+  });
+
+  const actionRow = (over: Record<string, unknown> = {}) => ({
+    ActionID: 900,
+    TaskID: 123,
+    Note: 'Quote sent today.',
+    createdOn: '2026-09-04 15:30:00',
+    completedOn: '2026-09-04 15:30:00',
+    dueOn: null,
+    actionResult: 'Quote sent',
+    createdByName: 'AE',
+    completedByName: 'AE',
+    ...over,
+  });
+
+  it('marks a failed history read as unavailable, not as empty proof', async () => {
     executeQuery.mockRejectedValue(new Error('offline'));
-    const crm = await loadThread('TASK', 123, 'Lead', cutoff);
-    expect(crm.unavailable).toBe(true);
+    const thread = await renderSalesThread({ records: [record()], callAt, notAfter: cutoff });
+    expect(thread.coverage.errors).toContain('TASK 123: history read failed');
+
     const prompt = buildUserPrompt({
-      agentName: 'AE', startedAt: new Date(2026, 8, 4, 10), talkSecs: 180,
-      transcript: 'Customer: Send pricing.', crm, leadsCreated: null,
+      agentName: 'AE',
+      startedAt: callAt,
+      talkSecs: 180,
+      transcript: 'Customer: Send pricing.',
+      crm: { notes: thread.notes, refs: thread.refs, scope: 'record', unavailable: true },
+      leadsCreated: null,
+      attribution: { internalPartyCount: 1, soleInternalParty: true },
     } as CallMaterial);
     expect(prompt).toContain('prior completion are UNKNOWN');
-    expect(prompt).not.toContain('(no prior notes');
     expect(prompt).toContain('THIS LOOKUP FAILED');
   });
 
-  it('keeps the newest follow-through, labels omitted history, and includes exact task/date/time', async () => {
-    executeQuery.mockResolvedValue([
-      { Note: 'Quote sent today.', at: new Date(2026, 8, 4, 15, 30), meta: 'Quote sent' },
-      { Note: 'older research '.repeat(600), at: new Date(2026, 8, 3, 10), meta: 'Research' },
-    ]);
-    const crm = await loadThread('TASK', 123, 'Lead', cutoff);
-    expect(crm.notes).toContain('Quote sent today.');
-    expect(crm.notes).toContain('TASK 123 · 2026-09-04 15:30');
-    expect(crm.truncated).toBe(true);
-    expect(crm.notes.length).toBeLessThanOrEqual(6000);
-    expect(executeQuery.mock.calls[0][1]).toEqual([123, cutoff]);
+  it('carries the record, action id, author and exact time on every rendered line', async () => {
+    executeQuery.mockImplementation(async (sql: string) => (
+      /COUNT/.test(String(sql)) ? [{ n: 1 }] : [actionRow()]
+    ));
+    const thread = await renderSalesThread({ records: [record()], callAt, notAfter: cutoff });
+    expect(thread.notes).toContain('TASK 123 · action 900 · 2026-09-04 15:30');
+    expect(thread.notes).toContain('by AE');
+    expect(thread.notes).toContain('Quote sent today.');
   });
 
-  it('marks row-limit truncation even when the remaining notes are short', async () => {
-    executeQuery.mockResolvedValue(Array.from({ length: 26 }, (_, i) => ({
-      Note: `note ${i}`, at: new Date(2026, 8, 4, 15), meta: null,
-    })));
-    expect((await loadThread('TASK', 1, 'Lead', cutoff)).truncated).toBe(true);
+  // "Newest 25" used to be reported as the account's whole history, so a topic
+  // decision older than 25 rows — the prior warranty decline an exception turns
+  // on — could not be found and its absence was read as proof.
+  it('reports rows it did not read rather than presenting a partial history as whole', async () => {
+    executeQuery.mockImplementation(async (sql: string) => (
+      /COUNT/.test(String(sql)) ? [{ n: 400 }] : [actionRow()]
+    ));
+    const thread = await renderSalesThread({ records: [record()], callAt, notAfter: cutoff });
+    expect(thread.coverage.rowsRetrieved).toBe(400);
+    expect(thread.coverage.truncated).toBe(true);
+    expect(thread.coverage.rowsOmitted).toBeGreaterThan(0);
   });
 
-  it('combines same-lead task evidence and propagates partial availability without borrowing another lead', async () => {
-    const lead = { TaskID: 1, CustomerLeadID: 10, CompletedOn: null, taskType: 'Lead Manager', accountName: 'Acme', lastActionOn: null };
-    const contact = { ...lead, TaskID: 2, taskType: 'Contact Manager' };
-    const other = { ...lead, TaskID: 3, CustomerLeadID: 20 };
-    executeQuery.mockImplementation(async (_sql, [id]) => {
-      if (id === 2) throw new Error('offline');
-      return [{ Note: 'Acme prior research.', at: new Date(2026, 8, 1), meta: null }];
+  it('reads the account CM alongside the lead without borrowing another lead', async () => {
+    executeQuery.mockImplementation(async (sql: string, params: unknown[]) => {
+      if (/COUNT/.test(String(sql))) return [{ n: 1 }];
+      return [actionRow({ TaskID: params[0], Note: `history for ${params[0]}` })];
     });
-    const { crm } = await loadSalesThreads(lead, [lead, contact, other], cutoff);
-    expect(crm.notes).toContain('Acme prior research.');
-    expect(crm.unavailable).toBe(true);
-    expect(executeQuery.mock.calls.map((c) => c[1][0])).toEqual([1, 2]);
+    const thread = await renderSalesThread({
+      records: [record(), record({ taskId: 880, role: 'account_cm', taskType: 'Contact Manager' })],
+      callAt,
+      notAfter: cutoff,
+    });
+    expect(thread.refs).toEqual(['TASK 123', 'TASK 880']);
+    expect(thread.notes).toContain('history for 123');
+    expect(thread.notes).toContain('history for 880');
+  });
+
+  it('bounds every read at the reviewed day cutoff', async () => {
+    executeQuery.mockImplementation(async (sql: string) => (
+      /COUNT/.test(String(sql)) ? [{ n: 1 }] : [actionRow()]
+    ));
+    await renderSalesThread({ records: [record()], callAt, notAfter: cutoff });
+    for (const call of executeQuery.mock.calls) expect(call[1]).toEqual([123, cutoff]);
   });
 });

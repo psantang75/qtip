@@ -76,12 +76,69 @@ export function parseCrmRef(value: unknown): { kind: CrmRefKind; id: number } | 
   return { kind: m[1].toUpperCase() as CrmRefKind, id };
 }
 
+/**
+ * How confident we are that the CRM records shown belong to this call.
+ *
+ *   verified     phone match PLUS independent corroboration from the call itself.
+ *                The only outcome allowed to override the model's own citation.
+ *   provisional  a compatible record, but nothing outside the phone match supports it.
+ *   ambiguous    several candidate accounts or opportunities we cannot separate.
+ *   unmatched    the lookup ran and found no sales record.
+ *   unavailable  the lookup itself failed; absence here is not a negative answer.
+ */
+export type ResolutionOutcome = 'verified' | 'provisional' | 'ambiguous' | 'unmatched' | 'unavailable';
+
+/** What was actually read, so a gap in history is stated instead of implied. */
+export interface CrmCoverage {
+  /** Refs whose full history was read, e.g. `['TASK 1120497', 'TASK 135455']`. */
+  recordsRead: string[];
+  /** Rows the source holds within the cutoff. */
+  rowsRetrieved: number;
+  /** Rows rendered into the prompt. */
+  rowsRendered: number;
+  /** Rows the source holds that were NOT read or not rendered. */
+  rowsOmitted: number;
+  /** History cutoff applied, `YYYY-MM-DD HH:MM:SS`. */
+  cutoff: string;
+  /** True when any record's history was longer than the retrieval cap. */
+  truncated: boolean;
+  /** Per-record read failures, so an outage is visible rather than empty. */
+  errors: string[];
+}
+
+/** Why these records, and what was rejected — the reviewable resolution trail. */
+export interface CrmResolutionSummary {
+  outcome: ResolutionOutcome;
+  reason: string;
+  /** The sales record a finding should cite, or null when none was established. */
+  primaryRef: string | null;
+  /** The sales grading record set (primary first). */
+  salesRefs: string[];
+  /** Operational tickets, kept in their own role — never sales documentation. */
+  ticketRefs: string[];
+  /** Duplicate-successor traversal, including why it stopped. */
+  duplicatePath: string[];
+  /** Candidates deliberately not used, with the reason. */
+  rejected: Array<{ ref: string; reason: string }>;
+  /** Customer numbers used, with where each came from on the conversation. */
+  numbers: Array<{ digits: string; source: string }>;
+  /** True when a record sits on a customer the phone match did not establish. */
+  crossAccount: boolean;
+}
+
 /** One agent's same-day CRM activity: the prompt text and the refs it cites. */
 export interface CrmDayActivity {
   /** Coverage flags distinguish an empty result from material we could not see. */
   unavailable?: boolean;
   truncated?: boolean;
-  matchConfidence?: 'strong' | 'weak';
+  /** Set for a resolved record set; absent for the day-wide fallback. */
+  resolution?: CrmResolutionSummary;
+  coverage?: CrmCoverage;
+  /**
+   * Operational ticket context, rendered separately from the sales records so a
+   * support note can inform recovery without ever becoming sales credit.
+   */
+  ticketNotes?: string;
   /** Rendered note lines, already stripped of HTML and length-capped. */
   notes: string;
   /** Citation tokens for the records rendered above, in first-seen order. */
@@ -97,6 +154,25 @@ export interface CrmDayActivity {
   recordLabel?: string;
 }
 
+/**
+ * Whether a transcript turn on OUR side of the line can be attributed to the
+ * REVIEWED salesperson.
+ *
+ * It usually cannot. `transcriptRender` labels every internal turn "Agent",
+ * collapsing the salesperson, a transferred Customer Service rep, an ACD and an
+ * IVR into one speaker. So on a transferred call the sentence "there's also a
+ * five-year extended option" may be Customer Service's, and crediting it to the
+ * reviewed salesperson is exactly the error that withdrew Jason's warranty
+ * finding. One internal party means an "Agent" line is theirs; more than one, or
+ * an unknown count, means the label proves nothing.
+ */
+export interface CallAttribution {
+  /** Distinct participants on our side of the line; null when not established. */
+  internalPartyCount: number | null;
+  /** True only when exactly one internal party was on the conversation. */
+  soleInternalParty: boolean;
+}
+
 /** Candidate plus the text the model reads. */
 export interface CallMaterial extends CallCandidate {
   /** Speaker-attributed dialogue, or empty when no transcript exists. */
@@ -110,6 +186,12 @@ export interface CallMaterial extends CallCandidate {
   transcriptUnavailable?: boolean;
   /** The agent's same-day CRM activity, and the records it may cite. */
   crm: CrmDayActivity;
+  /**
+   * Whether an internal transcript turn is this salesperson's. Required, not
+   * optional: a missing value would have to be guessed, and guessing "yes" is
+   * what credits one employee with another's offer.
+   */
+  attribution: CallAttribution;
   /**
    * Rendered new leads the agent opened that day (crmCreated.ts). `crm` above
    * shows work LOGGED, never a record CREATED, so this is what lets the model

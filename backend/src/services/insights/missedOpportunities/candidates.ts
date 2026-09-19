@@ -17,7 +17,7 @@ import { executeQuery } from '../../../utils/databaseUtils';
 import { formatTranscriptContent } from '../../transcriptRender';
 import phoneSystemService from '../../PhoneSystemService';
 import logger from '../../../config/logger';
-import { CallCandidate, CallMaterial, CrmDayActivity } from './types';
+import { CallAttribution, CallCandidate, CallMaterial, CrmDayActivity } from './types';
 
 /** Transcripts beyond this are truncated; a 40k-char call is a model-cost trap. */
 const MAX_TRANSCRIPT_CHARS = 24000;
@@ -310,11 +310,17 @@ export async function loadTranscript(conversationId: string): Promise<Transcript
  * rendered block from crmCreated.ts and is likewise per agent per day. A null
  * `leadsCreated` means that lookup failed and the prompt must not assert the
  * agent created nothing.
+ *
+ * `attribution` comes from the resolver's session read (crmLink). It defaults to
+ * "not established", which is the only safe default: it withholds credit for
+ * internal transcript lines rather than assuming every "Agent" turn is this
+ * salesperson's.
  */
 export async function loadCallMaterial(
   candidate: CallCandidate,
   crm: CrmDayActivity,
   leadsCreated: string | null = '',
+  attribution: CallAttribution = { internalPartyCount: null, soleInternalParty: false },
 ): Promise<CallMaterial> {
   const loaded = await loadTranscript(candidate.conversationId);
   return {
@@ -323,5 +329,6 @@ export async function loadCallMaterial(
     transcriptUnavailable: loaded.unavailable,
     crm,
     leadsCreated,
+    attribution,
   };
 }

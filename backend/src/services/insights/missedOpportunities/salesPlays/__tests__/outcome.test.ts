@@ -6,16 +6,29 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { executeQuery, getFarEndNumbers, resolveContactIds } = vi.hoisted(() => ({
+const { executeQuery, resolveExternalNumbers, resolveContactIds } = vi.hoisted(() => ({
   executeQuery: vi.fn(),
-  getFarEndNumbers: vi.fn(),
+  resolveExternalNumbers: vi.fn(),
   resolveContactIds: vi.fn(),
 }));
 
 vi.mock('../../../../../utils/databaseUtils', () => ({ executeQuery }));
-vi.mock('../../crmLink', () => ({ getFarEndNumbers, resolveContactIds }));
+// The labeler derives the customer's number through the same resolver the
+// reviewer uses, so a mined lesson cannot be attributed to an account that
+// merely shares one of OUR numbers with the call.
+vi.mock('../../crmPhone', () => ({ resolveExternalNumbers }));
+vi.mock('../../crmDiscover', () => ({ resolveContactIds }));
 
 import { labelCallOutcome } from '../outcome';
+
+/** What resolveExternalNumbers returns for a normal one-customer call. */
+const phone = (digits: string[]) => ({
+  numbers: digits.map((d) => ({ digits: d, source: 'customer-participant', provenance: [] })),
+  unavailable: false,
+  ambiguous: false,
+  excluded: [],
+  internalPartyCount: 1,
+});
 
 /** Route executeQuery by which table the SQL touches. */
 function stubCrm({ leads, order, lost }: { leads: number[]; order: boolean; lost: boolean }) {
@@ -29,13 +42,13 @@ function stubCrm({ leads, order, lost }: { leads: number[]; order: boolean; lost
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getFarEndNumbers.mockResolvedValue(['3145551212']);
+  resolveExternalNumbers.mockResolvedValue(phone(['3145551212']));
   resolveContactIds.mockResolvedValue([101]);
 });
 
 describe('labelCallOutcome', () => {
-  it('returns UNKNOWN when the call has no far-end number', async () => {
-    getFarEndNumbers.mockResolvedValue([]);
+  it('returns UNKNOWN when the call has no customer-side number', async () => {
+    resolveExternalNumbers.mockResolvedValue(phone([]));
     expect(await labelCallOutcome('conv')).toBe('UNKNOWN');
   });
 

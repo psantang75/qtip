@@ -83,15 +83,43 @@ export interface ChatModelOptions {
    * provided, the model may CHOOSE whether to call a tool.
    */
   toolChoice?: { type: 'tool'; name: string };
+  /**
+   * Anthropic prompt caching. When true, the `system` block is sent as a
+   * cache-eligible segment (`cache_control: { type: 'ephemeral' }`), so a
+   * large, byte-identical system prefix reused across many calls in the same
+   * short window is billed once as a cache write and read back at ~10% of the
+   * input rate on every subsequent call. Put ONLY stable content in `system`
+   * (persona, rules, KB grounding) and keep everything that changes per call in
+   * `user`, or the prefix will not match and nothing caches. Ignored by OpenAI,
+   * which caches automatically and is not billed through this flag.
+   */
+  cacheSystem?: boolean;
 }
 
 export interface ChatModelResult {
   /** Raw text response from the model. */
   text: string;
-  /** Input tokens billed by the provider; null when the provider didn't return usage. */
+  /**
+   * TOTAL input tokens billed by the provider (uncached + cache write + cache
+   * read); null when the provider didn't return usage. Kept as the whole input
+   * volume so token reporting stays comparable across cached and uncached runs
+   * — the billing split lives in `cacheWriteTokens`/`cacheReadTokens`.
+   */
   tokensIn: number | null;
   /** Output tokens billed by the provider; null when the provider didn't return usage. */
   tokensOut: number | null;
+  /**
+   * Input tokens written to the prompt cache on this call (Anthropic
+   * `cache_creation_input_tokens`). Billed above the base input rate. Null when
+   * the provider does not report caching or `cacheSystem` was not set.
+   */
+  cacheWriteTokens: number | null;
+  /**
+   * Input tokens served from the prompt cache on this call (Anthropic
+   * `cache_read_input_tokens`). Billed well below the base input rate — this is
+   * the saving. Null when the provider does not report caching.
+   */
+  cacheReadTokens: number | null;
   /** Wall-clock latency for this single call, in milliseconds. */
   latencyMs: number;
   /** Resolved model name (after defaulting). Useful for logs + the compare UI. */
@@ -233,7 +261,20 @@ async function callChatModelOnce(
     const tokensIn = res.usage?.prompt_tokens ?? null;
     const tokensOut = res.usage?.completion_tokens ?? null;
     const stopReason = choice?.finish_reason ?? null;
-    return { text, tokensIn, tokensOut, latencyMs, model, provider, stopReason, toolInput: null };
+    // OpenAI caches automatically and does not bill it through this wrapper, so
+    // the cache categories are always null on this branch.
+    return {
+      text,
+      tokensIn,
+      tokensOut,
+      cacheWriteTokens: null,
+      cacheReadTokens: null,
+      latencyMs,
+      model,
+      provider,
+      stopReason,
+      toolInput: null,
+    };
   }
 
   // Anthropic default branch.
@@ -251,11 +292,21 @@ async function callChatModelOnce(
           : {}),
       }
     : {};
+  // Prompt caching: mark the whole system prefix as a cache breakpoint. The
+  // caller guarantees `system` holds only stable content, so the segment is
+  // byte-identical across every call in the run and hits the cache after the
+  // first write. Below the model's minimum cacheable length Anthropic simply
+  // processes it uncached (no error), so the flag is safe on small prompts too.
+  const system = opts.cacheSystem
+    ? ([
+        { type: 'text', text: opts.system, cache_control: { type: 'ephemeral' } },
+      ] as unknown as Parameters<typeof client.messages.create>[0]['system'])
+    : opts.system;
   const res = await client.messages.create(
     {
       model,
       max_tokens: opts.maxTokens,
-      system: opts.system,
+      system,
       messages: [{ role: 'user', content: opts.user }],
       ...toolArgs,
     },
@@ -278,14 +329,32 @@ async function callChatModelOnce(
   if (!block && !toolBlock) {
     logger.warn(`[chat-model] Anthropic response had no text or tool_use block (model=${model})`);
   }
-  const usage = (res as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
-  const tokensIn = usage?.input_tokens ?? null;
+  const usage = (res as {
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+    };
+  }).usage;
+  // Anthropic reports uncached input in `input_tokens` and the cached portions
+  // separately, so the true input volume is the sum of all three. Report that
+  // sum as `tokensIn` (comparable to pre-cache runs) and surface the split for
+  // accurate pricing downstream.
+  const cacheWriteTokens = usage?.cache_creation_input_tokens ?? null;
+  const cacheReadTokens = usage?.cache_read_input_tokens ?? null;
+  const tokensIn =
+    usage?.input_tokens != null
+      ? usage.input_tokens + (cacheWriteTokens ?? 0) + (cacheReadTokens ?? 0)
+      : null;
   const tokensOut = usage?.output_tokens ?? null;
   const stopReason = (res as { stop_reason?: string | null }).stop_reason ?? null;
   return {
     text: block?.text ?? '',
     tokensIn,
     tokensOut,
+    cacheWriteTokens,
+    cacheReadTokens,
     latencyMs,
     model,
     provider,

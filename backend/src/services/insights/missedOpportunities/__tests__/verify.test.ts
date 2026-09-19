@@ -13,6 +13,12 @@
  *      out-of-range index keeps every finding. The alternative — silently
  *      emptying a day because an auxiliary call broke — is far worse than the
  *      false positives this exists to catch.
+ *   3. IT ONLY SPEAKS FOR THE REVIEWED PERSON. Every removal asserts that THIS
+ *      salesperson did the thing, so the quote behind it has to be theirs: an
+ *      internal turn, on a conversation with no second employee who could have
+ *      said it. Without that, Customer Service explaining warranty periods on a
+ *      transferred segment reads as the salesperson's offer and deletes a real
+ *      omission — the Jason Spangler / Patrick's case.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -83,6 +89,12 @@ const args = (over: Record<string, unknown> = {}) => ({
   provider: 'anthropic' as const,
   conversationId: 'conv-1',
   omissionRuleKeys: OMISSION_KEYS,
+  salespersonName: 'Mitchell Reyes',
+  // Empty by default; the account-history tests below supply their own.
+  salesNotes: '',
+  // The default is the attributable case — one employee on the line — because
+  // that is the only shape in which this pass is allowed to remove anything.
+  attribution: { internalPartyCount: 1, soleInternalParty: true },
   ...over,
 });
 
@@ -125,7 +137,7 @@ describe('verifyFindings — the drop decision', () => {
       finding({ ruleKey: 'no_dated_next_step' }),
     ];
     callChatModelMock.mockResolvedValue(
-      reply(JSON.stringify({ verdicts: [{ index: 2, rep_attempted: true, agent_quote: 'q' }] })),
+      reply(JSON.stringify({ verdicts: [{ index: 2, rep_attempted: true, agent_quote: ATTEMPT_QUOTE }] })),
     );
     const res = await verifyFindings(args({ findings: three }));
     expect(res.findings.map((f) => f.ruleKey)).toEqual([
@@ -241,7 +253,32 @@ describe('verifyFindings — failing open', () => {
     callChatModelMock.mockResolvedValue(reply('{"verdicts":[]}'));
     await verifyFindings(args());
     const system = String((callChatModelMock.mock.calls[0][1] as { system: string }).system);
-    expect(system).toContain('A true verdict without a verbatim quote');
+    expect(system).toContain('A true verdict is discarded and the finding kept');
+  });
+
+  // The auditor's stock unsound removal: the customer asks "does it come with a
+  // warranty?" and that question is quoted as proof the rep raised it.
+  it('keeps the finding when the auditor quotes the CUSTOMER instead of the rep', async () => {
+    callChatModelMock.mockResolvedValue(
+      reply(JSON.stringify({
+        verdicts: [{ index: 1, rep_attempted: true, agent_quote: 'Go ahead and activate it' }],
+      })),
+    );
+    const res = await verifyFindings(args());
+    expect(res.findings).toHaveLength(1);
+    expect(res.dropped).toBe(0);
+  });
+
+  it('keeps the finding when the transcript has no speaker labels to attribute by', async () => {
+    // A provider whose payload fell through to a verbatim dump. The words may be
+    // there, but nothing says who said them, and a removal is a claim about who.
+    callChatModelMock.mockResolvedValue(
+      reply(JSON.stringify({ verdicts: [{ index: 1, rep_attempted: true, agent_quote: ATTEMPT_QUOTE }] })),
+    );
+    const res = await verifyFindings(args({
+      transcript: 'I can take the card right now if you have it handy.',
+    }));
+    expect(res.findings).toHaveLength(1);
   });
 
   it('treats a non-boolean verdict as unproven rather than as attempted', async () => {
@@ -308,6 +345,95 @@ describe('verifyFindings — commission-type rules are out of scope', () => {
     }));
     expect(res.findings).toHaveLength(1);
     expect(callChatModelMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('verifyFindings — attribution gates every removal', () => {
+  const attempted = (quote = ATTEMPT_QUOTE) => reply(JSON.stringify({
+    verdicts: [{ index: 1, rep_attempted: true, agent_quote: quote }],
+  }));
+
+  // The Jason Spangler / Patrick's case. Customer Service explained a five-year
+  // extended option on an earlier segment of the conversation; the auditor read
+  // that as "the warranty was offered" and deleted the salesperson's real
+  // warranty omission. On a call with two employees a transcript line cannot be
+  // attributed, so no removal is possible.
+  it('removes nothing when a second employee was on the conversation', async () => {
+    const res = await verifyFindings(args({
+      attribution: { internalPartyCount: 2, soleInternalParty: false },
+    }));
+    expect(res.findings).toHaveLength(1);
+    expect(res.dropped).toBe(0);
+    // And it does not pay for an answer it could not have acted on.
+    expect(callChatModelMock).not.toHaveBeenCalled();
+  });
+
+  it('removes nothing when the internal party count could not be established', async () => {
+    // A phone-system read failure. Unknown is not "probably one".
+    const res = await verifyFindings(args({
+      attribution: { internalPartyCount: null, soleInternalParty: false },
+    }));
+    expect(res.findings).toHaveLength(1);
+    expect(callChatModelMock).not.toHaveBeenCalled();
+  });
+
+  it('still removes on a solo call, so the false-positive control keeps working', async () => {
+    callChatModelMock.mockResolvedValue(attempted());
+    expect((await verifyFindings(args())).dropped).toBe(1);
+  });
+
+  it('names the reviewed salesperson to the auditor so "the rep" is unambiguous', async () => {
+    callChatModelMock.mockResolvedValue(reply('{"verdicts":[]}'));
+    await verifyFindings(args());
+    const user = String((callChatModelMock.mock.calls[0][1] as { user: string }).user);
+    expect(user).toContain('REVIEWED SALESPERSON: Mitchell Reyes');
+  });
+
+  it('tells the auditor another person doing it is not an attempt', async () => {
+    callChatModelMock.mockResolvedValue(reply('{"verdicts":[]}'));
+    await verifyFindings(args());
+    const system = String((callChatModelMock.mock.calls[0][1] as { system: string }).system);
+    expect(system).toContain('ANOTHER PERSON DOING IT IS NOT AN ATTEMPT');
+    expect(system).toContain('NEVER the salesperson attempting a sale');
+  });
+});
+
+describe('verifyFindings — the account-history documentation gate', () => {
+  // A note the reviewed salesperson authored is the documentation gate: it can
+  // show a documented attempt the transcript alone does not. Rendered note lines
+  // carry `by <author>` (crmThread.renderAction), so authorship is checkable.
+  const OWN_NOTE = '[2026-09-16 10:00 · by Mitchell Reyes] Offered the five-year extended warranty; customer declined for now.';
+  const COLLEAGUE_NOTE = '[2026-09-16 10:00 · by Adrian Cole] Offered the five-year extended warranty; customer declined for now.';
+  const NOTE_QUOTE = 'Offered the five-year extended warranty';
+
+  it('drops a finding a note the reviewed salesperson authored documents as attempted', async () => {
+    callChatModelMock.mockResolvedValue(
+      reply(JSON.stringify({ verdicts: [{ index: 1, rep_attempted: true, agent_quote: NOTE_QUOTE }] })),
+    );
+    const res = await verifyFindings(args({ salesNotes: OWN_NOTE }));
+    expect(res.dropped).toBe(1);
+    expect(res.findings).toEqual([]);
+  });
+
+  it('keeps the finding when the documenting note was authored by a colleague', async () => {
+    // A colleague's note is not this salesperson's attempt — the documentation
+    // gate is per author, so Customer Service's note cannot clear the miss.
+    callChatModelMock.mockResolvedValue(
+      reply(JSON.stringify({ verdicts: [{ index: 1, rep_attempted: true, agent_quote: NOTE_QUOTE }] })),
+    );
+    const res = await verifyFindings(args({ salesNotes: COLLEAGUE_NOTE }));
+    expect(res.dropped).toBe(0);
+    expect(res.findings).toHaveLength(1);
+  });
+
+  it('shows the auditor the account history and how to weigh authorship', async () => {
+    callChatModelMock.mockResolvedValue(reply('{"verdicts":[]}'));
+    await verifyFindings(args({ salesNotes: OWN_NOTE }));
+    const user = String((callChatModelMock.mock.calls[0][1] as { user: string }).user);
+    expect(user).toContain('ACCOUNT HISTORY');
+    expect(user).toContain('Offered the five-year extended warranty');
+    const system = String((callChatModelMock.mock.calls[0][1] as { system: string }).system);
+    expect(system).toContain('ACCOUNT HISTORY CAN DOCUMENT AN ATTEMPT');
   });
 });
 

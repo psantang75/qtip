@@ -89,9 +89,17 @@ export interface CallLogResult<T> {
   rawResponse: string;
   /** True if the LLM was called twice (JSON-retry path). */
   retried: boolean;
-  /** Optional usage stats from the provider. */
+  /** Optional usage stats from the provider. `tokensIn` is TOTAL input. */
   tokensIn?: number | null;
   tokensOut?: number | null;
+  /**
+   * Prompt-cache split of `tokensIn`, when the provider reports it. Supplying
+   * these lets the cost sink price cache reads/writes at their own rates
+   * instead of charging the whole prefix at the base input rate. Omitted on the
+   * many call sites that don't cache, which keeps their cost identical.
+   */
+  cacheReadTokens?: number | null;
+  cacheWriteTokens?: number | null;
 }
 
 function hashPrompt(promptText: string): string {
@@ -131,7 +139,12 @@ export async function withCallLog<T>(
     // orchestrated run without each pass re-implementing pricing.
     if (meta.onCost) {
       try {
-        const cost = estimateUsdCost(out.model, out.tokensIn, out.tokensOut);
+        // `tokensIn` is total input; the base-rate share is what's left after
+        // the cache read/write portions are priced at their own rates.
+        const readT = out.cacheReadTokens ?? 0;
+        const writeT = out.cacheWriteTokens ?? 0;
+        const uncachedIn = Math.max(0, (out.tokensIn ?? 0) - readT - writeT);
+        const cost = estimateUsdCost(out.model, uncachedIn, out.tokensOut, readT, writeT);
         meta.onCost(cost);
       } catch (sinkErr) {
         logger.warn(

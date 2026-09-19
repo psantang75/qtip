@@ -22,17 +22,14 @@
  * TaskID/TicketID and the CRM has no ConversationID.
  */
 import { executeQuery } from '../../../utils/databaseUtils';
-import { stripHtmlToPlaintext } from '../../../utils/htmlText';
 import logger from '../../../config/logger';
+import { splitNote } from './crmNotes';
 import { CallCandidate, CrmDayActivity, crmRefToken } from './types';
 
-/** Trailing bound on how much note text one call's prompt may carry. Shared with crmLink. */
+/** Trailing bound on how much note text one call's prompt may carry. */
 export const MAX_CRM_NOTE_CHARS = 6000;
 /** Per-source row ceiling, so one pathological account can't crowd out the day. */
 const MAX_ROWS_PER_SOURCE = 200;
-
-/** Auto-generated bookkeeping rows the model should not read as agent work. Shared with crmLink. */
-export const AUTO_NOTE_RE = /^\s*(task (created|assigned|closed|reopened)|task status changed|status changed|auto[- ]?generated|system|created (contact update manager|contact manager|lead))\b/i;
 
 /**
  * Task actions the agent wrote that day, with task type, result, and customer.
@@ -164,8 +161,12 @@ export async function loadCrmActivityForDay(
     || (ticketRows?.length ?? 0) >= MAX_ROWS_PER_SOURCE;
 
   for (const { row, kind } of rows) {
-    const body = stripHtmlToPlaintext(row.Note ?? '').trim();
-    if (!body || AUTO_NOTE_RE.test(body)) continue;
+    // Only the auto-status OPENING is dropped. The remainder of a
+    // "Task Status Changed … customer wants the other two stores quoted" row is
+    // frequently the only place that requirement was ever written down, and
+    // discarding the whole row is what made the review blind to it.
+    const { prefix, body } = splitNote(row.Note);
+    if (!body) continue;
 
     const id = Number(row.RecordID);
     const ref = Number.isFinite(id) && id > 0 ? crmRefToken(kind, id) : null;
@@ -173,7 +174,7 @@ export async function loadCrmActivityForDay(
     const meta = [row.Label, row.ActionResult, row.CustomerName].filter(Boolean).join(' / ');
     const due = row.DueOn ? ` (next contact due ${String(row.DueOn).slice(0, 10)})` : '';
     const head = [ref, timeOf(row.CreatedOn)].filter(Boolean).join(' · ');
-    const line = `[${head}${meta ? ` — ${meta}` : ''}]${due} ${body}`;
+    const line = `[${head}${meta ? ` — ${meta}` : ''}]${due} ${prefix ? `(auto: ${prefix}) ` : ''}${body}`;
 
     if (chars + line.length > MAX_CRM_NOTE_CHARS) { truncated = true; break; }
     lines.push(line);

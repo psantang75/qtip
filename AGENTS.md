@@ -50,6 +50,7 @@ the linked docs are the deeper reference.
 - UI/UX conformance (shadcn/ui, TanStack, brand palette): [.cursor/rules/ui-design.mdc](.cursor/rules/ui-design.mdc) and [docs/design.md](docs/design.md).
 - Date/time handling: [.cursor/rules/date-handling.mdc](.cursor/rules/date-handling.mdc).
 - Frontend query keys: [.cursor/rules/query-keys.mdc](.cursor/rules/query-keys.mdc) → [docs/frontend_query_keys.md](docs/frontend_query_keys.md).
+- AI call cost efficiency (cache the stable prefix, price cache tokens, right-size model/output — never trade away evidence): [.cursor/rules/ai-cost-efficiency.mdc](.cursor/rules/ai-cost-efficiency.mdc) → [docs/cursor_missed_opportunities_cost_efficiency.md](docs/cursor_missed_opportunities_cost_efficiency.md).
 - Deploy / promote (stage + prod): [.cursor/rules/deploy-to-stage.mdc](.cursor/rules/deploy-to-stage.mdc) (quick-card) → [docs/deployment_runbook.md](docs/deployment_runbook.md) (full runbook).
 
 **Subsystem maps** (`.cursor/rules/`)

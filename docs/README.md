@@ -129,6 +129,7 @@ changes; Cursor auto-attaches the scoped rules when you edit matching files):
 
 - [`sales_missed_opportunities_review.md`](./sales_missed_opportunities_review.md) — Current sales review behavior, database-owned rules and evidence limits
 - [`sales_missed_opportunities_enhancement_plan.md`](./sales_missed_opportunities_enhancement_plan.md) — Bounded implementation plan, call metrics, CRM linking, cost controls and calibration
+- [`missed_opportunities_accountability_policy_diff.md`](./missed_opportunities_accountability_policy_diff.md) — Prepared (unapplied) persona and rule-body edits for salesperson accountability
 - [`sales_qa_kb_gap_analysis.md`](./sales_qa_kb_gap_analysis.md) — QA coverage, missing/partial KB guidance and SMB sales enablement backlog
 - [`sales_plays_audit.md`](./sales_plays_audit.md) — All 72 active play dispositions, archive screening and proposed curated play set
 

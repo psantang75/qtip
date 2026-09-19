@@ -65,6 +65,18 @@ const PRICING: Record<string, { in: number; out: number }> = {
 /** Used when the model isn't in the pricing table — better some signal than none. */
 const FALLBACK_PRICING = { in: 3.0, out: 15.0 };
 
+/**
+ * Prompt-cache multipliers on the base INPUT rate (Anthropic ephemeral cache):
+ *   - a cache READ bills at 10% of base input — the whole point of caching;
+ *   - a 5-minute cache WRITE bills at 125% of base input, a one-time premium
+ *     recovered after the second hit.
+ * Applied to whichever model's base input rate is in effect, so they track any
+ * future rate change automatically. Provider docs:
+ * https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+ */
+const CACHE_READ_MULTIPLIER = 0.1;
+const CACHE_WRITE_MULTIPLIER = 1.25;
+
 export interface CostEstimate {
   /** USD cost as a plain number, e.g. 0.0123. */
   usd: number;
@@ -79,18 +91,36 @@ export interface CostEstimate {
 }
 
 /**
- * Estimate USD cost for one LLM call. Returns null when neither
- * input nor output tokens are known — without a token count there's
- * nothing meaningful to report.
+ * Estimate USD cost for one LLM call. Returns null when no token category is
+ * known — without a token count there's nothing meaningful to report.
+ *
+ * `inputTokens` is the UNCACHED input (billed at the base rate). When prompt
+ * caching is in play, pass the cache read/write counts separately so they are
+ * priced at their own rates; omitting them (the default) reproduces the old
+ * uncached-only behaviour exactly, which is what every non-caching call site
+ * still relies on. The echoed `inputTokens` is the TOTAL input across all three
+ * categories, so it stays comparable to what the provider reports as volume.
  */
 export function estimateUsdCost(
   model: string | null | undefined,
   inputTokens: number | null | undefined,
-  outputTokens: number | null | undefined
+  outputTokens: number | null | undefined,
+  cacheReadTokens?: number | null,
+  cacheWriteTokens?: number | null
 ): CostEstimate | null {
   const inT = Number(inputTokens ?? 0);
   const outT = Number(outputTokens ?? 0);
-  if (!Number.isFinite(inT) || !Number.isFinite(outT) || inT + outT <= 0) return null;
+  const readT = Number(cacheReadTokens ?? 0);
+  const writeT = Number(cacheWriteTokens ?? 0);
+  if (
+    !Number.isFinite(inT) ||
+    !Number.isFinite(outT) ||
+    !Number.isFinite(readT) ||
+    !Number.isFinite(writeT) ||
+    inT + outT + readT + writeT <= 0
+  ) {
+    return null;
+  }
 
   const m = String(model ?? '').toLowerCase().trim();
   let pricing = PRICING[m];
@@ -102,11 +132,15 @@ export function estimateUsdCost(
       `[AI REVIEWER] TEMP COST ESTIMATOR: model "${model}" not in pricing table; using fallback ($${pricing.in}/$${pricing.out} per 1M tok).`
     );
   }
-  const usd = (inT / 1_000_000) * pricing.in + (outT / 1_000_000) * pricing.out;
+  const usd =
+    (inT / 1_000_000) * pricing.in +
+    (readT / 1_000_000) * pricing.in * CACHE_READ_MULTIPLIER +
+    (writeT / 1_000_000) * pricing.in * CACHE_WRITE_MULTIPLIER +
+    (outT / 1_000_000) * pricing.out;
   return {
     usd,
     formatted: formatUsdCost(usd),
-    inputTokens: inT,
+    inputTokens: inT + readT + writeT,
     outputTokens: outT,
     model: String(model ?? '(unknown)'),
     approximated,

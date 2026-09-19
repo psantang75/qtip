@@ -17,7 +17,8 @@
  */
 import { executeQuery } from '../../../../utils/databaseUtils';
 import logger from '../../../../config/logger';
-import { getFarEndNumbers, resolveContactIds } from '../crmLink';
+import { resolveContactIds } from '../crmDiscover';
+import { resolveExternalNumbers } from '../crmPhone';
 
 export type CallOutcome = 'WON' | 'LOST' | 'UNKNOWN';
 
@@ -78,10 +79,13 @@ async function hasLostLeadTask(leadIds: number[]): Promise<boolean> {
 
 /** Label a call by its account's terminal deal state. */
 export async function labelCallOutcome(conversationId: string): Promise<CallOutcome> {
-  const numbers = await getFarEndNumbers(conversationId);
-  if (numbers.length === 0) return 'UNKNOWN';
+  // Same customer-side number derivation the reviewer uses, so a mined lesson
+  // can never be attributed to an account that merely shares one of our own
+  // numbers with the call.
+  const phone = await resolveExternalNumbers(conversationId);
+  if (phone.numbers.length === 0) return 'UNKNOWN';
 
-  const contactIds = await resolveContactIds(numbers);
+  const contactIds = await resolveContactIds(phone.numbers.map((n) => n.digits));
   if (contactIds.length === 0) return 'UNKNOWN';
 
   const leadIds = await leadIdsForContacts(contactIds);

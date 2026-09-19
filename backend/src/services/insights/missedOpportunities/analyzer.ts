@@ -130,18 +130,38 @@ export async function analyzeCall(args: AnalyzeCallArgs): Promise<AnalyzeCallRes
           maxTokens: MAX_OUTPUT_TOKENS,
           responseFormat: 'json_object',
           timeoutMs: CALL_TIMEOUT_MS,
+          // The system prompt (persona + rules + KB/plays grounding) is built
+          // once per run and identical on every call, while everything specific
+          // to THIS call lives in `user`. That makes the system block a large
+          // constant prefix — exactly what prompt caching bills once and reads
+          // back cheaply, which is the dominant cost lever for this worker.
+          cacheSystem: true,
         });
         const out = parseFindings({
           raw: res.text,
           validRuleKeys: args.validRuleKeys,
           defaultSeverityByRule: args.defaultSeverityByRule,
           validCrmRefs: new Set(material.crm.refs),
-          // Every block the prompt rendered, so a quote is checked against
-          // what the model could actually have read. The created-leads block
-          // is included because it is real rendered text the model may quote,
-          // even though it is judgment context rather than a citable ref.
-          evidenceSources: [material.transcript, material.crm.notes, material.leadsCreated],
+          // Every block the prompt rendered, kept labelled so the parser can ask
+          // not just "was this said" but "by whom, and on what kind of record".
+          // The created-leads block is included because it is real rendered text
+          // the model may quote, though it is context rather than a citable ref.
+          evidence: {
+            transcript: material.transcript,
+            salesNotes: material.crm.notes,
+            ticketNotes: material.crm.ticketNotes ?? '',
+            leadsCreated: material.leadsCreated,
+            salespersonName: material.agentName,
+            soleInternalParty: material.attribution.soleInternalParty,
+          },
         });
+        if (res.cacheReadTokens || res.cacheWriteTokens) {
+          logger.info(
+            `[MISSED OPPS] ${material.conversationId}: prompt cache `
+              + `read=${res.cacheReadTokens ?? 0} write=${res.cacheWriteTokens ?? 0} `
+              + `(total input ${res.tokensIn ?? 0})`,
+          );
+        }
         return {
           result: { out, res },
           model: res.model,
@@ -149,6 +169,8 @@ export async function analyzeCall(args: AnalyzeCallArgs): Promise<AnalyzeCallRes
           retried: false,
           tokensIn: res.tokensIn,
           tokensOut: res.tokensOut,
+          cacheReadTokens: res.cacheReadTokens,
+          cacheWriteTokens: res.cacheWriteTokens,
         };
       },
     );
@@ -180,6 +202,14 @@ export async function analyzeCall(args: AnalyzeCallArgs): Promise<AnalyzeCallRes
           + 'citing no quote, which the prompt contract forbids',
       );
     }
+    if (parsed.out.unattributedSpeakers > 0) {
+      logger.warn(
+        `[MISSED OPPS] ${material.conversationId}: withdrew AGENT attribution on `
+          + `${parsed.out.unattributedSpeakers} finding(s) — the quote is real but nothing shows `
+          + `${material.agentName} said or wrote it `
+          + `(internal parties: ${material.attribution.internalPartyCount ?? 'unknown'})`,
+      );
+    }
 
     // Audit the grading pass for the one error it cannot self-check: alleging
     // the rep did not do something the transcript shows them doing. Fails open
@@ -190,6 +220,11 @@ export async function analyzeCall(args: AnalyzeCallArgs): Promise<AnalyzeCallRes
       provider: args.provider,
       conversationId: material.conversationId,
       omissionRuleKeys: args.omissionRuleKeys,
+      salespersonName: material.agentName,
+      // The same validated lead/CM history the grading pass saw, so a documented
+      // attempt the rep authored is not read as a miss.
+      salesNotes: material.crm.notes,
+      attribution: material.attribution,
     });
 
     return {

@@ -268,13 +268,24 @@ describe('parseFindings — evidence must resolve to the material', () => {
   const TRANSCRIPT = 'AGENT: Thanks for calling.\nCUSTOMER: Can you get someone out this week?';
   const NOTES = 'Called back, left voicemail about the Tuesday install window.';
 
-  const parseAgainst = (raw: string, sources: Array<string | null> = [TRANSCRIPT, NOTES]) =>
+  const evidence = (over: Record<string, unknown> = {}) => ({
+    transcript: TRANSCRIPT,
+    salesNotes: NOTES,
+    ticketNotes: '',
+    leadsCreated: '',
+    salespersonName: 'Jane Rep',
+    soleInternalParty: true,
+    ...over,
+  });
+
+  /** `null` means "no material supplied", which is the fail-open path. */
+  const parseAgainst = (raw: string, ev: ReturnType<typeof evidence> | null = evidence()) =>
     parseFindings({
       raw,
       validRuleKeys: VALID,
       defaultSeverityByRule: DEFAULTS,
       validCrmRefs: REFS,
-      evidenceSources: sources,
+      evidence: ev ?? undefined,
     });
 
   it('keeps a finding whose quote is really in the transcript', () => {
@@ -339,7 +350,104 @@ describe('parseFindings — evidence must resolve to the material', () => {
     const raw = JSON.stringify({
       findings: [finding({ evidence_quote: 'I will take two of them right now' })],
     });
-    expect(parseAgainst(raw, []).findings).toHaveLength(1);
+    expect(parseAgainst(raw, null).findings).toHaveLength(1);
+  });
+
+  it('keeps a quote from the ticket block — it is real text the model was shown', () => {
+    const raw = JSON.stringify({
+      findings: [finding({ evidence_quote: 'RMA issued for the failed player' })],
+    });
+    const ev = evidence({ ticketNotes: '[TICKET 289807] RMA issued for the failed player.' });
+    expect(parseAgainst(raw, ev).findings).toHaveLength(1);
+  });
+});
+
+describe('parseFindings — AGENT attribution must be earned', () => {
+  // `[time — Agent]` is what formatTranscriptContent renders, and it means "our
+  // side of the line", not "this employee".
+  const TRANSCRIPT = [
+    '[00:01 — Agent] I can get that replacement player out today.',
+    '[00:14 — Customer] does the warranty carry over?',
+  ].join('\n');
+  const SALES_NOTES = [
+    '[TASK 1120497 · action 8561828 · 2026-09-17 14:05 · by Jason Spangler] Ordered the replacement unit.',
+    '[TASK 1120497 · action 8561900 · 2026-09-17 15:20 · by Dana Fields] Confirmed shipping address.',
+  ].join('\n');
+  const TICKET_NOTES = '[TICKET 289807 · by Support Team] There is also a five year extended option.';
+
+  const parseAs = (quote: string, over: Record<string, unknown> = {}) => parseFindings({
+    raw: JSON.stringify({
+      findings: [finding({ evidence_quote: quote, evidence_speaker: 'AGENT' })],
+    }),
+    validRuleKeys: VALID,
+    defaultSeverityByRule: DEFAULTS,
+    evidence: {
+      transcript: TRANSCRIPT,
+      salesNotes: SALES_NOTES,
+      ticketNotes: TICKET_NOTES,
+      leadsCreated: '',
+      salespersonName: 'Jason Spangler',
+      soleInternalParty: true,
+      ...over,
+    },
+  });
+
+  it('keeps AGENT for the salesperson\'s own turn on a solo call', () => {
+    const out = parseAs('I can get that replacement player out today');
+    expect(out.findings[0].evidenceSpeaker).toBe('AGENT');
+    expect(out.unattributedSpeakers).toBe(0);
+  });
+
+  it('keeps AGENT for a note on the sales record they authored', () => {
+    expect(parseAs('Ordered the replacement unit').findings[0].evidenceSpeaker).toBe('AGENT');
+  });
+
+  // The Jason warranty case in miniature: the sentence exists, Customer Service
+  // said it, and labelling it AGENT would show a manager the reviewed
+  // salesperson offering a warranty they never mentioned.
+  it('withdraws AGENT from a ticket note another team wrote', () => {
+    const out = parseAs('There is also a five year extended option');
+    expect(out.findings[0].evidenceSpeaker).toBeNull();
+    expect(out.unattributedSpeakers).toBe(1);
+    // The finding itself survives — the miss can still be real.
+    expect(out.findings).toHaveLength(1);
+  });
+
+  it('withdraws AGENT from a colleague\'s note on the same record', () => {
+    expect(parseAs('Confirmed shipping address').findings[0].evidenceSpeaker).toBeNull();
+  });
+
+  it('withdraws AGENT from an internal turn when a second employee was on the call', () => {
+    const out = parseAs('I can get that replacement player out today', { soleInternalParty: false });
+    expect(out.findings[0].evidenceSpeaker).toBeNull();
+    expect(out.unattributedSpeakers).toBe(1);
+  });
+
+  it('withdraws AGENT from a line the customer spoke', () => {
+    expect(parseAs('does the warranty carry over').findings[0].evidenceSpeaker).toBeNull();
+  });
+
+  it('leaves a CUSTOMER-attributed quote alone', () => {
+    const out = parseFindings({
+      raw: JSON.stringify({
+        findings: [finding({
+          evidence_quote: 'does the warranty carry over',
+          evidence_speaker: 'CUSTOMER',
+        })],
+      }),
+      validRuleKeys: VALID,
+      defaultSeverityByRule: DEFAULTS,
+      evidence: {
+        transcript: TRANSCRIPT,
+        salesNotes: SALES_NOTES,
+        ticketNotes: '',
+        leadsCreated: '',
+        salespersonName: 'Jason Spangler',
+        soleInternalParty: true,
+      },
+    });
+    expect(out.findings[0].evidenceSpeaker).toBe('CUSTOMER');
+    expect(out.unattributedSpeakers).toBe(0);
   });
 });
 
@@ -369,8 +477,24 @@ describe('buildSystemPrompt', () => {
     expect(buildSystemPrompt(rules)).toContain('empty findings array');
   });
 
-  it('tells the model not to re-flag steps the account history already shows done', () => {
-    expect(buildSystemPrompt(rules)).toContain('Credit prior documented completion');
+  // The instruction this replaces was an unqualified "credit prior documented
+  // completion", which is how a warranty mentioned anywhere on the account — a
+  // support ticket, a different site's order — cleared a salesperson's omission.
+  it('gates a prior-completion exception on the validated sales record', () => {
+    const prompt = buildSystemPrompt(rules);
+    expect(prompt).toContain('ONLY THE VALIDATED SALES RECORD CAN EXCUSE A MISSING STEP');
+    expect(prompt).toContain('SAME requirement and the SAME transaction');
+    expect(prompt).not.toContain('Credit prior documented completion');
+  });
+
+  it('states that the salesperson owns the sales attempt', () => {
+    const prompt = buildSystemPrompt(rules);
+    expect(prompt).toContain('THE SALESPERSON OWNS THE SALES ATTEMPT');
+    expect(prompt).toContain('NEVER transfers credit to the salesperson under review');
+  });
+
+  it('keeps the record roles apart so a ticket cannot become sales documentation', () => {
+    expect(buildSystemPrompt(rules)).toContain('a support ticket');
   });
 
   it('requires disconfirming evidence before alleging the rep never made the move', () => {
@@ -378,8 +502,14 @@ describe('buildSystemPrompt', () => {
     // who asked for the card and was told "email me the link" grades as an
     // unclosed buying signal.
     const prompt = buildSystemPrompt(rules);
-    expect(prompt).toContain('re-read the transcript for the rep ATTEMPTING it');
-    expect(prompt).toContain('that is NOT a miss and you must not report it');
+    expect(prompt).toContain('re-read the transcript for THIS salesperson attempting it');
+    expect(prompt).toContain('that is NOT a miss');
+  });
+
+  it('makes insufficient evidence its own answer, not a clean call or a failure', () => {
+    const prompt = buildSystemPrompt(rules);
+    expect(prompt).toContain('INSUFFICIENT EVIDENCE IS ITS OWN ANSWER');
+    expect(prompt).toContain('never treat unavailable or omitted material as proof the call was clean');
   });
 
   it('exempts the quality-of-execution rules from the did-not-do test', () => {
@@ -396,7 +526,7 @@ describe('buildSystemPrompt', () => {
     // accusation: neither CRM view covers a record created on another account,
     // so "never captured the other two locations" was asserted, not observed.
     const prompt = buildSystemPrompt(rules);
-    expect(prompt).toContain('ONLY for steps the sections below would actually show');
+    expect(prompt).toContain('ONLY for steps the blocks you were shown would actually contain');
     expect(prompt).toContain('never state as fact that it was not done');
   });
 
@@ -404,9 +534,18 @@ describe('buildSystemPrompt', () => {
     expect(buildSystemPrompt(rules)).toContain('evidence_speaker');
   });
 
-  it('asks for a morning-after recovery action, distinct from the rewind-the-tape line', () => {
-    expect(buildSystemPrompt(rules)).toContain('recovery_action');
-    expect(buildSystemPrompt(rules)).toContain('morning-after action');
+  it('asks for a recovery action distinct from the rewind-the-tape line', () => {
+    const prompt = buildSystemPrompt(rules);
+    expect(prompt).toContain('recovery_action');
+    expect(prompt).toContain('after the call has ended');
+    expect(prompt).toContain('rewind-the-tape line');
+  });
+
+  it('keeps the coaching valid when someone else already recovered the account', () => {
+    // A CS rep fixing the customer's problem can leave nothing to recover while
+    // the salesperson's on-call omission stands. Conflating the two is what
+    // withdrew valid findings.
+    expect(buildSystemPrompt(rules)).toContain('SEPARATE COACHING FROM RECOVERY');
   });
 
   it('opens with the default expert-SMB persona when none is supplied', () => {
@@ -461,6 +600,9 @@ const material = (over: Partial<CallMaterial> = {}): CallMaterial => ({
   // '' is "the lookup ran and found none", which is the answer the expansion
   // rule needs. null would mean the lookup failed — a different prompt.
   leadsCreated: '',
+  // Solo call by default, so the tests that are not about attribution read the
+  // simple case. The unattributable shapes are asserted explicitly below.
+  attribution: { internalPartyCount: 1, soleInternalParty: true },
   ...over,
 });
 
@@ -483,17 +625,173 @@ describe('buildUserPrompt', () => {
     expect(buildUserPrompt(material())).toContain('often a city/state, not the business name');
   });
 
-  it('frames the CRM block as record history when the call resolved to one record', () => {
+  it('frames the CRM block as the validated sales record set when one resolved', () => {
     const prompt = buildUserPrompt(material({
       crm: { notes: 'prior thread', refs: ['TASK 5'], scope: 'record', recordLabel: 'TASK 5 — Acme' },
     }));
-    expect(prompt).toContain('CRM HISTORY FOR THE RECORD THIS CALL IS ABOUT — TASK 5 — Acme');
+    expect(prompt).toContain('SALES RECORD HISTORY — TASK 5 — Acme');
     expect(prompt).toContain('prior thread');
+  });
+
+  it('names the exception gate on the block that is allowed to satisfy it', () => {
+    const prompt = buildUserPrompt(material({
+      crm: { notes: 'prior thread', refs: ['TASK 5'], scope: 'record' },
+    }));
+    expect(prompt).toContain('A prior-completion exception MUST cite an action id from this block');
+    expect(prompt).toContain('a topic merely being mentioned is not a documented disposition');
   });
 
   it('says so when a resolved record has no prior notes, distinct from a no-notes day', () => {
     const prompt = buildUserPrompt(material({ crm: { notes: '', refs: [], scope: 'record' } }));
-    expect(prompt).toContain('no prior notes on this record');
+    expect(prompt).toContain('no substantive notes on these records');
+  });
+
+  it('marks the day-wide fallback as not an account history', () => {
+    // A failed record resolution used to hand the model another customer's
+    // day-wide notes under a header claiming they were this call's record.
+    const prompt = buildUserPrompt(material({ crm: { notes: 'other stuff', refs: [] } }));
+    expect(prompt).toContain('day-wide fallback');
+    expect(prompt).toContain('cannot establish what this account');
+  });
+});
+
+describe('buildUserPrompt — whose evidence is whose', () => {
+  it('says the AGENT label is this salesperson on a solo call', () => {
+    expect(buildUserPrompt(material())).toContain(
+      'ATTRIBUTION: Jane Rep was the only internal party',
+    );
+  });
+
+  // The Jason Spangler case: a Customer Service segment on the same conversation
+  // renders as "Agent" too, and the reviewer credited CS's warranty explanation
+  // to the salesperson.
+  it('warns that an AGENT turn may be another employee when the call was transferred', () => {
+    const prompt = buildUserPrompt(material({
+      attribution: { internalPartyCount: 2, soleInternalParty: false },
+    }));
+    expect(prompt).toContain('2 internal parties were on this conversation');
+    expect(prompt).toContain('may therefore be ANOTHER EMPLOYEE');
+    expect(prompt).toContain('treat the attempt as unestablished');
+  });
+
+  it('treats an unknown party count as unattributable, not as a solo call', () => {
+    const prompt = buildUserPrompt(material({
+      attribution: { internalPartyCount: null, soleInternalParty: false },
+    }));
+    expect(prompt).toContain('could not establish how many internal parties');
+  });
+
+  it('renders tickets in their own block, demoted to operational context', () => {
+    const prompt = buildUserPrompt(material({
+      crm: {
+        notes: 'lead history',
+        refs: ['TASK 5'],
+        scope: 'record',
+        ticketNotes: '[TICKET 289807] Five year extended option explained.',
+      },
+    }));
+    expect(prompt).toContain('SUPPORT / BILLING / RETURN TICKET CONTEXT');
+    expect(prompt).toContain('can NOT satisfy a sales requirement');
+    expect(prompt).toContain('not even when an Account Executive wrote the note');
+    expect(prompt).toContain('Five year extended option explained.');
+  });
+
+  it('omits the ticket block entirely when there are no tickets', () => {
+    expect(buildUserPrompt(material())).not.toContain('TICKET CONTEXT');
+  });
+
+  it('reports the resolution outcome and reason so trust is calibrated', () => {
+    const prompt = buildUserPrompt(material({
+      crm: {
+        notes: 'x',
+        refs: ['TASK 5'],
+        scope: 'record',
+        resolution: {
+          outcome: 'provisional',
+          reason: 'phone match only; no corroborating detail on the call',
+          numbers: [],
+          salesRefs: ['TASK 5'],
+          primaryRef: 'TASK 5',
+          ticketRefs: [],
+          duplicatePath: [],
+          rejected: [{ ref: 'TASK 1058436', reason: 'different account' }],
+          crossAccount: false,
+        },
+      },
+    }));
+    expect(prompt).toContain('PROVISIONAL');
+    expect(prompt).toContain('phone match only');
+    expect(prompt).toContain('REJECTED CANDIDATES: TASK 1058436 (different account)');
+    expect(prompt).toContain('PRIMARY SALES RECORD: TASK 5');
+  });
+
+  it('tells the model to cite nothing when no primary record was established', () => {
+    const prompt = buildUserPrompt(material({
+      crm: {
+        notes: '',
+        refs: [],
+        scope: 'record',
+        resolution: {
+          outcome: 'unmatched',
+          reason: 'the customer number matches no CRM contact',
+          numbers: [],
+          salesRefs: [],
+          primaryRef: null,
+          ticketRefs: [],
+          duplicatePath: [],
+          rejected: [],
+          crossAccount: false,
+        },
+      },
+    }));
+    expect(prompt).toContain('UNMATCHED');
+    expect(prompt).toContain('Absence of documentation here is NOT evidence a step was missed');
+    expect(prompt).toContain('PRIMARY SALES RECORD: none established');
+  });
+
+  it('states a coverage gap instead of letting it read as complete history', () => {
+    const prompt = buildUserPrompt(material({
+      crm: {
+        notes: 'x',
+        refs: [],
+        scope: 'record',
+        coverage: {
+          recordsRead: ['TASK 5'],
+          rowsRetrieved: 60,
+          rowsRendered: 25,
+          rowsOmitted: 35,
+          cutoff: '2026-09-04',
+          truncated: true,
+          errors: [],
+        },
+      },
+    }));
+    expect(prompt).toContain('NOT SHOWN: 35');
+    expect(prompt).toContain('TRUNCATED');
+    expect(prompt).toContain('you may NOT conclude that a topic was never documented');
+  });
+
+  it('shows the duplicate trail that led to the record it chose', () => {
+    const prompt = buildUserPrompt(material({
+      crm: {
+        notes: 'x',
+        refs: [],
+        scope: 'record',
+        resolution: {
+          outcome: 'provisional',
+          reason: 'followed a duplicate closure to its successor',
+          numbers: [],
+          salesRefs: ['TASK 856321'],
+          primaryRef: 'TASK 856321',
+          ticketRefs: [],
+          duplicatePath: ['TASK 856216 duplicate-closed → TASK 856321'],
+          rejected: [],
+          crossAccount: true,
+        },
+      },
+    }));
+    expect(prompt).toContain('DUPLICATE TRAIL: TASK 856216 duplicate-closed → TASK 856321');
+    expect(prompt).toContain('CROSS-ACCOUNT');
   });
 
   it('renders the leads the rep created, which is how an expansion claim gets checked', () => {

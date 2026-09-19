@@ -30,6 +30,17 @@
  * meant an unsupported "yes, they did that" silently deleted a real finding —
  * the same unchecked-citation problem on the other side of the ledger.
  *
+ * AND IT MUST BE THE REVIEWED PERSON'S QUOTE. A removal is a statement that THIS
+ * salesperson did the thing, so the quoted line has to be attributable to them:
+ * it must be an internal turn (not the customer's), and the conversation must
+ * have had no second employee on it who could have spoken it. On a transferred
+ * call this pass therefore removes nothing on transcript grounds. That is the
+ * control for the Jason warranty case — Customer Service explained a five-year
+ * option on an earlier segment, the auditor read that as "the warranty was
+ * offered", and a real salesperson omission was deleted. Requiring `is_omission`
+ * plus a resolving quote was not enough, because the quote genuinely existed;
+ * what it did not do was belong to the person under review.
+ *
  * FAIL OPEN. A provider error, a timeout, unparseable JSON, or a verdict whose
  * quote does not resolve keeps every finding. Silently emptying a day's review
  * because an auxiliary call failed would be a far worse outcome than the false
@@ -47,27 +58,34 @@ import {
   type ModelProvider,
 } from '../../ai/ChatModelClient';
 import { withCallLog } from '../../aiCallLogger';
-import { quoteResolves } from './evidence';
+import { isSamePerson, quoteAuthors, quoteResolvesAsInternalSpeaker } from './evidence';
 import { stripFence } from './parse';
-import { AnalyzedFinding } from './types';
+import { AnalyzedFinding, CallAttribution } from './types';
 
 const MAX_OUTPUT_TOKENS = 900;
 const CALL_TIMEOUT_MS = 60_000;
 
 const SYSTEM_PROMPT = [
-  'You audit draft coaching notes about a sales call for one specific error: claiming the salesperson did not do something they actually did.',
+  'You audit draft coaching notes about a sales call for one specific error: claiming the REVIEWED SALESPERSON did not do something they actually did.',
   '',
-  'For each numbered finding you are given the miss it alleges. Read the transcript and answer one question: does the transcript show the SALESPERSON attempting that action at any point?',
+  'For each numbered finding you are given the miss it alleges. Read the transcript and answer one question: does the transcript show THE REVIEWED SALESPERSON, named at the top of the material, attempting that action at any point?',
   '',
-  'Count it as attempted when the rep made the move and the customer declined, deferred, or chose another path — the rep asked for the order or the card, offered to place or activate it while on the line, offered the warranty, the upsell, the site survey, the group quote, or the transfer, or asked the qualifying question the finding says they never asked. The customer choosing a slower path does not make it unattempted.',
+  'Count it as attempted when that salesperson made the move and the customer declined, deferred, or chose another path — they asked for the order or the card, offered to place or activate it while on the line, offered the warranty, the upsell, the site survey, the group quote, or the transfer, or asked the qualifying question the finding says they never asked. The customer choosing a slower path does not make it unattempted.',
   '',
-  'Count it as NOT attempted when the rep never made the move, or only mentioned it in passing without offering it.',
+  'Count it as NOT attempted when that salesperson never made the move, or only mentioned it in passing without offering it.',
+  '',
+  // The transcript cannot distinguish employees: every internal turn is "Agent".
+  // Without this the auditor reads a transferred colleague's sentence as the
+  // reviewed person's attempt and deletes a valid finding.
+  'ANOTHER PERSON DOING IT IS NOT AN ATTEMPT. A transcript labels every one of our people "Agent", so the material tells you whether more than one employee was on this conversation. If it says so, a line may belong to a transferred Customer Service or support rep rather than the reviewed salesperson, and you must answer false unless the surrounding dialogue makes it unmistakable that the reviewed salesperson said it. Customer Service explaining warranty periods, handling a return, or resolving a billing issue is NEVER the salesperson attempting a sale. The customer asking about something is not the salesperson offering it.',
+  '',
+  'THE ACCOUNT HISTORY CAN DOCUMENT AN ATTEMPT TOO. You may also be given the reviewed salesperson\'s own notes on this customer\'s CRM record. Count the miss as attempted when one of THEIR notes — a line whose author is the reviewed salesperson — documents they made the move (offered the warranty, sent the quote, set the dated follow-up). A note written by a colleague, or an operational/ticket note, is NOT their attempt. When your evidence is a note, quote that note line verbatim in agent_quote.',
   '',
   'Some findings are not about an omission at all — they are about HOW WELL the rep did something they plainly did: the content of a voicemail they left, or a professionalism or compliance lapse in what they said on the recorded line. Those are outside what you audit, so answer rep_attempted: false for them and leave them alone. Answering true would delete a finding on the grounds that the rep did the very thing it criticises.',
   '',
-  'Judge each finding independently and only against the transcript. Do not consider whether the miss is important, whether the coaching is good, or whether some other miss occurred. You are not grading the call.',
+  'Judge each finding independently, against the transcript and the account history. Do not consider whether the miss is important, whether the coaching is good, or whether some other miss occurred. You are not grading the call.',
   '',
-  'When you answer rep_attempted: true you MUST quote the SALESPERSON line that shows the attempt, verbatim from the transcript, in agent_quote. A true verdict without a verbatim quote that appears in the transcript is discarded and the finding is kept — so if you cannot point to the line, answer false.',
+  'When you answer rep_attempted: true you MUST quote, verbatim in agent_quote, the REVIEWED SALESPERSON\'S line that shows the attempt — either their transcript turn or their own account-history note. A true verdict is discarded and the finding kept unless that quote appears verbatim on an internal turn of this transcript or on one of the reviewed salesperson\'s own account-history notes — a customer line, a colleague\'s note, a ticket note, a paraphrase, or a line you inferred will not do. If you cannot point to the line, answer false.',
   '',
   'Respond with ONLY a JSON object in this exact shape:',
   '{"verdicts":[{"index":1,"rep_attempted":true,"agent_quote":"verbatim line where the rep attempted it, or null"}]}',
@@ -97,6 +115,22 @@ export interface VerifyFindingsArgs {
    * about a skipped step".
    */
   omissionRuleKeys: ReadonlySet<string>;
+  /** The person under review, named to the auditor so "the rep" is unambiguous. */
+  salespersonName: string;
+  /**
+   * The reviewed salesperson's rendered lead/CM history — the documentation gate.
+   * A note THEY authored can show a documented attempt (an offer, a quote, a
+   * dated follow-up) that the transcript alone does not; a colleague's note or a
+   * ticket note never can, which is enforced on the quote's author in code.
+   */
+  salesNotes: string;
+  /**
+   * Whether an internal turn is attributable to them. When it is not — a second
+   * employee was on the conversation, or we could not tell — this pass removes
+   * nothing on TRANSCRIPT grounds, because every such removal asserts that THIS
+   * person spoke the line.
+   */
+  attribution: CallAttribution;
 }
 
 export interface VerifyFindingsResult {
@@ -129,12 +163,30 @@ export async function verifyFindings(args: VerifyFindingsArgs): Promise<VerifyFi
   const auditable = args.findings.filter((f) => args.omissionRuleKeys.has(f.ruleKey));
   if (auditable.length === 0) return unchanged;
 
+  // Nothing this pass could conclude would be about the reviewed person, so
+  // there is no call worth paying for. Skipping beats asking and discarding: it
+  // keeps the finding AND saves the tokens.
+  if (!args.attribution.soleInternalParty) {
+    logger.info(
+      `[MISSED OPPS] verification skipped for ${args.conversationId}: `
+        + `${args.attribution.internalPartyCount ?? 'an unknown number of'} employees were on this `
+        + `conversation, so a transcript line cannot be attributed to ${args.salespersonName}`,
+    );
+    return unchanged;
+  }
+
   const user = [
+    `REVIEWED SALESPERSON: ${args.salespersonName}`,
+    'They were the only employee on this conversation, so a turn labelled AGENT is theirs.',
+    '',
     'DRAFT FINDINGS TO AUDIT:',
     renderFindings(auditable),
     '',
     'CALL TRANSCRIPT:',
     args.transcript,
+    '',
+    `ACCOUNT HISTORY (only ${args.salespersonName}'s own notes here document an attempt; a colleague's or ticket note does not):`,
+    args.salesNotes.trim() || '(none on this record)',
   ].join('\n');
 
   let usd = 0;
@@ -158,6 +210,11 @@ export async function verifyFindings(args: VerifyFindingsArgs): Promise<VerifyFi
           maxTokens: MAX_OUTPUT_TOKENS,
           responseFormat: 'json_object',
           timeoutMs: CALL_TIMEOUT_MS,
+          // The auditor's instructions are a fixed constant; only the findings
+          // and transcript in `user` vary. Cache the prefix like the main pass.
+          // (Under the cheap model's minimum cacheable length it is simply
+          // processed uncached, so this is safe even though the block is small.)
+          cacheSystem: true,
         });
         return {
           result: out,
@@ -166,11 +223,17 @@ export async function verifyFindings(args: VerifyFindingsArgs): Promise<VerifyFi
           retried: false,
           tokensIn: out.tokensIn,
           tokensOut: out.tokensOut,
+          cacheReadTokens: out.cacheReadTokens,
+          cacheWriteTokens: out.cacheWriteTokens,
         };
       },
     );
 
-    const attempted = parseAttemptedIndexes(res.text, auditable.length, args.transcript);
+    const attempted = parseAttemptedIndexes(res.text, auditable.length, {
+      transcript: args.transcript,
+      salesNotes: args.salesNotes,
+      salespersonName: args.salespersonName,
+    });
     if (attempted.size === 0) {
       return { ...unchanged, tokensIn: res.tokensIn ?? 0, tokensOut: res.tokensOut ?? 0, usdCost: usd };
     }
@@ -201,17 +264,25 @@ export async function verifyFindings(args: VerifyFindingsArgs): Promise<VerifyFi
   }
 }
 
+interface AttributionSources {
+  transcript: string;
+  salesNotes: string;
+  salespersonName: string;
+}
+
 /**
  * Zero-based indexes the auditor marked as attempted AND backed with a quote
- * the transcript contains.
+ * attributable to the reviewed salesperson.
  *
  * Only an explicit `true` counts, an out-of-range index is ignored, and a
- * verdict whose `agent_quote` is missing or resolves nowhere in the transcript
- * is discarded — anything ambiguous keeps the finding, matching the fail-open
- * stance of the pass as a whole. Dropping a real miss on an unverifiable "yes"
- * is the failure mode this guards.
+ * verdict whose `agent_quote` is missing is discarded — anything ambiguous keeps
+ * the finding, matching the fail-open stance of the pass. A quote counts two
+ * ways, both attributable to THIS person: an internal turn of the transcript, or
+ * a line on the account history that the reviewed salesperson authored. A
+ * colleague's note, a ticket note, or a customer line resolves as neither.
+ * Dropping a real miss on an unverifiable "yes" is the failure mode this guards.
  */
-function parseAttemptedIndexes(raw: string, count: number, transcript: string): Set<number> {
+function parseAttemptedIndexes(raw: string, count: number, src: AttributionSources): Set<number> {
   const attempted = new Set<number>();
   let parsed: unknown;
   try {
@@ -241,9 +312,16 @@ function parseAttemptedIndexes(raw: string, count: number, transcript: string): 
       );
       continue;
     }
-    if (!quoteResolves(quote, transcript)) {
+    // The line has to be THIS person's: their own internal transcript turn, or a
+    // note they authored on the account history. The auditor's favourite unsound
+    // removals — the customer's own question, or a colleague's/CS note — resolve
+    // as neither.
+    const fromTranscript = quoteResolvesAsInternalSpeaker(quote, src.transcript);
+    const fromOwnNote = isSamePerson(quoteAuthors(quote, src.salesNotes), src.salespersonName);
+    if (!fromTranscript && !fromOwnNote) {
       logger.info(
-        `[MISSED OPPS] verification verdict ${oneBased} quoted a line absent from the transcript — finding kept`,
+        `[MISSED OPPS] verification verdict ${oneBased} quoted a line that is neither an attributable `
+          + `salesperson turn nor a note ${src.salespersonName} authored — finding kept`,
       );
       continue;
     }

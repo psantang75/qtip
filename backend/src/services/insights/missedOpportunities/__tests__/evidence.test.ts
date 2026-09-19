@@ -12,7 +12,10 @@
  * exists to stop. Words that appear nowhere in the material must not pass.
  */
 import { describe, it, expect } from 'vitest';
-import { normalizeForMatch, quoteResolves } from '../evidence';
+import {
+  isSamePerson, normalizeForMatch, quoteAuthors, quoteResolves,
+  quoteResolvesAsInternalSpeaker,
+} from '../evidence';
 
 const TRANSCRIPT = [
   'Agent: Thanks for calling, how can I help?',
@@ -141,5 +144,110 @@ describe('quoteResolves — fails open where it cannot know', () => {
   it('treats an empty or null quote as nothing to disprove', () => {
     expect(quoteResolves(null, TRANSCRIPT)).toBe(true);
     expect(quoteResolves('', TRANSCRIPT)).toBe(true);
+  });
+});
+
+/**
+ * The mirror image of `quoteResolves`, and deliberately biased the other way.
+ * This one is used to DELETE a finding on the grounds that the salesperson
+ * already did the thing, so every ambiguity has to answer no — a false accept
+ * here silently removes a real miss, which is what happened to Jason's warranty
+ * finding when Customer Service's explanation was read as his offer.
+ */
+describe('quoteResolvesAsInternalSpeaker', () => {
+  const RENDERED = [
+    '[00:00:03 — AGENT] Thanks for calling, I can add the extended warranty for you.',
+    '[00:01:24 — CUSTOMER] does the replacement player come with a warranty?',
+    '[00:01:40 — Unknown] your call may be recorded for quality.',
+  ].join('\n');
+
+  it('accepts a line our side of the call actually said', () => {
+    expect(quoteResolvesAsInternalSpeaker('I can add the extended warranty for you', RENDERED)).toBe(true);
+  });
+
+  it('accepts the older Agent: line form, so plain-text providers still work', () => {
+    // formatTranscriptContent passes an already-plain payload through verbatim.
+    // Without this the check would go silent on those calls and the
+    // false-positive control would stop working entirely.
+    expect(quoteResolvesAsInternalSpeaker(
+      'I can take the card right now',
+      'Agent: I can take the card right now if you have it handy.',
+    )).toBe(true);
+  });
+
+  it('rejects the customer\'s own question, however much it names the topic', () => {
+    expect(quoteResolvesAsInternalSpeaker('does the replacement player come with a warranty', RENDERED)).toBe(false);
+  });
+
+  it('rejects a turn whose speaker could not be identified', () => {
+    expect(quoteResolvesAsInternalSpeaker('your call may be recorded for quality', RENDERED)).toBe(false);
+  });
+
+  it('rejects everything when the transcript has no speaker labels at all', () => {
+    expect(quoteResolvesAsInternalSpeaker(
+      'I can add the extended warranty for you',
+      'I can add the extended warranty for you, no problem.',
+    )).toBe(false);
+  });
+
+  it('rejects a quote too short to attribute, where quoteResolves fails open', () => {
+    expect(quoteResolves('okay', RENDERED)).toBe(true);
+    expect(quoteResolvesAsInternalSpeaker('okay', RENDERED)).toBe(false);
+  });
+
+  it('rejects a null quote and an empty transcript', () => {
+    expect(quoteResolvesAsInternalSpeaker(null, RENDERED)).toBe(false);
+    expect(quoteResolvesAsInternalSpeaker('I can add the extended warranty', '')).toBe(false);
+  });
+
+  it('accepts a sentence a phrase-level provider split across the speaker\'s turns', () => {
+    const split = [
+      '[00:01:24 — AGENT] so we can add the five year coverage',
+      '[00:01:26 — AGENT] for another eighty nine dollars.',
+    ].join('\n');
+    expect(quoteResolvesAsInternalSpeaker(
+      'add the five year coverage for another eighty nine dollars',
+      split,
+    )).toBe(true);
+  });
+});
+
+/**
+ * A record's history legitimately contains other employees' notes. "The quote is
+ * somewhere in the CRM block" therefore says nothing about who wrote it, and the
+ * rendered `by <author>` header is the only thing that does.
+ */
+describe('quoteAuthors', () => {
+  const NOTES = [
+    '[TASK 1120497 · action 8561828 · 2026-09-17 14:05 · by Jason Spangler · Lead Manager] Ordered the replacement unit.',
+    '[TASK 1120497 · action 8561900 · 2026-09-17 15:20 · by Dana Fields · Lead Manager] Confirmed the shipping address.',
+    '[TASK 1120497 · action 8561950 · 2026-09-17 16:00 · author unknown · Lead Manager] Status synced from the portal.',
+  ].join('\n');
+
+  it('names the author of the line the quote is in', () => {
+    expect(quoteAuthors('Ordered the replacement unit', NOTES)).toEqual(['Jason Spangler']);
+  });
+
+  it('does not credit one author with another\'s note on the same record', () => {
+    expect(quoteAuthors('Confirmed the shipping address', NOTES)).toEqual(['Dana Fields']);
+  });
+
+  it('returns nothing for a line with no author, rather than guessing', () => {
+    expect(quoteAuthors('Status synced from the portal', NOTES)).toEqual([]);
+  });
+
+  it('returns nothing when the quote spans lines, so authorship stays unproven', () => {
+    expect(quoteAuthors('Ordered the replacement unit Confirmed the shipping address', NOTES)).toEqual([]);
+  });
+
+  it('returns nothing for a quote too short to attribute', () => {
+    expect(quoteAuthors('the', NOTES)).toEqual([]);
+  });
+
+  it('compares people on their normalised name', () => {
+    expect(isSamePerson(['Jason  SPANGLER'], 'Jason Spangler')).toBe(true);
+    expect(isSamePerson(['Jason Spangler'], 'Jason Spangle')).toBe(false);
+    expect(isSamePerson([], 'Jason Spangler')).toBe(false);
+    expect(isSamePerson(['Jason Spangler'], '')).toBe(false);
   });
 });

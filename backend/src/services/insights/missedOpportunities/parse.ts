@@ -18,7 +18,9 @@
  * cannot help with that" counted toward the clean-call rate. `parseFailed` is
  * how the caller tells the two apart.
  */
-import { quoteResolves } from './evidence';
+import {
+  isSamePerson, quoteAuthors, quoteResolves, quoteResolvesAsInternalSpeaker,
+} from './evidence';
 import { MAX_CANDIDATE_FINDINGS } from './prompt';
 import {
   AnalyzedFinding,
@@ -64,13 +66,34 @@ export interface ParseFindingsArgs {
    */
   validCrmRefs?: ReadonlySet<string>;
   /**
-   * The material an `evidence_quote` must resolve to — the transcript and the
-   * CRM notes shown to the model. An empty list disables the check (see
+   * The material an `evidence_quote` must resolve to, kept in labelled parts
+   * rather than one concatenated blob. Omitting it disables the check (see
    * evidence.quoteResolves, which fails open by design).
+   *
+   * The parts matter because a quote's SOURCE decides what it can prove: the
+   * same warranty sentence is the salesperson's offer in their own transcript
+   * turn, documented history on their lead, and merely operational context on a
+   * support ticket. Flattening them is what let a Customer Service line be
+   * reported as the reviewed salesperson's words.
    */
-  evidenceSources?: Array<string | null>;
+  evidence?: EvidenceMaterial;
   /** Ceiling on findings returned. Defaults to the pre-verification candidate cap. */
   max?: number;
+}
+
+/** The labelled material a finding's quote may come from. */
+export interface EvidenceMaterial {
+  transcript: string;
+  /** The validated lead/CM history — the only notes that can document an exception. */
+  salesNotes: string;
+  /** Support/billing/return tickets. Quotable as context, never as sales credit. */
+  ticketNotes: string;
+  /** The created-leads block. Judgment context; not citable. */
+  leadsCreated: string | null;
+  /** The reviewed salesperson, for checking who authored a quoted note. */
+  salespersonName: string;
+  /** True only when they were the sole internal party — see types.CallAttribution. */
+  soleInternalParty: boolean;
 }
 
 export interface ParseFindingsResult {
@@ -88,19 +111,47 @@ export interface ParseFindingsResult {
   rejectedQuotes: Array<{ ruleKey: string; quote: string }>;
   /** Findings rejected for lacking the evidence quote required by the contract. */
   missingQuotes: number;
+  /**
+   * Findings kept but whose AGENT attribution was withdrawn — the quote is real,
+   * yet nothing shows the REVIEWED salesperson said or wrote it. The finding
+   * survives with a null speaker (the miss can still be valid); the count is here
+   * so a run that is systematically mis-attributing is visible.
+   */
+  unattributedSpeakers: number;
+}
+
+/**
+ * Whether the reviewed salesperson can be shown to have produced this quote.
+ *
+ * Two ways in, both requiring positive evidence:
+ *   - their own transcript turn, but ONLY on a call where they were the sole
+ *     internal party, because otherwise an "Agent" turn may be a transferred rep
+ *     or an IVR (see types.CallAttribution);
+ *   - a note on the validated sales records that names them as its author.
+ *
+ * A quote found only in a ticket block, only in a colleague's note, or only in a
+ * customer turn is not theirs, whatever the model labelled it.
+ */
+function agentCanBeCredited(quote: string, ev: EvidenceMaterial): boolean {
+  if (ev.soleInternalParty && quoteResolvesAsInternalSpeaker(quote, ev.transcript)) return true;
+  return isSamePerson(quoteAuthors(quote, ev.salesNotes), ev.salespersonName);
 }
 
 /** Coerce the model's JSON into findings, dropping anything unusable. */
 export function parseFindings(args: ParseFindingsArgs): ParseFindingsResult {
   const max = args.max ?? MAX_CANDIDATE_FINDINGS;
   const validCrmRefs = args.validCrmRefs ?? new Set<string>();
-  const sources = args.evidenceSources ?? [];
+  const ev = args.evidence;
+  const sources = ev
+    ? [ev.transcript, ev.salesNotes, ev.ticketNotes, ev.leadsCreated]
+    : [];
   const base: ParseFindingsResult = {
     findings: [],
     customerName: null,
     parseFailed: false,
     rejectedQuotes: [],
     missingQuotes: 0,
+    unattributedSpeakers: 0,
   };
 
   let parsed: unknown;
@@ -128,6 +179,7 @@ export function parseFindings(args: ParseFindingsArgs): ParseFindingsResult {
   const seenRules = new Set<string>();
   const rejectedQuotes: ParseFindingsResult['rejectedQuotes'] = [];
   let missingQuotes = 0;
+  let unattributedSpeakers = 0;
 
   for (const item of arr) {
     if (!item || typeof item !== 'object') continue;
@@ -162,6 +214,17 @@ export function parseFindings(args: ParseFindingsArgs): ParseFindingsResult {
     const ref = parseCrmRef(o.crm_ref);
     const citable = ref && validCrmRefs.has(crmRefToken(ref.kind, ref.id)) ? ref : null;
 
+    // Speaker only means something when there is a quote to attribute, and AGENT
+    // only when this salesperson can be shown to have produced it. Withdrawing
+    // the label rather than the finding is deliberate: "someone said it and we
+    // cannot prove it was them" leaves the miss standing but stops the report
+    // presenting a colleague's sentence as the reviewed person's.
+    let speaker = evidenceQuote ? parseEvidenceSpeaker(o.evidence_speaker) : null;
+    if (speaker === 'AGENT' && ev && !agentCanBeCredited(evidenceQuote, ev)) {
+      speaker = null;
+      unattributedSpeakers += 1;
+    }
+
     seenRules.add(ruleKey);
     findings.push({
       ruleKey,
@@ -169,8 +232,7 @@ export function parseFindings(args: ParseFindingsArgs): ParseFindingsResult {
       title,
       whatHappened,
       evidenceQuote,
-      // Speaker only means something when there is a quote to attribute.
-      evidenceSpeaker: evidenceQuote ? parseEvidenceSpeaker(o.evidence_speaker) : null,
+      evidenceSpeaker: speaker,
       recommendedApproach: recommended,
       recoveryAction: recovery,
       estValueNote: cap(o.est_value_note, CAP.estValueNote),
@@ -181,5 +243,12 @@ export function parseFindings(args: ParseFindingsArgs): ParseFindingsResult {
     if (findings.length >= max) break;
   }
 
-  return { findings, customerName: topCustomer, parseFailed: false, rejectedQuotes, missingQuotes };
+  return {
+    findings,
+    customerName: topCustomer,
+    parseFailed: false,
+    rejectedQuotes,
+    missingQuotes,
+    unattributedSpeakers,
+  };
 }
