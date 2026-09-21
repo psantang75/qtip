@@ -188,22 +188,26 @@ interface CoreRow {
   ContactLastName: string | null;
   ContactEmail: string | null;
   JobID: number | null;
-  JobPartnerNumber: string | null;
+  // Numeric in the CRM source DB — mysql2 returns these as `number`.
+  JobPartnerNumber: string | number | null;
   OrderID: number | null;
-  OrderNumber: string | null;
-  PONumber: string | null;
+  OrderNumber: string | number | null;
+  PONumber: string | number | null;
   DeviceTypeID: number | null;
   DeviceTypeName: string | null;
-  RadioIDNum: string | null;
+  RadioIDNum: string | number | null;
 }
 
 function nullIfZero(v: number | null | undefined): number | null {
   return v == null || v === 0 ? null : v;
 }
 
-function blankToNull(v: string | null | undefined): string | null {
+function blankToNull(v: string | number | null | undefined): string | null {
   if (v == null) return null;
-  const trimmed = v.trim();
+  // CRM columns like tblOrders.OrderNumber / PONumber and PartnerJobNumber are
+  // numeric in the source DB, so mysql2 hands us a `number`. Coerce before
+  // trimming so a number never triggers `v.trim is not a function`.
+  const trimmed = String(v).trim();
   return trimmed.length === 0 ? null : trimmed;
 }
 
