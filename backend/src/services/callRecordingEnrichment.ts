@@ -4,20 +4,19 @@
  * `recordings[]` array so the UI can render an audio player even when
  * our own `calls.recording_url` column is empty.
  *
- * Genesys typically produces multiple recording files per conversation
- * (one per communication leg — e.g. an IVR/queue leg and the agent
- * leg). ~87% of conversations have exactly two. For QA review we only
- * care about the agent conversation, which is always the most recent
- * recording (`CreatedOn DESC`, so index 0). We therefore drop the
- * earlier legs at the enrichment boundary so no downstream consumer
- * has to worry about it.
+ * Genesys produces one recording file per communication leg (IVR / queue /
+ * agent / transfer), so a transferred call has several audio segments that
+ * together make up the full conversation. We surface every playable leg in
+ * call order so the UI can render one audio player per leg — collapsing to a
+ * single leg here previously truncated transferred calls to one segment even
+ * though the transcript covered the whole call.
  *
  * - Looks up every conversation in parallel against PhoneSystem.
  * - Failures (PhoneSystem unreachable, single ID missing) are swallowed
  *   so a submission detail page never breaks because the secondary DB
  *   is down — the call simply renders without audio.
  * - When a call has no `recording_url` stored locally but PhoneSystem
- *   has the agent leg, we backfill `recording_url` with that leg's
+ *   has recordings, we backfill `recording_url` with the first leg's
  *   stream URL so older UI surfaces that still read the scalar field
  *   continue to work.
  */
@@ -40,11 +39,10 @@ export async function attachPhoneSystemRecordings<T extends CallLike>(calls: T[]
       const convId = (call.call_id ?? '').trim()
       if (!convId) return
       try {
-        const allRecordings = await phoneSystemService.getRecordingsForConversation(convId)
-        const agentLeg = allRecordings.length > 0 ? [allRecordings[0]] : []
-        call.recordings = agentLeg
-        if (!call.recording_url && agentLeg.length > 0) {
-          call.recording_url = agentLeg[0].audio_url
+        const legs = await phoneSystemService.getRecordingsForConversation(convId)
+        call.recordings = legs
+        if (!call.recording_url && legs.length > 0) {
+          call.recording_url = legs[0].audio_url
         }
       } catch (error) {
         logger.warn(`[CALL ENRICHMENT] PhoneSystem lookup failed for conversation ${convId}:`, error)

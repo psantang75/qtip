@@ -132,8 +132,12 @@ class PhoneSystemService {
   }
 
   /**
-   * Return every completed recording for a conversation, newest first.
-   * Used so the UI can show one audio player per communication leg.
+   * Return every completed recording for a conversation, in call order
+   * (oldest leg first). A transferred call has several legs (IVR / queue /
+   * agent / transfer) that together make up the full conversation, so the
+   * UI shows one audio player per leg — ordering ascending lets a reviewer
+   * play them top-to-bottom to hear the whole call. `CreatedOn` is the best
+   * available ordering key in this table.
    */
   async getRecordingsForConversation(conversationId: string): Promise<CallRecordingResponse[]> {
     try {
@@ -151,7 +155,7 @@ class PhoneSystemService {
           AND RecordingID IS NOT NULL
           AND RecordingPath IS NOT NULL
           AND RecordingPath <> ''
-        ORDER BY CreatedOn DESC
+        ORDER BY CreatedOn ASC
       `;
 
       const results = await executeQuery<ConversationRecordingRow>(query, [conversationId], 'phone');
@@ -444,6 +448,8 @@ class PhoneSystemService {
       ]);
 
       const recordings = recordingsResult.status === 'fulfilled' ? recordingsResult.value : [];
+      // Scalar fallback for legacy `recording_url` consumers — the full
+      // per-leg list lives in `recordings` (in call order, first leg here).
       const audio = recordings.length > 0 ? recordings[0] : null;
       const transcript = transcriptResult.status === 'fulfilled' ? transcriptResult.value : null;
 

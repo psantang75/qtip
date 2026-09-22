@@ -41,12 +41,11 @@ function formatTranscripts(transcripts: ConversationDetailResponse[] | null | un
  * exist in PhoneSystem but not yet in Q-Tip's own `calls` table. Pulls real
  * call_date and duration from tblConversations when meta is provided.
  */
-// PhoneSystem returns every recording leg for a conversation (newest first).
-// For QA review we only surface the agent leg — see callRecordingEnrichment.ts
-// for the rationale.
-function agentLegOnly(recordings?: CallRecordingResponse[]): CallRecordingResponse[] {
-  if (!recordings || recordings.length === 0) return [];
-  return [recordings[0]];
+// PhoneSystem returns every recording leg for a conversation in call order.
+// Surface them all so transferred calls (multiple agent legs) keep their full
+// audio — the UI renders one player per leg. See callRecordingEnrichment.ts.
+function callLegs(recordings?: CallRecordingResponse[]): CallRecordingResponse[] {
+  return recordings ?? [];
 }
 
 function buildVirtualCall(
@@ -67,7 +66,7 @@ function buildVirtualCall(
     call_date: meta?.start_et ?? new Date(),
     duration: meta?.duration_seconds ?? 0,
     recording_url: phoneSystemData.audio?.audio_url || null,
-    recordings: agentLegOnly(phoneSystemData.recordings),
+    recordings: callLegs(phoneSystemData.recordings),
     transcript: formatTranscripts(phoneSystemData.transcript),
     csr_name: 'Unknown',
     department_name: 'Unknown',
@@ -185,7 +184,7 @@ router.get('/search', async (req: Request, res: Response) => {
     // the call selector can offer one audio player per communication leg even
     // when our own `calls.recording_url` is still empty.
     if (external_id && phoneSystemForExternal && calls.length > 0) {
-      const psRecordings = agentLegOnly(phoneSystemForExternal.recordings);
+      const psRecordings = callLegs(phoneSystemForExternal.recordings);
       calls.forEach(c => {
         c.recordings = psRecordings;
         if (!c.recording_url && psRecordings.length > 0) {
