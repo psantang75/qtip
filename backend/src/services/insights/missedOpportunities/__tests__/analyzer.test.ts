@@ -842,6 +842,10 @@ describe('analyzeCall', () => {
     validRuleKeys: VALID,
     defaultSeverityByRule: DEFAULTS,
     omissionRuleKeys: VALID,
+    // The verification pass is shown each rule's text so it can enforce that
+    // rule's own exclusions. These fixtures state none, which keeps these tests
+    // about the attempt question they were written for.
+    ruleBodies: new Map<string, string>(),
   };
 
   it('skips a call with no transcript without spending a model call', async () => {

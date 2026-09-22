@@ -75,6 +75,12 @@ export interface AnalyzeCallArgs {
    * skipped step (`is_omission`). Findings on content-graded rules bypass it.
    */
   omissionRuleKeys: ReadonlySet<string>;
+  /**
+   * `rule_key` → that rule's `body_md`, so the verification pass can enforce the
+   * exclusions an admin wrote into the rule ("Do NOT flag when…") rather than
+   * only the attempt question.
+   */
+  ruleBodies: ReadonlyMap<string, string>;
 }
 
 /**
@@ -211,15 +217,17 @@ export async function analyzeCall(args: AnalyzeCallArgs): Promise<AnalyzeCallRes
       );
     }
 
-    // Audit the grading pass for the one error it cannot self-check: alleging
-    // the rep did not do something the transcript shows them doing. Fails open
-    // and costs nothing on the empty results a well-handled call produces.
+    // Audit the grading pass for the two errors it cannot self-check: alleging
+    // the rep did not do something the transcript shows them doing, and ignoring
+    // an exclusion the rule itself states. Fails open and costs nothing on the
+    // empty results a well-handled call produces.
     const verified = await verifyFindings({
       findings: parsed.out.findings,
       transcript: material.transcript,
       provider: args.provider,
       conversationId: material.conversationId,
       omissionRuleKeys: args.omissionRuleKeys,
+      ruleBodies: args.ruleBodies,
       salespersonName: material.agentName,
       // The same validated lead/CM history the grading pass saw, so a documented
       // attempt the rep authored is not read as a miss.

@@ -136,6 +136,10 @@ export class MissedOpportunitiesWorker extends BaseInsightsWorker {
     const omissionRuleKeys = new Set(
       rules.filter((r) => r.is_omission).map((r) => r.rule_key),
     );
+    // The same admin-authored rule text the grading pass is shown, so the
+    // verification pass can enforce each rule's own "do NOT flag when…" clauses
+    // instead of trusting the grading pass to have honoured them.
+    const ruleBodies = new Map(rules.map((r) => [r.rule_key, r.body_md]));
     const model = resolveTierModel(provider, settings.modelTier);
     const crmByAgent = await loadCrmActivityByAgent(candidates, runDate);
     // Separate read from the notes above: those show work LOGGED, this shows
@@ -193,6 +197,7 @@ export class MissedOpportunitiesWorker extends BaseInsightsWorker {
           validRuleKeys,
           defaultSeverityByRule,
           omissionRuleKeys,
+          ruleBodies,
         });
 
         tokensIn += result.tokensIn;

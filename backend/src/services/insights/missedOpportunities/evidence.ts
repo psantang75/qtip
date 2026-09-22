@@ -198,19 +198,57 @@ export function quoteResolvesAsInternalSpeaker(
   quote: string | null,
   transcript: string | null,
 ): boolean {
+  return resolvesAsSpeaker(quote, transcript, (s) => INTERNAL_SPEAKERS.includes(s));
+}
+
+/**
+ * Labels `formatTranscriptContent` renders for the FAR END of the line. It emits
+ * only "Customer"; the aliases cover a hand-built or legacy rendering.
+ */
+const EXTERNAL_SPEAKERS = ['customer', 'external', 'caller'];
+
+/**
+ * True when `quote` resolves to a turn spoken by the CUSTOMER.
+ *
+ * Used for a rule's own exclusions, which are normally proved by what the
+ * customer said — "email me the link", "we'll review it and come back to you", "I
+ * need to run it past my partner". Those lines are what the miss turns on and
+ * they are unavailable to `quoteResolvesAsInternalSpeaker`.
+ *
+ * Scoped to the customer rather than to either party ON PURPOSE. A positive
+ * result DELETES a finding, and an internal turn identifies the company rather
+ * than a person, so accepting any speaker would let a transferred colleague's
+ * sentence clear the reviewed salesperson — the Jason warranty failure, re-entered
+ * through the exclusion question instead of the attempt question. Callers that can
+ * prove the reviewed salesperson was the only employee on the line combine this
+ * with the internal test; nobody else may.
+ */
+export function quoteResolvesAsCustomer(
+  quote: string | null,
+  transcript: string | null,
+): boolean {
+  return resolvesAsSpeaker(quote, transcript, (s) => EXTERNAL_SPEAKERS.includes(s));
+}
+
+/** Shared strict span test against the turns whose speaker `accept` allows. */
+function resolvesAsSpeaker(
+  quote: string | null,
+  transcript: string | null,
+  accept: (speaker: string) => boolean,
+): boolean {
   const normQuote = normalizeForMatch(quote ?? '');
   if (normQuote.length < MIN_RESOLVABLE_CHARS) return false;
 
-  const internal = turnsOf(transcript ?? '')
-    .filter((t) => INTERNAL_SPEAKERS.includes(t.speaker))
+  const texts = turnsOf(transcript ?? '')
+    .filter((t) => accept(t.speaker))
     .map((t) => t.text);
-  if (internal.length === 0) return false;
+  if (texts.length === 0) return false;
 
   // Both forms: each turn on its own, and the speaker's turns joined, so a
   // sentence a phrase-level provider split across turns still resolves.
   const haystacks = [
-    normalizeForMatch(internal.join(' ')),
-    ...internal.map(normalizeForMatch),
+    normalizeForMatch(texts.join(' ')),
+    ...texts.map(normalizeForMatch),
   ].filter((s) => s.length > 0);
   return matchesAny(quote, normQuote, haystacks, false);
 }

@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   isSamePerson, normalizeForMatch, quoteAuthors, quoteResolves,
-  quoteResolvesAsInternalSpeaker,
+  quoteResolvesAsCustomer, quoteResolvesAsInternalSpeaker,
 } from '../evidence';
 
 const TRANSCRIPT = [
@@ -209,6 +209,69 @@ describe('quoteResolvesAsInternalSpeaker', () => {
       'add the five year coverage for another eighty nine dollars',
       split,
     )).toBe(true);
+  });
+});
+
+/**
+ * The mirror image, for a rule's own exclusions. Those turn on what the CUSTOMER
+ * said — "email me the link", "we'll come back to you" — which the internal test
+ * can never see. It stays scoped to the far end rather than to any speaker,
+ * because a positive result here also deletes a finding and an internal turn
+ * identifies the company rather than a person.
+ */
+describe('quoteResolvesAsCustomer', () => {
+  const RENDERED = [
+    '[00:00:03 — AGENT] I can put that order through right now.',
+    '[00:01:24 — CUSTOMER] Just email me the link, I need to run it past my partner.',
+    '[00:01:40 — Unknown] your call may be recorded for quality.',
+  ].join('\n');
+
+  it('accepts the customer line a rule exclusion turns on', () => {
+    expect(quoteResolvesAsCustomer('I need to run it past my partner', RENDERED)).toBe(true);
+  });
+
+  it('accepts the plain Customer: form as well as the rendered one', () => {
+    expect(quoteResolvesAsCustomer(
+      'just email me the link',
+      'Customer: I am with a client, just email me the link.',
+    )).toBe(true);
+  });
+
+  // The Jason warranty case, arriving through the exclusion question instead of
+  // the attempt question: on a transferred call this line is Customer Service's.
+  it('rejects an internal turn, so a colleague cannot satisfy an exclusion', () => {
+    expect(quoteResolvesAsCustomer('I can put that order through right now', RENDERED)).toBe(false);
+  });
+
+  it('rejects a turn whose speaker could not be identified', () => {
+    expect(quoteResolvesAsCustomer('your call may be recorded for quality', RENDERED)).toBe(false);
+  });
+
+  it('rejects everything when the transcript carries no speaker labels', () => {
+    expect(quoteResolvesAsCustomer(
+      'just email me the link',
+      'I am with a client, just email me the link.',
+    )).toBe(false);
+  });
+
+  it('rejects a quote too short to be distinctive', () => {
+    expect(quoteResolvesAsCustomer('okay', RENDERED)).toBe(false);
+  });
+
+  it('rejects a null quote and an empty transcript', () => {
+    expect(quoteResolvesAsCustomer(null, RENDERED)).toBe(false);
+    expect(quoteResolvesAsCustomer('just email me the link', '')).toBe(false);
+  });
+
+  it('is the complement of the internal test on the same transcript', () => {
+    // Neither accepts the other's speaker, which is what makes combining them a
+    // deliberate decision at the call site rather than an accident.
+    const customerLine = 'I need to run it past my partner';
+    const agentLine = 'I can put that order through right now';
+    expect(quoteResolvesAsCustomer(customerLine, RENDERED)).toBe(true);
+    expect(quoteResolvesAsInternalSpeaker(customerLine, RENDERED)).toBe(false);
+    expect(quoteResolvesAsCustomer(agentLine, RENDERED)).toBe(false);
+    expect(quoteResolvesAsInternalSpeaker(agentLine, RENDERED)).toBe(true);
   });
 });
 

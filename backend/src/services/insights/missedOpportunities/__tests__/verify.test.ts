@@ -1,10 +1,11 @@
 /**
  * Verification-pass tests.
  *
- * This pass is a control on the one error the grading pass cannot self-check:
- * alleging the rep did not do something the transcript shows them doing. Two
- * properties make it safe to run on every day's review, and both are asserted
- * here rather than left to the prompt:
+ * This pass is a control on the two errors the grading pass cannot self-check:
+ * alleging the rep did not do something the transcript shows them doing, and
+ * reporting a situation the rule's own body excludes. These properties make it
+ * safe to run on every day's review, and all of them are asserted here rather
+ * than left to the prompt:
  *
  *   1. IT ONLY REMOVES. It cannot add a finding, reorder, or rewrite one. If it
  *      could, the report's content would no longer be owned by the rule set and
@@ -13,12 +14,17 @@
  *      out-of-range index keeps every finding. The alternative — silently
  *      emptying a day because an auxiliary call broke — is far worse than the
  *      false positives this exists to catch.
- *   3. IT ONLY SPEAKS FOR THE REVIEWED PERSON. Every removal asserts that THIS
- *      salesperson did the thing, so the quote behind it has to be theirs: an
+ *   3. IT ONLY SPEAKS FOR THE REVIEWED PERSON. An attempt removal asserts that
+ *      THIS salesperson did the thing, so the quote behind it has to be theirs: an
  *      internal turn, on a conversation with no second employee who could have
  *      said it. Without that, Customer Service explaining warranty periods on a
  *      transferred segment reads as the salesperson's offer and deletes a real
  *      omission — the Jason Spangler / Patrick's case.
+ *   4. AN EXCLUSION COMES FROM THE RULE, AND FROM A REAL LINE. The exclusion
+ *      question is bounded by the rule body the caller supplies, and its quote
+ *      must be the customer's, the reviewed salesperson's own (solo calls only),
+ *      or a note on the validated record. Otherwise "the rule excludes this"
+ *      becomes a way to delete anything.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -83,12 +89,29 @@ const OMISSION_KEYS = new Set([
   'no_dated_next_step',
 ]);
 
+/**
+ * Rule text as an admin wrote it, which is what makes the exclusion question
+ * answerable. `buying_signal_not_closed` carries the clause the Sunny Street Cafe
+ * false positive violated; the other two deliberately state none, so "this rule
+ * excludes nothing" stays distinguishable from "the auditor found an exclusion".
+ */
+const RULE_BODIES = new Map([
+  ['buying_signal_not_closed', 'The customer gave a clear buying signal and the salesperson never '
+    + 'asked for the order. Do NOT flag when the customer asked to be emailed a link, requested a '
+    + 'revised quote, or said they needed to discuss it with a partner before deciding — a customer '
+    + 'choosing a slower path is not a rep failure.'],
+  ['group_expansion_not_captured', 'An opportunity for additional sites was raised on the call and '
+    + 'never recorded anywhere in the CRM.'],
+  ['no_dated_next_step', 'The call ended with no dated next step on the record.'],
+]);
+
 const args = (over: Record<string, unknown> = {}) => ({
   findings: [finding()],
   transcript: TRANSCRIPT,
   provider: 'anthropic' as const,
   conversationId: 'conv-1',
   omissionRuleKeys: OMISSION_KEYS,
+  ruleBodies: RULE_BODIES,
   salespersonName: 'Mitchell Reyes',
   // Empty by default; the account-history tests below supply their own.
   salesNotes: '',
@@ -289,7 +312,89 @@ describe('verifyFindings — failing open', () => {
   });
 });
 
-describe('verifyFindings — commission-type rules are out of scope', () => {
+/**
+ * The K.C. Salon case. `professionalism_or_compliance` is content-graded, so it
+ * used to skip this pass entirely — which left the findings graded purely on
+ * judgment as the only ones with no check of any kind. That is how a rule whose
+ * body lists margin disclosure, profanity, disparagement and small talk produced
+ * a finding about a rep's tone while he correctly explained copyright law.
+ *
+ * The attempt question still cannot be put to them. The exclusion question can.
+ */
+describe('verifyFindings — content-graded rules get the exclusion question', () => {
+  const CONDUCT = 'professionalism_or_compliance';
+  const conduct = finding({
+    ruleKey: CONDUCT,
+    title: 'Dismissive tone on the licensing objection',
+    whatHappened: 'The rep pushed back on the licensing objection in a way that read as dismissive.',
+  });
+
+  /** The same rule, with the exclusion it was missing. */
+  const withBody = new Map([
+    ...RULE_BODIES,
+    [CONDUCT, 'The rep said something on a recorded line that creates a professionalism or '
+      + 'compliance problem. Do NOT flag ordinary objection handling, a firm but professional '
+      + 'explanation of policy or copyright law, or a call where the CUSTOMER was the dismissive '
+      + 'party.'],
+  ]);
+
+  const contentArgs = (over: Record<string, unknown> = {}) => args({
+    findings: [conduct],
+    ruleBodies: withBody,
+    ...over,
+  });
+
+  it('audits a content-graded finding once its rule states an exclusion', async () => {
+    callChatModelMock.mockResolvedValue(reply('{"verdicts":[]}'));
+    await verifyFindings(contentArgs());
+    const user = String((callChatModelMock.mock.calls[0][1] as { user: string }).user);
+    expect(user).toContain('Dismissive tone on the licensing objection');
+    expect(user).toContain('Do NOT flag ordinary objection handling');
+  });
+
+  it('tells the auditor to judge it on the exclusion question only', async () => {
+    callChatModelMock.mockResolvedValue(reply('{"verdicts":[]}'));
+    await verifyFindings(contentArgs());
+    const user = String((callChatModelMock.mock.calls[0][1] as { user: string }).user);
+    expect(user).toContain('GRADED ON CONTENT, NOT ON AN OMISSION');
+  });
+
+  it('drops it when the rule\'s exclusion covers the call', async () => {
+    callChatModelMock.mockResolvedValue(reply(JSON.stringify({
+      verdicts: [{
+        index: 1,
+        rep_attempted: false,
+        agent_quote: null,
+        carve_out_applies: true,
+        carve_out_quote: 'just email me the link',
+      }],
+    })));
+    const res = await verifyFindings(contentArgs());
+    expect(res.findings).toEqual([]);
+    expect(res.dropped).toBe(1);
+  });
+
+  it('still refuses an attempt verdict on it, however the auditor answers', async () => {
+    // A literal "yes they did that" would delete the finding on the grounds that
+    // the rep did the very thing it criticises.
+    callChatModelMock.mockResolvedValue(reply(JSON.stringify({
+      verdicts: [{ index: 1, rep_attempted: true, agent_quote: ATTEMPT_QUOTE }],
+    })));
+    const res = await verifyFindings(contentArgs());
+    expect(res.findings).toHaveLength(1);
+    expect(res.dropped).toBe(0);
+  });
+
+  it('does not spend a call on a content-graded rule with no exclusion to check', async () => {
+    // Nothing is askable: the attempt question does not apply and the rule states
+    // no exclusion. Auditing it anyway would be paying to be told nothing.
+    const res = await verifyFindings(args({ findings: [conduct] }));
+    expect(res.findings).toHaveLength(1);
+    expect(callChatModelMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('verifyFindings — the attempt question stays off commission-type rules', () => {
   // The auditor was TOLD to leave these alone and ignored it, dropping a
   // high-severity margin-disclosure finding because the rep had indeed spoken
   // on the recorded line. So the exemption is enforced in code, from the
@@ -348,33 +453,61 @@ describe('verifyFindings — commission-type rules are out of scope', () => {
   });
 });
 
-describe('verifyFindings — attribution gates every removal', () => {
+describe('verifyFindings — attribution gates the attempt verdict', () => {
   const attempted = (quote = ATTEMPT_QUOTE) => reply(JSON.stringify({
     verdicts: [{ index: 1, rep_attempted: true, agent_quote: quote }],
   }));
+
+  const transferred = { internalPartyCount: 2, soleInternalParty: false };
 
   // The Jason Spangler / Patrick's case. Customer Service explained a five-year
   // extended option on an earlier segment of the conversation; the auditor read
   // that as "the warranty was offered" and deleted the salesperson's real
   // warranty omission. On a call with two employees a transcript line cannot be
-  // attributed, so no removal is possible.
-  it('removes nothing when a second employee was on the conversation', async () => {
-    const res = await verifyFindings(args({
-      attribution: { internalPartyCount: 2, soleInternalParty: false },
-    }));
+  // attributed, so no ATTEMPT removal is possible.
+  it('discards an attempt verdict when a second employee was on the conversation', async () => {
+    callChatModelMock.mockResolvedValue(attempted());
+    const res = await verifyFindings(args({ attribution: transferred }));
     expect(res.findings).toHaveLength(1);
     expect(res.dropped).toBe(0);
-    // And it does not pay for an answer it could not have acted on.
-    expect(callChatModelMock).not.toHaveBeenCalled();
   });
 
-  it('removes nothing when the internal party count could not be established', async () => {
+  it('discards an attempt verdict when the internal party count could not be established', async () => {
     // A phone-system read failure. Unknown is not "probably one".
+    callChatModelMock.mockResolvedValue(attempted());
     const res = await verifyFindings(args({
       attribution: { internalPartyCount: null, soleInternalParty: false },
     }));
     expect(res.findings).toHaveLength(1);
-    expect(callChatModelMock).not.toHaveBeenCalled();
+    expect(res.dropped).toBe(0);
+  });
+
+  // An exclusion is a statement about the SITUATION — "the customer asked to be
+  // emailed a link" is true regardless of which employee was on the line — so
+  // unlike the attempt question it survives an unattributable transcript. Before
+  // this the whole pass was skipped on a transferred call, which meant a rule's
+  // own carve-out went unenforced precisely on the messiest conversations.
+  it('still enforces a rule exclusion on a transferred call', async () => {
+    callChatModelMock.mockResolvedValue(reply(JSON.stringify({
+      verdicts: [{
+        index: 1,
+        rep_attempted: false,
+        agent_quote: null,
+        carve_out_applies: true,
+        carve_out_quote: 'just email me the link',
+      }],
+    })));
+    const res = await verifyFindings(args({ attribution: transferred }));
+    expect(res.findings).toEqual([]);
+    expect(res.dropped).toBe(1);
+  });
+
+  it('warns the auditor off attributing AGENT turns on a transferred call', async () => {
+    callChatModelMock.mockResolvedValue(reply('{"verdicts":[]}'));
+    await verifyFindings(args({ attribution: transferred }));
+    const user = String((callChatModelMock.mock.calls[0][1] as { user: string }).user);
+    expect(user).toContain('may be a transferred colleague');
+    expect(user).toContain('does NOT limit question 2');
   });
 
   it('still removes on a solo call, so the false-positive control keeps working', async () => {
@@ -434,6 +567,126 @@ describe('verifyFindings — the account-history documentation gate', () => {
     expect(user).toContain('Offered the five-year extended warranty');
     const system = String((callChatModelMock.mock.calls[0][1] as { system: string }).system);
     expect(system).toContain('ACCOUNT HISTORY CAN DOCUMENT AN ATTEMPT');
+  });
+});
+
+/**
+ * The Sunny Street Cafe case. `buying_signal_not_closed` says in its own body
+ * "Do NOT flag when the customer asked to be emailed a link, requested a revised
+ * quote, or said they needed to discuss it with a partner", and nothing enforced
+ * that clause anywhere: the grading pass was merely asked to honour it, and the
+ * verification pass only ever asked whether the rep ATTEMPTED the close. On a
+ * call where the rep genuinely never asked for the order but the customer had
+ * plainly chosen a slower path, both questions answered "keep it" and a good call
+ * was reported as a miss.
+ */
+describe('verifyFindings — the rule\'s own exclusions', () => {
+  const excluded = (quote: string | null) => reply(JSON.stringify({
+    verdicts: [{
+      index: 1,
+      rep_attempted: false,
+      agent_quote: null,
+      carve_out_applies: true,
+      carve_out_quote: quote,
+    }],
+  }));
+
+  it('drops a finding the rule excludes, on the CUSTOMER\'S line', async () => {
+    // The exclusion is proved by what the customer said, which is why this
+    // question resolves quotes against either speaker while the attempt question
+    // does not.
+    callChatModelMock.mockResolvedValue(excluded('just email me the link'));
+    const res = await verifyFindings(args());
+    expect(res.findings).toEqual([]);
+    expect(res.dropped).toBe(1);
+  });
+
+  it('keeps the finding when the exclusion cites no quote', async () => {
+    callChatModelMock.mockResolvedValue(excluded(null));
+    const res = await verifyFindings(args());
+    expect(res.findings).toHaveLength(1);
+    expect(res.dropped).toBe(0);
+  });
+
+  it('keeps the finding when the exclusion quotes a line nobody said', async () => {
+    // The removal has to be as checkable as the attempt removal, or "the rule
+    // excludes this" becomes a way to delete anything.
+    callChatModelMock.mockResolvedValue(excluded('the customer told me to hold off entirely'));
+    const res = await verifyFindings(args());
+    expect(res.findings).toHaveLength(1);
+    expect(res.dropped).toBe(0);
+  });
+
+  it('accepts an exclusion documented in the account history', async () => {
+    callChatModelMock.mockResolvedValue(excluded('partner is out until the 24th'));
+    const res = await verifyFindings(args({
+      salesNotes: '[2026-09-16 10:00 · by Mitchell Reyes] Sending revised quote; partner is out until the 24th.',
+    }));
+    expect(res.dropped).toBe(1);
+  });
+
+  it('treats a non-boolean exclusion verdict as no exclusion', async () => {
+    callChatModelMock.mockResolvedValue(reply(JSON.stringify({
+      verdicts: [{ index: 1, carve_out_applies: 'yes', carve_out_quote: 'just email me the link' }],
+    })));
+    expect((await verifyFindings(args())).findings).toHaveLength(1);
+  });
+
+  it('counts a finding once when both questions vote to drop it', async () => {
+    callChatModelMock.mockResolvedValue(reply(JSON.stringify({
+      verdicts: [{
+        index: 1,
+        rep_attempted: true,
+        agent_quote: ATTEMPT_QUOTE,
+        carve_out_applies: true,
+        carve_out_quote: 'just email me the link',
+      }],
+    })));
+    const res = await verifyFindings(args());
+    expect(res.dropped).toBe(1);
+    expect(res.findings).toEqual([]);
+  });
+
+  it('shows the auditor the rule text verbatim, so a new clause needs no deploy', async () => {
+    // The exclusions are admin-editable content. Passing the body whole rather
+    // than pattern-matching clauses here is what makes a differently worded
+    // carve-out enforceable without a code change.
+    callChatModelMock.mockResolvedValue(reply('{"verdicts":[]}'));
+    await verifyFindings(args());
+    const user = String((callChatModelMock.mock.calls[0][1] as { user: string }).user);
+    expect(user).toContain('RULE (buying_signal_not_closed) AS WRITTEN:');
+    expect(user).toContain('Do NOT flag when the customer asked to be emailed a link');
+  });
+
+  it('tells the auditor an exclusion must come from the rule\'s own words', async () => {
+    callChatModelMock.mockResolvedValue(reply('{"verdicts":[]}'));
+    await verifyFindings(args());
+    const system = String((callChatModelMock.mock.calls[0][1] as { system: string }).system);
+    expect(system).toContain('DOES THE RULE\'S OWN EXCLUSION APPLY?');
+    expect(system).toContain('Do NOT invent an exclusion the rule does not state');
+  });
+
+  it('accepts the rep\'s own spoken line on a solo call', async () => {
+    // With one employee on the line an AGENT turn is provably theirs, so it can
+    // satisfy an exclusion phrased about what the rep said.
+    callChatModelMock.mockResolvedValue(excluded('I can take the card right now'));
+    expect((await verifyFindings(args())).dropped).toBe(1);
+  });
+
+  it('refuses the same line once a second employee was on the call', async () => {
+    callChatModelMock.mockResolvedValue(excluded('I can take the card right now'));
+    const res = await verifyFindings(args({
+      attribution: { internalPartyCount: 2, soleInternalParty: false },
+    }));
+    expect(res.findings).toHaveLength(1);
+    expect(res.dropped).toBe(0);
+  });
+
+  it('says so when a rule body was not supplied, instead of inviting a guess', async () => {
+    callChatModelMock.mockResolvedValue(reply('{"verdicts":[]}'));
+    await verifyFindings(args({ ruleBodies: new Map() }));
+    const user = String((callChatModelMock.mock.calls[0][1] as { user: string }).user);
+    expect(user).toContain('rule text unavailable');
   });
 });
 

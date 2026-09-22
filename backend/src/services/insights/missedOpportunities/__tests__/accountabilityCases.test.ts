@@ -44,6 +44,19 @@ const RULE_KEYS = new Set([...OMISSION_KEYS, 'professionalism_or_compliance']);
 const SEVERITIES = new Map([[WARRANTY_RULE, 'high']]);
 
 /**
+ * The warranty rule as an admin wrote it. Its exclusion is a DOCUMENTED PRIOR
+ * DECLINE, which is exactly what Patrick's does not have — the subject appears
+ * only on a support ticket and in Customer Service's spoken turn. Included so
+ * these cases pin that the exclusion question does not become a second route to
+ * the same wrong answer the attribution gate exists to block.
+ */
+const RULE_BODIES = new Map([
+  [WARRANTY_RULE, 'The salesperson took an equipment order without offering extended coverage. Do '
+    + 'NOT flag when the customer already declined extended coverage for THIS transaction and the '
+    + "salesperson's own lead or Contact Manager note records that decline."],
+]);
+
+/**
  * Patrick's, September 17. Two segments of one conversation: Customer Service
  * first, then Jason. The label is "Agent" on both, which is the whole problem —
  * the transcript cannot tell the auditor which employee spoke.
@@ -121,6 +134,7 @@ const verify = (over: Record<string, unknown> = {}) => verifyFindings({
   provider: 'anthropic' as const,
   conversationId: '24a2a340-c796-492a-9e59-204a164870b3',
   omissionRuleKeys: OMISSION_KEYS,
+  ruleBodies: RULE_BODIES,
   salespersonName: 'Jason Spangler',
   salesNotes: '',
   attribution: { internalPartyCount: 2, soleInternalParty: false },
@@ -149,9 +163,45 @@ describe("Patrick's / Jason #112 — CS explaining warranty is not Jason's sales
     expect(res.dropped).toBe(0);
   });
 
-  it('does not pay for a verdict it could not act on', async () => {
-    await verify();
-    expect(callChatModelMock).not.toHaveBeenCalled();
+  // The exclusion question CAN be answered on a transferred call — it is about the
+  // situation, not about who acted — so the pass now runs here where it used to be
+  // skipped outright. Which opens the same wound on the new question: Customer
+  // Service's line would satisfy a prior-offer exclusion if any speaker counted.
+  it('refuses a rule exclusion resting on the transferred segment', async () => {
+    callChatModelMock.mockResolvedValue(reply(JSON.stringify({
+      verdicts: [{
+        index: 1,
+        rep_attempted: false,
+        agent_quote: null,
+        carve_out_applies: true,
+        carve_out_quote: 'there is a five year option available',
+      }],
+    })));
+
+    const res = await verify();
+
+    expect(res.findings).toHaveLength(1);
+    expect(res.dropped).toBe(0);
+  });
+
+  // The rule's exclusion demands the decline be on the SALESPERSON'S own record.
+  // The subject is in writing on ticket 289807, and this pass is never handed the
+  // ticket block, so no quote from it can resolve.
+  it('refuses a rule exclusion resting on the support ticket', async () => {
+    callChatModelMock.mockResolvedValue(reply(JSON.stringify({
+      verdicts: [{
+        index: 1,
+        rep_attempted: false,
+        agent_quote: null,
+        carve_out_applies: true,
+        carve_out_quote: 'a five year extended option exists',
+      }],
+    })));
+
+    const res = await verify({ salesNotes: PATRICKS_SALES_NOTES });
+
+    expect(res.findings).toHaveLength(1);
+    expect(res.dropped).toBe(0);
   });
 
   it('withdraws AGENT from the warranty line without discarding the finding', () => {
