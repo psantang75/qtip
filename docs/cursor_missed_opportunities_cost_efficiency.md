@@ -1,6 +1,6 @@
 # Missed Opportunities: reduce cost while preserving review quality
 
-Prepared September 18, 2026; updated the same day with measured dev figures after the CRM-correctness fix landed. Recommendation and Cursor implementation addendum only. **No production** application, model, database, scheduler, or settings were changed. The correctness fix and its accountability policy edits have since been applied **in dev**, which is where the updated initial-run measurements in §1 come from; production remains on the earlier baseline until separately authorized.
+Prepared September 18, 2026; updated the same day with measured dev figures after the CRM-correctness fix landed; updated September 22, 2026 with the measured caching result (§2) and the decision to decline tiered model routing (§5). Recommendation and Cursor implementation addendum only. **No production** application, model, database, scheduler, or settings were changed. The correctness fix and its accountability policy edits have since been applied **in dev**, which is where the updated initial-run measurements in §1 come from; production remains on the earlier baseline until separately authorized.
 
 Read with [the salesperson/CRM correction brief](cursor_missed_opportunities_salesperson_crm_fix.md). Its accountability and correct-record requirements remain mandatory. Cost optimization must not restore CS-only sales credit, skip eligible calls, omit relevant lead/CM decisions, or conceal incomplete reviews.
 
@@ -87,8 +87,8 @@ Explicit provider prompt caching now marks the end of the stable shared system c
   total input — **no schema change**.
 - Per-call cache usage is logged (`prompt cache read=… write=…`) so real hits
   are confirmed from the provider usage fields, not the request flag.
-- Not yet done: the ~$4–5 saving must still be measured on a dev regrade
-  (cold-cache first calls, warm thereafter) before it is claimed as delivered.
+- Measured and delivered (September 22, dev) — see "Measured saving" below. The
+  earlier caveat that this remained an unvalidated projection no longer applies.
 
 For Opus 4.7, published cache-hit input pricing is $0.50/million versus $5/million ordinary input; a five-minute cache write costs $6.25/million. This reduces the price of the **cached portion**, not the entire request. Output is still charged normally. [Provider pricing](https://platform.claude.com/docs/en/about-claude/pricing).
 
@@ -124,6 +124,39 @@ upper bound on the cacheable prefix, since even the smallest call adds some
 per-call evidence on top of it).
 
 Calculation: `main_input_cost × [(1 − s) + s × (1.25 + 65 × 0.10) / 66] + main_output_cost + verification_cost`, where `s` is the stable input share (here inferred from the measured floor, not assumed). Different volumes, rule sets, KB size, complete CRM evidence, and cache misses change the result.
+
+### Measured saving (September 22, dev regrade of the September 21 business day)
+
+The projection above is now confirmed against a full dev run, read from
+`ie_missed_opportunity_run` and `ai_call_logs`:
+
+| | 9/17 dev run (pre-cache) | 9/21 dev run (cache active) |
+|---|---:|---:|
+| Calls analyzed | 63 | 79 |
+| Input / output tokens | 3,171,701 / 31,875 | 3,774,540 / 33,297 |
+| Run cost | $15.8976 | **$5.4173** |
+| Cost per analyzed call | $0.2523 | **$0.0686** |
+| Effective rate per million input tokens | $5.01 | **$1.44** |
+
+The per-million-token rate is the load-bearing comparison, because it is
+unaffected by the differing call counts: the pre-cache run paid Opus 4.7's full
+$5/million input rate, and the cached run pays $1.44/million. That is a **73%
+reduction in cost per call**, and the cached run cost less in absolute dollars
+while grading 16 more calls. Normalized to the 66-call workload used in the
+projection above, $5.4173 becomes about $4.53 — inside the $4–$5 target.
+
+Caveats to respect when citing these figures:
+
+- This is not a controlled A/B. The two runs cover different business days with
+  different call mixes, and the verification pass gained rule-exclusion
+  enforcement between them. Treat the per-call dollar figure as indicative and
+  the per-million-token rate as the reliable measure.
+- `ai_call_logs.tokens_in` remains TOTAL input, so the cache read/write split is
+  not recoverable from the database alone; the hit rate itself was not measured
+  directly from provider usage fields on this run. The run-level cost is
+  consistent with a high hit rate but does not prove a specific one.
+- Both figures are application estimates at the configured model rates, not a
+  reconciliation to the provider invoice.
 
 ## 3. Second priority: reuse valid unchanged results on reruns
 
@@ -171,6 +204,27 @@ Caching is the first recommendation because it preserves content and the existin
 
 Do not blindly run a cheap review then Opus on every positive. That pays twice on difficult cases and can miss false negatives from the first pass. If routing is introduced, validate independent routing signals, escalate ambiguity, and audit a sample of apparently clean calls. Keep Opus for cases whose correctness has not been demonstrated on the cheaper route. A model change is not necessary to achieve the first savings.
 
+### Decision (September 22): tiered "waterfall" routing not pursued
+
+A cheap-first / escalate-on-positive waterfall was considered as the next cost
+lever and **declined** on the measured evidence, not on principle:
+
+- The premise was that ~$16/day was mostly re-sent boilerplate. Caching removed
+  that at no cost to evidence or accuracy, taking the run to $5.4173.
+- Of what remains, roughly $0.83 is output tokens, which routing does not
+  address. Most of the remaining input is already billed at the cache-read
+  tenth-rate. The genuinely per-call portion is about 5k tokens of transcript
+  and CRM evidence — the material §4 and §6 forbid trimming.
+- So a waterfall would add a second call per case to pursue a small remainder
+  while introducing false-negative risk. A cheap first pass that misses a real
+  miss produces silence, which no downstream check can catch, unlike a false
+  positive that a reviewer sees and disputes.
+
+Revisit only if per-call volume grows substantially or a cheaper model is
+independently calibrated against a manually reviewed set under §7. Request
+batching (above) remains the honest next lever: a flat 50% reduction with no
+accuracy risk, paid for in up to 24 hours of latency.
+
 ## 6. Preserve the checks that are already inexpensive
 
 The observed Haiku verification cost is only about **1.5% of the latest run**. Removing it saves roughly twelve cents and weakens quality controls; improve its salesperson/lead/CM evidence instead. Similarly, lowering output limits has limited upside when input dominates, and truncated JSON can create paid failures.
@@ -190,6 +244,6 @@ Before accepting an optimization:
 5. Keep existing source/CRM repair work intact. Prepare a targeted implementation and necessary database/configuration diffs; applying DB changes, deployment, and a paid production regrade require their separately authorized scope.
 
 Suggested implementation order, weighted to the once-a-day initial run:
-**accurate usage accounting (uncached/cache-write/cache-read/output categories) [done] → same-model prompt caching of the ~42k-token shared prefix on the initial daily run [done, pending a measured dev regrade] → validated context cleanup → optional batching/model routing → safe rerun reuse (last, since reruns are occasional per §3)**. Keep the salesperson/CRM repair as a correctness prerequisite for interpreting quality results.
+**accurate usage accounting (uncached/cache-write/cache-read/output categories) [done] → same-model prompt caching of the ~42k-token shared prefix on the initial daily run [done, measured September 22: $15.90 → $5.42] → validated context cleanup → optional batching [model routing declined, see §5] → safe rerun reuse (last, since reruns are occasional per §3)**. Keep the salesperson/CRM repair as a correctness prerequisite for interpreting quality results.
 
 Main files to inspect: `backend/src/services/ai/ChatModelClient.ts`, `backend/src/services/aiCallLogger.ts`, `backend/src/services/aiCostEstimator.ts`, `backend/src/workers/MissedOpportunitiesWorker.ts`, and its `backend/src/services/insights/missedOpportunities/` prompt, evidence, settings, and persistence helpers. Extend existing modules rather than introducing a second review pipeline.
