@@ -94,7 +94,10 @@ export interface OnDemandFilterOptions {
 
 function buildFilterPayload(params: OnDemandReportFilterParams): Record<string, unknown> {
   const out: Record<string, unknown> = { period: params.period }
-  if (params.period === 'custom') {
+  // The period dropdown value is 'Custom' (see PERIOD_OPTIONS); the backend
+  // normalises case itself, so match case-insensitively or the custom dates get
+  // dropped and the request 400s with "customStart and customEnd are required".
+  if (params.period?.toLowerCase() === 'custom') {
     out.customStart = params.customStart
     out.customEnd = params.customEnd
   }
