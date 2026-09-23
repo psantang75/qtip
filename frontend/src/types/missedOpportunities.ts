@@ -135,6 +135,10 @@ export interface MissedOpportunitySettings {
   systemPersona: string
   /** BookStack page URLs whose content grounds the recommended approach; empty disables grounding. */
   kbAnchorUrls: string[]
+  /** Whether the prior business day is graded automatically. */
+  scheduleEnabled: boolean
+  /** Earliest hour (0-23, Eastern) the automatic grading may run. */
+  scheduleHour: number
 }
 
 export interface MissedOpportunityRulesResponse {

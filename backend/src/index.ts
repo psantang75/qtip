@@ -387,6 +387,16 @@ const server = app.listen(port, () => {
     } catch (err) {
       logger.error('[KB INDEX SCHEDULER] startup failed', err);
     }
+
+    // Missed Opportunities: grade the prior business day on the cadence set in
+    // the report's Settings tab. This replaced a PM2 cron so the schedule is
+    // visible and can be paused from the UI.
+    try {
+      const { startMissedOpportunitiesScheduler } = await import('./workers/missedOpportunitiesScheduler');
+      await startMissedOpportunitiesScheduler();
+    } catch (err) {
+      logger.error('[MISSED OPPS SCHEDULER] startup failed', err);
+    }
   })();
 });
 

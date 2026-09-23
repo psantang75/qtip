@@ -90,18 +90,25 @@ export async function recordRun(
  * (which already carries the company holiday calendar). Falls back to
  * yesterday when the dimension has no row for the window, so a gap in the
  * date seed degrades to "yesterday" rather than skipping the run.
+ *
+ * The DATE is formatted in SQL rather than returned as a value. The primary
+ * pool is configured `timezone: 'Z'`, so mysql2 hydrates a DATE column as UTC
+ * midnight; reading that back with local getters under the process timezone
+ * (America/New_York, pinned in config/timezone.ts) lands on the previous
+ * calendar day. That shifted every scheduled run one business day early —
+ * grading Thursday on Monday, and resolving Sunday on Tuesday, where the
+ * absence of calls silently produced an empty run. Keeping the value a string
+ * end-to-end means no timezone is ever applied to it.
  */
 export async function resolvePriorBusinessDay(now: Date = new Date()): Promise<string> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT full_date FROM ie_dim_date
+    `SELECT DATE_FORMAT(full_date, '%Y-%m-%d') AS business_day FROM ie_dim_date
       WHERE full_date < CURDATE() AND is_business_day = 1
       ORDER BY full_date DESC LIMIT 1`,
   );
-  const value = rows[0]?.full_date;
-  if (value) {
-    const d = value instanceof Date ? value : new Date(String(value));
-    if (!Number.isNaN(d.getTime())) return toIsoDate(d);
-  }
+  const value = rows[0]?.business_day;
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
   const fallback = new Date(now);
   fallback.setDate(fallback.getDate() - 1);
   return toIsoDate(fallback);

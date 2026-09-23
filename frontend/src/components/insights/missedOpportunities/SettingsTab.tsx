@@ -41,6 +41,7 @@ import NewRuleCard from './NewRuleCard'
 import PersonaCard from './PersonaCard'
 import RuleCard from './RuleCard'
 import SalesPlaysCard from './SalesPlaysCard'
+import ScheduleCard from './ScheduleCard'
 import ThresholdsCard from './ThresholdsCard'
 
 const RULES_KEY = ['insights', 'sales', 'missed-opportunities', 'rules'] as const
@@ -179,6 +180,13 @@ export default function MissedOpportunitySettingsTab({ selectedDay, run }: Setti
         </TabsList>
 
         <TabsContent value="grading" className="space-y-4">
+          <ScheduleCard
+            settings={settings}
+            canEdit={canEdit}
+            saving={settingsMut.isPending}
+            onSave={(patch) => settingsMut.mutate(patch)}
+          />
+
           <ThresholdsCard
             settings={settings}
             salesAgents={salesAgents ?? []}

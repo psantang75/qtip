@@ -213,6 +213,8 @@ const settingsSchema = z.object({
   maxCallsPerRun: z.number().int().optional(),
   systemPersona: z.string().trim().min(1).max(8000).optional(),
   kbAnchorUrls: z.array(z.string().trim().max(300)).max(20).optional(),
+  scheduleEnabled: z.boolean().optional(),
+  scheduleHour: z.number().int().min(0).max(23).optional(),
 });
 
 /** PATCH /api/insights/agent-activity/missed-opportunities/settings */
@@ -244,7 +246,7 @@ const runSchema = z.object({
  * HTTP request should block (the old synchronous version timed out the client).
  * The worker writes a RUNNING run row immediately and a terminal row when done;
  * the client polls GET /run-status to follow it to completion. The worker's own
- * lock still prevents it from colliding with the nightly cron.
+ * lock still prevents it from colliding with the daily scheduled run.
  */
 export const postRun = async (req: Request, res: Response): Promise<void> => {
   try {

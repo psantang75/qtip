@@ -19,6 +19,8 @@ import {
   DEFAULT_EXCLUDED_AGENTS,
   DEFAULT_KB_ANCHOR_URLS,
   DEFAULT_MAX_CALLS_PER_RUN,
+  DEFAULT_SCHEDULE_ENABLED,
+  DEFAULT_SCHEDULE_HOUR,
   DEFAULT_MIN_TALK_SECS,
   DEFAULT_SYSTEM_PERSONA,
   getMissedOpportunitySettings,
@@ -52,6 +54,8 @@ describe('getMissedOpportunitySettings', () => {
       maxCallsPerRun: DEFAULT_MAX_CALLS_PER_RUN,
       systemPersona: DEFAULT_SYSTEM_PERSONA,
       kbAnchorUrls: [...DEFAULT_KB_ANCHOR_URLS],
+      scheduleEnabled: DEFAULT_SCHEDULE_ENABLED,
+      scheduleHour: DEFAULT_SCHEDULE_HOUR,
     });
   });
 
@@ -62,6 +66,8 @@ describe('getMissedOpportunitySettings', () => {
       missed_opps_daily_usd_cap: '12.50',
       missed_opps_model_tier: 'reasoning',
       missed_opps_max_calls_per_run: '150',
+      missed_opps_schedule_enabled: '0',
+      missed_opps_schedule_hour: '7',
     });
     expect(await getMissedOpportunitySettings()).toEqual({
       minTalkSecs: 240,
@@ -71,7 +77,26 @@ describe('getMissedOpportunitySettings', () => {
       maxCallsPerRun: 150,
       systemPersona: DEFAULT_SYSTEM_PERSONA,
       kbAnchorUrls: [...DEFAULT_KB_ANCHOR_URLS],
+      scheduleEnabled: false,
+      scheduleHour: 7,
     });
+  });
+
+  it('keeps the schedule on unless the row is explicitly "0"', async () => {
+    // A malformed row must not be able to silently stop the daily review.
+    stubConfig({ missed_opps_schedule_enabled: 'yes please' });
+    expect((await getMissedOpportunitySettings()).scheduleEnabled).toBe(true);
+  });
+
+  it('defaults an unset or out-of-range hour rather than falling to midnight', async () => {
+    expect((await getMissedOpportunitySettings()).scheduleHour).toBe(DEFAULT_SCHEDULE_HOUR);
+    stubConfig({ missed_opps_schedule_hour: '' });
+    expect((await getMissedOpportunitySettings()).scheduleHour).toBe(DEFAULT_SCHEDULE_HOUR);
+    stubConfig({ missed_opps_schedule_hour: '24' });
+    expect((await getMissedOpportunitySettings()).scheduleHour).toBe(DEFAULT_SCHEDULE_HOUR);
+    // Midnight is a legitimate choice and must survive.
+    stubConfig({ missed_opps_schedule_hour: '0' });
+    expect((await getMissedOpportunitySettings()).scheduleHour).toBe(0);
   });
 
   it('reads stored anchor URLs, and an empty string means grounding is off', async () => {

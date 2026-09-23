@@ -16,6 +16,12 @@
  *   missed_opps_kb_anchor_urls     newline-separated BookStack page URLs whose
  *                                  content grounds the recommended-approach in
  *                                  the company's own sales playbook (Phase 1).
+ *   missed_opps_schedule_enabled   '1'/'0' — whether the daily grading runs on
+ *                                  its own. Replaces an invisible PM2 cron, so
+ *                                  the automation can be seen and switched off
+ *                                  from the report's Settings tab.
+ *   missed_opps_schedule_hour      0-23, business timezone — the earliest hour
+ *                                  the prior business day may be graded.
  *
  * Every value is validated on read AND write so a hand-edited row can never
  * feed the worker garbage (a bad cap must not mean "unlimited spend").
@@ -29,6 +35,8 @@ const MODEL_TIER_KEY = 'missed_opps_model_tier';
 const MAX_CALLS_KEY = 'missed_opps_max_calls_per_run';
 const SYSTEM_PERSONA_KEY = 'missed_opps_system_persona';
 const KB_ANCHOR_URLS_KEY = 'missed_opps_kb_anchor_urls';
+const SCHEDULE_ENABLED_KEY = 'missed_opps_schedule_enabled';
+const SCHEDULE_HOUR_KEY = 'missed_opps_schedule_hour';
 
 export type ModelTier = 'cheap' | 'reasoning';
 
@@ -94,11 +102,19 @@ export const DEFAULT_DAILY_USD_CAP = 25;
  */
 export const DEFAULT_MODEL_TIER: ModelTier = 'reasoning';
 export const DEFAULT_MAX_CALLS_PER_RUN = 400;
+/**
+ * On by default at 5am so the report is ready before the sales floor starts,
+ * matching the hour the retired `ie-missed-opportunities` PM2 cron used. The
+ * difference is that this one is visible and switchable in the UI.
+ */
+export const DEFAULT_SCHEDULE_ENABLED = true;
+export const DEFAULT_SCHEDULE_HOUR = 5;
 
 /** Guardrails on what an admin may save. */
 const MIN_TALK_SECS_RANGE = { min: 30, max: 3600 } as const;
 const DAILY_USD_CAP_RANGE = { min: 1, max: 500 } as const;
 const MAX_CALLS_RANGE = { min: 1, max: 2000 } as const;
+const SCHEDULE_HOUR_RANGE = { min: 0, max: 23 } as const;
 
 export interface MissedOpportunitySettings {
   minTalkSecs: number;
@@ -110,6 +126,10 @@ export interface MissedOpportunitySettings {
   systemPersona: string;
   /** BookStack page URLs whose content grounds the recommended approach; empty disables grounding. */
   kbAnchorUrls: string[];
+  /** Whether the prior business day is graded automatically. */
+  scheduleEnabled: boolean;
+  /** Earliest hour (0-23, business timezone) the automatic grading may run. */
+  scheduleHour: number;
 }
 
 async function readConfig(key: string): Promise<string | null> {
@@ -126,6 +146,10 @@ async function writeConfig(key: string, value: string, description: string): Pro
 }
 
 function clampedInt(raw: string | null, fallback: number, range: { min: number; max: number }): number {
+  // A missing or blank row means "use the default". Checked explicitly because
+  // Number(null) and Number('') are both 0 — harmless for ranges that start
+  // above zero, but it would silently turn an unset hour into midnight.
+  if (raw === null || raw.trim() === '') return fallback;
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   const i = Math.trunc(n);
@@ -152,7 +176,7 @@ function parseAnchorUrls(raw: string | null): string[] {
 }
 
 export async function getMissedOpportunitySettings(): Promise<MissedOpportunitySettings> {
-  const [talk, agents, cap, tier, maxCalls, persona, anchors] = await Promise.all([
+  const [talk, agents, cap, tier, maxCalls, persona, anchors, schedOn, schedHour] = await Promise.all([
     readConfig(MIN_TALK_SECS_KEY),
     readConfig(EXCLUDED_AGENTS_KEY),
     readConfig(DAILY_USD_CAP_KEY),
@@ -160,6 +184,8 @@ export async function getMissedOpportunitySettings(): Promise<MissedOpportunityS
     readConfig(MAX_CALLS_KEY),
     readConfig(SYSTEM_PERSONA_KEY),
     readConfig(KB_ANCHOR_URLS_KEY),
+    readConfig(SCHEDULE_ENABLED_KEY),
+    readConfig(SCHEDULE_HOUR_KEY),
   ]);
 
   const capNum = Number(cap);
@@ -177,6 +203,10 @@ export async function getMissedOpportunitySettings(): Promise<MissedOpportunityS
     maxCallsPerRun: clampedInt(maxCalls, DEFAULT_MAX_CALLS_PER_RUN, MAX_CALLS_RANGE),
     systemPersona: personaTrimmed || DEFAULT_SYSTEM_PERSONA,
     kbAnchorUrls: parseAnchorUrls(anchors),
+    // Anything other than an explicit '0' leaves the schedule on, so a malformed
+    // row can never silently stop the daily review.
+    scheduleEnabled: schedOn === null ? DEFAULT_SCHEDULE_ENABLED : schedOn.trim() !== '0',
+    scheduleHour: clampedInt(schedHour, DEFAULT_SCHEDULE_HOUR, SCHEDULE_HOUR_RANGE),
   };
 }
 
@@ -188,6 +218,8 @@ export interface MissedOpportunitySettingsPatch {
   maxCallsPerRun?: number;
   systemPersona?: string;
   kbAnchorUrls?: string[];
+  scheduleEnabled?: boolean;
+  scheduleHour?: number;
 }
 
 /** Persists only the supplied keys; rejects out-of-range values loudly. */
@@ -278,6 +310,26 @@ export async function saveMissedOpportunitySettings(
     await writeConfig(
       KB_ANCHOR_URLS_KEY, cleaned.join('\n'),
       'Missed Opportunities: BookStack page URLs whose content grounds recommendations.',
+    );
+  }
+
+  if (patch.scheduleEnabled !== undefined) {
+    await writeConfig(
+      SCHEDULE_ENABLED_KEY, patch.scheduleEnabled ? '1' : '0',
+      'Missed Opportunities: whether the prior business day is graded automatically.',
+    );
+  }
+
+  if (patch.scheduleHour !== undefined) {
+    const v = Math.trunc(patch.scheduleHour);
+    if (!Number.isFinite(v) || v < SCHEDULE_HOUR_RANGE.min || v > SCHEDULE_HOUR_RANGE.max) {
+      throw new Error(
+        `Scheduled hour must be between ${SCHEDULE_HOUR_RANGE.min} and ${SCHEDULE_HOUR_RANGE.max}`,
+      );
+    }
+    await writeConfig(
+      SCHEDULE_HOUR_KEY, String(v),
+      'Missed Opportunities: earliest hour (business timezone) the automatic grading runs.',
     );
   }
 
