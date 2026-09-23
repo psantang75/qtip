@@ -16,6 +16,7 @@ interface Dispute {
   resolution_notes?: string | null
   attachment_url?:   string | null
   resolved_by?:      number | null
+  resolved_by_name?: string | null
   created_at?:       string
   resolved_at?:      string
   reopen_count?:     number
@@ -131,6 +132,13 @@ export function DisputePanel({
                 dispute.resolution_notes && (
                   <div className="border-t border-slate-100 pt-3">
                     <SectionLabel>Resolution Notes</SectionLabel>
+                    {(dispute.resolved_by_name || dispute.resolved_at) && (
+                      <p className="text-[11px] text-slate-400 mb-1">
+                        {dispute.resolved_by_name && <>Resolved by {dispute.resolved_by_name}</>}
+                        {dispute.resolved_by_name && dispute.resolved_at && ' · '}
+                        {dispute.resolved_at && fmtDate(dispute.resolved_at)}
+                      </p>
+                    )}
                     <div className="bg-slate-50 rounded-lg p-3">
                       <NoteBlock text={dispute.resolution_notes} placeholder="" />
                     </div>

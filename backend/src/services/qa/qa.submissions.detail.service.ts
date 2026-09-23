@@ -306,9 +306,11 @@ async function loadDispute(submissionId: number): Promise<any[]> {
     SELECT
       d.id, d.reason, d.status, d.resolution_notes, d.attachment_url,
       d.resolved_by, d.created_at, d.resolved_at, d.reopen_count,
+      u.username AS resolved_by_name,
       dsh_adj.score  AS new_score,
       dsh_prev.score AS previous_score
     FROM disputes d
+    LEFT JOIN users u ON d.resolved_by = u.id
     LEFT JOIN dispute_score_history dsh_adj  ON dsh_adj.dispute_id  = d.id AND dsh_adj.score_type  = 'ADJUSTED'
     LEFT JOIN dispute_score_history dsh_prev ON dsh_prev.dispute_id = d.id AND dsh_prev.score_type = 'PREVIOUS'
     WHERE d.submission_id = ${submissionId}
