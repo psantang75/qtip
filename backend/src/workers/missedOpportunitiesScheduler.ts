@@ -3,7 +3,8 @@
  *
  * Replaces the `ie-missed-opportunities` PM2 cron, which fired invisibly: there
  * was no way to see the schedule, pause it, or tell a skipped day from a failed
- * one without shelling into the box. Cadence now lives in `ie_config`
+ * one without shelling into the box, and PM2 launched it on every container
+ * start as well as on its cron. Cadence now lives in `ie_config`
  * (`missed_opps_schedule_*`, editable on the report's Settings tab) and every
  * decision made here is logged.
  *
@@ -16,9 +17,6 @@
  * A failed day is deliberately NOT retried automatically. The failure is on the
  * report and in the ingestion log, and an admin re-runs it from Settings; that
  * keeps a persistently failing day from re-spending the LLM budget every tick.
- *
- * Same self-arming setTimeout shape as KbIndexScheduler and DigestScheduler so
- * operators have one mental model for background work.
  */
 
 import logger from '../config/logger';
@@ -26,6 +24,7 @@ import { getRunStatus } from '../services/insights/missedOpportunities/reportSup
 import { getMissedOpportunitySettings } from '../services/insights/missedOpportunities/settings';
 import { resolvePriorBusinessDay } from '../services/insights/missedOpportunities/workerSupport';
 import { MissedOpportunitiesWorker } from './MissedOpportunitiesWorker';
+import { createScheduleLoop } from './scheduleLoop';
 
 const SERVICE = '[MISSED OPPS SCHEDULER]';
 
@@ -35,73 +34,12 @@ const SERVICE = '[MISSED OPPS SCHEDULER]';
  */
 const TICK_MS = 15 * 60_000;
 
-/** Let the HTTP server become healthy before a multi-minute grading run can start. */
+/** Let the HTTP server become healthy before a multi-minute grading run starts. */
 const BOOT_DELAY_MS = 90_000;
-
-let timeoutHandle: NodeJS.Timeout | null = null;
-let running = false;
 
 const hh = (hour: number): string => `${String(hour).padStart(2, '0')}:00`;
 
-/**
- * Start the scheduler. Idempotent — subsequent calls are no-ops. Settings are
- * re-read on every tick, so a Settings-tab edit takes effect within one cycle
- * without a restart.
- */
-export async function startMissedOpportunitiesScheduler(): Promise<void> {
-  if (timeoutHandle) return;
-  // Armed before the summary is read: that read is a convenience for the boot
-  // log, and a transient DB error on it must not leave the schedule unarmed
-  // until the next restart.
-  armNextTick(BOOT_DELAY_MS);
-  try {
-    const { scheduleEnabled, scheduleHour } = await getMissedOpportunitySettings();
-    logger.info(
-      `${SERVICE} started — ${
-        scheduleEnabled ? `prior business day graded after ${hh(scheduleHour)}` : 'schedule disabled'
-      }, checking every ${TICK_MS / 60_000} min`,
-    );
-  } catch (err) {
-    logger.error(
-      `${SERVICE} started, but reading the schedule failed: ${(err as Error)?.message ?? String(err)}`,
-    );
-  }
-}
-
-/** Stop the scheduler. Used by tests and graceful shutdown. */
-export function stopMissedOpportunitiesScheduler(): void {
-  if (timeoutHandle) clearTimeout(timeoutHandle);
-  timeoutHandle = null;
-}
-
-/**
- * The `.catch()` is the crash guard: the tick runs as a floating promise, and an
- * unhandled rejection calls `process.exit(1)` in dev. Anything escaping `tick`
- * is logged here instead of taking the API process down.
- */
-function armNextTick(delayMs: number): void {
-  timeoutHandle = setTimeout(() => {
-    void tick().catch((err) => {
-      logger.error(`${SERVICE} tick chain error: ${(err as Error)?.message ?? String(err)}`);
-    });
-  }, delayMs);
-}
-
-async function tick(): Promise<void> {
-  try {
-    await gradeIfDue();
-  } catch (err) {
-    // Re-armed in `finally` regardless: one bad tick (a DB blip, an LLM outage)
-    // must not end the schedule for the life of the process.
-    logger.error(`${SERVICE} tick failed: ${(err as Error)?.message ?? String(err)}`);
-  } finally {
-    armNextTick(TICK_MS);
-  }
-}
-
 async function gradeIfDue(): Promise<void> {
-  if (running) return;
-
   const { scheduleEnabled, scheduleHour } = await getMissedOpportunitySettings();
   if (!scheduleEnabled) {
     logger.debug(`${SERVICE} skipped — schedule disabled in settings`);
@@ -124,14 +62,25 @@ async function gradeIfDue(): Promise<void> {
     return;
   }
 
-  running = true;
   logger.info(`${SERVICE} grading ${runDate} (due after ${hh(scheduleHour)}, now ${hh(hour)})`);
-  try {
-    // The date is passed explicitly so the run row and this log agree on the day
-    // even if the tick straddles midnight.
-    await new MissedOpportunitiesWorker(runDate).run();
-    logger.info(`${SERVICE} finished ${runDate}`);
-  } finally {
-    running = false;
-  }
+  // The date is passed explicitly so the run row and this log agree on the day
+  // even if the tick straddles midnight.
+  await new MissedOpportunitiesWorker(runDate).run();
+  logger.info(`${SERVICE} finished ${runDate}`);
 }
+
+const loop = createScheduleLoop({
+  label: SERVICE,
+  tickMs: TICK_MS,
+  bootDelayMs: BOOT_DELAY_MS,
+  describe: async () => {
+    const { scheduleEnabled, scheduleHour } = await getMissedOpportunitySettings();
+    return `started — ${
+      scheduleEnabled ? `prior business day graded after ${hh(scheduleHour)}` : 'schedule disabled'
+    }, checking every ${TICK_MS / 60_000} min`;
+  },
+  tick: gradeIfDue,
+});
+
+export const startMissedOpportunitiesScheduler = loop.start;
+export const stopMissedOpportunitiesScheduler = loop.stop;

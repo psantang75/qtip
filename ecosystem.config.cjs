@@ -13,18 +13,23 @@
  *     :15 / :45   ie-rollup               ← KPI rollups (drives dashboards)
  *     :20 / :50   ie-source-dispatch      ← DB-driven source-report ingestion
  *     :25 / :55   ie-monitor              ← dataset health eval + alerts
- *     06:00 1st (monthly) ie-sales-plays-miner ← mine WON/LOST calls into plays
  *     00:00 UTC (monthly) ie-partition-manager ← partition housekeeping
  *
  * ie-source-dispatch is a fixed 30-min floor only; which reports actually run
  * (and how often) is data in ie_source_report.frequency_minutes — not cron.
  *
- * The Missed Opportunities LLM review is deliberately NOT here. A cron gave it
- * no on/off switch and no visible schedule, so it moved into the API process
- * under `ie_config.missed_opps_schedule_*`, editable on the report's Settings
- * tab. See backend/src/workers/missedOpportunitiesScheduler.ts. The one-shot
- * entrypoint remains for a manual backfill:
+ * NOTHING THAT SPENDS MONEY ON AI BELONGS IN THIS FILE. PM2 launches every app
+ * listed here when the daemon starts, so a one-shot `cron_restart` app also runs
+ * on every container start — i.e. on every deploy. For the LLM jobs that meant
+ * unscheduled spend with no on/off switch and no visible schedule. Both moved
+ * into the API process, driven by `ie_config` and editable in the admin UI:
+ *     Missed Opportunities review → backend/src/workers/missedOpportunitiesScheduler.ts
+ *                                   (`missed_opps_schedule_*`, report Settings tab)
+ *     Sales plays miner           → backend/src/workers/salesPlaysScheduler.ts
+ *                                   (`missed_opps_plays_schedule_*`, Sales Plays card)
+ * Their one-shot entrypoints remain for manual backfills, e.g.
  *     node backend/dist/workers/run-missed-opportunities.js 2026-09-04
+ * Spend for every AI job is on Admin → Insights → AI Spend.
  *
  * 5-minute gaps between the three dimension syncs are intentional: dept
  * must finish before emp (dept ids feed employee rows), and the rollup
@@ -119,20 +124,6 @@ module.exports = {
       name: 'ie-monitor',
       script: './backend/dist/workers/run-monitor.js',
       cron_restart: '25,55 * * * *',
-      watch: false,
-      autorestart: false,
-      env: { NODE_ENV: 'production' }
-    },
-    {
-      // Sales Plays miner (Phase 2 learning loop): once a month, mine the active
-      // sales team's WON/LOST calls since the last mined day into 'proposed'
-      // plays for admin approval. Monthly (1st, 06:00) because it is incremental
-      // and budget-capped (missed_opps_plays_monthly_usd_cap) — running it more
-      // often just re-scans the same calls. The whole loop is also gated by
-      // missed_opps_plays_enabled, so the worker exits immediately when off.
-      name: 'ie-sales-plays-miner',
-      script: './backend/dist/workers/run-sales-plays-miner.js',
-      cron_restart: '0 6 1 * *',
       watch: false,
       autorestart: false,
       env: { NODE_ENV: 'production' }

@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Users, Building2, List, BarChart3, FileText, Activity, CalendarDays, Clock, Mail, Settings, Upload, HeartPulse, Lightbulb } from 'lucide-react'
+import { Users, Building2, List, BarChart3, FileText, Activity, CalendarDays, Clock, Mail, Settings, Upload, HeartPulse, Lightbulb, DollarSign } from 'lucide-react'
 import TopBar from './TopBar'
 import { cn } from '@/lib/utils'
 
@@ -22,6 +22,7 @@ const INSIGHTS_NAV = [
   { label: 'Report Schedules', path: '/app/admin/insights/source-reports', icon: Clock },
   { label: 'Missed Opportunities', path: '/app/admin/insights/missed-opportunities', icon: Lightbulb },
   { label: 'Ingestion Log',     path: '/app/admin/insights/ingestion',  icon: Activity },
+  { label: 'AI Spend',          path: '/app/admin/insights/ai-spend',   icon: DollarSign },
   { label: 'Monitoring',        path: '/app/admin/insights/monitoring', icon: HeartPulse },
   { label: 'Manual Upload',     path: '/app/admin/insights/import',     icon: Upload },
 ]

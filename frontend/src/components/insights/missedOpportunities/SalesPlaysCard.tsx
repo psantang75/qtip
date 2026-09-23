@@ -43,12 +43,16 @@ export default function SalesPlaysCard({ salesAgents }: SalesPlaysCardProps) {
   const [roster, setRoster] = useState<string[]>([])
   const [seedDays, setSeedDays] = useState('')
   const [cap, setCap] = useState('')
+  const [schedDay, setSchedDay] = useState('')
+  const [schedHour, setSchedHour] = useState('')
 
   useEffect(() => {
     if (!data) return
     setRoster(data.settings.roster)
     setSeedDays(String(data.settings.seedDays))
     setCap(String(data.settings.monthlyUsdCap))
+    setSchedDay(String(data.settings.scheduleDay))
+    setSchedHour(String(data.settings.scheduleHour))
   }, [data])
 
   const invalidate = () => qc.invalidateQueries({ queryKey: PLAYS_KEY })
@@ -87,7 +91,9 @@ export default function SalesPlaysCard({ salesAgents }: SalesPlaysCardProps) {
   const dirty =
     !sameList(roster, settings.roster) ||
     seedDays !== String(settings.seedDays) ||
-    cap !== String(settings.monthlyUsdCap)
+    cap !== String(settings.monthlyUsdCap) ||
+    schedDay !== String(settings.scheduleDay) ||
+    schedHour !== String(settings.scheduleHour)
 
   const rosterOptions = [...new Set([...salesAgents, ...settings.roster])]
     .sort((a, b) => a.localeCompare(b))
@@ -169,6 +175,36 @@ export default function SalesPlaysCard({ salesAgents }: SalesPlaysCardProps) {
               />
             </div>
 
+            <div>
+              <Label className="text-[12px] font-medium text-slate-800">Mine on day of month</Label>
+              <p className="text-[11px] text-slate-500">
+                1–28, so the schedule still fires in February. It mines once per month; a restart in
+                between cannot trigger a second one.
+              </p>
+              <Input
+                type="number" min={1} max={28}
+                value={schedDay}
+                onChange={(e) => setSchedDay(e.target.value)}
+                disabled={!canEdit}
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label className="text-[12px] font-medium text-slate-800">Mine after hour</Label>
+              <p className="text-[11px] text-slate-500">
+                Earliest hour on that day, Eastern. Spend for every mine is on Admin → Insights → AI
+                Spend.
+              </p>
+              <Input
+                type="number" min={0} max={23}
+                value={schedHour}
+                onChange={(e) => setSchedHour(e.target.value)}
+                disabled={!canEdit}
+                className="mt-1"
+              />
+            </div>
+
             <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
               <Button
                 size="sm"
@@ -177,6 +213,8 @@ export default function SalesPlaysCard({ salesAgents }: SalesPlaysCardProps) {
                   roster,
                   seedDays: Number(seedDays),
                   monthlyUsdCap: Number(cap),
+                  scheduleDay: Number(schedDay),
+                  scheduleHour: Number(schedHour),
                 })}
                 className="bg-primary text-white hover:bg-primary/90"
               >

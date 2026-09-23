@@ -48,6 +48,8 @@ const playsSettingsSchema = z.object({
   roster: z.array(z.string().trim().max(160)).max(25).optional(),
   seedDays: z.number().int().optional(),
   monthlyUsdCap: z.number().optional(),
+  scheduleDay: z.number().int().min(1).max(28).optional(),
+  scheduleHour: z.number().int().min(0).max(23).optional(),
 });
 
 /** PATCH /api/insights/agent-activity/missed-opportunities/plays/settings */

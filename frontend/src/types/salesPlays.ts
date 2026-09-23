@@ -46,6 +46,10 @@ export interface SalesPlaysSettings {
   seedDays: number
   /** Hard USD ceiling for one monthly mine. */
   monthlyUsdCap: number
+  /** Day of month (1-28) the mine may run. */
+  scheduleDay: number
+  /** Earliest hour (0-23, Eastern) on that day. */
+  scheduleHour: number
 }
 
 export interface SalesPlaysResponse {

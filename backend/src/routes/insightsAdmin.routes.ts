@@ -8,6 +8,7 @@ import {
   listOverrides, createOverride, deleteOverride,
 } from '../controllers/insightsAdminPage.controller';
 import { getIngestionLog } from '../controllers/insightsAdminIngestion.controller';
+import { getAiSpendRollup } from '../controllers/insightsAdminAiSpend.controller';
 import {
   listEmailFeeds, createEmailFeed, updateEmailFeed, deleteEmailFeed,
 } from '../controllers/insightsAdminEmailFeed.controller';
@@ -46,6 +47,7 @@ router.post('/pages/:id/overrides', authenticate as unknown as RequestHandler, a
 router.delete('/pages/:id/overrides/:overrideId', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, deleteOverride as unknown as RequestHandler);
 
 router.get('/ingestion-log', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, getIngestionLog as unknown as RequestHandler);
+router.get('/ai-spend', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, getAiSpendRollup as unknown as RequestHandler);
 router.get('/email-feeds', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, listEmailFeeds as unknown as RequestHandler);
 router.post('/email-feeds', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, createEmailFeed as unknown as RequestHandler);
 router.put('/email-feeds/:id', authenticate as unknown as RequestHandler, authorizeAdmin as unknown as RequestHandler, updateEmailFeed as unknown as RequestHandler);

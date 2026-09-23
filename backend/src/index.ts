@@ -397,6 +397,16 @@ const server = app.listen(port, () => {
     } catch (err) {
       logger.error('[MISSED OPPS SCHEDULER] startup failed', err);
     }
+
+    // Sales plays miner: monthly, on the cadence set on the Sales Plays card.
+    // Also moved off PM2 — as a one-shot cron app it fired on every container
+    // start, which meant an unscheduled LLM spend on every deploy.
+    try {
+      const { startSalesPlaysScheduler } = await import('./workers/salesPlaysScheduler');
+      await startSalesPlaysScheduler();
+    } catch (err) {
+      logger.error('[SALES PLAYS SCHEDULER] startup failed', err);
+    }
   })();
 });
 

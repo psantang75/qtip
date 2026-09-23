@@ -19,6 +19,8 @@ import {
   DEFAULT_PLAYS_ENABLED,
   DEFAULT_PLAYS_MONTHLY_USD_CAP,
   DEFAULT_PLAYS_ROSTER,
+  DEFAULT_PLAYS_SCHEDULE_DAY,
+  DEFAULT_PLAYS_SCHEDULE_HOUR,
   DEFAULT_PLAYS_SEED_DAYS,
   getSalesPlaysSettings,
   saveSalesPlaysSettings,
@@ -52,6 +54,8 @@ describe('getSalesPlaysSettings', () => {
       lastMined: null,
       seedDays: DEFAULT_PLAYS_SEED_DAYS,
       monthlyUsdCap: DEFAULT_PLAYS_MONTHLY_USD_CAP,
+      scheduleDay: DEFAULT_PLAYS_SCHEDULE_DAY,
+      scheduleHour: DEFAULT_PLAYS_SCHEDULE_HOUR,
     });
   });
 
@@ -62,6 +66,8 @@ describe('getSalesPlaysSettings', () => {
       missed_opps_plays_last_mined: '2026-08-31',
       missed_opps_plays_seed_days: '30',
       missed_opps_plays_monthly_usd_cap: '10.00',
+      missed_opps_plays_schedule_day: '3',
+      missed_opps_plays_schedule_hour: '7',
     });
     expect(await getSalesPlaysSettings()).toEqual({
       enabled: false,
@@ -69,6 +75,8 @@ describe('getSalesPlaysSettings', () => {
       lastMined: '2026-08-31',
       seedDays: 30,
       monthlyUsdCap: 10,
+      scheduleDay: 3,
+      scheduleHour: 7,
     });
   });
 
@@ -82,6 +90,24 @@ describe('getSalesPlaysSettings', () => {
   it('falls back to the default seed window when out of range', async () => {
     stubConfig({ missed_opps_plays_seed_days: '0' });
     expect((await getSalesPlaysSettings()).seedDays).toBe(DEFAULT_PLAYS_SEED_DAYS);
+  });
+
+  it('keeps an unset schedule hour on the default instead of midnight', async () => {
+    // Number('') and Number(null) are both 0, and 0 is a legal hour — so a blank
+    // row must be rejected before the range check, or the mine silently moves.
+    stubConfig({ missed_opps_plays_schedule_hour: '   ' });
+    expect((await getSalesPlaysSettings()).scheduleHour).toBe(DEFAULT_PLAYS_SCHEDULE_HOUR);
+  });
+
+  it('accepts an explicit midnight hour', async () => {
+    stubConfig({ missed_opps_plays_schedule_hour: '0' });
+    expect((await getSalesPlaysSettings()).scheduleHour).toBe(0);
+  });
+
+  it('falls back to the default day when out of range', async () => {
+    // 29-31 are rejected so the schedule still fires in February.
+    stubConfig({ missed_opps_plays_schedule_day: '31' });
+    expect((await getSalesPlaysSettings()).scheduleDay).toBe(DEFAULT_PLAYS_SCHEDULE_DAY);
   });
 
   it('ignores a malformed last-mined date rather than resuming from garbage', async () => {
@@ -112,6 +138,17 @@ describe('saveSalesPlaysSettings', () => {
   it('rejects an out-of-range seed window', async () => {
     await expect(saveSalesPlaysSettings({ seedDays: 5 }))
       .rejects.toThrow(/Seed lookback/);
+  });
+
+  it('rejects a schedule day that would skip February', async () => {
+    await expect(saveSalesPlaysSettings({ scheduleDay: 30 })).rejects.toThrow(/day/i);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('stores a valid schedule day and hour', async () => {
+    await saveSalesPlaysSettings({ scheduleDay: 2, scheduleHour: 0 });
+    expect(savedValue('missed_opps_plays_schedule_day')).toBe('2');
+    expect(savedValue('missed_opps_plays_schedule_hour')).toBe('0');
   });
 
   it('setLastMined rejects a malformed date', async () => {
