@@ -28,11 +28,20 @@ interface AiSpendRow {
   estimatedUsd: number
 }
 
+interface AiSpendTotal {
+  purpose: string
+  calls: number
+  estimatedUsd: number
+  /** Exact charge, for the jobs that record one. */
+  recordedUsd: number | null
+}
+
 interface AiSpendRollup {
   windowDays: number
   totalEstimatedUsd: number
+  totalRecordedUsd: number | null
   totalCalls: number
-  byPurpose: { purpose: string; calls: number; estimatedUsd: number }[]
+  byPurpose: AiSpendTotal[]
   rows: AiSpendRow[]
 }
 
@@ -101,10 +110,11 @@ export default function InsightsAiSpendPage() {
       <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-surface px-4 py-3">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
         <p className="text-[12.5px] text-slate-600">
-          These are upper bounds. The log records a call’s total input tokens but not how many of
-          them were prompt-cache reads, which bill at a tenth of the input rate — so a cached job
-          shows higher here than it actually costs. The Missed Opportunities report records its exact
-          per-run cost on its own page.
+          Estimates are upper bounds. The call log records a call’s total input tokens but not how
+          many were prompt-cache reads, which bill at a tenth of the input rate — so a heavily
+          cached job reads several times higher than it really costs. Where a job banks its own
+          exact charge, the <span className="font-medium">Recorded</span> figure is the one to
+          trust.
         </p>
       </div>
 
@@ -118,7 +128,10 @@ export default function InsightsAiSpendPage() {
                 Estimated spend
               </p>
               <p className="mt-1 text-2xl font-bold text-slate-900">{usd(data.totalEstimatedUsd)}</p>
-              <p className="text-[11px] text-slate-400">over the last {data.windowDays} days</p>
+              <p className="text-[11px] text-slate-400">
+                ceiling over the last {data.windowDays} days
+                {data.totalRecordedUsd !== null && ` · ${usd(data.totalRecordedUsd)} recorded exactly`}
+              </p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
@@ -135,7 +148,9 @@ export default function InsightsAiSpendPage() {
                 {topJob ? purposeLabel(topJob.purpose) : '—'}
               </p>
               <p className="text-[11px] text-slate-400">
-                {topJob ? `${usd(topJob.estimatedUsd)} over ${num(topJob.calls)} call(s)` : 'No calls in this window'}
+                {topJob
+                  ? `${usd(topJob.recordedUsd ?? topJob.estimatedUsd)} over ${num(topJob.calls)} call(s)`
+                  : 'No calls in this window'}
               </p>
             </div>
           </div>
@@ -149,13 +164,14 @@ export default function InsightsAiSpendPage() {
                 <TableRow>
                   <TableHead>Job</TableHead>
                   <TableHead className="text-right">Calls</TableHead>
-                  <TableHead className="text-right">Estimated cost</TableHead>
+                  <TableHead className="text-right">Estimated ceiling</TableHead>
+                  <TableHead className="text-right">Recorded</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.byPurpose.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-sm text-slate-400">
+                    <TableCell colSpan={4} className="text-center text-sm text-slate-400">
                       No AI calls in this window.
                     </TableCell>
                   </TableRow>
@@ -163,7 +179,12 @@ export default function InsightsAiSpendPage() {
                   <TableRow key={p.purpose}>
                     <TableCell className="font-medium text-slate-800">{purposeLabel(p.purpose)}</TableCell>
                     <TableCell className="text-right">{num(p.calls)}</TableCell>
-                    <TableCell className="text-right font-medium">{usd(p.estimatedUsd)}</TableCell>
+                    <TableCell className="text-right text-slate-500">{usd(p.estimatedUsd)}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {p.recordedUsd === null
+                        ? <span className="text-slate-400">—</span>
+                        : usd(p.recordedUsd)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -12,9 +12,13 @@
  * uses to price the call is not persisted (see aiCallLogger). Recomputing from
  * the stored total therefore bills every cached token at the full input rate,
  * where the real charge for a cache read is a tenth of that. Treat the numbers
- * as an upper bound. Missed Opportunities keeps its exact per-run cost in
- * `ie_missed_opportunity_run.usd_cost`, which is the figure to trust for that
- * job. Making this rollup exact needs cache-token columns on `ai_call_logs`.
+ * as an upper bound — on prod the Missed Opportunities estimate reads roughly
+ * 3-4x its real charge, because its prompt is heavily cached.
+ *
+ * Where a job banks its own exact cost we surface that too, so the biggest line
+ * isn't a false alarm: `ie_missed_opportunity_run.usd_cost` is the figure to
+ * trust for that job. Making the estimate itself exact for every job would need
+ * cache-token columns on `ai_call_logs`.
  *
  * Rates come from aiCostEstimator, the one pricing table in the codebase, so
  * this view can never drift from what the callers themselves charge.
@@ -40,11 +44,20 @@ export interface AiSpendTotal {
   purpose: string;
   calls: number;
   estimatedUsd: number;
+  /**
+   * The exact charge, where the job records one of its own. Only Missed
+   * Opportunities does today, and its estimate reads roughly 3-4x high because
+   * its prompt is heavily cached — so showing the estimate alone would raise a
+   * false alarm on the biggest line.
+   */
+  recordedUsd: number | null;
 }
 
 export interface AiSpendRollup {
   windowDays: number;
   totalEstimatedUsd: number;
+  /** Sum of the exact figures, for the share of spend that records one. */
+  totalRecordedUsd: number | null;
   totalCalls: number;
   byPurpose: AiSpendTotal[];
   rows: AiSpendRow[];
@@ -126,25 +139,61 @@ export async function getAiSpend(windowDays: number): Promise<AiSpendRollup> {
 
   rows.sort((a, b) => (a.day === b.day ? a.purpose.localeCompare(b.purpose) : b.day.localeCompare(a.day)));
 
-  const totals = new Map<string, AiSpendTotal>();
+  // The exact charge is attached after the loop, so the accumulator drops it.
+  const totals = new Map<string, Omit<AiSpendTotal, 'recordedUsd'>>();
   for (const row of rows) {
     const t = totals.get(row.purpose) ?? { purpose: row.purpose, calls: 0, estimatedUsd: 0 };
     t.calls += row.calls;
     t.estimatedUsd += row.estimatedUsd;
     totals.set(row.purpose, t);
   }
+  const recorded = await recordedUsdByPurpose(days);
   const byPurpose = [...totals.values()]
-    .map((t) => ({ ...t, estimatedUsd: round4(t.estimatedUsd) }))
+    .map((t) => ({
+      ...t,
+      estimatedUsd: round4(t.estimatedUsd),
+      recordedUsd: recorded.get(t.purpose) ?? null,
+    }))
     .sort((a, b) => b.estimatedUsd - a.estimatedUsd);
+
+  const recordedTotals = byPurpose.filter((p) => p.recordedUsd !== null);
 
   return {
     windowDays: days,
     totalEstimatedUsd: round4(rows.reduce((sum, r) => sum + r.estimatedUsd, 0)),
+    totalRecordedUsd: recordedTotals.length
+      ? round4(recordedTotals.reduce((sum, p) => sum + (p.recordedUsd ?? 0), 0))
+      : null,
     totalCalls: rows.reduce((sum, r) => sum + r.calls, 0),
     byPurpose,
     rows,
     estimatesReadHigh: true,
   };
+}
+
+/**
+ * Exact spend for the jobs that bank their own cost, keyed by the same `purpose`
+ * the call log uses. Summed on `started_at` (when the money was actually spent),
+ * not `run_date` — a run grades the prior day, so the two differ.
+ *
+ * A failed lookup is not fatal: the estimate is still worth showing, so this
+ * returns an empty map rather than taking the page down with it.
+ */
+async function recordedUsdByPurpose(days: number): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  try {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT COALESCE(SUM(usd_cost), 0) AS usd
+         FROM ie_missed_opportunity_run
+        WHERE started_at >= NOW() - INTERVAL ? DAY`,
+      [days],
+    );
+    const usd = Number(rows[0]?.usd);
+    if (Number.isFinite(usd)) out.set('insights.missed_opportunities', round4(usd));
+  } catch {
+    return out;
+  }
+  return out;
 }
 
 /** 'YYYY-MM-DDTHH' in UTC -> the business-timezone calendar date it belongs to. */
