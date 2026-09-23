@@ -43,6 +43,12 @@ export type TicketTaskKind = 'TICKET' | 'TASK';
 export interface TaskHeader {
   task_id: number;
   task_type: string | null;
+  /** tblTaskType.TaskTypeID — selects the Jobs-vs-TaskManager URL base. */
+  task_type_id: number | null;
+  /** tblTaskType.NewScreen — the layout segment used to build the CRM deep link. */
+  new_screen: string | null;
+  /** tblJobs.JobID — only present/needed for job-typed tasks (14/42/46). */
+  job_id: number | null;
   task_status: string | null;
   assigned_to_id: number | null;
   /** Best-effort display name; null if no resolution available. */
@@ -81,6 +87,9 @@ class CRMService {
     try {
       const rows = await executeQuery<{
         TaskID: number;
+        TaskTypeID: number | null;
+        NewScreen: string | null;
+        JobID: number | null;
         TaskType: string | null;
         TaskStatus: string | null;
         AssignedTo: number | null;
@@ -93,6 +102,9 @@ class CRMService {
         `
           SELECT
             t.TaskID,
+            t.TaskTypeID,
+            tt.NewScreen   AS NewScreen,
+            (SELECT jj.JobID FROM tblJobs jj WHERE jj.TaskID = t.TaskID LIMIT 1) AS JobID,
             tt.Title       AS TaskType,
             ts.Title       AS TaskStatus,
             t.AssignedTo,
@@ -118,6 +130,9 @@ class CRMService {
       return {
         task_id: r.TaskID,
         task_type: r.TaskType,
+        task_type_id: r.TaskTypeID == null ? null : Number(r.TaskTypeID),
+        new_screen: r.NewScreen,
+        job_id: r.JobID == null ? null : Number(r.JobID),
         task_status: r.TaskStatus,
         assigned_to_id: r.AssignedTo,
         assigned_to_name: r.AssignedToName,

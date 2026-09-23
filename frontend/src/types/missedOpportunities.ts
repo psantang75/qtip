@@ -19,6 +19,8 @@ export interface MissedOpportunityFinding {
   /** CRM record the model cited from the rep's same-day notes; null when none. */
   crmRefKind: 'TASK' | 'TICKET' | null
   crmRefId: number | null
+  /** Server-built CRM deep link (task layout resolved from its type); null when none. */
+  crmRefUrl: string | null
   ruleKey: string
   ruleName: string | null
   category: string | null

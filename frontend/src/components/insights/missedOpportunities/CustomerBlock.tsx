@@ -5,7 +5,6 @@
  */
 import { ExternalLink, Headphones, Phone, Ticket } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { buildCrmUrl } from '@/utils/crmLinks'
 import { cn } from '@/lib/utils'
 import FindingCard from './FindingCard'
 import { formatCallStamp, formatDirection, formatTalkMins, SEVERITY_CHIP } from './findingsFormat'
@@ -105,18 +104,29 @@ function InteractionChrome({ findings, onOpenCall }: {
       )}
       {crmLinks.length > 0
         ? crmLinks.map((crm) => (
-            <a
-              key={`${crm.kind}-${crm.id}`}
-              href={buildCrmUrl(crm.kind, crm.id)}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`Open ${crm.kind === 'TASK' ? 'task' : 'ticket'} ${crm.id} in the CRM`}
-              className="inline-flex items-center gap-1 font-medium text-primary hover:text-primary/80 hover:underline"
-            >
-              <Ticket className="h-3 w-3 shrink-0" />
-              {crm.kind === 'TASK' ? 'Task' : 'Ticket'} {crm.id}
-              <ExternalLink className="h-3 w-3 shrink-0" />
-            </a>
+            crm.url ? (
+              <a
+                key={`${crm.kind}-${crm.id}`}
+                href={crm.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open ${crm.kind === 'TASK' ? 'task' : 'ticket'} ${crm.id} in the CRM`}
+                className="inline-flex items-center gap-1 font-medium text-primary hover:text-primary/80 hover:underline"
+              >
+                <Ticket className="h-3 w-3 shrink-0" />
+                {crm.kind === 'TASK' ? 'Task' : 'Ticket'} {crm.id}
+                <ExternalLink className="h-3 w-3 shrink-0" />
+              </a>
+            ) : (
+              <span
+                key={`${crm.kind}-${crm.id}`}
+                className="inline-flex items-center gap-1 font-medium text-slate-500"
+                title={`${crm.kind === 'TASK' ? 'Task' : 'Ticket'} ${crm.id} — CRM link unavailable`}
+              >
+                <Ticket className="h-3 w-3 shrink-0" />
+                {crm.kind === 'TASK' ? 'Task' : 'Ticket'} {crm.id}
+              </span>
+            )
           ))
         : (
           <span
@@ -131,15 +141,17 @@ function InteractionChrome({ findings, onOpenCall }: {
   )
 }
 
-function uniqueCrmRefs(findings: MissedOpportunityFinding[]): { kind: 'TASK' | 'TICKET'; id: number }[] {
+function uniqueCrmRefs(
+  findings: MissedOpportunityFinding[],
+): { kind: 'TASK' | 'TICKET'; id: number; url: string | null }[] {
   const seen = new Set<string>()
-  const out: { kind: 'TASK' | 'TICKET'; id: number }[] = []
+  const out: { kind: 'TASK' | 'TICKET'; id: number; url: string | null }[] = []
   for (const f of findings) {
     if (!f.crmRefKind || f.crmRefId == null) continue
     const key = `${f.crmRefKind}:${f.crmRefId}`
     if (seen.has(key)) continue
     seen.add(key)
-    out.push({ kind: f.crmRefKind, id: f.crmRefId })
+    out.push({ kind: f.crmRefKind, id: f.crmRefId, url: f.crmRefUrl })
   }
   return out
 }

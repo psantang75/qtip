@@ -11,7 +11,7 @@ import crmService, {
   type CRMNote,
 } from '@/services/crmService'
 import { formatCrmDateTime } from '@/utils/dateFormat'
-import { buildCrmUrl } from '@/utils/crmLinks'
+import { buildCrmTaskUrl, buildCrmTicketUrl } from '@/utils/crmLinks'
 import { RichTextDisplay } from '@/components/common/RichTextDisplay'
 
 /**
@@ -351,9 +351,20 @@ function ActiveHeader({
   }
 
   const idLabel = kind === 'TASK' ? 'Task #' : 'Ticket #'
+  // The task layout segment comes from the task type's NewScreen (carried on the
+  // header), so a Contact Manager / Lead Manager / Job task links to the right
+  // CRM screen instead of the old hardcoded AccountsReceivableManager.
+  const crmHref = kind === 'TASK'
+    ? buildCrmTaskUrl({
+        taskId: externalId,
+        newScreen: (data as TaskHeader).new_screen,
+        taskTypeId: (data as TaskHeader).task_type_id,
+        jobId: (data as TaskHeader).job_id,
+      })
+    : buildCrmTicketUrl(externalId)
   const idLink = (
     <a
-      href={buildCrmUrl(kind, externalId)}
+      href={crmHref}
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex items-center gap-1 text-[12px] font-medium text-primary hover:text-primary/80 hover:underline break-all"

@@ -16,6 +16,12 @@ export type TicketTaskKind = 'TICKET' | 'TASK';
 export interface TaskHeader {
   task_id: number;
   task_type: string | null;
+  /** tblTaskType.TaskTypeID — selects the Jobs-vs-TaskManager URL base. */
+  task_type_id: number | null;
+  /** tblTaskType.NewScreen — the layout segment used to build the CRM deep link. */
+  new_screen: string | null;
+  /** tblJobs.JobID — only present/needed for job-typed tasks (14/42/46). */
+  job_id: number | null;
   task_status: string | null;
   assigned_to_id: number | null;
   assigned_to_name: string | null;

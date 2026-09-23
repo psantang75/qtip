@@ -16,13 +16,6 @@ import type {
   MissedOpportunityFindingRow,
 } from './insightsMissedOpportunities.service';
 
-/** Mirror of frontend `utils/crmLinks.buildCrmUrl` — same host the page links to. */
-function crmUrl(kind: 'TASK' | 'TICKET', externalId: number): string {
-  return kind === 'TASK'
-    ? `https://crm.dm-us.com/TaskManager/AccountsReceivableManager?TaskID=${externalId}`
-    : `https://crm.dm-us.com/Tickets/Edit?CustomerID=0&JobID=0&TicketID=${externalId}`;
-}
-
 const esc = (v: unknown): string =>
   String(v ?? '')
     .replace(/&/g, '&amp;')
@@ -133,15 +126,17 @@ export function groupFindingsForExport(findings: MissedOpportunityFindingRow[]):
   return customers;
 }
 
-function uniqueCrm(findings: MissedOpportunityFindingRow[]): { kind: 'TASK' | 'TICKET'; id: number }[] {
+function uniqueCrm(
+  findings: MissedOpportunityFindingRow[],
+): { kind: 'TASK' | 'TICKET'; id: number; url: string | null }[] {
   const seen = new Set<string>();
-  const out: { kind: 'TASK' | 'TICKET'; id: number }[] = [];
+  const out: { kind: 'TASK' | 'TICKET'; id: number; url: string | null }[] = [];
   for (const f of findings) {
     if (!f.crmRefKind || f.crmRefId == null) continue;
     const key = `${f.crmRefKind}:${f.crmRefId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ kind: f.crmRefKind, id: f.crmRefId });
+    out.push({ kind: f.crmRefKind, id: f.crmRefId, url: f.crmRefUrl });
   }
   return out;
 }
@@ -158,7 +153,9 @@ function renderInteractionChrome(rows: MissedOpportunityFindingRow[]): string {
   if (f.conversationId) links.push(`Call ${esc(f.conversationId)}`);
   for (const crm of uniqueCrm(rows)) {
     const label = crm.kind === 'TASK' ? `Task ${crm.id}` : `Ticket ${crm.id}`;
-    links.push(`<a href="${esc(crmUrl(crm.kind, crm.id))}">${esc(label)}</a>`);
+    // The link is resolved server-side (correct task-type layout); if that lookup
+    // failed the id is still shown as plain text rather than a wrong URL.
+    links.push(crm.url ? `<a href="${esc(crm.url)}">${esc(label)}</a>` : esc(label));
   }
 
   return `<p style="margin:0 0 8pt 0;font-size:9.5pt;color:#666666">${bits.join(' &middot; ')}${links.length ? ` &nbsp;|&nbsp; ${links.join(' &nbsp;|&nbsp; ')}` : ''}</p>`;

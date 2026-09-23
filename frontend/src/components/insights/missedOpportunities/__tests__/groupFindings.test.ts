@@ -17,6 +17,7 @@ const finding = (over: Partial<MissedOpportunityFinding> = {}): MissedOpportunit
   customerName: 'Mabels Diner',
   crmRefKind: 'TASK',
   crmRefId: 12345,
+  crmRefUrl: 'https://crm.dm-us.com/TaskManager/ContactManager?TaskID=12345',
   ruleKey: 'buying_signal_not_closed',
   ruleName: 'Buying signal not closed',
   category: 'Closing',

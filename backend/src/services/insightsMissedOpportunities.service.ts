@@ -12,6 +12,8 @@
 import type { RowDataPacket } from 'mysql2';
 import pool from '../config/database';
 import { resolvePeriod } from '../utils/periodUtils';
+import { resolveTaskCrmUrls } from './insights/missedOpportunities/crmLinkResolve';
+import { buildCrmTicketUrl } from '../utils/crmLinks';
 import { currentEmployeeJoin } from './insightsAgentScope';
 import { MAX_FINDINGS, toDateKey, num, fmtYMD, fmtMDY, isoDate, dateOnly, buildScope, buildRunScope, EMP_JOINS } from './insights/missedOpportunities/reportSupport';
 import type { MissedOpportunityFilters, MissedOpportunityResult, MissedOpportunityAgentRow } from './insights/missedOpportunities/reportTypes';
@@ -191,6 +193,21 @@ export async function getMissedOpportunities(
     ? null
     : Math.max(0, callsAnalyzed - num(flaggedTotals?.callsFlagged));
 
+  // Build the CRM deep link for every cited TASK from its task type's NewScreen
+  // (one batched CRM read); tickets are deterministic. Resolved here so the page
+  // and the Word export both render a correct URL instead of a hardcoded screen.
+  const taskUrlById = await resolveTaskCrmUrls(
+    findingRows
+      .filter((r) => (r.crm_task_kind as string) === 'TASK' && r.crm_task_id != null)
+      .map((r) => num(r.crm_task_id)),
+  );
+  const crmRefUrlOf = (kind: 'TASK' | 'TICKET' | null, id: number | null): string | null => {
+    if (id == null) return null;
+    if (kind === 'TASK') return taskUrlById.get(id) ?? null;
+    if (kind === 'TICKET') return buildCrmTicketUrl(id);
+    return null;
+  };
+
   return {
     totals: {
       findings: totalFindings,
@@ -225,6 +242,10 @@ export async function getMissedOpportunities(
       customerName: (r.customer_name as string) ?? null,
       crmRefKind: (r.crm_task_kind as 'TASK' | 'TICKET') ?? null,
       crmRefId: r.crm_task_id == null ? null : num(r.crm_task_id),
+      crmRefUrl: crmRefUrlOf(
+        (r.crm_task_kind as 'TASK' | 'TICKET') ?? null,
+        r.crm_task_id == null ? null : num(r.crm_task_id),
+      ),
       ruleKey: r.rule_key as string,
       ruleName: (r.rule_name as string) ?? null,
       category: (r.category as string) ?? null,

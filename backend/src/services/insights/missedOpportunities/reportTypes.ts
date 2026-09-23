@@ -25,6 +25,13 @@ export interface MissedOpportunityFindingRow {
   /** CRM record the model cited, for the deep link. Null when none was cited. */
   crmRefKind: 'TASK' | 'TICKET' | null;
   crmRefId: number | null;
+  /**
+   * Fully-built CRM deep link for the cited record. Resolved server-side so the
+   * task layout segment comes from the task type's NewScreen (not a hardcoded
+   * constant); null when no record was cited. Both the page and the Word export
+   * render this directly.
+   */
+  crmRefUrl: string | null;
   ruleKey: string;
   ruleName: string | null;
   category: string | null;
