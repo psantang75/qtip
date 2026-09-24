@@ -132,12 +132,17 @@ class PhoneSystemService {
   }
 
   /**
-   * Return every completed recording for a conversation, in call order
-   * (oldest leg first). A transferred call has several legs (IVR / queue /
-   * agent / transfer) that together make up the full conversation, so the
-   * UI shows one audio player per leg — ordering ascending lets a reviewer
-   * play them top-to-bottom to hear the whole call. `CreatedOn` is the best
-   * available ordering key in this table.
+   * Return the playable recordings for a conversation, in call order
+   * (oldest leg first), with duplicate legs collapsed.
+   *
+   * Genesys writes one recording file per recorded participant leg. On a
+   * normal (non-transferred) call the agent and customer legs cover the exact
+   * same time window, so their files are duplicate audio of the same
+   * conversation — surfacing both makes the reviewer see the call "twice".
+   * Only a genuine transfer/hold produces legs with distinct, non-overlapping
+   * `Interact` windows. We therefore collapse legs that share a single time
+   * window down to one recording, and keep every leg when the windows differ.
+   * See `collapseRedundantLegs` for the source-of-truth leg lookup.
    */
   async getRecordingsForConversation(conversationId: string): Promise<CallRecordingResponse[]> {
     try {
@@ -159,10 +164,53 @@ class PhoneSystemService {
       `;
 
       const results = await executeQuery<ConversationRecordingRow>(query, [conversationId], 'phone');
-      return results.map(toResponse);
+      const recordings = results.map(toResponse);
+      if (recordings.length <= 1) return recordings;
+      return this.collapseRedundantLegs(conversationId, recordings);
     } catch (error) {
       logger.error(`[PHONE SYSTEM SERVICE] Error fetching recordings for conversation ID ${conversationId}:`, error);
       throw new Error(`Failed to retrieve recordings for conversation ID: ${conversationId}`);
+    }
+  }
+
+  /**
+   * Collapse duplicate recording legs using the session/segment data as the
+   * source of truth. A recorded leg is a `tblSessions` row with `Recording=1`;
+   * its talk window is the span of its `Interact` segments in `tblSegments`.
+   * When every recorded leg shares a single Interact window the files are
+   * duplicate audio of the same call, so we keep just the newest leg (the
+   * agent leg, historically the most recent `CreatedOn`). When the windows
+   * differ the call was genuinely multi-leg (transfer/hold) and we keep all
+   * legs. Fails open: any lookup problem returns the recordings unchanged so
+   * a duplicate is never worse than hiding real audio.
+   */
+  private async collapseRedundantLegs(
+    conversationId: string,
+    recordings: CallRecordingResponse[],
+  ): Promise<CallRecordingResponse[]> {
+    try {
+      const query = `
+        SELECT COUNT(DISTINCT CONCAT(seg.SegmentStart, '|', seg.SegmentEnd)) AS distinct_windows
+        FROM tblSessions s
+        JOIN tblSegments seg
+          ON seg.SessionId = s.SessionId
+          AND seg.SegmentType = 'Interact'
+        WHERE s.ConversationID = ?
+          AND s.Recording = 1
+      `;
+      const rows = await executeQuery<{ distinct_windows: number | null }>(query, [conversationId], 'phone');
+      const distinctWindows = Number(rows?.[0]?.distinct_windows ?? 0);
+
+      // A single shared window means every recorded leg is the same audio —
+      // keep only the newest (last, since ordered CreatedOn ASC). Zero means
+      // we have no segment data to judge by, so leave the legs untouched.
+      if (distinctWindows === 1) {
+        return [recordings[recordings.length - 1]];
+      }
+      return recordings;
+    } catch (error) {
+      logger.warn(`[PHONE SYSTEM SERVICE] Leg de-duplication lookup failed for conversation ${conversationId}:`, error);
+      return recordings;
     }
   }
 

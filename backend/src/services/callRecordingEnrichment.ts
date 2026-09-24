@@ -4,12 +4,12 @@
  * `recordings[]` array so the UI can render an audio player even when
  * our own `calls.recording_url` column is empty.
  *
- * Genesys produces one recording file per communication leg (IVR / queue /
- * agent / transfer), so a transferred call has several audio segments that
- * together make up the full conversation. We surface every playable leg in
- * call order so the UI can render one audio player per leg — collapsing to a
- * single leg here previously truncated transferred calls to one segment even
- * though the transcript covered the whole call.
+ * Genesys produces one recording file per recorded participant leg. On a
+ * normal call the agent and customer legs cover the same time window (duplicate
+ * audio), while a genuine transfer/hold has legs with distinct windows.
+ * `getRecordingsForConversation` collapses the duplicate legs and keeps the
+ * distinct ones, so the UI renders one audio player per genuinely different
+ * segment — no duplicated players on ordinary calls.
  *
  * - Looks up every conversation in parallel against PhoneSystem.
  * - Failures (PhoneSystem unreachable, single ID missing) are swallowed

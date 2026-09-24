@@ -41,9 +41,9 @@ function formatTranscripts(transcripts: ConversationDetailResponse[] | null | un
  * exist in PhoneSystem but not yet in Q-Tip's own `calls` table. Pulls real
  * call_date and duration from tblConversations when meta is provided.
  */
-// PhoneSystem returns every recording leg for a conversation in call order.
-// Surface them all so transferred calls (multiple agent legs) keep their full
-// audio — the UI renders one player per leg. See callRecordingEnrichment.ts.
+// PhoneSystem legs arrive already de-duplicated by getRecordingsForConversation
+// (duplicate same-window legs collapsed; distinct transfer/hold legs kept), in
+// call order. Pass them through so the UI renders one player per real segment.
 function callLegs(recordings?: CallRecordingResponse[]): CallRecordingResponse[] {
   return recordings ?? [];
 }
