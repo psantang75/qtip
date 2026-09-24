@@ -5,7 +5,7 @@ import ActivityGantt from './ActivityGantt'
 import HeaderMetrics from './HeaderMetrics'
 import TimeSpentPanel from './TimeSpentPanel'
 import { buildDayModel } from './productivityModel'
-import { getProductivityDay, type ProductivityArea } from '@/services/insightsService'
+import { getProductivityDay, getProductivityRoster, type ProductivityArea } from '@/services/insightsService'
 import type { ProductivityRosterRow } from './productivityTypes'
 import { PageSpinner } from '@/components/common/PageSpinner'
 
@@ -54,6 +54,16 @@ export default function ProductivityDayTimeline({ area, employeeKey, agent, date
     queryFn: () => getProductivityDay(area, employeeKey, priorDate),
   })
 
+  // Desk utilization is computed only by the roster (DeskTime + warehouse
+  // presence), so the Sales strip reads it from the roster row for each day.
+  const priorRosterQuery = useQuery({
+    queryKey: ['productivity-roster', area, priorDate],
+    queryFn: () => getProductivityRoster(area, priorDate),
+    enabled: area === 'sales',
+  })
+  const row = roster.find(r => r.employeeKey === employeeKey) ?? null
+  const priorRow = priorRosterQuery.data?.rows.find(r => r.employeeKey === employeeKey) ?? null
+
   const model = useMemo(() => buildDayModel(dayQuery.data ?? null), [dayQuery.data])
   const priorModel = useMemo(() => {
     if (!priorQuery.data) return null
@@ -71,7 +81,7 @@ export default function ProductivityDayTimeline({ area, employeeKey, agent, date
           <p className="py-10 text-center text-sm text-slate-400">No activity for {agent} on this day.</p>
         ) : (
           <>
-            <HeaderMetrics model={model} priorModel={priorModel} />
+            <HeaderMetrics area={area} model={model} priorModel={priorModel} row={row} priorRow={priorRow} />
 
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="mb-3 text-[13px] font-semibold text-slate-800">Activity Timeline</div>

@@ -11,7 +11,7 @@ import type { KpiDef } from '@/constants/kpiDefs'
 import { THRESHOLD_BG } from './thresholdColors'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import KpiInfoCard from './KpiInfoCard'
+import KpiInfoCard, { type KpiBasisRow } from './KpiInfoCard'
 import { useKpiConfig } from '@/hooks/useKpiConfig'
 
 export interface KpiFilterContext {
@@ -36,6 +36,8 @@ interface KpiTileProps {
    * disclose that the value does not change with the current filter.
    */
   filterContext?: KpiFilterContext
+  /** Figures behind the value, shown in the (i) card (see KpiInfoCard). */
+  basis?: KpiBasisRow[]
 }
 
 export default function KpiTile({
@@ -46,6 +48,7 @@ export default function KpiTile({
   onClick,
   thresholds: thresholdsProp,
   filterContext,
+  basis,
 }: KpiTileProps) {
   const def = getKpiDef(kpiCode)
   const name   = def?.name   ?? kpiCode
@@ -192,7 +195,7 @@ export default function KpiTile({
               className="w-96"
               onClick={stop}
             >
-              <KpiInfoCard kpiCode={kpiCode} displayName={name} />
+              <KpiInfoCard kpiCode={kpiCode} displayName={name} basis={basis} />
             </PopoverContent>
           </Popover>
         </div>
