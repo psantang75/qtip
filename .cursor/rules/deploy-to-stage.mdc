@@ -28,6 +28,18 @@ workstation). `dmadmin` is the only account that owns the Docker socket + the
 
 Confirm identity before acting: `ssh dmadmin@10.90.15.6 'whoami; docker ps --format "{{.Names}}"'`.
 
+**SSH from PowerShell — quoting that works first time.** PowerShell re-parses
+the remote command string, so a regex alternation like `grep -E "a|b|c"` gets
+split on `|` and the remote bash runs `b` / `c` as commands (`bash: b: command
+not found`). Rules:
+- Never put `|` inside a quoted regex. Use repeated `-e` patterns instead:
+  `grep -i -e error -e draft -e prisma` (not `grep -E "error|draft|prisma"`).
+- Wrap the whole remote command in **double quotes**; use single quotes inside it
+  (e.g. `sed -n '930,945p'`). Pipes *between* remote commands are fine.
+- Log bodies can be huge (transcripts) — always `cut -c1-2000` before `tail`.
+- Logs grep template:
+  `ssh dmadmin@10.90.15.5 "docker logs --since 30m qtip-app 2>&1 | grep -n -i -e error -e prisma | cut -c1-2000 | tail -n 40"`
+
 **Credentials:** never hardcode the DB password. In-container commands reference
 the container's own `$MYSQL_ROOT_PASSWORD` / `$MYSQL_DATABASE` env vars (see the
 runbook). The literal lives in the operator secret store for break-glass only —
