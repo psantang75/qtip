@@ -6,7 +6,8 @@ import {
   createNotFoundError,
 } from '../utils/errorHandler';
 import logger from '../config/logger';
-import { SourceReportSyncWorker, SourceReportConfig } from '../workers/SourceReportSyncWorker';
+import type { SourceReportConfig } from '../workers/SourceReportSyncWorker';
+import { runSourceReport } from '../workers/apiSourceReports';
 import { notifyIngestionFailure } from '../services/notifications/ingestionAlerts';
 import { isCyclePipelineCode, runCyclePipeline } from '../services/insights/collections/cyclePipeline';
 
@@ -210,7 +211,7 @@ export const runSourceReportNow = asyncHandler(async (req: Request, res: Respons
   // Run in the background — the HTTP response has already been sent.
   void (async () => {
     try {
-      const result = await new SourceReportSyncWorker(cfg).run();
+      const result = await runSourceReport(cfg);
       // null == another run held the lock; leave its status alone.
       if (result !== null) await reschedule(id, 'SUCCESS');
     } catch (err) {

@@ -9,6 +9,7 @@ import { RowDataPacket } from 'mysql2';
 import logger from '../config/logger';
 import { SourceReportSyncWorker, SourceReportConfig } from './SourceReportSyncWorker';
 import { CYCLE_LOAD_ORDER, isCyclePipelineCode } from '../services/insights/collections/cyclePipeline';
+import { isApiSourceReport } from './apiSourceReports';
 
 const SERVICE = 'SourceReportBackfill';
 
@@ -55,6 +56,10 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   const chunkDays = Math.max(1, Number(chunkStr) || 10);
+  if (isApiSourceReport(reportCode)) {
+    logger.error(`${reportCode} is an API feed with its own backfill (e.g. run-desktime-backfill)`, { service: SERVICE });
+    process.exit(2);
+  }
 
   // Naming any Cycle Performance member backfills all five, in load order. A
   // windowed reload of invoices without tasks (or recovery without invoices) is

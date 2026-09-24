@@ -578,8 +578,16 @@ export const KPI_DEFS: Record<string, KpiDef> = {
   // only one with a target (the rest stay neutral and lean on the vs-prior delta),
   // matching how the report reads. Decimal places default to the format (0 for
   // NUMBER, 1 for PERCENT) until tuned per-KPI in the KPI registry admin page.
+  aa_prod_desk_utilization: {
+    code: 'aa_prod_desk_utilization', name: 'Desk Utilization',
+    format: 'PERCENT', direction: 'UP_IS_GOOD',
+    scope: 'department',
+    description: 'Share of paid time spent productively at the desk or working in the warehouse.',
+    formulaPlain: '(productive desk time + Genesys "In Warehouse" time) / paid time × 100',
+    source: 'DeskTime productive time, phone presence, time clock',
+  },
   aa_prod_utilization: {
-    code: 'aa_prod_utilization', name: 'Utilization',
+    code: 'aa_prod_utilization', name: 'Phone Utilization',
     format: 'PERCENT', direction: 'UP_IS_GOOD', goal: 70, warn: 64, crit: 63,
     scope: 'department',
     description: 'Share of paid time spent on calls — engaged on the phone while punched in. Answers whether the paid hours produced phone work.',

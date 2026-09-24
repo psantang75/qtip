@@ -1,7 +1,8 @@
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import logger from '../config/logger';
-import { SourceReportSyncWorker, SourceReportConfig } from './SourceReportSyncWorker';
+import type { SourceReportConfig } from './SourceReportSyncWorker';
+import { runSourceReport } from './apiSourceReports';
 import { notifyIngestionFailure } from '../services/notifications/ingestionAlerts';
 import { runCyclePipeline, splitCycleDue } from '../services/insights/collections/cyclePipeline';
 
@@ -13,7 +14,8 @@ const SERVICE = 'SourceReportDispatcher';
  * Invoked on a fixed floor by the single PM2 app `ie-source-dispatch`. Each tick
  * it picks up every active report whose `next_run_at` is due (and whose
  * optional `run_only_hours` off-peak window includes the current hour), runs it
- * via SourceReportSyncWorker, and reschedules it `frequency_minutes` later.
+ * via SourceReportSyncWorker (or its API worker — see apiSourceReports), and
+ * reschedules it `frequency_minutes` later.
  *
  * Cadence is pure data: edit the ie_source_report row to retune a report — no
  * code change, no redeploy. A failure in one report is isolated; the rest of
@@ -44,7 +46,7 @@ export class SourceReportDispatcher {
     for (const cfg of rest) {
       let status: 'SUCCESS' | 'FAILED' = 'SUCCESS';
       try {
-        await new SourceReportSyncWorker(cfg).run();
+        await runSourceReport(cfg);
       } catch (err: any) {
         status = 'FAILED';
         logger.error('Source report run failed', {

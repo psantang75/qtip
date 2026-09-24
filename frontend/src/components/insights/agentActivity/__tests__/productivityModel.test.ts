@@ -366,7 +366,8 @@ describe('peer comparison', () => {
   const row = (agent: string, department: string, o: Partial<ProductivityRosterRow> = {}): ProductivityRosterRow => ({
     employeeKey: 0, agent, department,
     clockedMin: 480, utilizationPct: 40, occupancyPct: 55, callsPerHour: 8, ahtMins: 3, missedCalls: 0,
-    handleMin: 200, onQueueMin: 380, ticketsTouched: 50, ...o,
+    handleMin: 200, onQueueMin: 380, ticketsTouched: 50,
+    deskProductiveMin: 240, warehouseMin: 0, deskUtilizationPct: 50, ...o,
   })
   const roster: ProductivityRosterRow[] = [
     row('A1', 'Billing', { handleMin: 220, onQueueMin: 400, ticketsTouched: 60, occupancyPct: 60 }),

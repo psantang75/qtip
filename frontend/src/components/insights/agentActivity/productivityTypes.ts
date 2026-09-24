@@ -95,8 +95,14 @@ export interface ProductivityRosterRow {
   department: string
   /** Paid time (Work + Break), in minutes. */
   clockedMin: number
-  /** Phone-handle share of paid time — the report's headline metric. */
+  /** Phone Utilization: phone-handle share of paid time. */
   utilizationPct: number
+  /** Productive DeskTime minutes; null when DeskTime has no data for the agent. */
+  deskProductiveMin: number | null
+  /** Genesys "In Warehouse" presence minutes. */
+  warehouseMin: number
+  /** (productive desk + In Warehouse) / paid time; null when desk time is unknown. */
+  deskUtilizationPct: number | null
   /** Engaged share of on-queue time. */
   occupancyPct: number
   /** Answered calls per paid hour. */

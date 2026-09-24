@@ -62,6 +62,13 @@ interface EnvironmentConfig {
   BOOKSTACK_TIMEOUT_MS?: number;
   BOOKSTACK_MAX_RETRIES?: number;
 
+  // DeskTime (read-only consumer; optional. Disabled when DESKTIME_API_KEY is
+  // blank — the Productivity report then shows Desk Utilization as unavailable.)
+  DESKTIME_API_KEY?: string;
+  DESKTIME_BASE_URL?: string;
+  DESKTIME_TIMEOUT_MS?: number;
+  DESKTIME_MAX_RETRIES?: number;
+
   // AI Reviewer system user id. Optional: when blank, the /api/ai-reviewer/*
   // endpoints return 503 not_configured. Same "leave-blank-to-disable"
   // pattern as the other optional integrations above. The user row itself
@@ -285,6 +292,12 @@ export const config: EnvironmentConfig = {
   BOOKSTACK_TIMEOUT_MS: process.env.BOOKSTACK_TIMEOUT_MS ? parseInt(process.env.BOOKSTACK_TIMEOUT_MS, 10) : 15000,
   BOOKSTACK_MAX_RETRIES: process.env.BOOKSTACK_MAX_RETRIES ? parseInt(process.env.BOOKSTACK_MAX_RETRIES, 10) : 2,
 
+  // DeskTime (optional; client only constructed when the API key is present)
+  DESKTIME_API_KEY: process.env.DESKTIME_API_KEY,
+  DESKTIME_BASE_URL: process.env.DESKTIME_BASE_URL || 'https://desktime.com/api/v2/json',
+  DESKTIME_TIMEOUT_MS: process.env.DESKTIME_TIMEOUT_MS ? parseInt(process.env.DESKTIME_TIMEOUT_MS, 10) : 15000,
+  DESKTIME_MAX_RETRIES: process.env.DESKTIME_MAX_RETRIES ? parseInt(process.env.DESKTIME_MAX_RETRIES, 10) : 2,
+
   // AI Reviewer (optional; endpoint guards on this being a positive integer)
   AI_REVIEWER_USER_ID: process.env.AI_REVIEWER_USER_ID ? parseInt(process.env.AI_REVIEWER_USER_ID, 10) : undefined,
 
@@ -466,6 +479,18 @@ export const bookstackConfig = config.BOOKSTACK_BASE_URL && config.BOOKSTACK_TOK
   tokenSecret: config.BOOKSTACK_TOKEN_SECRET,
   timeoutMs: config.BOOKSTACK_TIMEOUT_MS!,
   maxRetries: config.BOOKSTACK_MAX_RETRIES!,
+} : null;
+
+/**
+ * DeskTime configuration. Same conditional-construction pattern as BookStack:
+ * `null` when the API key is blank, so an unconfigured environment reports
+ * Desk Utilization as unavailable instead of failing the Productivity roster.
+ */
+export const desktimeConfig = config.DESKTIME_API_KEY ? {
+  apiKey: config.DESKTIME_API_KEY,
+  baseUrl: config.DESKTIME_BASE_URL!.replace(/\/+$/, ''),
+  timeoutMs: config.DESKTIME_TIMEOUT_MS!,
+  maxRetries: config.DESKTIME_MAX_RETRIES!,
 } : null;
 
 /**

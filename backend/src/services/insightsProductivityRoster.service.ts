@@ -10,6 +10,7 @@
  *   queue/occupancy → Genesys routing status
  *   calls / AHT / missed → Genesys conversations + segments
  *   tickets touched → ie_ticket_task_productivity_daily (the stored Workload count)
+ *   desk utilization → DeskTime + Genesys "In Warehouse" (insightsProductivityDesk)
  *
  * Scope mirrors the other Agent Activity readers: CSR role, area decided by the
  * "Sales Department - All" department subtree.
@@ -19,6 +20,7 @@ import { getDatabasePool } from '../config/database';
 import { phoneDatabaseConfig } from '../config/environment';
 import { RowDataPacket } from 'mysql2';
 import { AGENT_ROLE, areaDeptGuard, type Area } from './insightsAgentScope';
+import { deskFieldsFor, loadDeskInputs, type DeskRowFields } from './insightsProductivityDesk.service';
 
 /**
  * Resolved scope for one viewer, two independent layers:
@@ -38,7 +40,7 @@ export interface RosterScope {
   pageDepartmentKeys: number[];
 }
 
-export interface ProductivityRosterRow {
+export interface ProductivityRosterRow extends DeskRowFields {
   employeeKey: number;
   agent: string;
   department: string;
@@ -239,11 +241,12 @@ export async function getProductivityRoster(area: Area, date: string, scope: Ros
   const guidMap = await loadGuidMap(emails);
   const guids = [...new Set([...guidMap.values()])];
 
-  const [paid, routing, calls, tickets] = await Promise.all([
+  const [paid, routing, calls, tickets, desk] = await Promise.all([
     loadPaidMinutes(userIds, date),
     loadRouting(guids, dayStart, dayEnd),
     loadCalls(guids, dayStart, dayEnd),
     loadTicketsTouched(employeeKeys, date, area),
+    loadDeskInputs(guids, date, dayStart, dayEnd),
   ]);
 
   const rows: ProductivityRosterRow[] = agents.map((a) => {
@@ -268,6 +271,7 @@ export async function getProductivityRoster(area: Area, date: string, scope: Ros
       handleMin: Math.round(handleMin),
       onQueueMin: Math.round(onQueueMin),
       ticketsTouched: tickets.get(a.employeeKey) ?? 0,
+      ...deskFieldsFor(desk, a.email, guid, clockedMin),
     };
   });
 
