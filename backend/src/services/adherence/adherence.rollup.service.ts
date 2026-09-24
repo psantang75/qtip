@@ -70,6 +70,14 @@ export interface AgentAdherenceRow {
   phoneStartEvents: number;
   phoneStopEvents: number;
   phoneEvents: number;
+  /** Same five deviation counts restricted to point-bearing occurrences (points >
+   *  0), so the roster's "Point Only" view can show counts that agree with the
+   *  point columns instead of every tracked deviation. */
+  durationPointEvents: number;
+  startPointEvents: number;
+  missedPointEvents: number;
+  phoneStartPointEvents: number;
+  phoneStopPointEvents: number;
   daysMeasured: number;
   scheduledSec: number;
   adherentSec: number;
@@ -126,6 +134,11 @@ interface OccAgg extends RowDataPacket {
   phoneStartEvents: number;
   phoneStopEvents: number;
   phoneEvents: number;
+  durationPointEvents: number;
+  startPointEvents: number;
+  missedPointEvents: number;
+  phoneStartPointEvents: number;
+  phoneStopPointEvents: number;
   punchOverrunSec: string | null;
 }
 
@@ -199,6 +212,11 @@ export async function getAgentRows(
             SUM(o.kind IN ('BREAK_PHONE_START','LUNCH_PHONE_START')) AS phoneStartEvents,
             SUM(o.kind IN ('BREAK_PHONE_STOP','LUNCH_PHONE_STOP')) AS phoneStopEvents,
             SUM(o.kind IN (${PHONE_KINDS})) AS phoneEvents,
+            SUM(o.kind IN ('BREAK_DURATION','LUNCH_DURATION') AND o.points > 0) AS durationPointEvents,
+            SUM(o.kind IN ('BREAK_START','LUNCH_START') AND o.points > 0) AS startPointEvents,
+            SUM(o.kind IN ('BREAK_MISSED','LUNCH_MISSED') AND o.points > 0) AS missedPointEvents,
+            SUM(o.kind IN ('BREAK_PHONE_START','LUNCH_PHONE_START') AND o.points > 0) AS phoneStartPointEvents,
+            SUM(o.kind IN ('BREAK_PHONE_STOP','LUNCH_PHONE_STOP') AND o.points > 0) AS phoneStopPointEvents,
             SUM(CASE WHEN o.kind IN ('BREAK_DURATION','LUNCH_DURATION') THEN o.deviation_seconds ELSE 0 END) AS punchOverrunSec
        FROM adherence_occurrence o
        JOIN users u ON u.id = o.user_id
@@ -261,6 +279,11 @@ export async function getAgentRows(
       phoneStartEvents: Number(o?.phoneStartEvents ?? 0),
       phoneStopEvents: Number(o?.phoneStopEvents ?? 0),
       phoneEvents: Number(o?.phoneEvents ?? 0),
+      durationPointEvents: Number(o?.durationPointEvents ?? 0),
+      startPointEvents: Number(o?.startPointEvents ?? 0),
+      missedPointEvents: Number(o?.missedPointEvents ?? 0),
+      phoneStartPointEvents: Number(o?.phoneStartPointEvents ?? 0),
+      phoneStopPointEvents: Number(o?.phoneStopPointEvents ?? 0),
       daysMeasured: Number(d.daysMeasured),
       scheduledSec,
       adherentSec,

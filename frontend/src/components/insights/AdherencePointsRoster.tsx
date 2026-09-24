@@ -67,9 +67,12 @@ interface RosterProps {
   /** Point bands and discipline ladder in force, for the header tooltips. */
   bands: AdherencePointBand[]
   levels: AdherenceWarningLevel[]
+  /** When true, the deviation counts and the drill-down show only point-bearing
+   *  occurrences; the point columns are unaffected either way. */
+  pointOnly: boolean
 }
 
-export default function AdherencePointsRoster({ rows, detail, onExpand, pointsActive, thresholds, bands, levels }: RosterProps) {
+export default function AdherencePointsRoster({ rows, detail, onExpand, pointsActive, thresholds, bands, levels, pointOnly }: RosterProps) {
   const [expanded, setExpanded] = useState<number | null>(null)
 
   const toggle = (userId: number) => {
@@ -148,12 +151,12 @@ export default function AdherencePointsRoster({ rows, detail, onExpand, pointsAc
                   summary={
                     <span className={GRID}>
                       <span className="text-slate-700 truncate">{r.name}</span>
-                      <span className="text-right tabular-nums text-slate-600">{fmtCount(r.startEvents)}</span>
-                      <span className="text-right tabular-nums text-slate-600">{fmtCount(r.durationEvents)}</span>
-                      <span className="text-right tabular-nums text-slate-600">{fmtCount(r.missedEvents)}</span>
+                      <span className="text-right tabular-nums text-slate-600">{fmtCount(pointOnly ? r.startPointEvents : r.startEvents)}</span>
+                      <span className="text-right tabular-nums text-slate-600">{fmtCount(pointOnly ? r.durationPointEvents : r.durationEvents)}</span>
+                      <span className="text-right tabular-nums text-slate-600">{fmtCount(pointOnly ? r.missedPointEvents : r.missedEvents)}</span>
                       <span />
-                      <span className="text-right tabular-nums text-slate-600">{fmtCount(r.phoneStartEvents)}</span>
-                      <span className="text-right tabular-nums text-slate-600">{fmtCount(r.phoneStopEvents)}</span>
+                      <span className="text-right tabular-nums text-slate-600">{fmtCount(pointOnly ? r.phoneStartPointEvents : r.phoneStartEvents)}</span>
+                      <span className="text-right tabular-nums text-slate-600">{fmtCount(pointOnly ? r.phoneStopPointEvents : r.phoneStopEvents)}</span>
                       <span />
                       {ptsCells(
                         r.punchPoints0to30 + r.phonePoints0to30,
@@ -171,7 +174,7 @@ export default function AdherencePointsRoster({ rows, detail, onExpand, pointsAc
                       </span>
                     </span>
                   }
-                  detail={<RowDetail row={r} occurrences={detail[r.userId]} pointsActive={pointsActive} />}
+                  detail={<RowDetail row={r} occurrences={detail[r.userId]} pointsActive={pointsActive} pointOnly={pointOnly} />}
                 />
               </div>
             )
@@ -182,14 +185,18 @@ export default function AdherencePointsRoster({ rows, detail, onExpand, pointsAc
   )
 }
 
-function RowDetail({ row, occurrences, pointsActive }: {
+function RowDetail({ row, occurrences, pointsActive, pointOnly }: {
   row: AdherenceAgentRow
   occurrences?: AdherenceOccurrence[]
   pointsActive: boolean
+  pointOnly: boolean
 }) {
   // Punch overage = gross over-schedule time of every break/lunch that ran long,
   // each segment independent (a short break never offsets a long one). Phone
   // overage = off-queue time outside each punched window.
+  // In Point Only mode the occurrence table drops the zero-point rows so the
+  // drill-down matches the (filtered) summary counts above it.
+  const shown = occurrences && pointOnly ? occurrences.filter(o => o.points > 0) : occurrences
   return (
     <div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-3 text-[13px]">
@@ -210,10 +217,12 @@ function RowDetail({ row, occurrences, pointsActive }: {
         )}
       </div>
 
-      {occurrences === undefined ? (
+      {shown === undefined ? (
         <p className="text-[12px] text-slate-400 pt-6">Loading detail…</p>
-      ) : occurrences.length === 0 ? (
-        <p className="text-[12px] text-slate-400 pt-6">No deviations in this window.</p>
+      ) : shown.length === 0 ? (
+        <p className="text-[12px] text-slate-400 pt-6">
+          {pointOnly ? 'No point-bearing deviations in this window.' : 'No deviations in this window.'}
+        </p>
       ) : (
         <div className="overflow-x-auto mt-6">
           <table className="w-full text-[12px] min-w-[780px]">
@@ -231,7 +240,7 @@ function RowDetail({ row, occurrences, pointsActive }: {
               </tr>
             </thead>
             <tbody>
-              {occurrences.map(o => (
+              {shown.map(o => (
                 <tr key={`${o.workDate}-${o.kind}-${o.seq}`} className="border-b border-slate-100 last:border-0">
                   <td className="py-1.5 text-slate-500 whitespace-nowrap tabular-nums">{fmtDate(o.workDate)}</td>
                   <td className="py-1.5 text-slate-500 whitespace-nowrap">{kindCategory(o.kind)}</td>

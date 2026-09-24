@@ -41,6 +41,13 @@ export interface AdherenceAgentRow {
   phoneStartEvents: number
   phoneStopEvents: number
   phoneEvents: number
+  /** The same five counts restricted to point-bearing occurrences, for the
+   *  roster's "Point Only" view. */
+  durationPointEvents: number
+  startPointEvents: number
+  missedPointEvents: number
+  phoneStartPointEvents: number
+  phoneStopPointEvents: number
   daysMeasured: number
   scheduledSec: number
   adherentSec: number
