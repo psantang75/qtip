@@ -20,6 +20,7 @@ import {
   BLOCK_MIN, buildStatusSegments, makeAxis, place, toMin, toStatusBlocks,
 } from './productivitySegments'
 import type { Segment, StatusBlock, StatusSegment } from './productivitySegments'
+import { buildSalesModel, type SalesModel } from './productivitySalesModel'
 
 export { BLOCK_MIN }
 export type { Segment, StatusBlock, StatusSegment, StatusSlice } from './productivitySegments'
@@ -176,6 +177,8 @@ export interface DayModel {
   /** Phone-handle share of clocked (paid) time. */
   utilizationPct: number
   notRespondingCount: number
+  /** Sales work rows and totals; null for areas without a sales work stream. */
+  sales: SalesModel | null
 }
 
 interface Bounds { startMin: number; endMin: number }
@@ -452,5 +455,6 @@ export function buildDayModel(day: AgentDay | null): DayModel {
     // counting phone minutes logged over an unpunched break.
     utilizationPct: pctOf(onCallMin, clockedMin),
     notRespondingCount: statusSegments.filter(s => s.status === 'NOT_RESPONDING').length,
+    sales: day?.sales ? buildSalesModel(axis, day.sales) : null,
   }
 }
