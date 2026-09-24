@@ -41,10 +41,10 @@ const compactPct = (pct: number | null): string => (pct === null ? '—' : `${Ma
  *  the spans land directly in the parent grid. */
 const ptsCells = (b0: number, b31: number, b61: number, total: number) => (
   <>
-    <span className="text-right tabular-nums text-slate-500 text-[13px]">{fmtPoints(b0)}</span>
-    <span className="text-right tabular-nums text-slate-500 text-[13px]">{fmtPoints(b31)}</span>
-    <span className="text-right tabular-nums text-slate-500 text-[13px]">{fmtPoints(b61)}</span>
-    <span className="text-right tabular-nums font-semibold text-slate-900 text-[13px]">{fmtPoints(total)}</span>
+    <span className="text-right tabular-nums text-slate-500">{fmtPoints(b0)}</span>
+    <span className="text-right tabular-nums text-slate-500">{fmtPoints(b31)}</span>
+    <span className="text-right tabular-nums text-slate-500">{fmtPoints(b61)}</span>
+    <span className="text-right tabular-nums font-semibold text-slate-900">{fmtPoints(total)}</span>
   </>
 )
 
@@ -98,7 +98,7 @@ export default function AdherencePointsRoster({ rows, detail, onExpand, pointsAc
   return (
     <div className="overflow-x-auto">
       <div className="min-w-[900px]">
-        <div className={cn(GRID, 'text-[11px] uppercase tracking-wide text-slate-400 px-3')}>
+        <div className={cn(GRID, 'text-xs uppercase tracking-wide text-slate-400 px-3')}>
           <span />
           <span className="text-center border-b border-slate-200 pb-0.5" style={{ gridColumn: 'span 3' }}>
             Punch
@@ -114,8 +114,8 @@ export default function AdherencePointsRoster({ rows, detail, onExpand, pointsAc
           <span />
           <span />
         </div>
-        <div className={cn(GRID, 'text-[11px] text-slate-400 border-b border-slate-200 pb-2 px-3')}>
-          <span className="pl-6 text-xs">Agent</span>
+        <div className={cn(GRID, 'text-xs text-slate-400 border-b border-slate-200 pb-2 px-3')}>
+          <span className="pl-6">Agent</span>
           <span className="text-right">Start</span>
           <span className="text-right">Long</span>
           <span className="text-right">Miss</span>
@@ -147,13 +147,13 @@ export default function AdherencePointsRoster({ rows, detail, onExpand, pointsAc
                   onToggle={() => toggle(r.userId)}
                   summary={
                     <span className={GRID}>
-                      <span className="text-slate-700 truncate text-sm">{r.name}</span>
-                      <span className="text-right tabular-nums text-slate-600 text-sm">{fmtCount(r.startEvents)}</span>
-                      <span className="text-right tabular-nums text-slate-600 text-sm">{fmtCount(r.durationEvents)}</span>
-                      <span className="text-right tabular-nums text-slate-600 text-sm">{fmtCount(r.missedEvents)}</span>
+                      <span className="text-slate-700 truncate">{r.name}</span>
+                      <span className="text-right tabular-nums text-slate-600">{fmtCount(r.startEvents)}</span>
+                      <span className="text-right tabular-nums text-slate-600">{fmtCount(r.durationEvents)}</span>
+                      <span className="text-right tabular-nums text-slate-600">{fmtCount(r.missedEvents)}</span>
                       <span />
-                      <span className="text-right tabular-nums text-slate-600 text-sm">{fmtCount(r.phoneStartEvents)}</span>
-                      <span className="text-right tabular-nums text-slate-600 text-sm">{fmtCount(r.phoneStopEvents)}</span>
+                      <span className="text-right tabular-nums text-slate-600">{fmtCount(r.phoneStartEvents)}</span>
+                      <span className="text-right tabular-nums text-slate-600">{fmtCount(r.phoneStopEvents)}</span>
                       <span />
                       {ptsCells(
                         r.punchPoints0to30 + r.phonePoints0to30,

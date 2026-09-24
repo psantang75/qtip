@@ -52,15 +52,19 @@ export default function ProductivityReport({ agentLabel, date, area, selectedUse
   // The full roster still feeds the department comparison medians (peers are the
   // whole team, not the filtered view), so filtering only narrows the table.
   const roster = useMemo(() => data?.rows ?? [], [data])
-  // Highest utilization first: the manager's question is how well the clocked
-  // time is being used, so that ranking surfaces at the top.
+  // Group by department (mirrors the Attendance / Adherence rosters), then
+  // highest utilization first within each department: the manager's question is
+  // how well the clocked time is being used, so that ranking surfaces at the top.
   const rows = useMemo(
     () => roster
       .filter(r => selectedUsers.length === 0 || selectedUsers.includes(r.agent))
       .filter(r => selectedDepts.length === 0 || selectedDepts.includes(r.department))
-      .sort((a, b) => b.utilizationPct - a.utilizationPct),
+      .sort((a, b) => a.department.localeCompare(b.department) || b.utilizationPct - a.utilizationPct),
     [roster, selectedUsers, selectedDepts],
   )
+  // Tracks the current department while mapping so a header renders once per
+  // group (reset each render; the map below runs synchronously).
+  let lastDept = ''
 
   return (
     <InsightsSection title="Productivity by Agent">
@@ -83,30 +87,40 @@ export default function ProductivityReport({ agentLabel, date, area, selectedUse
             </div>
 
             <div className="pt-2">
-              {rows.map(r => (
-                <ExpandableRow
-                  key={r.agent}
-                  isExpanded={expanded === r.agent}
-                  onToggle={() => setExpanded(prev => (prev === r.agent ? null : r.agent))}
-                  summary={
-                    <span className={GRID}>
-                      <span className="truncate text-slate-700">{r.agent}</span>
-                      <span className="text-right tabular-nums text-slate-600">{fmtHM(r.clockedMin)}</span>
-                      <span className={cn('text-right font-semibold tabular-nums', METRIC_TEXT[stateFor(r.utilizationPct, UTILIZATION_TARGET)])}>
-                        {r.utilizationPct}%
-                      </span>
-                      <span className="text-right tabular-nums text-slate-600">{r.callsPerHour.toFixed(1)}</span>
-                      <span className="text-right tabular-nums text-slate-600">{fmtMS(r.ahtMins)}</span>
-                      <span className={r.missedCalls > 0 ? 'text-right font-semibold tabular-nums text-destructive' : 'text-right tabular-nums text-slate-400'}>
-                        {fmtNum(r.missedCalls)}
-                      </span>
-                    </span>
-                  }
-                  detail={expanded === r.agent
-                    ? <ProductivityDayTimeline area={area} employeeKey={r.employeeKey} agent={r.agent} date={date} roster={roster} />
-                    : null}
-                />
-              ))}
+              {rows.map(r => {
+                const showDept = r.department !== lastDept
+                lastDept = r.department
+                return (
+                  <div key={r.agent}>
+                    {showDept && (
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 bg-surface px-3 py-1.5 mb-2 rounded">
+                        {r.department}
+                      </p>
+                    )}
+                    <ExpandableRow
+                      isExpanded={expanded === r.agent}
+                      onToggle={() => setExpanded(prev => (prev === r.agent ? null : r.agent))}
+                      summary={
+                        <span className={GRID}>
+                          <span className="truncate text-slate-700">{r.agent}</span>
+                          <span className="text-right tabular-nums text-slate-600">{fmtHM(r.clockedMin)}</span>
+                          <span className={cn('text-right font-semibold tabular-nums', METRIC_TEXT[stateFor(r.utilizationPct, UTILIZATION_TARGET)])}>
+                            {r.utilizationPct}%
+                          </span>
+                          <span className="text-right tabular-nums text-slate-600">{r.callsPerHour.toFixed(1)}</span>
+                          <span className="text-right tabular-nums text-slate-600">{fmtMS(r.ahtMins)}</span>
+                          <span className={r.missedCalls > 0 ? 'text-right font-semibold tabular-nums text-destructive' : 'text-right tabular-nums text-slate-400'}>
+                            {fmtNum(r.missedCalls)}
+                          </span>
+                        </span>
+                      }
+                      detail={expanded === r.agent
+                        ? <ProductivityDayTimeline area={area} employeeKey={r.employeeKey} agent={r.agent} date={date} roster={roster} />
+                        : null}
+                    />
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
