@@ -32,7 +32,7 @@ import {
 // can breathe and it still fits one page wide.
 // Agent | Punch: Start Long Miss | Phone: Start Stop | Points: 0-30 31-60 61-90 Total | Adherence | Standing
 const GRID =
-  'grid grid-cols-[minmax(160px,1.5fr)_46px_46px_46px_20px_46px_46px_24px_54px_54px_54px_62px_84px_112px] gap-x-2 items-center'
+  'grid grid-cols-[minmax(160px,1.5fr)_56px_56px_56px_20px_56px_56px_24px_64px_64px_64px_72px_92px_112px] gap-x-3 items-center'
 
 /** Integer % keeps the adherence pills narrow enough to fit on one line. */
 const compactPct = (pct: number | null): string => (pct === null ? '—' : `${Math.round(pct)}%`)
@@ -97,7 +97,7 @@ export default function AdherencePointsRoster({ rows, detail, onExpand, pointsAc
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[900px]">
+      <div className="min-w-[1040px]">
         <div className={cn(GRID, 'text-xs uppercase tracking-wide text-slate-400 px-3')}>
           <span />
           <span className="text-center border-b border-slate-200 pb-0.5" style={{ gridColumn: 'span 3' }}>
