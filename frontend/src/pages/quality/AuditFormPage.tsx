@@ -32,6 +32,7 @@ import {
   type FormRenderData,
 } from '@/utils/forms'
 import { validateAnswers } from '@/utils/submissionUtils'
+import { buildAuditFormPayload } from './auditFormPayload'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScoreBreakdownTables } from '@/components/quality/ScoreBreakdownTables'
@@ -526,50 +527,16 @@ export default function AuditFormPage() {
       return
     }
 
-    let customerId: string | null = null
-    let agentUserId: number | null = null
-    if (form.metadata_fields && metadataValues) {
-      for (const f of form.metadata_fields) {
-        const key = (f.id && f.id !== 0) ? f.id.toString() : f.field_name
-        const val = metadataValues[key]
-        if (!val) continue
-        if (f.field_name?.toLowerCase().includes('customer')) customerId = val
-        if (f.field_type === 'DROPDOWN' && !f.dropdown_source) {
-          const parsed = parseInt(val, 10)
-          if (!isNaN(parsed) && parsed > 0) agentUserId = parsed
-        }
-      }
-    }
-
-    const payload = {
-      form_id: Number(formId),
-      call_id: callId ? Number(callId) : null,
-      call_ids: selectedCalls.map(c => c.id),
-      call_data: selectedCalls.map(c => ({
-        call_id: c.call_id, customer_id: customerId || c.customer_id,
-        call_date: c.call_date, duration: c.duration, recording_url: c.recording_url, transcript: c.transcript,
-      })),
-      ticket_tasks: linkedTicketTasks,
-      csr_id: agentUserId,
-      submitted_by: user.id,
-      answers: Object.entries(answers).map(([qId, a]) => ({ question_id: Number(qId), answer: a.answer, notes: a.notes || '' })),
-      metadata: Object.entries(metadataValues).map(([fieldId, value]) => ({ field_id: fieldId, value })),
-    }
-
-    doSubmit(payload)
+    doSubmit(buildAuditFormPayload({
+      form, formId, callId, userId: user.id, selectedCalls, linkedTicketTasks, answers, metadataValues,
+    }))
   }
 
   const handleSaveDraft = () => {
     if (!form || !formId || !user) return
-    doSaveDraft({
-      form_id:  Number(formId),
-      call_id:  callId ? Number(callId) : null,
-      call_ids: selectedCalls.map(c => c.id),
-      ticket_tasks: linkedTicketTasks,
-      submitted_by: user.id,
-      answers:  Object.entries(answers).map(([qId, a]) => ({ question_id: Number(qId), answer: a.answer, notes: a.notes || '' })),
-      metadata: Object.entries(metadataValues).map(([fieldId, value]) => ({ field_id: fieldId, value })),
-    })
+    doSaveDraft(buildAuditFormPayload({
+      form, formId, callId, userId: user.id, selectedCalls, linkedTicketTasks, answers, metadataValues,
+    }))
   }
 
   // `resumeAlreadyClosed` holds the skeleton for the one frame before the
