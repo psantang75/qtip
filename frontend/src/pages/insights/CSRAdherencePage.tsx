@@ -18,6 +18,8 @@ import AdherencePointsRoster from '@/components/insights/AdherencePointsRoster'
 import { LEVEL_VARIANT } from '@/components/insights/attendancePolicy'
 import ActivityReportShell from '@/components/insights/agentActivity/ActivityReportShell'
 import { useActivityFilters } from '@/hooks/useActivityFilters'
+import { cn } from '@/lib/utils'
+import { optionCls } from '@/utils/forms/optionCls'
 import { getAdherenceSummary, getAdherenceOccurrences } from '@/services/insightsAdherenceService'
 import type { AdherenceAgentRow, AdherenceOccurrence } from '@/services/insightsAdherenceService'
 
@@ -43,10 +45,24 @@ const TONE_TEXT: Record<Tone, string> = {
   neutral: 'text-slate-900',
 }
 
+// Roster length grows quickly, so a manager triaging point-bearing issues can't
+// see them for the noise. The view toggle narrows the roster to the agents who
+// carry points (default), only those without, or everyone.
+const POINT_VIEWS = [
+  { key: 'points', label: 'Points' },
+  { key: 'nopoints', label: 'No points' },
+  { key: 'all', label: 'All' },
+] as const
+type PointView = (typeof POINT_VIEWS)[number]['key']
+
+/** Total rolling-90 points a row carries — the "Total" column the roster shows. */
+const rowPoints = (r: AdherenceAgentRow): number => r.punchPoints90 + r.phonePoints90
+
 export default function CSRAdherencePage() {
   const filters = useActivityFilters('aa-adherence-filters')
   const queryClient = useQueryClient()
   const [detail, setDetail] = useState<Record<number, AdherenceOccurrence[] | undefined>>({})
+  const [pointView, setPointView] = useState<PointView>('points')
 
   const summaryQ = useQuery({
     queryKey: ['csr-adherence-summary', filters.params],
@@ -68,6 +84,10 @@ export default function CSRAdherencePage() {
   }, [detail, filters.params, queryClient])
 
   const rows = useMemo(() => summaryQ.data?.rows ?? [], [summaryQ.data])
+  const visibleRows = useMemo(() => {
+    if (pointView === 'all') return rows
+    return rows.filter(r => (pointView === 'points' ? rowPoints(r) > 0 : rowPoints(r) === 0))
+  }, [rows, pointView])
   const levels = useMemo(() => summaryQ.data?.warningLevels ?? [], [summaryQ.data])
   const bands = useMemo(() => summaryQ.data?.pointBands ?? [], [summaryQ.data])
   const isSelf = summaryQ.data?.isSelfView ?? false
@@ -123,13 +143,30 @@ export default function CSRAdherencePage() {
       ))}
 
       <InsightsSection title="Adherence Points">
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] uppercase tracking-wide text-slate-400 mr-0.5">View</span>
+          {POINT_VIEWS.map(v => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => setPointView(v.key)}
+              className={cn('rounded-full border px-3 py-1 text-[12px] font-medium transition-colors', optionCls(pointView === v.key))}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
         {summaryQ.isLoading ? (
           <p className="text-sm text-slate-400 text-center py-6">Loading…</p>
         ) : summaryQ.isError ? (
           <p className="text-sm text-danger text-center py-6">Couldn't load adherence. Refresh to try again.</p>
+        ) : rows.length > 0 && visibleRows.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-6">
+            No agents {pointView === 'points' ? 'with points' : 'without points'} in this window.
+          </p>
         ) : (
           <AdherencePointsRoster
-            rows={rows}
+            rows={visibleRows}
             detail={detail}
             onExpand={loadDetail}
             pointsActive={pointsActive}
