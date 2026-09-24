@@ -440,6 +440,50 @@ describe('resolveCallCrmRecord — confidence has to be earned', () => {
     expect(res.crm.resolution?.reason).toContain('historical record');
   });
 
+  // Subaru of Little Rock #388: the call's Winrock research lived on an OPEN
+  // Contact Manager (38 actions, worked minutes before) while every lead was a
+  // closed same-day fulfilment stub. Selection cited the empty stub and passed the
+  // live CM over. An actively-worked open CM is the account's sales record here.
+  it('prefers an actively-worked open Contact Manager over a closed fulfilment-stub lead', async () => {
+    executeQueryMock.mockImplementation(route(resolvedAccount({
+      tasks: [
+        task({
+          TaskID: 1121763, statusTitle: 'Sale Fulfillment - Existing Customer', statusClosed: 1,
+          completedOn: '2026-09-04 11:27:00', lastActionOn: '2026-09-04 11:27:00', actionCount: 2,
+        }),
+        task({
+          TaskID: 70316, TaskTypeID: 10, taskType: 'Contact Manager', CustomerLeadID: 0,
+          statusTitle: 'Contacted Resumed', statusClosed: 0,
+          lastActionOn: '2026-09-04 11:32:00', actionCount: 38,
+        }),
+      ],
+    })));
+    const res = await resolveCallCrmRecord(candidate(), withName);
+    expect(res.id).toBe(70316);
+    expect(res.outcome).toBe('provisional');
+    expect(res.crm.resolution?.reason).toContain('Contact Manager is the sales record');
+  });
+
+  // The guard: a STALE open CM must not hijack a genuinely recent closed lead.
+  it('keeps the recent closed lead when the open CM was last worked long before it', async () => {
+    executeQueryMock.mockImplementation(route(resolvedAccount({
+      tasks: [
+        task({
+          TaskID: 900, statusTitle: 'Sold', statusClosed: 1,
+          completedOn: '2026-09-03 10:00:00', lastActionOn: '2026-09-03 10:00:00', actionCount: 6,
+        }),
+        task({
+          TaskID: 70316, TaskTypeID: 10, taskType: 'Contact Manager', CustomerLeadID: 0,
+          statusTitle: 'Contacted Resumed', statusClosed: 0,
+          lastActionOn: '2026-06-01 09:00:00', actionCount: 40,
+        }),
+      ],
+    })));
+    const res = await resolveCallCrmRecord(candidate(), withName);
+    expect(res.id).toBe(900);
+    expect(res.crm.resolution?.reason).toContain('historical record');
+  });
+
   it('never verifies the account Contact Manager fallback', async () => {
     executeQueryMock.mockImplementation(route(resolvedAccount({
       tasks: [task({

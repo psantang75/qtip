@@ -317,21 +317,42 @@ export function selectSalesRecords(args: SelectArgs): SalesRecordSelection {
       outcome = 'ambiguous';
       reason = `${openLeads.length} open leads on this account and no same-opportunity evidence to choose between them`;
     }
-  } else if (leads.length > 0) {
-    // The sale is fulfilled or the lead is closed. Use the real closed lead as
-    // the historical record rather than inventing an open one — but this is a
-    // historical record, not a resolved current opportunity.
-    const mostRecent = [...leads].sort(byRecency)[0];
-    primary = mostRecent;
-    reason = mostRecent.open === 'unknown'
-      ? 'no open lead; most recently worked lead used, open state could not be established'
-      : 'no open lead; most recently worked closed lead used as the historical record';
   } else {
-    const cm = records.find(isCm) ?? null;
-    primary = cm;
-    reason = cm
-      ? 'no lead on this account; the account Contact Manager is the sales record'
-      : 'no lead or Contact Manager could be selected';
+    // No open lead. Before falling back to a closed lead, prefer an OPEN Contact
+    // Manager that is the live account record: for an existing customer the active
+    // sales history lives on the CM, while a closed lead is often a same-day
+    // fulfilment stub with no opportunity on it (this is what cited an empty
+    // 2-action stub over the 38-action open CM that held the real account work).
+    // Gated on the CM being worked at least as recently as the newest closed lead,
+    // so a stale CM never displaces a genuine recent lead. A CM still cannot be a
+    // resolved opportunity, so `opportunityOpen` stays false and the outcome is
+    // provisional exactly as the closed-lead fallback is.
+    const liveCm = records
+      .filter((r) => isCm(r) && r.open === 'open')
+      .sort(byRecency)[0] ?? null;
+    const recentLead = [...leads].sort(byRecency)[0] ?? null;
+    const cmAtLeastAsRecent = !!liveCm
+      && (liveCm.lastActionAt?.getTime() ?? -Infinity)
+        >= (recentLead?.lastActionAt?.getTime() ?? -Infinity);
+
+    if (liveCm && cmAtLeastAsRecent) {
+      primary = liveCm;
+      reason = 'no open lead; the account Contact Manager is the sales record';
+    } else if (recentLead) {
+      // The sale is fulfilled or the lead is closed. Use the real closed lead as
+      // the historical record rather than inventing an open one — but this is a
+      // historical record, not a resolved current opportunity.
+      primary = recentLead;
+      reason = recentLead.open === 'unknown'
+        ? 'no open lead; most recently worked lead used, open state could not be established'
+        : 'no open lead; most recently worked closed lead used as the historical record';
+    } else {
+      const cm = records.find(isCm) ?? null;
+      primary = cm;
+      reason = cm
+        ? 'no lead on this account; the account Contact Manager is the sales record'
+        : 'no lead or Contact Manager could be selected';
+    }
   }
 
   if (primary) {

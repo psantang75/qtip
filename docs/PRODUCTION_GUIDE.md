@@ -56,7 +56,11 @@ REFRESH_TOKEN_EXPIRES_IN=7d
 # Security
 BCRYPT_ROUNDS=12
 RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
+# Per-user (JWT) / per-IP cap over the 15-min window. This is an authenticated
+# internal SPA where a single dashboard legitimately fires 10-30 queries, so 100
+# was far too low and caused 429 storms. 1000 matches the backend code default
+# and the deploy template.
+RATE_LIMIT_MAX_REQUESTS=1000
 AUTH_RATE_LIMIT_MAX=5
 MAX_FILE_SIZE=10485760
 
