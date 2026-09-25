@@ -17,6 +17,7 @@ import { assertCanWriteUsers, listRoster } from './schedule.permissions';
 import {
   fmtLocal, combineLocal, dateOnlyValue, dateStrFromDate, hmFromDateTime, isShiftLocked,
 } from './schedule.dates';
+import { rescoreSchedule } from './schedule.rescore';
 
 export function today(): string {
   return fmtLocal(new Date());
@@ -151,7 +152,7 @@ export async function upsertShift(scope: ScheduleScope, input: ShiftInput, actor
     updated_by: actorId,
   };
 
-  return prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
     if (existing) {
       await tx.scheduleShiftSegment.deleteMany({ where: { shift_id: existing.id } });
       return tx.scheduleShift.update({
@@ -173,6 +174,12 @@ export async function upsertShift(scope: ScheduleScope, input: ShiftInput, actor
       include: { segments: true },
     });
   });
+  // Draft edits are invisible to scoring. A published shift is the denominator
+  // already on the books, so the edit has to rescore before the next punch file.
+  if (existing?.status === 'PUBLISHED') {
+    await rescoreSchedule(input.shift_date, input.shift_date, [input.user_id], 'shift edit');
+  }
+  return saved;
 }
 
 export async function deleteShift(scope: ScheduleScope, shiftId: number) {
@@ -182,7 +189,10 @@ export async function deleteShift(scope: ScheduleScope, shiftId: number) {
   if (isShiftLocked(dateStrFromDate(shift.shift_date), shift.status, today())) {
     throw new ScheduleServiceError('This shift is locked', 423, 'LOCKED');
   }
+  const published = shift.status === 'PUBLISHED';
+  const date = dateStrFromDate(shift.shift_date);
   await prisma.scheduleShift.delete({ where: { id: shiftId } });
+  if (published) await rescoreSchedule(date, date, [shift.user_id], 'shift delete');
   return { success: true };
 }
 
@@ -225,7 +235,7 @@ export async function publishRange(
     );
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     for (const s of drafts) {
       const isElapsedDay = dateStrFromDate(s.shift_date) < td;
       await tx.scheduleShift.update({
@@ -238,6 +248,10 @@ export async function publishRange(
     }
     return { published: drafts.length, elapsed: elapsed.length };
   });
+  const publishedDates = [...new Set(drafts.map((s) => dateStrFromDate(s.shift_date)))].sort();
+  const publishedUsers = [...new Set(drafts.map((s) => s.user_id))];
+  await rescoreSchedule(publishedDates[0], publishedDates[publishedDates.length - 1], publishedUsers, 'shift publish');
+  return result;
 }
 
 /** Revert PUBLISHED back to DRAFT — future-only. Elapsed days are refused. */
@@ -251,6 +265,10 @@ export async function unpublishRange(scope: ScheduleScope, userIds: number[], da
     where: { user_id: { in: userIds }, shift_date: { in: dates.map(dateOnlyValue) }, status: 'PUBLISHED' },
     data: { status: 'DRAFT', locked_at: null, updated_by: actorId },
   });
+  if (res.count > 0) {
+    const sorted = [...dates].sort();
+    await rescoreSchedule(sorted[0], sorted[sorted.length - 1], userIds, 'shift unpublish');
+  }
   return { unpublished: res.count };
 }
 
@@ -277,8 +295,17 @@ export async function adminUnlockShift(scope: ScheduleScope, shiftId: number, ac
  * left intact as history.
  */
 export async function cancelFutureShiftsForUser(userId: number): Promise<number> {
-  const res = await prisma.scheduleShift.deleteMany({
-    where: { user_id: userId, shift_date: { gte: dateOnlyValue(today()) } },
+  const from = today();
+  const published = await prisma.scheduleShift.findMany({
+    where: { user_id: userId, shift_date: { gte: dateOnlyValue(from) }, status: 'PUBLISHED' },
+    select: { shift_date: true },
   });
+  const res = await prisma.scheduleShift.deleteMany({
+    where: { user_id: userId, shift_date: { gte: dateOnlyValue(from) } },
+  });
+  if (published.length > 0) {
+    const dates = published.map((s) => dateStrFromDate(s.shift_date)).sort();
+    await rescoreSchedule(dates[0], dates[dates.length - 1], [userId], 'shift cancel');
+  }
   return res.count;
 }
