@@ -19,7 +19,9 @@ import pool from '../config/database';
 import { getDatabasePool } from '../config/database';
 import { phoneDatabaseConfig } from '../config/environment';
 import { RowDataPacket } from 'mysql2';
-import { getTicketTouchDetail } from './insightsTouchDetail.service';
+import { getTicketTouchDetail, type TouchDetailRow } from './insightsTouchDetail.service';
+import { loadSalesDay, type SalesDay } from './insightsProductivitySales.service';
+import { salesTouchKind } from './insights/salesWorkClassify';
 import type { Area } from './insightsAgentScope';
 
 // Re-exported so existing importers (e.g. the roster service) keep their path.
@@ -50,6 +52,8 @@ export interface AgentDay {
   calls: CallSpan[];
   outbound: { dials: number; connected: number; voicemail: number; noAnswer: number };
   tickets: TicketEvent[];
+  /** Sales only: leads, proposals, floor plans, demos and emails. Absent for CSR. */
+  sales?: SalesDay;
 }
 
 const phonePool = () => getDatabasePool('phone');
@@ -213,13 +217,15 @@ async function loadCalls(guid: string, dayStart: string, dayEnd: string): Promis
 }
 
 /** CRM touched events → per-minute TicketEvent[], deduped to distinct items (the
- *  same basis the Workload "touched" count uses). Machine notes are dropped. */
-async function loadTickets(area: Area, employeeKey: number, date: string): Promise<TicketEvent[]> {
-  const detail = await getTicketTouchDetail({ area, employeeKey, date });
+ *  same basis the Workload "touched" count uses). Machine notes are dropped.
+ *  Sales moves Lead / Contact Manager work to its own Leads row, so those rows
+ *  are left off Tickets there to avoid counting the same touch twice. */
+export function buildTicketEvents(area: Area, rows: TouchDetailRow[]): TicketEvent[] {
   const seen = new Set<string>();
   const byMinute = new Map<string, TicketEvent>();
-  for (const r of detail.rows) {
+  for (const r of rows) {
     if (r.isSystem) continue;
+    if (area === 'sales' && salesTouchKind(r)) continue;
     const key = `${r.itemType === 'task' ? 'T' : 'K'}${r.itemId}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -270,7 +276,9 @@ export async function getProductivityDay(
   const [routing, presence, callData] = guid
     ? await Promise.all([loadRouting(guid, dayStart, dayEnd), loadPresence(guid, dayStart, dayEnd), loadCalls(guid, dayStart, dayEnd)])
     : [[], [], { calls: [], outbound: empty.outbound }];
-  const tickets = await loadTickets(area, employeeKey, date);
-
-  return { schedule: null, clock, routing, presence, calls: callData.calls, outbound: callData.outbound, tickets };
+  const touch = await getTicketTouchDetail({ area, employeeKey, date });
+  const tickets = buildTicketEvents(area, touch.rows);
+  const day: AgentDay = { schedule: null, clock, routing, presence, calls: callData.calls, outbound: callData.outbound, tickets };
+  if (area === 'sales') day.sales = await loadSalesDay(touch, identity.email, date, dayStart, dayEnd);
+  return day;
 }

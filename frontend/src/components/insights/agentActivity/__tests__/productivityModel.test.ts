@@ -357,7 +357,7 @@ describe('header KPIs', () => {
   it('computes a finite value for every day', () => {
     days.forEach(d => {
       const m = buildDayModel(d)
-      PRODUCTIVITY_KPIS.forEach(k => expect(Number.isFinite(k.value(m)), k.code).toBe(true))
+      PRODUCTIVITY_KPIS.forEach(k => expect(Number.isFinite(k.value(m, null)), k.code).toBe(true))
     })
   })
 })

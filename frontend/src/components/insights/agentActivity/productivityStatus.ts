@@ -185,6 +185,54 @@ export const TICKET_CLS: Record<'Completed' | 'Updated', string> = {
   'Updated':   TONE.off,
 }
 
+// ── Sales work rows ──────────────────────────────────────────────────────────
+
+export const EMAIL_CLS = TONE.work
+export const LEAD_CLS: Record<'lead' | 'contact_manager', string> = {
+  lead:            TONE.work,
+  contact_manager: TONE.ready,
+}
+/** Proposal markers sit on the Leads row, so they borrow the reason hues the
+ *  Status row uses rather than adding new colours. */
+export const PROPOSAL_CLS: Record<'sub_only' | 'sub_player' | 'audio_system' | 'unclassified', string> = {
+  sub_only:     'bg-indigo-500',
+  sub_player:   'bg-purple-500',
+  audio_system: 'bg-amber-700',
+  unclassified: 'bg-slate-500',
+}
+export const WORK_SPAN_CLS: Record<'floor_plan' | 'demo', string> = {
+  floor_plan: TONE.work,
+  demo:       TONE.ready,
+}
+
+/** Legend groups for the Sales-only rows, shown after the shared groups. */
+export const SALES_LEGEND_GROUPS: { group: string; items: LegendItem[] }[] = [
+  { group: 'Emails', items: [{ label: 'Sent', cls: EMAIL_CLS }] },
+  {
+    group: 'Leads',
+    items: [
+      { label: 'Lead Manager', cls: LEAD_CLS.lead },
+      { label: 'Contact Manager', cls: LEAD_CLS.contact_manager },
+    ],
+  },
+  {
+    group: 'Proposals',
+    items: [
+      { label: 'Sub Only', cls: PROPOSAL_CLS.sub_only },
+      { label: 'Sub + Player', cls: PROPOSAL_CLS.sub_player },
+      { label: 'Audio System', cls: PROPOSAL_CLS.audio_system },
+      { label: 'Unclassified', cls: PROPOSAL_CLS.unclassified },
+    ],
+  },
+  {
+    group: 'Floor plans & demos',
+    items: [
+      { label: 'Floor plan', cls: WORK_SPAN_CLS.floor_plan },
+      { label: 'Demo held', cls: WORK_SPAN_CLS.demo },
+    ],
+  },
+]
+
 // ── Threshold states for the headline metrics ────────────────────────────────
 
 export type MetricState = 'good' | 'warn' | 'bad'
