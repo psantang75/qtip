@@ -21,6 +21,7 @@
 
 import * as XLSX from '@e965/xlsx';
 import prisma from '../config/prisma';
+import { retireSupersededPunches } from './imports/punchSupersede';
 
 const BATCH_SIZE = 500;
 
@@ -783,8 +784,10 @@ export async function importEmailStats(
  * `Pay Type` is what makes a Start Non-Work block self-describing ("PTO -
  * Approved" vs "Holiday"); scheduling derives excused exceptions from it.
  *
- * Dedup key is `Post ID`: the importer UPSERTS on it, so overlapping or re-sent
- * 14-day exports never duplicate and later Paychex edits heal in place.
+ * Dedup key is `Post ID`: the importer UPSERTS on it, so a re-sent row with the
+ * same id heals in place. A correction that arrives under a new Post ID used to
+ * leave the old segment behind; after the upsert, segments inside each person's
+ * file window whose Post ID is absent from the file are removed.
  */
 export async function importPunchData(
   buffer: Buffer,
@@ -876,6 +879,15 @@ export async function importPunchData(
         ),
       );
       imported += chunk.length;
+    }
+
+    const retired = await retireSupersededPunches(prepared.map(rec => ({
+      userId: rec.user_id,
+      postId: rec.post_id,
+      punchInAt: rec.punch_in_at,
+    })));
+    if (retired > 0) {
+      warnings.push(`${retired} earlier punch segment(s) were replaced by this file and removed.`);
     }
 
     if (nameMatchedRows > 0) {

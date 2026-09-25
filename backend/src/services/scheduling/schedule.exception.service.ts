@@ -11,7 +11,6 @@
  * last Tuesday is the normal case, and last Tuesday is exactly the locked week.
  */
 import prisma from '../../config/prisma';
-import logger from '../../config/logger';
 import {
   ScheduleScope, ExceptionInput, ScheduleServiceError,
 } from './schedule.types';
@@ -19,28 +18,11 @@ import { assertCanWriteUsers } from './schedule.permissions';
 import {
   addDays, combineLocal, dateOnlyValue, dateStrFromDate, hmFromDateTime, exceptionsOverlap,
 } from './schedule.dates';
-import { recomputeRange } from '../attendance/attendance.engine';
-import { recomputeRange as recomputeAdherence } from '../adherence/adherence.engine';
+import { rescoreSchedule } from './schedule.rescore';
 
-/**
- * Attendance and adherence are both derived. After an exception is added or
- * removed we recompute that user's day(s) so points add/remove immediately
- * instead of waiting for the next punch import. Adherence treats any attendance
- * exception as "not here" and drops overlapping breaks/lunches. Each engine is
- * idempotent and isolated — a failure in one never rolls back the write or the
- * other rescore. The next recompute heals the range.
- */
-async function safeRecompute(from: string, to: string, userIds: number[]): Promise<void> {
-  try {
-    await recomputeRange(from, to, userIds);
-  } catch (err) {
-    logger.error('[SCHEDULING] attendance recompute after exception change failed:', err);
-  }
-  try {
-    await recomputeAdherence(from, to, userIds);
-  } catch (err) {
-    logger.error('[SCHEDULING] adherence recompute after exception change failed:', err);
-  }
+/** Recompute the affected day(s) so points move with the exception, not the next punch file. */
+function safeRecompute(from: string, to: string, userIds: number[]): Promise<void> {
+  return rescoreSchedule(from, to, userIds, 'exception change');
 }
 
 function windowInsideShift(start: string, end: string, shiftStart: string | null, shiftEnd: string | null): boolean {
