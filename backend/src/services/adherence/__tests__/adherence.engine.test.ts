@@ -490,6 +490,69 @@ describe('attendance exceptions (not-here drops the segment)', () => {
   });
 });
 
+describe('attendance supersedes adherence', () => {
+  const hm = (h: number, m: number) => h * 3600 + m * 60;
+  const threeSegs = {
+    breaks: [sched(hm(10, 15), 900), sched(hm(14, 15), 900)],
+    lunches: [sched(hm(12, 15), 1800)],
+  };
+  const withAttendance = (
+    act: { breaks: ActualSeg[]; lunches: ActualSeg[] },
+    isAbsent: boolean,
+    clockedIn: { startSec: number; endSec: number } | null,
+  ) => scoreDay(USER, D, 900, threeSegs, act, null, RULES, GRACE, undefined, [], { isAbsent, clockedIn });
+
+  it('a day attendance scored absent (no punches) records nothing — no stacked misses', () => {
+    expect(withAttendance({ breaks: [], lunches: [] }, true, null)).toBeNull();
+  });
+
+  it('left at noon: breaks after the last punch are dropped, not missed', () => {
+    // Clocked 08:30-12:00, took the 10:15 break, then left. Attendance charges
+    // the early leave; the 12:15 lunch and 14:15 break are not adherence misses.
+    const res = withAttendance(
+      { breaks: [actual(hm(10, 15), 900)], lunches: [] },
+      false,
+      { startSec: hm(8, 30), endSec: hm(12, 0) },
+    );
+    expect(res!.occurrences).toHaveLength(0);
+    expect(res!.daily.break_scheduled_sec).toBe(900);
+    expect(res!.daily.lunch_scheduled_sec).toBe(0);
+  });
+
+  it('arrived at 13:00: segments before the first punch are dropped', () => {
+    const res = withAttendance(
+      { breaks: [actual(hm(14, 15), 900)], lunches: [] },
+      false,
+      { startSec: hm(13, 0), endSec: hm(17, 0) },
+    );
+    expect(res!.occurrences).toHaveLength(0);
+  });
+
+  it('a break the arrival overlaps is still scored', () => {
+    // Break 10:15-10:30, clocked in at 10:20 — they were here for part of it.
+    const res = withAttendance(
+      { breaks: [], lunches: [] },
+      false,
+      { startSec: hm(10, 20), endSec: hm(17, 0) },
+    );
+    expect(res!.occurrences.filter((o) => o.kind === 'BREAK_MISSED').map((o) => o.seq)).toEqual([1, 2]);
+  });
+
+  it('on the clock all day and never punched a break is still a miss', () => {
+    const res = withAttendance(
+      { breaks: [], lunches: [actual(hm(12, 15), 1800)] },
+      false,
+      { startSec: hm(8, 30), endSec: hm(17, 0) },
+    );
+    expect(res!.occurrences.filter((o) => o.kind === 'BREAK_MISSED')).toHaveLength(2);
+  });
+
+  it('no attendance row leaves adherence scoring as it was', () => {
+    const res = scoreDay(USER, D, 900, threeSegs, { breaks: [], lunches: [] }, null, RULES, GRACE);
+    expect(res!.occurrences.filter((o) => o.kind === 'BREAK_MISSED')).toHaveLength(2);
+  });
+});
+
 describe('adherence_pct', () => {
   it('a flawless day reads 100', () => {
     const res = run(

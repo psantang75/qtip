@@ -18,10 +18,9 @@ export async function applyUserPunchExempt(userId: number, exempt: boolean): Pro
     const [attStart, adhStart] = await Promise.all([getPointsStartDate(), getAdherenceStartDate()]);
     const from = attStart < adhStart ? attStart : adhStart;
     const to = fmtLocal(new Date());
-    await Promise.all([
-      recomputeAttendance(from, to, [userId]),
-      recomputeAdherence(from, to, [userId]),
-    ]);
+    // Sequential: adherence reads the attendance verdict this rescore writes.
+    await recomputeAttendance(from, to, [userId]);
+    await recomputeAdherence(from, to, [userId]);
   } catch (err) {
     logger.warn(`punchExempt: saved flag for user ${userId} but rescore failed`, err);
   }
