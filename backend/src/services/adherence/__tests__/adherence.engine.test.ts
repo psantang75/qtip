@@ -94,6 +94,52 @@ describe('missed segment', () => {
   });
 });
 
+describe('pairing punches to scheduled breaks by start time', () => {
+  const hm = (h: number, m: number) => h * 3600 + m * 60;
+
+  it('a skipped FIRST break is the miss — the later punch stays on its own break', () => {
+    // Scheduled 10:15 and 16:15; only the 16:15 break was punched. Positional
+    // pairing charged break 2 as missed and break 1 as taken 6 hours late.
+    const res = run(
+      { breaks: [sched(hm(10, 15), 900), sched(hm(16, 15), 900)], ...noLunch },
+      { breaks: [actual(hm(16, 15), 900)], ...noLunchAct },
+    );
+    const misses = res!.occurrences.filter((o) => o.kind === 'BREAK_MISSED');
+    expect(misses).toHaveLength(1);
+    expect(misses[0].seq).toBe(1);
+    expect(res!.occurrences.find((o) => o.kind === 'BREAK_START')).toBeUndefined();
+  });
+
+  it('a skipped MIDDLE break does not push the miss onto the last break', () => {
+    // Scheduled 10:45, 12:45, 14:45; punched 10:45 and 14:46.
+    const res = run(
+      { breaks: [sched(hm(10, 45), 900), sched(hm(12, 45), 1800), sched(hm(14, 45), 900)], ...noLunch },
+      { breaks: [actual(hm(10, 45), 840), actual(hm(14, 46), 840)], ...noLunchAct },
+    );
+    const misses = res!.occurrences.filter((o) => o.kind === 'BREAK_MISSED');
+    expect(misses.map((o) => o.seq)).toEqual([2]);
+    expect(res!.occurrences.find((o) => o.kind === 'BREAK_START')).toBeUndefined();
+  });
+
+  it('every break taken on time scores nothing even when punches arrive out of order', () => {
+    const res = run(
+      { breaks: [sched(hm(10, 0), 900), sched(hm(15, 0), 900)], ...noLunch },
+      { breaks: [actual(hm(15, 0), 900), actual(hm(10, 0), 900)], ...noLunchAct },
+    );
+    expect(res!.occurrences).toHaveLength(0);
+    expect(res!.daily.adherence_pct).toBe(100);
+  });
+
+  it('an extra unscheduled punch does not steal a scheduled break', () => {
+    // One scheduled break at 15:00; punches at 10:00 (unscheduled) and 15:02.
+    const res = run(
+      { breaks: [sched(hm(15, 0), 900)], ...noLunch },
+      { breaks: [actual(hm(10, 0), 900), actual(hm(15, 2), 900)], ...noLunchAct },
+    );
+    expect(res!.occurrences).toHaveLength(0);
+  });
+});
+
 describe('start-time', () => {
   it('5+ minutes off schedule records an occurrence-only (zero points)', () => {
     const res = run(

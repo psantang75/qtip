@@ -33,6 +33,7 @@ import { getAdherenceStartDate, getPhoneGrace } from './adherence.settings';
 import { getPunchExemptUserIds } from '../attendance/punchExempt.settings';
 import type { PhoneGrace } from './adherence.settings';
 import { matchBand, missedRule, formatDeviation } from './adherence.rules';
+import { pairByNearestStart } from './adherence.pairing';
 import type { PointRule, AdherenceKind } from './adherence.rules';
 import {
   isFullDayAbsence, absenceWindows, absentScheduledSeqs, overlapsAny,
@@ -183,7 +184,8 @@ function takeOverlappingPhone(
 
 /**
  * Score one segment type (break or lunch) for a day. There are exactly TWO
- * independent comparisons, both per break/lunch INSTANCE (paired by sorted order):
+ * independent comparisons, both per break/lunch INSTANCE (each scheduled one
+ * paired to the punch nearest its start — see adherence.pairing):
  *
  *   1. SCHEDULED ↔ PUNCH — start (punch start vs scheduled start) and duration
  *      (punch length vs scheduled length). There is no separate end check: the end
@@ -208,12 +210,14 @@ function scoreSegment(
   outWindows: SecRange[] = [],
 ): SegmentScore {
   const occurrences: OccurrenceRow[] = [];
+  const paired = pairByNearestStart(scheduled, actual);
   // Attendance-absent segments are dropped from both sides — not a miss, not 100%.
   const scheduledSec = scheduled.reduce((a, s, i) => (
     absentSeqs.has(i + 1) ? a : a + Math.max(0, s.endSec - s.startSec)
   ), 0);
-  const actualSec = actual.reduce((a, s, i) => {
-    if (scheduled[i] && absentSeqs.has(i + 1)) return a;
+  const absentActs = new Set(paired.filter((_, i) => absentSeqs.has(i + 1)));
+  const actualSec = actual.reduce((a, s) => {
+    if (absentActs.has(s)) return a;
     if (overlapsAny(s.startSec, s.endSec, outWindows)) return a;
     return a + s.durationSec;
   }, 0);
@@ -229,7 +233,7 @@ function scoreSegment(
 
   scheduled.forEach((sched, i) => {
     const seq = i + 1;
-    const act = actual[i];
+    const act = paired[i];
     const schedDur = Math.max(0, sched.endSec - sched.startSec);
     // An EXCUSED exception on this instance forgives the WHOLE segment — its
     // duration, start, a miss, AND the phone start/stop tied to it. If the break
