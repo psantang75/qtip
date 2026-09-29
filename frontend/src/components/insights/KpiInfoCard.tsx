@@ -9,7 +9,12 @@ interface KpiInfoCardProps {
   kpiCode: string
   /** Optional KPI display name override; defaults to catalog name. */
   displayName?: string
+  /** The actual figures behind the shown value (e.g. a count split by type),
+   *  rendered as labelled rows for every role. */
+  basis?: KpiBasisRow[]
 }
+
+export interface KpiBasisRow { label: string; value: string }
 
 /**
  * Detailed KPI reference card. Used inside the (i) popover on KpiTile and
@@ -23,7 +28,7 @@ interface KpiInfoCardProps {
  * Agent role:    name + description only.
  * Manager/Admin: name + description + formula + source + live thresholds + Manage link.
  */
-export default function KpiInfoCard({ kpiCode, displayName }: KpiInfoCardProps) {
+export default function KpiInfoCard({ kpiCode, displayName, basis }: KpiInfoCardProps) {
   const { user } = useAuth()
   const def = getKpiDef(kpiCode)
   const scope = getKpiScope(kpiCode)
@@ -50,6 +55,16 @@ export default function KpiInfoCard({ kpiCode, displayName }: KpiInfoCardProps) 
 
       {description && (
         <p className="text-[12.5px] text-slate-600 leading-relaxed">{description}</p>
+      )}
+
+      {basis && basis.length > 0 && (
+        <div className="space-y-1.5">
+          {basis.map(b => (
+            <Row key={b.label} label={b.label}>
+              <span className="text-[11.5px] font-medium text-slate-700 tabular-nums">{b.value}</span>
+            </Row>
+          ))}
+        </div>
       )}
 
       {showFilterNote && (

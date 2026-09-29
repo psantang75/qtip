@@ -19,6 +19,7 @@ import mysql from 'mysql2/promise';
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import { crmDatabaseConfig } from '../config/environment';
+import { openCrmConnection, resolveCrmSalesPeople } from './insights/crmAgentConnection';
 import {
   isSystemNote,
   systemExclusionEnabled,
@@ -28,6 +29,8 @@ import {
 export interface TouchDetailRow {
   itemType: 'task' | 'ticket';
   itemId: number;
+  /** CRM tblTask.TaskTypeID for task rows; null for tickets. */
+  taskTypeId: number | null;
   subject: string | null;
   segment: 'contact_manager' | 'other';
   actor: string | null;
@@ -71,6 +74,7 @@ export interface TouchDetailParams {
 // UserID). Segment splits Contact Manager out like the Sales Workload page.
 const taskSql = (userPlaceholders: string) => `
   SELECT a.TaskID AS itemId,
+         t.TaskTypeID AS taskTypeId,
          tt.Title AS subject,
          CASE WHEN tt.Title = 'Contact Manager' THEN 'contact_manager' ELSE 'other' END AS segment,
          a.CompletedBy AS crmUserId,
@@ -165,24 +169,12 @@ export async function getTicketTouchDetail(params: TouchDetailParams): Promise<T
   );
   const excludeSystem = systemExclusionEnabled(exclCfg[0]?.config_value as string | undefined);
 
-  const crm = await mysql.createConnection({
-    host: crmDatabaseConfig.host,
-    user: crmDatabaseConfig.user,
-    password: crmDatabaseConfig.password,
-    database: crmDatabaseConfig.database,
-    connectTimeout: 60_000,
-    dateStrings: true,
-    charset: 'utf8mb4',
-  });
+  const crm = await openCrmConnection();
+  if (!crm) return empty('no-crm-config', email);
   try {
-    const [spRows] = await crm.query<mysql.RowDataPacket[]>(
-      `SELECT UserID, MAX(SalesPersonName) AS name FROM tblSalesPeople
-       WHERE UserID NOT IN (12) AND email IS NOT NULL AND LOWER(TRIM(email)) = ?
-       GROUP BY UserID`,
-      [email],
-    );
-    const crmUserIds = spRows.map((r) => Number(r.UserID));
-    const nameByUser = new Map<number, string>(spRows.map((r) => [Number(r.UserID), (r.name as string) ?? '']));
+    const people = await resolveCrmSalesPeople(crm, email);
+    const crmUserIds = people.map((p) => p.userId);
+    const nameByUser = new Map<number, string>(people.map((p) => [p.userId, p.name]));
     if (crmUserIds.length === 0) { await crm.end(); return empty('no-crm-user', email); }
 
     const ph = crmUserIds.map(() => '?').join(',');
@@ -194,7 +186,7 @@ export async function getTicketTouchDetail(params: TouchDetailParams): Promise<T
     for (const r of taskRows) {
       const note = String(r.note ?? '');
       rows.push({
-        itemType: 'task', itemId: Number(r.itemId),
+        itemType: 'task', itemId: Number(r.itemId), taskTypeId: Number(r.taskTypeId),
         subject: (r.subject as string | null) ?? null,
         segment: r.segment === 'contact_manager' ? 'contact_manager' : 'other',
         crmUserId: Number(r.crmUserId), actor: nameByUser.get(Number(r.crmUserId)) ?? null,
@@ -206,7 +198,7 @@ export async function getTicketTouchDetail(params: TouchDetailParams): Promise<T
     for (const r of ticketRows) {
       const note = String(r.note ?? '');
       rows.push({
-        itemType: 'ticket', itemId: Number(r.itemId),
+        itemType: 'ticket', itemId: Number(r.itemId), taskTypeId: null,
         subject: (r.subject as string | null) ?? null, segment: 'other',
         crmUserId: Number(r.crmUserId), actor: nameByUser.get(Number(r.crmUserId)) ?? null,
         note, occurredAt: String(r.occurredAt),

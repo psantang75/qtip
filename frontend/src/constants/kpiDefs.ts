@@ -626,6 +626,31 @@ export const KPI_DEFS: Record<string, KpiDef> = {
     formulaPlain: 'COUNT(calls offered WHERE never answered)',
     source: 'call activity (source phone system)',
   },
+  // Sales set — the work a sales agent moves, rather than call handling.
+  aa_prod_leads_touched: {
+    code: 'aa_prod_leads_touched', name: 'Leads Touched',
+    format: 'NUMBER', direction: 'UP_IS_GOOD',
+    scope: 'department',
+    description: 'Distinct Lead Manager and Contact Manager tasks the agent worked on the day. Automatic system notes are not counted.',
+    formulaPlain: 'COUNT(DISTINCT lead + contact manager tasks with an agent note)',
+    source: 'task notes (source CRM)',
+  },
+  aa_prod_proposals_issued: {
+    code: 'aa_prod_proposals_issued', name: 'Proposals Issued',
+    format: 'NUMBER', direction: 'UP_IS_GOOD',
+    scope: 'department',
+    description: 'Leads the agent moved to Proposal Issued, typed by the proposal\'s base-package quote: Sub Only, Sub + Player, or Audio System (hardware or install).',
+    formulaPlain: 'COUNT(lead status changes to Proposal Issued)',
+    source: 'task status history and agreements (source CRM)',
+  },
+  aa_prod_emails_sent: {
+    code: 'aa_prod_emails_sent', name: 'Emails Sent',
+    format: 'NUMBER', direction: 'UP_IS_GOOD',
+    scope: 'department',
+    description: 'Emails the agent sent from their mailbox, counted once per conversation. Automatic replies are excluded.',
+    formulaPlain: 'COUNT(DISTINCT outbound email conversations)',
+    source: 'email stats (source mail system)',
+  },
   // ── Collections · AR Campaign Performance ──────────────────────────────────
   // Live KPIs for the Collections dashboards, served from the ie_fact_collections_*
   // warehouse facts. Goals are seeded from published industry benchmarks
