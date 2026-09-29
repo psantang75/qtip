@@ -6,6 +6,7 @@ import { serviceLogger } from '../config/logger';
 import prisma from '../config/prisma';
 import { findOpenUnlock, closeUnlock } from '../services/unlock/unlock.service';
 import { isManagerOfSubmissionAgent } from '../services/manager/manager.access';
+import { buildSubmissionData } from './submissionPayload';
 
 const router = express.Router();
 
@@ -49,18 +50,7 @@ const submitAudit = async (req: Request, res: Response) => {
       return;
     }
 
-    const submissionData = {
-      form_id:    req.body.form_id,
-      call_id:    req.body.call_id,
-      call_ids:   req.body.call_ids,
-      call_data:  req.body.call_data,
-      ticket_tasks: req.body.ticket_tasks,
-      submitted_by: qa_id,
-      answers:    req.body.answers  || [],
-      metadata:   req.body.metadata || [],
-    };
-
-    const result = await submissionService.submitAudit(submissionData, qa_id);
+    const result = await submissionService.submitAudit(buildSubmissionData(req.body, qa_id), qa_id);
     res.status(201).json(result);
   } catch (error: any) {
     if (error instanceof SubmissionServiceError) {
@@ -83,17 +73,7 @@ const saveDraft = async (req: Request, res: Response) => {
       return;
     }
 
-    const submissionData = {
-      form_id: req.body.form_id,
-      call_id: req.body.call_id,
-      call_ids: req.body.call_ids,
-      ticket_tasks: req.body.ticket_tasks,
-      submitted_by: qa_id,
-      answers: req.body.answers || [],
-      metadata: req.body.metadata || []
-    };
-
-    const result = await submissionService.saveDraft(submissionData, qa_id);
+    const result = await submissionService.saveDraft(buildSubmissionData(req.body, qa_id), qa_id);
     res.status(200).json(result);
   } catch (error: any) {
     if (error instanceof SubmissionServiceError) {
