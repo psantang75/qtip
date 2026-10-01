@@ -3,9 +3,10 @@
  * their membership (which library campaigns are enabled). One calendar often
  * serves several departments, so the same plan is published once instead of
  * being copied per department. Department scoping reuses the scheduling module's
- * resolveScope: Admin/Director-ALL see everything, Managers are limited to the
- * departments they manage, and everyone else (agents) sees only the schedules
- * their own department is on, read-only.
+ * resolveScope: Admin/Director-ALL (and any non-Manager role granted viewAll,
+ * e.g. Trainer/QA) see everything; Managers are limited to the departments
+ * they manage; view-only agents see only the schedules their own department
+ * is on, read-only.
  *
  * Publish state (campaign.publish.service) narrows that further: an agent's list
  * excludes draft schedules and any schedule with no released month, and each DTO
