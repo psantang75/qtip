@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Phone, MicOff, FileDown, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatTranscriptText } from '@/utils/transcriptUtils'
-import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
+import { formatCrmDateTime } from '@/utils/dateFormat'
 import { InfoRow } from '@/components/common/DetailLayout'
 import { AudioPlayer } from '@/components/common/AudioPlayer'
 import { useQualityRole } from '@/hooks/useQualityRole'
@@ -85,7 +85,7 @@ export function CallDetailsPanel({ calls }: Props) {
         <div className="px-4 py-3 space-y-3">
           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
             {call.call_id && <InfoRow label="Conversation ID" value={call.call_id} />}
-            {call.call_date && <InfoRow label="Call Date" value={fmtDate(call.call_date)} />}
+            {call.call_date && <InfoRow label="Call Date" value={formatCrmDateTime(call.call_date)} />}
           </div>
 
           {!isAgent && (() => {

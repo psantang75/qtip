@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import callService, { type Call, type CallRecording } from '@/services/callService'
 import { AudioPlayer } from '@/components/common/AudioPlayer'
-import { formatQualityDate as fmtDate } from '@/utils/dateFormat'
+import { formatQualityDate as fmtDate, formatCrmDateTime } from '@/utils/dateFormat'
 import { normalizeConversationId } from '@/utils/conversationId'
 import { formatTranscriptText } from '@/utils/transcriptUtils'
 
@@ -22,10 +22,42 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
   const [adding,         setAdding]         = useState(false)
   const [callId,         setCallId]         = useState('')
   const [error,          setError]          = useState('')
+  // Manual entries carry the time they were added, not a real call time, so
+  // only calls found in the phone system show a time of day.
+  const [manualCallIds,  setManualCallIds]  = useState<Set<string>>(new Set())
 
   const setActiveTab = (i: number) => {
     setActiveIndex(i)
     setTranscriptOpen(false)
+  }
+
+  // Negative ID signals to the backend that this call needs to be created (not looked up)
+  const manualCall = (): Call => ({
+    id:            -(selectedCalls.length + 1),
+    call_id:       callId.trim(),
+    csr_id:        0,
+    customer_id:   null,
+    call_date:     new Date().toISOString(),
+    duration:      0,
+    recording_url: null,
+    transcript:    null,
+  })
+
+  const appendCall = (call: Call, isManual: boolean) => {
+    // Dedupe by conversation ID (call_id), not the numeric id: virtual calls
+    // resolved from PhoneSystem all share id -1, so comparing ids would falsely
+    // reject every additional (genuinely different) call.
+    if (selectedCalls.some(c => c.call_id === call.call_id)) {
+      setError('This call has already been added.')
+      return
+    }
+    if (isManual) setManualCallIds(prev => new Set(prev).add(call.call_id))
+    const updated = [...selectedCalls, call]
+    onCallsChange(updated)
+    setActiveTab(updated.length - 1)
+    setAdding(false)
+    setCallId('')
+    setError('')
   }
 
   const addMut = useMutation({
@@ -33,57 +65,11 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
       external_id: callId.trim() || undefined,
     }),
     onSuccess: (results) => {
-      // Use found call if available, otherwise create a manual entry from the entered fields
-      // Negative ID signals to the backend that this call needs to be created (not looked up)
-      const call: Call = results.length > 0
-        ? results[0]
-        : {
-            id:            -(selectedCalls.length + 1),
-            call_id:       callId.trim(),
-            csr_id:        0,
-            customer_id:   null,
-            call_date:     new Date().toISOString(),
-            duration:      0,
-            recording_url: null,
-            transcript:    null,
-          }
-      // Dedupe by conversation ID (call_id), not the numeric id: virtual calls
-      // resolved from PhoneSystem all share id -1, so comparing ids would falsely
-      // reject every additional (genuinely different) call.
-      if (selectedCalls.some(c => c.call_id === call.call_id)) {
-        setError('This call has already been added.')
-        return
-      }
-      const updated = [...selectedCalls, call]
-      onCallsChange(updated)
-      setActiveTab(updated.length - 1)
-      setAdding(false)
-      setCallId('')
-      setError('')
+      if (results.length > 0) appendCall(results[0], false)
+      else appendCall(manualCall(), true)
     },
-    onError: () => {
-      // On network error also fall back to manual entry
-      const call: Call = {
-        id:            -(selectedCalls.length + 1),
-        call_id:       callId.trim(),
-        csr_id:        0,
-        customer_id:   null,
-        call_date:     new Date().toISOString(),
-        duration:      0,
-        recording_url: null,
-        transcript:    null,
-      }
-      if (selectedCalls.some(c => c.call_id === call.call_id)) {
-        setError('This call has already been added.')
-        return
-      }
-      const updated = [...selectedCalls, call]
-      onCallsChange(updated)
-      setActiveTab(updated.length - 1)
-      setAdding(false)
-      setCallId('')
-      setError('')
-    },
+    // On network error also fall back to manual entry
+    onError: () => appendCall(manualCall(), true),
   })
 
   const removeCall = (idx: number) => {
@@ -147,7 +133,9 @@ export default function MultipleCallSelector({ selectedCalls, onCallsChange, dis
             {activeCall.call_date && (
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Call Date</p>
-                <p className="text-[12px] font-medium text-slate-700 mt-0.5">{fmtDate(activeCall.call_date)}</p>
+                <p className="text-[12px] font-medium text-slate-700 mt-0.5">
+                  {manualCallIds.has(activeCall.call_id) ? fmtDate(activeCall.call_date) : formatCrmDateTime(activeCall.call_date)}
+                </p>
               </div>
             )}
             {activeCall.duration > 0 && (
