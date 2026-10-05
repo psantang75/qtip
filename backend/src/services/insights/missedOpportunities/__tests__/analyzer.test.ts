@@ -541,6 +541,12 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('rewind-the-tape line');
   });
 
+  it('forbids returning a satisfied rule as a finding', () => {
+    // Production logged "Warranty offered and declined — not a miss" as a miss
+    // on a transferred call, where the auditor could not credit the rep's line.
+    expect(buildSystemPrompt(rules)).toContain('Every finding you return is a miss');
+  });
+
   it('keeps the coaching valid when someone else already recovered the account', () => {
     // A CS rep fixing the customer's problem can leave nothing to recover while
     // the salesperson's on-call omission stands. Conflating the two is what

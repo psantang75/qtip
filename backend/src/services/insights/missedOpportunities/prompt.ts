@@ -75,6 +75,7 @@ const FIXED_CONTRACT = [
   // stretch of call it was never shown.
   '- If the transcript contains a line saying its MIDDLE WAS OMITTED, you are reading only the opening and the close. Do not treat the gap as though nothing happened in it: grade only what you can see, and where a rule turns on something that would have been in the omitted stretch, say so in what_happened instead of reporting a miss.',
   '- If the salesperson handled the call well, return an empty findings array. An empty result is a valid and expected outcome — do not invent a miss to fill space.',
+  '- Every finding you return is a miss. When a rule was satisfied — the salesperson made the move, the customer declined, or one of the rule\'s exclusions applies — leave that rule out of findings entirely. Never return a finding to report correct handling, and never one whose title or recommended_approach says it is not a miss or that no change is needed.',
   '- Do NOT flag correct process as a miss. Routing a cancellation to Customer Service, transferring a billing question, and declining to quote outside the rep\'s authority are all correct.',
   // Most rules are of the form "the rep did not do X", and the evidence rules
   // below only ever demanded proof that the OPENING existed (the customer's
