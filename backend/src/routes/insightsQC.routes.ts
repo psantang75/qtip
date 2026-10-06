@@ -8,7 +8,6 @@ import {
   getCoachingTopics, getRepeatOffenders, getCoachingTopicAgents, getSessionsByStatus, getAgentsFailedQuizzes, getQuizBreakdown, getCoachingDeptComparison,
   getWriteUpPipeline, getActiveWriteUps, getEscalationData, getRepeatWarningAgents, getPolicyViolations, getWarningsDeptComparison,
 } from '../controllers/insightsQC.controller'
-import { getManagerReviewSummary, getManagerReviewAnswers } from '../controllers/insightsQCManagerReview.controller'
 import { qcCache } from '../middleware/qcCache'
 
 const router = express.Router()
@@ -45,7 +44,5 @@ router.get('/warnings/escalation',        h(getEscalationData))
 router.get('/warnings/repeat-agents',     h(getRepeatWarningAgents))
 router.get('/warnings/policies',          h(getPolicyViolations))
 router.get('/warnings/dept-comparison',   h(getWarningsDeptComparison))
-router.get('/manager-review/summary',     h(getManagerReviewSummary))
-router.get('/manager-review/answers',     h(getManagerReviewAnswers))
 
 export default router

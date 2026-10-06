@@ -23,13 +23,6 @@ class BadRequestError extends Error {
   }
 }
 
-export class ForbiddenError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'ForbiddenError'
-  }
-}
-
 function periodRanges(req: Request): PeriodRanges {
   return resolvePeriod(
     (req.query.period as string) || 'current_month',
@@ -48,7 +41,7 @@ function periodRanges(req: Request): PeriodRanges {
 // granted access if ANY of the keys resolve to canAccess; the resolved access
 // is the first one that grants — preferring narrower scopes is the caller's
 // responsibility.
-export function qcHandler(
+function qcHandler(
   pageKey: string | string[],
   fn: (deptFilter: number[], ranges: PeriodRanges, req: Request, access: InsightsAccessResult) => Promise<unknown>,
 ) {
@@ -83,10 +76,6 @@ export function qcHandler(
     } catch (err) {
       if (err instanceof BadRequestError) {
         res.status(400).json({ error: err.message })
-        return
-      }
-      if (err instanceof ForbiddenError) {
-        res.status(403).json({ error: err.message })
         return
       }
       logger.error(`insightsQC [${label}] error:`, err)
@@ -188,7 +177,7 @@ export const getFilterOptions = async (req: Request, res: Response): Promise<voi
     if (roleId === null) { res.status(403).json({ error: 'Unknown role' }); return }
 
     let access: InsightsAccessResult | null = null
-    for (const key of [...QC_PAGE_KEYS, 'qc_manager_review']) {
+    for (const key of QC_PAGE_KEYS) {
       const a = await permissionService.resolveAccess(req.user.user_id, roleId, key)
       if (a.canAccess) { access = a; break }
     }

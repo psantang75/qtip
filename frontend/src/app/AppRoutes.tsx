@@ -64,6 +64,7 @@ const ReviewFormsPage       = React.lazy(() => import('../pages/quality/ReviewFo
 const AuditFormPage         = React.lazy(() => import('../pages/quality/AuditFormPage'))
 const SubmissionDetailPage  = React.lazy(() => import('../pages/quality/SubmissionDetailPage'))
 const AIReviewInbox         = React.lazy(() => import('../pages/quality/AIReviewInbox'))
+const ManagerReviewPage     = React.lazy(() => import('../pages/quality/ManagerReviewPage'))
 const AIReviewerFormsList   = React.lazy(() => import('../pages/quality/AIReviewerFormsList'))
 const AIReviewerFormDetail  = React.lazy(() => import('../pages/quality/AIReviewerFormDetail'))
 const RulePackLibrary       = React.lazy(() => import('../pages/quality/ai-reviewer/RulePackLibrary'))
@@ -110,7 +111,6 @@ const QCQualityPage          = React.lazy(() => import('../pages/insights/QCQual
 const QCCoachingPage         = React.lazy(() => import('../pages/insights/QCCoachingPage'))
 const QCWarningsPage         = React.lazy(() => import('../pages/insights/QCWarningsPage'))
 const QCAgentsPage           = React.lazy(() => import('../pages/insights/QCAgentsPage'))
-const QCManagerReviewPage    = React.lazy(() => import('../pages/insights/QCManagerReviewPage'))
 const AACallActivityPage     = React.lazy(() => import('../pages/insights/AACallActivityPage'))
 const AALeadsPage            = React.lazy(() => import('../pages/insights/AALeadsPage'))
 const AAMarginPage           = React.lazy(() => import('../pages/insights/AAMarginPage'))
@@ -276,6 +276,8 @@ export default function AppRoutes(): React.ReactElement {
                 under Quality; gated by the `quality_unlock_register` app_page
                 (only Admin is granted, so ALL+ = admin here). */}
             <Route path="unlocks"        element={<RequirePageAccess pageKey="quality_unlock_register" minLevel="viewAll" fallback="/app/quality/submissions"><PageLoader><UnlockRegisterPage /></PageLoader></RequirePageAccess>} />
+            {/* Manager Review Items — answers hidden from agents; viewAll keeps CSRs (OWN) out. */}
+            <Route path="manager-review" element={<RequirePageAccess pageKey="quality_manager_review" minLevel="viewAll" fallback="/app/quality/submissions"><PageLoader><ManagerReviewPage /></PageLoader></RequirePageAccess>} />
           </Route>
 
           {/* Training. Coaching is one logical page (`training_coaching`):
@@ -427,7 +429,7 @@ export default function AppRoutes(): React.ReactElement {
             <Route path="qc-coaching" element={<RequireInsightsAccess pageKey="qc_coaching"><PageLoader><QCCoachingPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="qc-warnings" element={<RequireInsightsAccess pageKey="qc_warnings"><PageLoader><QCWarningsPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="qc-agents"   element={<RequireInsightsAccess pageKey="qc_agents"><PageLoader><InsightsScopeProvider scope="qc"><QCAgentsPage /></InsightsScopeProvider></PageLoader></RequireInsightsAccess>} />
-            <Route path="qc-manager-review" element={<RequireInsightsAccess pageKey="qc_manager_review"><PageLoader><QCManagerReviewPage /></PageLoader></RequireInsightsAccess>} />
+            <Route path="qc-manager-review" element={<Navigate to="/app/quality/manager-review" replace />} />
             {/* Internal Research (Internal forms) — QC dashboards reused in INTERNAL scope.
                 No Overview page: Internal Research starts at Quality. */}
             <Route path="ir-quality"  element={<RequireInsightsAccess pageKey="ir_quality"><PageLoader><InsightsScopeProvider scope="ir"><QCQualityPage /></InsightsScopeProvider></PageLoader></RequireInsightsAccess>} />

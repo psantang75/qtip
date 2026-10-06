@@ -112,28 +112,6 @@ export interface DeptWarningsRow { dept: string; writeups: number; closed: numbe
 
 export interface FilterOptions { departments: string[]; forms: string[] }
 
-export interface ManagerReviewKpis {
-  reviews: number; reviewsFlagged: number; notes: number
-}
-export interface HiddenQuestionAgent { userId: number; name: string; dept: string; total: number; responses: number; flagged: number }
-export interface HiddenQuestionSummary {
-  key: string; form: string; question: string; type: string
-  total: number; responses: number; flagged: number
-  distribution: Array<{ answer: string; count: number }>
-  agents: HiddenQuestionAgent[]
-}
-export interface ManagerReviewSummary {
-  kpis: ManagerReviewKpis
-  questions: HiddenQuestionSummary[]
-  range: { startDate: string; endDate: string }
-}
-export interface HiddenAnswerRow {
-  submissionId: number; date: string; status: string
-  userId: number; agent: string; dept: string
-  form: string; question: string; type: string
-  answer: string | null; notes: string | null; flagged: boolean
-}
-
 // Combined initial-load bundle for the Agent Profile page. Used as
 // placeholderData for the per-section queries so the page renders in one
 // round trip; subsequent filter changes still hit the per-section endpoints
@@ -275,11 +253,3 @@ export const getEscalationData         = qcApi.getEscalationData
 export const getRepeatWarningAgents    = qcApi.getRepeatWarningAgents
 export const getPolicyViolations       = qcApi.getPolicyViolations
 export const getWarningsDeptComparison = qcApi.getWarningsDeptComparison
-
-// Manager Review Items is QC-only (no Internal Research variant), so it is not
-// part of the scoped factory.
-export const getManagerReviewSummary = async (p: QCParams): Promise<ManagerReviewSummary> =>
-  (await api.get('/insights/qc/manager-review/summary', { params: p })).data
-
-export const getManagerReviewAnswers = async (p: QCParams & { all?: '1' }): Promise<HiddenAnswerRow[]> =>
-  (await api.get('/insights/qc/manager-review/answers', { params: p })).data

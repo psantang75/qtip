@@ -85,7 +85,6 @@ export const NAV_CONFIG: SectionConfig[] = [
       { label: 'Coaching',             path: '/app/insights/qc-coaching', icon: 'BookOpen',        roles: [], pageKey: 'qc_coaching', group: 'Quality, Coaching & Performance Warnings' },
       { label: 'Performance Warnings', path: '/app/insights/qc-warnings', icon: 'AlertTriangle',   roles: [], pageKey: 'qc_warnings', group: 'Quality, Coaching & Performance Warnings' },
       { label: 'Agent Performance',    path: '/app/insights/qc-agents',   icon: 'Users',           roles: [], pageKey: 'qc_agents',   group: 'Quality, Coaching & Performance Warnings' },
-      { label: 'Manager Review Items', path: '/app/insights/qc-manager-review', icon: 'ClipboardCheck', roles: [], pageKey: 'qc_manager_review', group: 'Quality, Coaching & Performance Warnings' },
       // ── Sales Agent Activity ──
       // `roles` is ignored when `pageKey` is set — visibility comes from
       // /api/insights/navigation (i.e. ie_page_role_access). The section only

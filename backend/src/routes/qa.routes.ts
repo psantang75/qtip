@@ -10,6 +10,11 @@ import {
   getQAStats,
   getQACSRActivity,
 } from '../controllers/qa';
+import {
+  getManagerReviewFilterOptions,
+  getManagerReviewSummary,
+  getManagerReviewAnswers,
+} from '../controllers/managerReview.controller';
 import { qaFeatureFlags } from '../config/qa.config';
 import { qaCacheService } from '../services/QACacheService';
 import prisma from '../config/prisma';
@@ -97,5 +102,12 @@ router.get('/completed/:id/export',        submissionsRead,  exportSubmission);
 
 // Submission state transitions — full write required.
 router.put('/submissions/:id/finalize',    submissionsWrite, finalizeSubmission);
+
+// Quality > Manager Review Items (answers hidden from agents). Read-only,
+// org-wide report, so ALL+ is required — OWN (CSR) can never reach it.
+const managerReviewRead = authorizePage('quality_manager_review', 'viewAll') as unknown as RequestHandler;
+router.get('/manager-review/filter-options', managerReviewRead, getManagerReviewFilterOptions as unknown as RequestHandler);
+router.get('/manager-review/summary',        managerReviewRead, getManagerReviewSummary as unknown as RequestHandler);
+router.get('/manager-review/answers',        managerReviewRead, getManagerReviewAnswers as unknown as RequestHandler);
 
 export default router;

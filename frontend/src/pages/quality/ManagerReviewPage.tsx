@@ -1,21 +1,21 @@
 import { useQuery } from '@tanstack/react-query'
 import { InsightsFilterBar, KpiTile, QCPageSkeleton, ErrorCard } from '@/components/insights'
-import ManagerReviewQuestionsSection from '@/components/insights/ManagerReviewQuestionsSection'
-import ManagerReviewAnswersSection from '@/components/insights/ManagerReviewAnswersSection'
+import ManagerReviewQuestionsSection from '@/components/quality/ManagerReviewQuestionsSection'
+import ManagerReviewAnswersSection from '@/components/quality/ManagerReviewAnswersSection'
 import { useQCFilters } from '@/hooks/useQCFilters'
-import { getFilterOptions, getManagerReviewSummary } from '@/services/insightsQCService'
+import { getManagerReviewFilterOptions, getManagerReviewSummary } from '@/services/managerReviewService'
 
-export default function QCManagerReviewPage() {
+export default function ManagerReviewPage() {
   const { departments, setDepartments, period, setPeriod,
           customStart, setCustomStart, customEnd, setCustomEnd,
           forms, setForms, resetFilters, params } = useQCFilters()
 
   const { data: filterOpts } = useQuery({
-    queryKey: ['insights', 'qc-manager-review', 'filter-options', params],
-    queryFn:  () => getFilterOptions(params),
+    queryKey: ['manager-review', 'options', params],
+    queryFn:  () => getManagerReviewFilterOptions(params),
   })
   const { data: summary, isLoading, isError, refetch } = useQuery({
-    queryKey: ['insights', 'qc-manager-review', 'summary', params],
+    queryKey: ['manager-review', 'summary', params],
     queryFn:  () => getManagerReviewSummary(params),
   })
 

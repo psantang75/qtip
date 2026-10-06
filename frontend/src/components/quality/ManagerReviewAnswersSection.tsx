@@ -6,9 +6,11 @@ import { ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { optionCls } from '@/utils/forms/optionCls'
 import { InsightsSection } from '@/components/insights'
+import { useInsightsAccess } from '@/hooks/useInsightsAccess'
 import SortableTable from '@/components/insights/agentActivity/SortableTable'
-import { answerLabel } from './agentProfileHelpers'
-import { getManagerReviewAnswers, type HiddenAnswerRow, type QCParams } from '@/services/insightsQCService'
+import { answerLabel } from '@/components/insights/agentProfileHelpers'
+import type { QCParams } from '@/services/insightsQCService'
+import { getManagerReviewAnswers, type HiddenAnswerRow } from '@/services/managerReviewService'
 
 const VIEWS = [
   { key: 'flagged', label: 'Notes Only' },
@@ -32,11 +34,12 @@ function AnswerCell({ row }: { row: HiddenAnswerRow }) {
 
 export default function ManagerReviewAnswersSection({ params }: { params: QCParams }) {
   const navigate = useNavigate()
+  const { canAccess: canOpenAgent } = useInsightsAccess('qc_agents')
   const [view, setView] = useState<View>('flagged')
   const apiParams = useMemo(() => (view === 'all' ? { ...params, all: '1' as const } : params), [params, view])
 
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ['insights', 'qc-manager-review', 'answers', apiParams],
+    queryKey: ['manager-review', 'list', apiParams],
     queryFn:  () => getManagerReviewAnswers(apiParams),
   })
 
@@ -53,7 +56,7 @@ export default function ManagerReviewAnswersSection({ params }: { params: QCPara
     },
     { accessorKey: 'date', header: 'Review Date', meta: { width: 'w-[10%]' } },
     { accessorKey: 'agent', header: 'Agent', meta: { width: 'w-[13%]' },
-      cell: ({ row }) => <span className="font-medium text-primary hover:underline">{row.original.agent}</span> },
+      cell: ({ row }) => <span className={canOpenAgent ? 'font-medium text-primary hover:underline' : 'font-medium text-slate-800'}>{row.original.agent}</span> },
     { accessorKey: 'dept', header: 'Department', meta: { width: 'w-[12%]' } },
     { accessorKey: 'question', header: 'Question', meta: { width: 'w-[22%]' },
       cell: ({ row }) => (
@@ -64,7 +67,7 @@ export default function ManagerReviewAnswersSection({ params }: { params: QCPara
       ) },
     { id: 'answer', accessorFn: r => r.answer ?? '', header: 'Answer / Note', meta: { width: 'w-[34%]' },
       cell: ({ row }) => <AnswerCell row={row.original} /> },
-  ], [])
+  ], [canOpenAgent])
 
   return (
     <InsightsSection
@@ -92,7 +95,7 @@ export default function ManagerReviewAnswersSection({ params }: { params: QCPara
               initialSorting={[{ id: 'date', desc: true }]}
               minWidth="min-w-[900px]"
               paginated
-              onRowClick={r => navigate(`/app/insights/qc-agents?agent=${r.userId}`)}
+              onRowClick={canOpenAgent ? r => navigate(`/app/insights/qc-agents?agent=${r.userId}`) : undefined}
             />
           )}
     </InsightsSection>

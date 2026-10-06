@@ -36,6 +36,24 @@ export type { SqlFragment } from './qcQueryHelpers';
 export const NO_MATCH_DEPARTMENT_ID = -1;
 
 /**
+ * The UI's department filter (ids or department names) as department ids, for
+ * an org-wide viewer. Empty input → [] (no restriction).
+ */
+export async function resolveRequestedDepts(reqDepts?: string): Promise<number[]> {
+  if (!reqDepts) return [];
+  const parts = reqDepts.split(',').map((s) => s.trim()).filter(Boolean);
+  if (parts.length === 0) return [];
+  const numericIds = parts.map(Number).filter((n) => !isNaN(n) && n > 0);
+  if (numericIds.length === parts.length) return numericIds;
+  const ph = parts.map(() => '?').join(',');
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id FROM departments WHERE department_name IN (${ph})`,
+    parts,
+  );
+  return rows.map((r) => r.id as number);
+}
+
+/**
  * The department ids a viewer's query must be restricted to. An EMPTY array means
  * "no department restriction" — callers pass it to deptClause, which then emits
  * no SQL. SELF scope also returns empty, because it is filtered by user_id at the
@@ -48,20 +66,7 @@ export async function resolveDeptFilter(
   access: InsightsAccessResult,
   reqDepts?: string,
 ): Promise<number[]> {
-  if (access.dataScope === 'ALL') {
-    if (reqDepts) {
-      const parts = reqDepts.split(',').map((s) => s.trim()).filter(Boolean);
-      const numericIds = parts.map(Number).filter((n) => !isNaN(n) && n > 0);
-      if (numericIds.length === parts.length) return numericIds;
-      const ph = parts.map(() => '?').join(',');
-      const [rows] = await pool.execute<RowDataPacket[]>(
-        `SELECT id FROM departments WHERE department_name IN (${ph})`,
-        parts,
-      );
-      return rows.map((r) => r.id as number);
-    }
-    return [];
-  }
+  if (access.dataScope === 'ALL') return resolveRequestedDepts(reqDepts);
   if (access.dataScope === 'SELF') return [];
   // DEPARTMENT / DIVISION: the permission service already resolved the exact set
   // of warehouse department_keys this viewer may see (profile department + the

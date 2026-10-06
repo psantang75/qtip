@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { InsightsSection, ExpandableRow } from '@/components/insights'
+import { useInsightsAccess } from '@/hooks/useInsightsAccess'
 import { Button } from '@/components/ui/button'
-import type { HiddenQuestionSummary } from '@/services/insightsQCService'
-import { answerLabel } from './agentProfileHelpers'
+import type { HiddenQuestionSummary } from '@/services/managerReviewService'
+import { answerLabel } from '@/components/insights/agentProfileHelpers'
 
 function QuestionSummaryLine({ q }: { q: HiddenQuestionSummary }) {
   if (q.type === 'TEXT') {
@@ -25,6 +26,7 @@ function QuestionSummaryLine({ q }: { q: HiddenQuestionSummary }) {
 
 export default function ManagerReviewQuestionsSection({ questions }: { questions: HiddenQuestionSummary[] }) {
   const navigate = useNavigate()
+  const { canAccess: canOpenAgent } = useInsightsAccess('qc_agents')
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const byForm = new Map<string, HiddenQuestionSummary[]>()
@@ -66,10 +68,12 @@ export default function ManagerReviewQuestionsSection({ questions }: { questions
                         {q.agents.map(a => (
                           <div key={a.userId} className="flex items-center text-xs py-1.5 border-b border-slate-100 last:border-0">
                             <span className="flex-1 min-w-0">
-                              <Button variant="link" onClick={() => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
-                                className="h-auto p-0 text-xs font-medium max-w-full truncate justify-start">
-                                {a.name}
-                              </Button>
+                              {canOpenAgent
+                                ? <Button variant="link" onClick={() => navigate(`/app/insights/qc-agents?agent=${a.userId}`)}
+                                    className="h-auto p-0 text-xs font-medium max-w-full truncate justify-start">
+                                    {a.name}
+                                  </Button>
+                                : <span className="block truncate font-medium text-slate-800">{a.name}</span>}
                             </span>
                             <span className="w-40 shrink-0 truncate text-slate-500">{a.dept}</span>
                             <span className="w-20 shrink-0 text-right text-slate-700">{a.total}</span>
