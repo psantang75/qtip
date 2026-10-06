@@ -12,3 +12,11 @@ export function scoreColor(v: number | null | undefined, goal = 85, warn = 75): 
 }
 
 export type TrendPoint = { label: string; value: number | null }
+
+/** Display label for a stored (lower-cased) choice answer, e.g. 'yes' → 'Yes'. */
+export function answerLabel(answer: string): string {
+  if (answer === 'yes') return 'Yes'
+  if (answer === 'no')  return 'No'
+  if (answer === 'na' || answer === 'n/a') return 'N/A'
+  return answer
+}

@@ -110,6 +110,7 @@ const QCQualityPage          = React.lazy(() => import('../pages/insights/QCQual
 const QCCoachingPage         = React.lazy(() => import('../pages/insights/QCCoachingPage'))
 const QCWarningsPage         = React.lazy(() => import('../pages/insights/QCWarningsPage'))
 const QCAgentsPage           = React.lazy(() => import('../pages/insights/QCAgentsPage'))
+const QCManagerReviewPage    = React.lazy(() => import('../pages/insights/QCManagerReviewPage'))
 const AACallActivityPage     = React.lazy(() => import('../pages/insights/AACallActivityPage'))
 const AALeadsPage            = React.lazy(() => import('../pages/insights/AALeadsPage'))
 const AAMarginPage           = React.lazy(() => import('../pages/insights/AAMarginPage'))
@@ -426,6 +427,7 @@ export default function AppRoutes(): React.ReactElement {
             <Route path="qc-coaching" element={<RequireInsightsAccess pageKey="qc_coaching"><PageLoader><QCCoachingPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="qc-warnings" element={<RequireInsightsAccess pageKey="qc_warnings"><PageLoader><QCWarningsPage /></PageLoader></RequireInsightsAccess>} />
             <Route path="qc-agents"   element={<RequireInsightsAccess pageKey="qc_agents"><PageLoader><InsightsScopeProvider scope="qc"><QCAgentsPage /></InsightsScopeProvider></PageLoader></RequireInsightsAccess>} />
+            <Route path="qc-manager-review" element={<RequireInsightsAccess pageKey="qc_manager_review"><PageLoader><QCManagerReviewPage /></PageLoader></RequireInsightsAccess>} />
             {/* Internal Research (Internal forms) — QC dashboards reused in INTERNAL scope.
                 No Overview page: Internal Research starts at Quality. */}
             <Route path="ir-quality"  element={<RequireInsightsAccess pageKey="ir_quality"><PageLoader><InsightsScopeProvider scope="ir"><QCQualityPage /></InsightsScopeProvider></PageLoader></RequireInsightsAccess>} />
