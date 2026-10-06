@@ -13,6 +13,8 @@ export interface QuestionRenderData {
   isNaAllowed?: boolean;
   isRequired?: boolean;
   isCritical?: boolean;
+  /** Agent Visible = No in the Form Builder (`visible_to_csr === false`). */
+  hiddenFromAgent?: boolean;
   /**
    * Question role surfaced to the renderer so role=ROLLUP questions can be
    * rendered read-only with the "Auto-computed" badge. Defaults to DETAIL

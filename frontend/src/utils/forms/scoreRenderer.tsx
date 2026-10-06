@@ -2,6 +2,7 @@ import React from 'react';
 import { processConditionalLogic } from './formConditions';
 import { getMaxPossibleScore, getQuestionScore } from './scoringEngine';
 import { RichTextDisplay } from '../../components/common/RichTextDisplay';
+import { HiddenFromAgentBadge } from './HiddenFromAgentBadge';
 import type { Form, FormCategory, FormQuestion, RadioOption } from '../../types/form.types';
 
 interface QuestionWithScore {
@@ -13,6 +14,7 @@ interface QuestionWithScore {
   questionType: string;
   isCritical?: boolean;
   criticalMissed?: boolean;
+  hiddenFromAgent?: boolean;
 }
 
 interface CategoryScore {
@@ -189,6 +191,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         questionType: qType,
         isCritical,
         criticalMissed,
+        hiddenFromAgent: question.visible_to_csr === false,
       });
     });
 
@@ -339,6 +342,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                                       Critical
                                     </span>
                                   )}
+                                  {q.hiddenFromAgent && <HiddenFromAgentBadge />}
                                 </span>
                               </td>
                               {isText ? (

@@ -10,6 +10,7 @@ import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { cn } from '../../lib/utils';
 import { RichTextDisplay } from '../../components/common/RichTextDisplay';
 import { optionCls } from './optionCls';
+import { HiddenFromAgentBadge } from './HiddenFromAgentBadge';
 import type { QuestionRenderData, CategoryRenderData, FormRenderData } from './formRenderTypes';
 import type { RadioOption } from '../../types/form.types';
 
@@ -57,7 +58,7 @@ interface QuestionProps {
 
 export const YesNoQuestion: React.FC<QuestionProps> = ({ question, isDisabled = false, onAnswerChange }) => {
   if (!question.isVisible) return null;
-  const { id, text, currentValue, isNaAllowed, isCritical, role, rollupReason } = question;
+  const { id, text, currentValue, isNaAllowed, isCritical, role, rollupReason, hiddenFromAgent } = question;
   const isRollup = role === 'ROLLUP';
   const options = [
     { value: 'yes', label: 'Yes' },
@@ -85,6 +86,7 @@ export const YesNoQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
             Auto
           </span>
         )}
+        {hiddenFromAgent && <HiddenFromAgentBadge />}
       </p>
       <div className="flex flex-col gap-1.5 pl-4">
         {options.map(opt => (
@@ -115,7 +117,10 @@ export const ScaleQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
   const { id, text, min = 0, max = 5, currentValue } = question;
   return (
     <div className="flex items-start gap-3">
-      <p className="flex-1 text-[13px] text-slate-800 leading-snug pt-0.5">{text}</p>
+      <p className="flex-1 text-[13px] text-slate-800 leading-snug pt-0.5 inline-flex items-start gap-2 flex-wrap">
+        <span>{text}</span>
+        {question.hiddenFromAgent && <HiddenFromAgentBadge />}
+      </p>
       <div className="flex items-center gap-0.5 flex-wrap shrink-0">
         {Array.from({ length: (max - min) + 1 }, (_, i) => {
           const val = (min + i).toString();
@@ -153,7 +158,10 @@ export const TextQuestion: React.FC<QuestionProps> = ({ question, isDisabled = f
   if (isAiReviewerFeedback || looksLikeHtml) {
     return (
       <div>
-        <p className="text-[13px] text-slate-800 leading-snug mb-1.5">{text}</p>
+        <p className="text-[13px] text-slate-800 leading-snug mb-1.5 inline-flex items-start gap-2 flex-wrap">
+          <span>{text}</span>
+          {question.hiddenFromAgent && <HiddenFromAgentBadge />}
+        </p>
         <div className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 bg-slate-50">
           <RichTextDisplay html={value} placeholder="(no AI narrative yet)" />
         </div>
@@ -163,7 +171,10 @@ export const TextQuestion: React.FC<QuestionProps> = ({ question, isDisabled = f
 
   return (
     <div>
-      <p className="text-[13px] text-slate-800 leading-snug mb-1.5">{text}</p>
+      <p className="text-[13px] text-slate-800 leading-snug mb-1.5 inline-flex items-start gap-2 flex-wrap">
+        <span>{text}</span>
+        {question.hiddenFromAgent && <HiddenFromAgentBadge />}
+      </p>
       <textarea
         ref={ref}
         value={value}
@@ -184,7 +195,10 @@ export const RadioQuestion: React.FC<QuestionProps> = ({ question, isDisabled = 
   if (radioOptions.length === 0) return <p className="text-[12px] text-red-500">Error: No options for this question.</p>;
   return (
     <div>
-      <p className="text-[13px] text-slate-800 leading-snug mb-3">{text}</p>
+      <p className="text-[13px] text-slate-800 leading-snug mb-3 inline-flex items-start gap-2 flex-wrap">
+        <span>{text}</span>
+        {question.hiddenFromAgent && <HiddenFromAgentBadge />}
+      </p>
       <div className="flex flex-col gap-1.5 pl-4">
         {radioOptions.map((option: RadioOption & { value?: string; label?: string }) => {
           const val = String(option.option_value || option.value || '');
@@ -218,7 +232,10 @@ export const MultiSelectQuestion: React.FC<QuestionProps> = ({ question, isDisab
 
   return (
     <div>
-      <p className="text-[13px] text-slate-800 leading-snug mb-3">{text}</p>
+      <p className="text-[13px] text-slate-800 leading-snug mb-3 inline-flex items-start gap-2 flex-wrap">
+        <span>{text}</span>
+        {question.hiddenFromAgent && <HiddenFromAgentBadge />}
+      </p>
       <div className="flex flex-col gap-1.5 pl-4">
         {options.map((option: RadioOption & { value?: string; label?: string }) => {
           const val = String(option.option_value || option.value || '');

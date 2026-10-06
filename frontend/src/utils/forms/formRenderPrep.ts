@@ -105,6 +105,7 @@ export const prepareQuestionForRender = (
     isNaAllowed:   !!question.is_na_allowed,
     isRequired:    !!question.is_required,
     isCritical:    !!question.is_critical,
+    hiddenFromAgent: question.visible_to_csr === false,
     role:          isRollup ? 'ROLLUP' : 'DETAIL',
     // The rollup engine writes its reason into `answer.notes` for ROLLUP
     // questions (see frontend/src/utils/forms/rollupEngine.ts). Surface it
