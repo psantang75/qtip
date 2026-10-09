@@ -99,6 +99,7 @@ export function ScorePanel({
             <FormRenderer
               formRenderData={editRenderData}
               isDisabled={false}
+              highlightMisses
               onAnswerChange={onEditAnswer}
               onNotesChange={() => {}}
             />

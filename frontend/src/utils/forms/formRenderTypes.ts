@@ -35,6 +35,8 @@ export interface QuestionRenderData {
   notes?: string;
   score?: number;
   maxScore?: number;
+  /** Answered, scored, not N/A, and earning less than the question's max. */
+  pointsLost?: boolean;
   radio_options?: Array<{
     option_text: string;
     option_value: string;

@@ -269,14 +269,16 @@ export const SubCategoryQuestion: React.FC<QuestionProps> = ({ question }) => {
 
 // ── Question Row Wrapper ──────────────────────────────────────────────────────
 
-export const QuestionRenderer: React.FC<QuestionProps> = (props) => {
+export const QuestionRenderer: React.FC<QuestionProps & { highlightMisses?: boolean }> = ({ highlightMisses = false, ...props }) => {
   if (!props.question.isVisible) return null;
   const isSubCat = props.question.type === 'sub_category';
   const isInfo   = props.question.type === 'info' || props.question.type === 'info_block';
+  const showMiss = highlightMisses && !!props.question.pointsLost;
   return (
     <div id={`question-${props.question.id}`}
       className={cn('transition-colors',
-        isSubCat ? '' : 'pl-[29px] pr-4 py-2.5 border-b border-slate-100 last:border-0',
+        isSubCat ? '' : 'pr-4 py-2.5 border-b border-slate-100 last:border-0',
+        isSubCat ? '' : showMiss ? 'pl-[26px] border-l-[3px] border-l-warning bg-warning/[0.06]' : 'pl-[29px]',
         isInfo ? 'py-2' : ''
       )}>
       {props.question.type === 'yes_no'       && <YesNoQuestion       {...props} />}
@@ -297,9 +299,10 @@ interface CategoryProps {
   isDisabled?:    boolean;
   onAnswerChange: (id: number, value: string, type: string) => void;
   onNotesChange:  (id: number, notes: string) => void;
+  highlightMisses?: boolean;
 }
 
-export const CategoryRenderer: React.FC<CategoryProps> = ({ category, isDisabled = false, onAnswerChange, onNotesChange }) => (
+export const CategoryRenderer: React.FC<CategoryProps> = ({ category, isDisabled = false, onAnswerChange, onNotesChange, highlightMisses }) => (
   <div className="mb-4">
     <div className="flex items-center gap-2.5 bg-primary/10 border border-primary/30 rounded-t-lg px-4 py-2.5">
       <span className="w-[3px] h-4 rounded-full bg-[#00aeef] shrink-0" />
@@ -311,7 +314,7 @@ export const CategoryRenderer: React.FC<CategoryProps> = ({ category, isDisabled
       )}
       {category.questions.map((question, index) => (
         <QuestionRenderer key={question.id || `question-${index}`}
-          question={question} isDisabled={isDisabled}
+          question={question} isDisabled={isDisabled} highlightMisses={highlightMisses}
           onAnswerChange={onAnswerChange} onNotesChange={onNotesChange}
         />
       ))}
@@ -326,13 +329,15 @@ interface FormRendererProps {
   isDisabled?:    boolean;
   onAnswerChange: (id: number, value: string, type: string) => void;
   onNotesChange:  (id: number, notes: string) => void;
+  /** Tint scored questions whose current answer earns less than max points. */
+  highlightMisses?: boolean;
 }
 
-export const FormRenderer: React.FC<FormRendererProps> = ({ formRenderData, isDisabled = false, onAnswerChange, onNotesChange }) => (
+export const FormRenderer: React.FC<FormRendererProps> = ({ formRenderData, isDisabled = false, onAnswerChange, onNotesChange, highlightMisses = false }) => (
   <div className="space-y-1">
     {formRenderData.categories.map((category, i) => (
       <CategoryRenderer key={category.id || `category-${i}`}
-        category={category} isDisabled={isDisabled}
+        category={category} isDisabled={isDisabled} highlightMisses={highlightMisses}
         onAnswerChange={onAnswerChange} onNotesChange={onNotesChange}
       />
     ))}

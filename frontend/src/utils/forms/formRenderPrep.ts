@@ -5,7 +5,7 @@
 
 import type { Form, Answer, FormSubmission, FormQuestion, FormCategory, FormQuestionCondition, RadioOption } from '../../types/form.types';
 import { processConditionalLogic } from './formConditions';
-import { calculateFormScore } from './scoringEngine';
+import { calculateFormScore, getMaxPossibleScore, getQuestionScore } from './scoringEngine';
 import type { QuestionRenderData, CategoryRenderData, FormRenderData } from './formRenderTypes';
 
 // ── generateFormPreview ───────────────────────────────────────────────────────
@@ -96,6 +96,10 @@ export const prepareQuestionForRender = (
   const questionType = (question.question_type || '').toLowerCase() as QuestionRenderData['type'];
 
   const isRollup = question.role === 'ROLLUP';
+  const rawAnswer = (currentAnswer?.answer || '').trim();
+  const isScoredAnswer = !!rawAnswer
+    && ['yes_no', 'scale', 'radio', 'multi_select'].includes(questionType)
+    && !(question.is_na_allowed && ['na', 'n/a'].includes(rawAnswer.toLowerCase()));
   const baseData: QuestionRenderData = {
     id:            question.id || 0,
     text:          question.question_text || '',
@@ -116,6 +120,7 @@ export const prepareQuestionForRender = (
     currentValue:  currentAnswer?.answer,
     notes:         currentAnswer?.notes,
     score:         currentAnswer?.score,
+    pointsLost:    isScoredAnswer && getQuestionScore(question, rawAnswer) < getMaxPossibleScore(question),
     conditionalLogic: question.conditional_logic ? {
       targetQuestionId: question.conditional_logic.target_question_id,
       conditionType:    question.conditional_logic.condition_type,

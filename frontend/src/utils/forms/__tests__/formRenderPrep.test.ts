@@ -38,6 +38,23 @@ describe('prepareQuestionForRender hiddenFromAgent', () => {
   })
 })
 
+describe('prepareQuestionForRender pointsLost', () => {
+  const scored = { ...question(1), yes_value: 5, no_value: 0, is_na_allowed: true } as FormQuestion
+  const answer = (value: string) => ({ question_id: 1, answer: value, score: 0, notes: '' })
+
+  it('flags answers that earn less than the max', () => {
+    expect(prepareQuestionForRender(scored, answer('no')).pointsLost).toBe(true)
+  })
+
+  it('does not flag full-credit, N/A, unanswered, or text answers', () => {
+    expect(prepareQuestionForRender(scored, answer('yes')).pointsLost).toBe(false)
+    expect(prepareQuestionForRender(scored, answer('na')).pointsLost).toBe(false)
+    expect(prepareQuestionForRender(scored).pointsLost).toBe(false)
+    const text = { ...question(2), question_type: 'TEXT' } as FormQuestion
+    expect(prepareQuestionForRender(text, answer('anything')).pointsLost).toBe(false)
+  })
+})
+
 describe('prepareFormForRender', () => {
   const visibility = { 10: true, 11: true }
 

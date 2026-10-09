@@ -1,4 +1,5 @@
 import React from 'react';
+import { cn } from '../../lib/utils';
 import { processConditionalLogic } from './formConditions';
 import { getMaxPossibleScore, getQuestionScore } from './scoringEngine';
 import { RichTextDisplay } from '../../components/common/RichTextDisplay';
@@ -327,9 +328,13 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                         {(questions as QuestionWithScore[]).map((q: QuestionWithScore) => {
                           const isText = q.questionType === 'text';
                           const hasScore = !(q.pointsEarned === 0 && q.pointsPossible === 0);
+                          const pointsLost = !isText && hasScore && q.pointsEarned < q.pointsPossible;
                           return (
-                            <tr key={q.id} className={`hover:bg-slate-50/60 transition-colors ${q.criticalMissed ? 'bg-red-50/40' : ''}`}>
-                              <td className="pl-[29px] pr-3 py-2.5 text-slate-700 leading-snug">
+                            <tr key={q.id} className={cn('transition-colors',
+                              q.criticalMissed ? 'bg-red-50/40' : pointsLost ? 'bg-warning/[0.06]' : 'hover:bg-slate-50/60')}>
+                              <td className={cn('pr-3 py-2.5 text-slate-700 leading-snug',
+                                pointsLost || q.criticalMissed ? 'border-l-[3px] pl-[26px]' : 'pl-[29px]',
+                                q.criticalMissed ? 'border-l-destructive' : pointsLost && 'border-l-warning')}>
                                 <span className="inline-flex items-start gap-2 flex-wrap">
                                   <span>{q.text}</span>
                                   {q.criticalMissed && (
@@ -360,7 +365,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                                   <td className="px-3 py-2.5 text-slate-600">
                                     {q.answer === 'No answer' ? <span className="text-slate-300">—</span> : q.answer}
                                   </td>
-                                  <td className="px-3 py-2.5 text-right text-slate-700 font-medium">
+                                  <td className={cn('px-3 py-2.5 text-right font-medium', pointsLost ? 'text-warning font-semibold' : 'text-slate-700')}>
                                     {hasScore ? q.pointsEarned.toFixed(1) : <span className="text-slate-300">—</span>}
                                   </td>
                                   <td className="px-4 py-2.5 text-right text-slate-500">
