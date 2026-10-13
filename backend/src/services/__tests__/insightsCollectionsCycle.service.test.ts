@@ -1092,6 +1092,19 @@ describe('getCycleInvoices', () => {
     });
   });
 
+  it('names the task assignee through the current employee row, falling back to the CRM email', async () => {
+    mockInvoiceQueries([
+      { order_id: 1, task_agent: 'bbettis@dm-us.com', task_agent_name: 'Bob Bettis', currency_code: 'USD' },
+      { order_id: 2, task_agent: null, task_agent_name: null, currency_code: 'USD' },
+    ], 2);
+
+    const { rows } = await getCycleInvoices(filters);
+    expect(sqlOf(0)).toContain('COALESCE(te.username, t.agent_email)');
+    expect(sqlOf(0)).toContain('te.user_id = tev.user_id');
+    expect(rows[0].taskAgentName).toBe('Bob Bettis');
+    expect(rows[1].taskAgentName).toBeNull();
+  });
+
   it('carries the CRM account so the grid can build an Order/Detail link, null when absent', async () => {
     mockInvoiceQueries([
       { order_id: 1, customer_id: 104231, currency_code: 'USD' },

@@ -8,6 +8,7 @@
  * noted below are load-bearing, not stylistic.
  */
 import { easternDate, easternInstant } from '../easternTime';
+import { currentEmployeeJoin } from '../../../insightsAgentScope';
 import type { CycleScope, SqlPart } from './scope';
 
 /**
@@ -227,6 +228,18 @@ export const RESULT_CASE = `
 export const TASK_JOIN = `
   LEFT JOIN ie_fact_collections_task t
          ON t.task_id = i.task_id`;
+
+/**
+ * The task assignee's QTIP name, read off the employee the task transform already
+ * conformed and hopped to that user's current row. Falls back to the CRM email
+ * (TASK_AGENT_NAME) like the agent leaderboard, so an assignee with no QTIP account
+ * is still named. Needs TASK_JOIN first.
+ */
+export const TASK_AGENT_JOIN = currentEmployeeJoin({
+  factAlias: 't', alias: 'te', versionAlias: 'tev', left: true,
+});
+
+export const TASK_AGENT_NAME = 'COALESCE(te.username, t.agent_email)';
 
 /**
  * How the invoice and its task came to be linked, for the coverage breakdown.

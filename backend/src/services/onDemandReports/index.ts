@@ -16,4 +16,5 @@ export type {
   OnDemandReportDownloadResult,
   OnDemandReportSummary,
   OnDemandFilterOptions,
+  OnDemandDownloadOptions,
 } from './types'

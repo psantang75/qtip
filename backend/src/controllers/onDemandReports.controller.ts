@@ -121,6 +121,9 @@ function pickFilters(body: any, start_date: string, end_date: string): OnDemandR
     status: str(body?.status),
     sessionId: str(body?.sessionId),
     callLengthBand: str(body?.callLengthBand),
+    campaign: str(body?.campaign),
+    declineReason: str(body?.declineReason),
+    currency: str(body?.currency),
   };
 }
 
@@ -135,6 +138,9 @@ function reportToSummary(r: ReturnType<typeof getOnDemandReport>) {
     defaultFilters: r.defaultFilters ?? {},
     callLengthBandOptions: r.callLengthBandOptions ?? [],
     downloadFormat: r.downloadFormat ?? 'xlsx',
+    periodLabel: r.periodLabel ?? null,
+    periodOptions: r.periodOptions ?? null,
+    groupBy: r.groupBy ?? null,
   };
 }
 
@@ -193,7 +199,8 @@ export const getReportData = asyncHandler(async (req: Request, res: Response): P
 
 /**
  * POST /api/on-demand-reports/:id/download
- * Same body shape as `/data`.
+ * Same body shape as `/data`, plus — for a grouped report — `group` (one group's
+ * rows) or `split: 'tabs'` (one worksheet per group).
  */
 export const downloadReport = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const user = requireUser(req);
@@ -202,8 +209,12 @@ export const downloadReport = asyncHandler(async (req: Request, res: Response): 
     const resolved = resolveFilters(req.body);
     if (!resolved.ok) throw createValidationError(resolved.message);
 
+    const group = typeof req.body?.group === 'string' && req.body.group.trim() ? req.body.group.trim() : undefined;
+    const split = req.body?.split === 'tabs' ? 'tabs' as const : undefined;
+    if ((group || split) && !report.groupBy) throw createValidationError('This report has no grouped downloads.');
+
     const { buffer, filename, contentType } = await withQueryTimeout(
-      report.getDownload(resolved.filters, user),
+      report.getDownload(resolved.filters, user, { group, split }),
       `on-demand-report.${report.id}.download`,
       // Downloads can legitimately scan more rows than a screen view, so
       // double the default deadline before failing the request. A report whose
@@ -238,6 +249,8 @@ export const getFilterOptions = asyncHandler(async (req: Request, res: Response)
         departments: resolved.filters.departments,
         forms: resolved.filters.forms,
         agents: resolved.filters.agents,
+        campaign: resolved.filters.campaign,
+        currency: resolved.filters.currency,
       },
     );
 

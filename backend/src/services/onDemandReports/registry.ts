@@ -15,12 +15,14 @@
 import { analyticsRawScoresReport } from './analytics.report'
 import { coachingSessionsReport } from './coaching.report'
 import { callTranscriptsReport } from './callTranscripts.report'
+import { failedChargesReport } from './failedCharges.report'
 import type { OnDemandReport } from './types'
 
 export const ON_DEMAND_REPORTS: OnDemandReport[] = [
   analyticsRawScoresReport,
   coachingSessionsReport,
   callTranscriptsReport,
+  failedChargesReport,
 ]
 
 export function getOnDemandReport(id: string): OnDemandReport | undefined {

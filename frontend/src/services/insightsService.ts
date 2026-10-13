@@ -389,6 +389,7 @@ export const getTicketsTasks = async (p: AAParams): Promise<TicketsTasksResponse
 
 /** One work item behind a Past Due or Due Today cell. Tasks fill `taskType`, tickets fill `classification`/`subClassification`; `status` applies to both. */
 export interface PastDueItem {
+  agent:              string
   processType:        string
   referenceId:        number
   customerName:       string | null
@@ -400,7 +401,16 @@ export interface PastDueItem {
   crmUrl:             string | null
 }
 
-export interface PastDueQuery { agent: string; classification: string }
+/**
+ * A row cell sends agent + classification, an agent total the agent only, and the
+ * Grand Total neither — just the page's CSV users/departments filters.
+ */
+export interface PastDueQuery {
+  agent?:          string
+  classification?: string
+  users?:          string
+  departments?:    string
+}
 
 export const getTicketsPastDue = async (q: PastDueQuery): Promise<PastDueItem[]> => {
   const response = await api.get('/insights/agent-activity/tickets/past-due', { params: q })

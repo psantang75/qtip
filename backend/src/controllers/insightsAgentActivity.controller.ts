@@ -1,7 +1,5 @@
 import { Request, Response } from 'express';
 import logger from '../config/logger';
-import { InsightsPermissionService } from '../services/InsightsPermissionService';
-import { getInsightsRoleId } from '../utils/insightsRoleMap';
 import {
   listSourceReports,
   getEmailActivity as svcGetEmailActivity,
@@ -15,12 +13,10 @@ import {
   getMargin as svcGetMargin,
   type TicketDueBucket,
 } from '../services/insightsAgentActivity.service';
-import { NO_MATCH_DEPARTMENT_ID } from '../services/insightsScope';
+import { resolveInsightsScope, type InsightsPageScope } from '../services/insightsScope';
 import { getTicketTouchDetail as svcGetTicketTouchDetail } from '../services/insightsTouchDetail.service';
 import { getProductivityDay as svcGetProductivityDay } from '../services/insightsProductivityDay.service';
 import { getProductivityRoster as svcGetProductivityRoster } from '../services/insightsProductivityRoster.service';
-
-const permissionService = new InsightsPermissionService();
 
 /**
  * Resolve Insights page access for an Agent Activity endpoint, mirroring the
@@ -37,28 +33,11 @@ export async function resolveAaScope(
   req: Request,
   res: Response,
   pageKey: string,
-): Promise<{ selfEmployeeKey: number | null; departmentKeys: number[]; pageDepartmentKeys: number[] } | null> {
+): Promise<InsightsPageScope | null> {
   if (!req.user) { res.status(401).json({ error: 'Authentication required' }); return null; }
-  const roleId = getInsightsRoleId(req.user.role);
-  if (roleId === null) { res.status(403).json({ error: 'Unknown role' }); return null; }
-  const access = await permissionService.resolveAccess(req.user.user_id, roleId, pageKey);
-  if (!access.canAccess) { res.status(403).json({ error: 'Access denied' }); return null; }
-  const selfEmployeeKey = access.dataScope === 'SELF' ? (access.employeeKey ?? -1) : null;
-  // Per-viewer narrowing: DEPARTMENT/DIVISION restrict to the viewer's own
-  // department subtree. ALL and SELF carry no viewer department list. A
-  // DEPARTMENT/DIVISION viewer with no resolved departments must see NOTHING,
-  // so fall back to the impossible-id sentinel (fail closed) rather than an
-  // empty list, which the roster/day services would treat as "no narrowing" and
-  // leak the whole population — the same reasoning as the SELF `?? -1` above.
-  const departmentKeys =
-    access.dataScope === 'DEPARTMENT' || access.dataScope === 'DIVISION'
-      ? (access.departmentKeys.length > 0 ? access.departmentKeys : [NO_MATCH_DEPARTMENT_ID])
-      : [];
-  // Report population: the departments configured on the page (Insights → Page
-  // Management). Empty = not configured → the service falls back to its built-in
-  // area/subtree split.
-  const pageDepartmentKeys = await permissionService.getPageDepartmentScope(pageKey);
-  return { selfEmployeeKey, departmentKeys, pageDepartmentKeys };
+  const result = await resolveInsightsScope(req.user.user_id, req.user.role, pageKey);
+  if (!result.ok) { res.status(403).json({ error: result.error }); return null; }
+  return result.scope;
 }
 
 /**
@@ -230,14 +209,18 @@ function dueItemsHandler(pageKey: string, area: 'sales' | 'csr', bucket: TicketD
     try {
       const scope = await resolveAaScope(req, res, pageKey);
       if (!scope) return;
-      const { agent, classification } = req.query as Record<string, string | undefined>;
-      if (!agent || !classification) {
-        res.status(400).json({ error: 'agent and classification are required' });
+      // A row cell sends agent + classification, an agent total the agent only, and
+      // the Grand Total neither — just the page's users/departments filters.
+      const { agent, classification, users, departments } = req.query as Record<string, string | undefined>;
+      if (classification && !agent) {
+        res.status(400).json({ error: 'classification requires agent' });
         return;
       }
       const items = await svcGetTicketsPastDue({
-        agent,
-        classification,
+        agent: agent || undefined,
+        classification: classification || undefined,
+        users: users ? users.split(',').filter(Boolean) : undefined,
+        departments: departments ? departments.split(',').filter(Boolean) : undefined,
         selfEmployeeKey: scope.selfEmployeeKey,
         area,
         bucket,
@@ -251,8 +234,8 @@ function dueItemsHandler(pageKey: string, area: 'sales' | 'csr', bucket: TicketD
 }
 
 /**
- * GET /api/insights/agent-activity/tickets/past-due?agent=&classification=
- * GET /api/insights/csr/tickets/past-due?agent=&classification=
+ * GET /api/insights/agent-activity/tickets/past-due?agent=&classification=&users=&departments=
+ * GET /api/insights/csr/tickets/past-due?agent=&classification=&users=&departments=
  * The individual overdue work items behind one Past Due count, each with its CRM
  * deep link so the viewer can act on it.
  */

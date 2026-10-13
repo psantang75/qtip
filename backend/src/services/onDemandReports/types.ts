@@ -21,9 +21,10 @@ export interface OnDemandReportColumn {
    * - `percent`  → number formatted as "86.74%"
    * - `number`   → numeric, 2-decimals when non-integer
    * - `date`     → ISO date string
+   * - `link`     → URL rendered as an external link
    * - `text`     → plain string (default)
    */
-  format?: 'percent' | 'number' | 'date' | 'text'
+  format?: 'percent' | 'number' | 'date' | 'link' | 'text'
 }
 
 export interface OnDemandReportUser {
@@ -58,11 +59,26 @@ export interface OnDemandReportFilters {
    * publish their own allowed values via `callLengthBandOptions`.
    */
   callLengthBand?: string
+  /** Collections campaign label (e.g. 'All Declined'). */
+  campaign?: string
+  /** Gateway decline reason; empty = every reason. */
+  declineReason?: string
+  /** ISO currency code the report is denominated in. */
+  currency?: string
 }
 
 export type OnDemandFilterKey =
   | 'period' | 'departments' | 'forms' | 'agents' | 'submissionId'
   | 'topics' | 'status' | 'sessionId' | 'callLengthBand'
+  | 'campaign' | 'declineReason' | 'currency'
+
+/** Download variants a grouped report can produce besides the complete file. */
+export interface OnDemandDownloadOptions {
+  /** Only this group's rows (e.g. one rep). */
+  group?: string
+  /** One worksheet per group in a single workbook. */
+  split?: 'tabs'
+}
 
 export interface OnDemandReportPage {
   page: number
@@ -116,7 +132,18 @@ export interface OnDemandReport {
    */
   defaultFilters?: Partial<Pick<OnDemandReportFilters,
     'departments' | 'forms' | 'agents' | 'submissionId'
-    | 'topics' | 'status' | 'sessionId' | 'callLengthBand'>>
+    | 'topics' | 'status' | 'sessionId' | 'callLengthBand'
+    | 'campaign' | 'declineReason' | 'currency'>>
+  /** Label for the period control when the report's window means something specific ("Billing Cycle"). */
+  periodLabel?: string
+  /** Period choices for this report when the shared list doesn't fit (labels, e.g. 'Current Month'). */
+  periodOptions?: ReadonlyArray<string>
+  /**
+   * Group the in-browser results by this row key, one expandable line per value
+   * with its own download. A grouped report's `getRows` returns every row (no
+   * paging), since a group cannot be split across pages.
+   */
+  groupBy?: { key: string; label: string }
   /**
    * Choices for the `callLengthBand` control, in display order. Required when
    * the report declares that filter — the UI has no global band list, because
@@ -142,6 +169,7 @@ export interface OnDemandReport {
   getDownload: (
     filters: OnDemandReportFilters,
     user: OnDemandReportUser,
+    opts?: OnDemandDownloadOptions,
   ) => Promise<OnDemandReportDownloadResult>
 }
 
@@ -153,6 +181,12 @@ export interface OnDemandFilterOptions {
   topics?: string[]
   /** Coaching-only: status enum values (always full enum, ordered). */
   statuses?: string[]
+  /** Collections-only: campaign labels, 'All Declined' first. */
+  campaigns?: string[]
+  /** Collections-only: decline reasons present in the billing cycle. */
+  declineReasons?: string[]
+  /** Collections-only: currencies the report can be denominated in. */
+  currencies?: string[]
 }
 
 /**

@@ -1,98 +1,45 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, type ReactNode } from 'react'
 import { getErrorMessage } from '@/utils/errorHandling'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Download, Loader2, Play, Search } from 'lucide-react'
+import { Download, Layers, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { t } from '@/lib/t'
 import { ListPagination } from '@/components/common/ListPagination'
-import { StagedMultiSelect } from '@/components/common/StagedMultiSelect'
-import { StickyFilterBar, StickyFilterField } from '@/components/common/StickyFilterBar'
 import { InsightsSection } from '@/components/insights'
-import { PERIOD_OPTIONS } from '@/components/insights/insightsFilterOptions'
+import OnDemandFilterBar from '@/components/insights/onDemand/OnDemandFilterBar'
+import OnDemandResultsTable from '@/components/insights/onDemand/OnDemandResultsTable'
+import OnDemandGroupedResults from '@/components/insights/onDemand/OnDemandGroupedResults'
+import {
+  EMPTY_STATE, applyDefaults, differsFromBaseline, toFilterParams, type FilterState,
+} from '@/components/insights/onDemand/onDemandFilterState'
 
 import {
   getReport,
   runReport,
   downloadReport,
   getFilterOptions,
+  type OnDemandDownloadOptions,
+  type OnDemandFilterOptions,
   type OnDemandReportColumn,
-  type OnDemandReportFilterParams,
   type OnDemandReportSummary,
 } from '@/services/onDemandReportsService'
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100]
-const DEFAULT_PERIOD = 'Current Month'
-
-interface FilterState {
-  period: string
-  customStart: string
-  customEnd: string
-  departments: string[]
-  forms: string[]
-  agents: string[]
-  submissionId: string
-  topics: string[]
-  status: string
-  sessionId: string
-  callLengthBand: string
-}
-
-const EMPTY_STATE: FilterState = {
-  period: DEFAULT_PERIOD,
-  customStart: '',
-  customEnd: '',
-  departments: [],
-  forms: [],
-  agents: [],
-  submissionId: '',
-  topics: [],
-  status: '',
-  sessionId: '',
-  callLengthBand: '',
-}
-
-/** Merge per-report default filter values (e.g. coaching → status=CLOSED) on top of the empty state. */
-function applyDefaults(meta?: OnDemandReportSummary | null): FilterState {
-  const d = meta?.defaultFilters
-  if (!d) return EMPTY_STATE
-  return {
-    ...EMPTY_STATE,
-    departments: d.departments ?? EMPTY_STATE.departments,
-    forms: d.forms ?? EMPTY_STATE.forms,
-    agents: d.agents ?? EMPTY_STATE.agents,
-    submissionId: d.submissionId ?? EMPTY_STATE.submissionId,
-    topics: d.topics ?? EMPTY_STATE.topics,
-    status: d.status ?? EMPTY_STATE.status,
-    sessionId: d.sessionId ?? EMPTY_STATE.sessionId,
-    callLengthBand: d.callLengthBand ?? EMPTY_STATE.callLengthBand,
-  }
+/** Download-in-flight keys for the two whole-report downloads; a group's key is its name. */
+const COMPLETE = '__complete__'
+const BY_GROUP = '__tabs__'
+const NO_OPTIONS: OnDemandFilterOptions = {
+  departments: [], forms: [], agents: [], topics: [], statuses: [], campaigns: [], declineReasons: [], currencies: [],
 }
 
 /** Button label + fallback filename for the report's download format. */
 function downloadLabel(meta?: OnDemandReportSummary | null): string {
+  if (meta?.groupBy) return 'Download Complete Report'
   return meta?.downloadFormat === 'txt' ? 'Download Text' : 'Download Excel'
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Draft',
-  SCHEDULED: 'Scheduled',
-  IN_PROCESS: 'In Process',
-  AWAITING_CSR_ACTION: 'Awaiting CSR Action',
-  QUIZ_PENDING: 'Quiz Pending',
-  COMPLETED: 'Completed',
-  FOLLOW_UP_REQUIRED: 'Follow-Up Required',
-  CLOSED: 'Closed',
-}
-
-const formatStatusLabel = (s: string): string =>
-  STATUS_LABELS[s] || s.replace(/_/g, ' ').toLowerCase().replace(/^./, c => c.toUpperCase())
 
 export default function OnDemandReportViewPage() {
   const { reportId = '' } = useParams<{ reportId: string }>()
@@ -107,7 +54,7 @@ export default function OnDemandReportViewPage() {
   const [applied, setApplied] = useState<FilterState | null>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
-  const [downloading, setDownloading] = useState(false)
+  const [downloading, setDownloading] = useState<string | null>(null)
 
   const metaQuery = useQuery({
     queryKey: ['on-demand-reports', 'meta', reportId],
@@ -116,16 +63,8 @@ export default function OnDemandReportViewPage() {
   })
 
   const meta = metaQuery.data
-  const supported = meta?.supportedFilters ?? []
-  const showDept = supported.includes('departments')
-  const showForm = supported.includes('forms')
-  const showAgent = supported.includes('agents')
-  const showSubmissionId = supported.includes('submissionId')
-  const showTopics = supported.includes('topics')
-  const showStatus = supported.includes('status')
-  const showSessionId = supported.includes('sessionId')
-  const showCallLength = supported.includes('callLengthBand')
-  const bandOptions = meta?.callLengthBandOptions ?? []
+  const supported = useMemo(() => meta?.supportedFilters ?? [], [meta])
+  const groupBy = meta?.groupBy ?? null
   const isCustom = draft.period === 'Custom'
   const customReady = !isCustom || (!!draft.customStart && !!draft.customEnd)
 
@@ -138,12 +77,13 @@ export default function OnDemandReportViewPage() {
     setDefaultsApplied(true)
   }, [meta, defaultsApplied])
 
-  // Filter dropdown options — refreshed when the date scope changes, so the
-  // user sees only depts / forms / agents that have data for the chosen period.
+  // Filter dropdown options — refreshed when the date scope (or, for collections
+  // reports, the campaign / currency) changes, so the user sees only values that
+  // have data for the current selection.
   const optionsQuery = useQuery({
     queryKey: [
       'on-demand-reports', 'options', reportId,
-      draft.period, draft.customStart, draft.customEnd,
+      draft.period, draft.customStart, draft.customEnd, draft.campaign, draft.currency,
     ],
     queryFn: () => getFilterOptions(reportId, toFilterParams(draft)),
     enabled: !!reportId && !!meta && customReady,
@@ -183,25 +123,22 @@ export default function OnDemandReportViewPage() {
     setDraft(d => {
       const next: FilterState = { ...d }
       let changed = false
-      if (showDept && d.departments.length) {
-        const valid = d.departments.filter(x => opts.departments.includes(x))
-        if (valid.length !== d.departments.length) { next.departments = valid; changed = true }
+      const prune = (key: 'departments' | 'forms' | 'agents' | 'topics', valid: string[]) => {
+        if (!supported.includes(key) || !d[key].length) return
+        const kept = d[key].filter(x => valid.includes(x))
+        if (kept.length !== d[key].length) { next[key] = kept; changed = true }
       }
-      if (showForm && d.forms.length) {
-        const valid = d.forms.filter(x => opts.forms.includes(x))
-        if (valid.length !== d.forms.length) { next.forms = valid; changed = true }
-      }
-      if (showAgent && d.agents.length) {
-        const valid = d.agents.filter(x => opts.agents.includes(x))
-        if (valid.length !== d.agents.length) { next.agents = valid; changed = true }
-      }
-      if (showTopics && d.topics.length) {
-        const valid = d.topics.filter(x => opts.topics.includes(x))
-        if (valid.length !== d.topics.length) { next.topics = valid; changed = true }
+      prune('departments', opts.departments)
+      prune('forms', opts.forms)
+      prune('agents', opts.agents)
+      prune('topics', opts.topics)
+      if (supported.includes('declineReason') && d.declineReason && !opts.declineReasons.includes(d.declineReason)) {
+        next.declineReason = ''
+        changed = true
       }
       return changed ? next : d
     })
-  }, [optionsQuery.data, showDept, showForm, showAgent, showTopics])
+  }, [optionsQuery.data, supported])
 
   const validateDraft = (): string | null => {
     if (!draft.period) return 'Pick a period.'
@@ -226,15 +163,15 @@ export default function OnDemandReportViewPage() {
     setApplied({ ...draft })
   }
 
-  const handleDownload = async () => {
+  const handleDownload = async (key: string, options: OnDemandDownloadOptions = {}) => {
     if (!applied) {
       toast(t.msg.insights.runBeforeDownload())
       return
     }
     try {
-      setDownloading(true)
+      setDownloading(key)
       const ext = meta?.downloadFormat ?? 'xlsx'
-      await downloadReport(reportId, toFilterParams(applied), `${reportId}.${ext}`)
+      await downloadReport(reportId, toFilterParams(applied), `${reportId}.${ext}`, options)
     } catch (err) {
       toast({
         variant: 'destructive',
@@ -242,7 +179,7 @@ export default function OnDemandReportViewPage() {
         description: getErrorMessage(err, 'Try again.'),
       })
     } finally {
-      setDownloading(false)
+      setDownloading(null)
     }
   }
 
@@ -251,269 +188,65 @@ export default function OnDemandReportViewPage() {
     setApplied(null)
   }
 
-  const opts = optionsQuery.data ?? { departments: [], forms: [], agents: [], topics: [], statuses: [] }
-
   // Reset Filters is only meaningful when something is actually applied or
   // selected — mirrors the disabled state used by `ListFilterBar`. We compare
   // to the defaulted draft so a coaching report whose Status defaults to
   // "Closed" doesn't show the button as active by default.
   const baseline = useMemo(() => applyDefaults(meta), [meta])
-  const hasFilters = !!(
-    applied
-    || draft.departments.length !== baseline.departments.length
-    || draft.forms.length !== baseline.forms.length
-    || draft.agents.length !== baseline.agents.length
-    || draft.topics.length !== baseline.topics.length
-    || draft.submissionId !== baseline.submissionId
-    || draft.sessionId !== baseline.sessionId
-    || draft.status !== baseline.status
-    || draft.callLengthBand !== baseline.callLengthBand
-    || (draft.period && draft.period !== DEFAULT_PERIOD)
-    || draft.customStart
-    || draft.customEnd
-  )
+  const hasFilters = !!applied || differsFromBaseline(draft, baseline)
+
+  const rows = dataQuery.data?.rows ?? []
 
   return (
     <div>
-      {/* Sticky filter bar — shared chrome with `InsightsFilterBar`.
-          Row 1: Agent · Department · Form · ... · result count + Back
-          Row 2: Period (+ Custom dates) · Review # · ... · Reset Filters + Run */}
-      <StickyFilterBar>
-
-        {/* Row 1 — entity filters + results / back */}
-        <StickyFilterBar.Row>
-
-          {showAgent && (
-            <StickyFilterField label="Agent">
-              <StagedMultiSelect
-                options={opts.agents}
-                selected={draft.agents}
-                onApply={v => setDraft(d => ({ ...d, agents: v }))}
-                placeholder="All Agents"
-                width="w-[200px]"
-              />
-            </StickyFilterField>
-          )}
-
-          {showDept && (
-            <StickyFilterField label="Department">
-              <StagedMultiSelect
-                options={opts.departments}
-                selected={draft.departments}
-                onApply={v => setDraft(d => ({ ...d, departments: v }))}
-                placeholder="All Departments"
-                width="w-[200px]"
-              />
-            </StickyFilterField>
-          )}
-
-          {showForm && (
-            <StickyFilterField label="Form">
-              <StagedMultiSelect
-                options={opts.forms}
-                selected={draft.forms}
-                onApply={v => setDraft(d => ({ ...d, forms: v }))}
-                placeholder="All Forms"
-                width="w-[230px]"
-              />
-            </StickyFilterField>
-          )}
-
-          {showTopics && (
-            <StickyFilterField label="Training Topics">
-              <StagedMultiSelect
-                options={opts.topics}
-                selected={draft.topics}
-                onApply={v => setDraft(d => ({ ...d, topics: v }))}
-                placeholder="All Topics"
-                width="w-[200px]"
-              />
-            </StickyFilterField>
-          )}
-
-          {showStatus && (
-            <StickyFilterField label="Status">
-              <Select
-                value={draft.status || '__all__'}
-                onValueChange={v => setDraft(d => ({ ...d, status: v === '__all__' ? '' : v }))}
-              >
-                <SelectTrigger className="h-8 text-xs w-[170px] bg-white">
-                  <SelectValue placeholder="All Statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All Statuses</SelectItem>
-                  {opts.statuses.map(s => (
-                    <SelectItem key={s} value={s}>{formatStatusLabel(s)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </StickyFilterField>
-          )}
-
-          {showCallLength && (
-            <StickyFilterField label="Call Length">
-              <Select
-                value={draft.callLengthBand || bandOptions[0]?.value || ''}
-                onValueChange={v => setDraft(d => ({ ...d, callLengthBand: v }))}
-              >
-                <SelectTrigger className="h-8 text-xs w-[200px] bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {bandOptions.map(b => (
-                    <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </StickyFilterField>
-          )}
-
-          <StickyFilterBar.RightCluster>
-            {applied && dataQuery.data && (
-              <span className="text-[12px] text-slate-500">
-                <span className="font-semibold text-slate-700">
-                  {dataQuery.data.total.toLocaleString()}
-                </span>{' '}
-                results
-              </span>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/app/insights/on-demand-reports')}
-              className="h-8 px-3 text-primary hover:text-primary hover:bg-primary/10"
-            >
-              <ArrowLeft size={14} className="mr-1" />
-              Back to Reports
-            </Button>
-          </StickyFilterBar.RightCluster>
-
-        </StickyFilterBar.Row>
-
-        {/* Row 2 — period + review #/session # + reset/run */}
-        <StickyFilterBar.Row className="mt-3">
-
-          <StickyFilterField label="Period">
-            <Select
-              value={draft.period}
-              onValueChange={v => setDraft(d => ({ ...d, period: v }))}
-            >
-              <SelectTrigger className="h-8 text-xs w-[175px] bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PERIOD_OPTIONS.map(p => (
-                  <SelectItem key={p} value={p}>{p}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </StickyFilterField>
-
-          {isCustom && (
-            <div className="flex items-center gap-1.5">
-              <Input
-                type="date"
-                value={draft.customStart}
-                onChange={e => setDraft(d => ({ ...d, customStart: e.target.value }))}
-                className="h-8 text-xs w-[150px] bg-white"
-              />
-              <span className="text-xs text-slate-400">to</span>
-              <Input
-                type="date"
-                value={draft.customEnd}
-                onChange={e => setDraft(d => ({ ...d, customEnd: e.target.value }))}
-                className="h-8 text-xs w-[150px] bg-white"
-              />
-            </div>
-          )}
-
-          {showSubmissionId && (
-            <StickyFilterField label="Review #">
-              <div className="relative w-[150px]">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="Review #"
-                  value={draft.submissionId}
-                  onChange={e => setDraft(d => ({ ...d, submissionId: e.target.value.replace(/\D/g, '') }))}
-                  className="pl-8 h-8 text-xs bg-white"
-                />
-              </div>
-            </StickyFilterField>
-          )}
-
-          {showSessionId && (
-            <StickyFilterField label="Session #">
-              <div className="relative w-[150px]">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="Session #"
-                  value={draft.sessionId}
-                  onChange={e => setDraft(d => ({ ...d, sessionId: e.target.value.replace(/\D/g, '') }))}
-                  className="pl-8 h-8 text-xs bg-white"
-                />
-              </div>
-            </StickyFilterField>
-          )}
-
-          <StickyFilterBar.RightCluster>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleReset}
-              disabled={!hasFilters}
-              className="h-7 px-2 text-[12px] text-primary hover:text-primary hover:bg-primary/5"
-            >
-              Reset Filters
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleRun}
-              disabled={dataQuery.isFetching}
-              className="h-8 text-xs"
-            >
-              {dataQuery.isFetching
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                : <Play className="h-3.5 w-3.5 mr-1" />}
-              Run
-            </Button>
-          </StickyFilterBar.RightCluster>
-
-        </StickyFilterBar.Row>
-
-      </StickyFilterBar>
+      <OnDemandFilterBar
+        meta={meta}
+        draft={draft}
+        setDraft={setDraft}
+        opts={optionsQuery.data ?? NO_OPTIONS}
+        resultCount={applied && dataQuery.data ? dataQuery.data.total : undefined}
+        hasFilters={hasFilters}
+        running={dataQuery.isFetching}
+        onReset={handleReset}
+        onRun={handleRun}
+        onBack={() => navigate('/app/insights/on-demand-reports')}
+      />
 
       <div className="space-y-5">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{meta?.name || 'Report'}</h1>
         </div>
 
-        {/* Download lives directly above the results table — only enabled
-            after a successful Run, so it always matches what's on screen. Any
-            notice the report returned sits beside it, because it qualifies
-            what the download will contain. */}
+        {/* Downloads live directly above the results — only enabled after a
+            successful Run, so they always match what's on screen. Any notice the
+            report returned sits beside them, because it qualifies what the
+            download will contain. */}
         <div className="flex items-start justify-between gap-4">
           {dataQuery.data?.notice ? (
             <p className="text-[12.5px] text-slate-600">{dataQuery.data.notice}</p>
           ) : <span />}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleDownload}
-            disabled={downloading || !applied}
-            className="h-8 shrink-0 text-xs"
-            title={applied ? downloadLabel(meta) : 'Run the report first to download'}
-          >
-            {downloading
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-              : <Download className="h-3.5 w-3.5 mr-1" />}
-            {downloading ? 'Generating…' : downloadLabel(meta)}
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            {groupBy && (
+              <DownloadButton
+                label="Download All Agents"
+                busyLabel="Generating…"
+                icon={<Layers className="h-3.5 w-3.5 mr-1" />}
+                busy={downloading === BY_GROUP}
+                disabled={downloading !== null || !applied}
+                title={applied ? `One worksheet per ${groupBy.label.toLowerCase()}` : 'Run the report first to download'}
+                onClick={() => handleDownload(BY_GROUP, { split: 'tabs' })}
+              />
+            )}
+            <DownloadButton
+              label={downloadLabel(meta)}
+              busyLabel="Generating…"
+              icon={<Download className="h-3.5 w-3.5 mr-1" />}
+              busy={downloading === COMPLETE}
+              disabled={downloading !== null || !applied}
+              title={applied ? downloadLabel(meta) : 'Run the report first to download'}
+              onClick={() => handleDownload(COMPLETE)}
+            />
+          </div>
         </div>
 
         <InsightsSection title="Results">
@@ -529,48 +262,25 @@ export default function OnDemandReportViewPage() {
             <div className="py-10 text-center text-sm text-red-600">
               Couldn't run report. Adjust your filters and try again.
             </div>
-          ) : !dataQuery.data?.rows?.length ? (
+          ) : !rows.length ? (
             <div className="py-10 text-center text-sm text-slate-400">
               No rows for the selected filters.
             </div>
+          ) : groupBy ? (
+            <OnDemandGroupedResults
+              columns={columns}
+              rows={rows}
+              groupBy={groupBy}
+              downloadingGroup={downloading}
+              onDownloadGroup={group => handleDownload(group, { group })}
+            />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs">
-                <thead>
-                  <tr className="text-slate-400 border-b border-slate-200">
-                    {columns.map(c => (
-                      <th
-                        key={c.key}
-                        className={`py-2 px-2 font-medium ${alignClass(c.align)}`}
-                      >
-                        {c.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {dataQuery.data.rows.map((row, idx) => (
-                    <tr
-                      key={idx}
-                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
-                    >
-                      {columns.map(c => (
-                        <td
-                          key={c.key}
-                          className={`py-1.5 px-2 text-slate-700 ${alignClass(c.align)}`}
-                        >
-                          {formatCellValue(row[c.key], c.format)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <OnDemandResultsTable columns={columns} rows={rows} />
           )}
         </InsightsSection>
 
-        {applied && dataQuery.data && dataQuery.data.total > 0 && (
+        {/* A grouped report returns every row at once, so it never pages. */}
+        {!groupBy && applied && dataQuery.data && dataQuery.data.total > 0 && (
           <ListPagination
             page={page}
             totalPages={totalPages}
@@ -586,48 +296,21 @@ export default function OnDemandReportViewPage() {
   )
 }
 
-function toFilterParams(state: FilterState): OnDemandReportFilterParams {
-  // Backend normalises e.g. "Current Month" → "current_month".
-  return {
-    period: state.period,
-    customStart: state.period === 'Custom' ? state.customStart : undefined,
-    customEnd: state.period === 'Custom' ? state.customEnd : undefined,
-    departments: state.departments.length ? state.departments : undefined,
-    forms: state.forms.length ? state.forms : undefined,
-    agents: state.agents.length ? state.agents : undefined,
-    submissionId: state.submissionId || undefined,
-    topics: state.topics.length ? state.topics : undefined,
-    status: state.status || undefined,
-    sessionId: state.sessionId || undefined,
-    callLengthBand: state.callLengthBand || undefined,
-  }
+interface DownloadButtonProps {
+  label: string
+  busyLabel: string
+  icon: ReactNode
+  busy: boolean
+  disabled: boolean
+  title: string
+  onClick: () => void
 }
 
-function alignClass(align: OnDemandReportColumn['align']): string {
-  if (align === 'right') return 'text-right'
-  if (align === 'center') return 'text-center'
-  return 'text-left'
-}
-
-function formatCellValue(
-  value: unknown,
-  format: OnDemandReportColumn['format'] | undefined,
-): string {
-  if (value === null || value === undefined || value === '') return ''
-  if (format === 'percent') {
-    const n = typeof value === 'number' ? value : Number(value)
-    if (!isFinite(n)) return String(value)
-    return `${n.toFixed(2)}%`
-  }
-  if (format === 'date') {
-    if (value instanceof Date) return value.toISOString().split('T')[0]
-    return String(value).split('T')[0]
-  }
-  if (format === 'number' || typeof value === 'number') {
-    const n = typeof value === 'number' ? value : Number(value)
-    if (!isFinite(n)) return String(value)
-    return Number.isInteger(n) ? n.toString() : n.toFixed(2)
-  }
-  if (value instanceof Date) return value.toISOString().split('T')[0]
-  return String(value)
+function DownloadButton({ label, busyLabel, icon, busy, disabled, title, onClick }: DownloadButtonProps) {
+  return (
+    <Button size="sm" variant="outline" onClick={onClick} disabled={disabled} className="h-8 text-xs" title={title}>
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : icon}
+      {busy ? busyLabel : label}
+    </Button>
+  )
 }

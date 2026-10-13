@@ -20,7 +20,8 @@
  */
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
-import type { InsightsAccessResult } from './InsightsPermissionService';
+import { InsightsPermissionService, type InsightsAccessResult } from './InsightsPermissionService';
+import { getInsightsRoleId } from '../utils/insightsRoleMap';
 
 export { deptClause } from './qcQueryHelpers';
 export type { SqlFragment } from './qcQueryHelpers';
@@ -34,6 +35,45 @@ export type { SqlFragment } from './qcQueryHelpers';
  * empty grants the same way.
  */
 export const NO_MATCH_DEPARTMENT_ID = -1;
+
+const permissionService = new InsightsPermissionService();
+
+export interface InsightsPageScope {
+  /** SELF scope's conformed employee (-1 when unresolved); null for wider scopes. */
+  selfEmployeeKey: number | null;
+  /** DEPARTMENT/DIVISION viewer's department keys; [] means no viewer narrowing. */
+  departmentKeys: number[];
+  /** Departments configured on the page itself; [] = not configured. */
+  pageDepartmentKeys: number[];
+}
+
+export type InsightsScopeResult =
+  | { ok: true; scope: InsightsPageScope }
+  | { ok: false; error: 'Unknown role' | 'Access denied' };
+
+/**
+ * The page grant every Insights report is gated on, resolved without an HTTP
+ * request so non-controller callers (On-Demand Reports) apply the identical rule.
+ * A SELF grant with no conformed employee resolves to -1 and a DEPARTMENT/DIVISION
+ * grant with no departments to NO_MATCH_DEPARTMENT_ID, so both fail CLOSED.
+ */
+export async function resolveInsightsScope(
+  userId: number,
+  role: string,
+  pageKey: string,
+): Promise<InsightsScopeResult> {
+  const roleId = getInsightsRoleId(role);
+  if (roleId === null) return { ok: false, error: 'Unknown role' };
+  const access = await permissionService.resolveAccess(userId, roleId, pageKey);
+  if (!access.canAccess) return { ok: false, error: 'Access denied' };
+  const selfEmployeeKey = access.dataScope === 'SELF' ? (access.employeeKey ?? -1) : null;
+  const departmentKeys =
+    access.dataScope === 'DEPARTMENT' || access.dataScope === 'DIVISION'
+      ? (access.departmentKeys.length > 0 ? access.departmentKeys : [NO_MATCH_DEPARTMENT_ID])
+      : [];
+  const pageDepartmentKeys = await permissionService.getPageDepartmentScope(pageKey);
+  return { ok: true, scope: { selfEmployeeKey, departmentKeys, pageDepartmentKeys } };
+}
 
 /**
  * The UI's department filter (ids or department names) as department ids, for

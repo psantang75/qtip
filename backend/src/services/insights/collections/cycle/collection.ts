@@ -12,7 +12,9 @@ import {
   parts,
   type CycleScope, type PathRow, type CycleInvoiceRow, type CurrencyTotal,
 } from './scope';
-import { BILLING_JOIN, TASK_JOIN, touchJoin, RESULT_CASE, repeatJoin, IS_REPEAT } from './joins';
+import {
+  BILLING_JOIN, TASK_JOIN, TASK_AGENT_JOIN, TASK_AGENT_NAME, touchJoin, RESULT_CASE, repeatJoin, IS_REPEAT,
+} from './joins';
 import { pathJoins, PATH_CASE, PAYER_CLASS, DIFFERENT_CARD, originalStillJoin } from './recoveryJoins';
 
 /**
@@ -158,7 +160,7 @@ export async function getCycleInvoiceRows(
   }
 
   const joins = parts(
-    BILLING_JOIN, repeatJoin(scope), TASK_JOIN, touchJoin(scope), pathJoins(scope),
+    BILLING_JOIN, repeatJoin(scope), TASK_JOIN, TASK_AGENT_JOIN, touchJoin(scope), pathJoins(scope),
   );
 
   const [rows] = await pool.query<RowDataPacket[]>(
@@ -181,6 +183,7 @@ export async function getCycleInvoiceRows(
             ${IS_REPEAT}                          AS is_repeat,
             b.billing_group_id AS charge_bg, b.charge_last4,
             t.task_id, t.final_status_label, t.agent_email AS task_agent,
+            ${TASK_AGENT_NAME}                    AS task_agent_name,
             i.task_link_source,
             IFNULL(tw.touches_before, 0)          AS touches,
             IFNULL(tc.touches, 0)                 AS touches_lifetime,
@@ -229,6 +232,7 @@ export async function getCycleInvoiceRows(
     taskId: r.task_id == null ? null : num(r.task_id),
     taskStatus: r.final_status_label ? String(r.final_status_label) : null,
     taskAgent: r.task_agent ? String(r.task_agent) : null,
+    taskAgentName: r.task_agent_name ? String(r.task_agent_name) : null,
     taskLinkSource: r.task_link_source ? String(r.task_link_source) : null,
     touches: num(r.touches),
     touchesLifetime: num(r.touches_lifetime),

@@ -44,6 +44,7 @@ export default function AATicketsTasksPage() {
             fetchPastDue={getTicketsPastDue}
             fetchDueToday={getTicketsDueToday}
             queryKeyPrefix="aa-tickets"
+            pageFilters={{ users: filters.params.users, departments: filters.params.departments }}
           />
         )}
       </InsightsSection>

@@ -163,6 +163,8 @@ export interface CycleInvoiceRow {
   taskId: number | null;
   taskStatus: string | null;
   taskAgent: string | null;
+  /** The assignee's QTIP name, falling back to `taskAgent` (their CRM email). */
+  taskAgentName: string | null;
   /** EXPLICIT | AMBIGUOUS | TRIGGERED | COVERED, or null when no task matched. */
   taskLinkSource: string | null;
   /** Logged status moves between this invoice's decline and its financial event. */

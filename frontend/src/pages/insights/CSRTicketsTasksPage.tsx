@@ -44,6 +44,7 @@ export default function CSRTicketsTasksPage() {
             fetchPastDue={getCsrTicketsPastDue}
             fetchDueToday={getCsrTicketsDueToday}
             queryKeyPrefix="csr-tickets"
+            pageFilters={{ users: filters.params.users, departments: filters.params.departments }}
           />
         )}
       </InsightsSection>

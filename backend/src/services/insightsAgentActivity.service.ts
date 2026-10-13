@@ -823,6 +823,25 @@ function ticketTaskBase(area: 'sales' | 'csr' | undefined, selfEmployeeKey?: num
   };
 }
 
+/**
+ * The page's Agent / Department filter, shared by the aggregate and the drill-in
+ * so a total's item list is always the population that total counted.
+ */
+function applyTicketPageFilters(
+  where: string[],
+  params: (string | number)[],
+  filters: Pick<TicketTaskFilters, 'users' | 'departments'>,
+) {
+  if (filters.departments?.length) {
+    where.push(`dpt.department_name IN (${filters.departments.map(() => '?').join(',')})`);
+    params.push(...filters.departments);
+  }
+  if (filters.users?.length) {
+    where.push(`f.agent_name IN (${filters.users.map(() => '?').join(',')})`);
+    params.push(...filters.users);
+  }
+}
+
 export interface TicketRow {
   agent: string; department: string; classification: string;
   current: number; dueToday: number; pastDue: number;
@@ -865,14 +884,7 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
 
   const where = [...baseWhere];
   const params = [...baseParams];
-  if (filters.departments?.length) {
-    where.push(`dpt.department_name IN (${filters.departments.map(() => '?').join(',')})`);
-    params.push(...filters.departments);
-  }
-  if (filters.users?.length) {
-    where.push(`f.agent_name IN (${filters.users.map(() => '?').join(',')})`);
-    params.push(...filters.users);
-  }
+  applyTicketPageFilters(where, params, filters);
   const whereSql = `WHERE ${where.join(' AND ')}`;
   const baseWhereSql = `WHERE ${baseWhere.join(' AND ')}`;
 
@@ -950,10 +962,16 @@ export async function getTicketsTasks(filters: TicketTaskFilters): Promise<Ticke
 export type TicketDueBucket = 'past_due' | 'due_today';
 
 export interface TicketPastDueFilters {
-  /** The agent whose Past Due / Due Today cell was opened (ie_fact_ticket_task.agent_name). */
-  agent: string;
-  /** The classification row that was opened. */
-  classification: string;
+  /**
+   * The agent whose Past Due / Due Today cell was opened (ie_fact_ticket_task.agent_name).
+   * Omitted for the Grand Total, which lists every agent the page filters allow.
+   */
+  agent?: string;
+  /** The classification row that was opened. Omitted for an agent or grand total. */
+  classification?: string;
+  /** The page's Agent / Department filters — they shape the Grand Total. */
+  users?: string[];
+  departments?: string[];
   selfEmployeeKey?: number | null;
   area?: 'sales' | 'csr';
   /** Which snapshot bucket to list. Defaults to past due so existing callers stay put. */
@@ -961,6 +979,8 @@ export interface TicketPastDueFilters {
 }
 
 export interface PastDueItem {
+  /** Assigned agent (ie_fact_ticket_task.agent_name). */
+  agent: string;
   /** 'Ticket' or 'Task'. */
   processType: string;
   /** Ticket number for tickets, task id for tasks — what the CRM screen is keyed on. */
@@ -995,12 +1015,17 @@ export async function getTicketsPastDue(filters: TicketPastDueFilters): Promise<
 
   const predicate = filters.bucket === 'due_today' ? DUE_TODAY_PREDICATE : PAST_DUE_PREDICATE;
   const { EMP_JOIN, DEPT_JOIN, baseWhere, baseParams } = ticketTaskBase(filters.area, filters.selfEmployeeKey);
-  const where = [...baseWhere, 'f.agent_name = ?', 'f.classification = ?', predicate];
+  const where = [...baseWhere];
+  const params = [...baseParams];
+  applyTicketPageFilters(where, params, filters);
+  if (filters.agent) { where.push('f.agent_name = ?'); params.push(filters.agent); }
+  if (filters.classification) { where.push('f.classification = ?'); params.push(filters.classification); }
   // Final `?` is the business-timezone (ET) today for the due-date predicate.
-  const params = [...baseParams, filters.agent, filters.classification, businessNow(new Date()).date];
+  where.push(predicate);
+  params.push(businessNow(new Date()).date);
 
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT f.process_type, f.ticket_id, f.task_id, f.customer_name,
+    `SELECT f.agent_name, f.process_type, f.ticket_id, f.task_id, f.customer_name,
             f.classification, f.sub_classification, f.status, f.crm_url,
             DATE_FORMAT(f.next_contact, '%Y-%m-%d') AS next_contact
      FROM ie_fact_ticket_task f
@@ -1014,6 +1039,7 @@ export async function getTicketsPastDue(filters: TicketPastDueFilters): Promise<
   return rows.map((r) => {
     const isTask = r.process_type === 'Task';
     return {
+      agent: (r.agent_name as string | null) ?? '',
       processType: r.process_type as string,
       referenceId: Number(isTask ? r.task_id : r.ticket_id),
       customerName: (r.customer_name as string | null) ?? null,

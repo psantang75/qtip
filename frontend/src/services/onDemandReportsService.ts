@@ -7,12 +7,13 @@ export interface OnDemandReportColumn {
   label: string
   align?: 'left' | 'right' | 'center'
   /** Optional value-formatting hint the UI uses when rendering cells. */
-  format?: 'percent' | 'number' | 'date' | 'text'
+  format?: 'percent' | 'number' | 'date' | 'link' | 'text'
 }
 
 export type OnDemandFilterKey =
   | 'period' | 'departments' | 'forms' | 'agents' | 'submissionId'
   | 'topics' | 'status' | 'sessionId' | 'callLengthBand'
+  | 'campaign' | 'declineReason' | 'currency'
 
 /** Per-report default values for filter controls (e.g. coaching → status=CLOSED). */
 export interface OnDemandReportDefaults {
@@ -24,6 +25,9 @@ export interface OnDemandReportDefaults {
   status?: string
   sessionId?: string
   callLengthBand?: string
+  campaign?: string
+  declineReason?: string
+  currency?: string
 }
 
 export interface OnDemandReportSummary {
@@ -42,6 +46,18 @@ export interface OnDemandReportSummary {
   callLengthBandOptions?: { value: string; label: string }[]
   /** What the download produces, so the button can be labelled honestly. */
   downloadFormat?: 'xlsx' | 'txt'
+  /** Label for the period control (e.g. "Billing Cycle"); null = "Period". */
+  periodLabel?: string | null
+  /** Report-specific period choices; null = the shared PERIOD_OPTIONS. */
+  periodOptions?: string[] | null
+  /** When set, results render one expandable line per value of this row key. */
+  groupBy?: { key: string; label: string } | null
+}
+
+/** Grouped-report download variants: one group's rows, or a tab per group. */
+export interface OnDemandDownloadOptions {
+  group?: string
+  split?: 'tabs'
 }
 
 /**
@@ -61,6 +77,9 @@ export interface OnDemandReportFilterParams {
   status?: string
   sessionId?: string
   callLengthBand?: string
+  campaign?: string
+  declineReason?: string
+  currency?: string
 }
 
 export interface OnDemandReportRunParams extends OnDemandReportFilterParams {
@@ -88,6 +107,9 @@ export interface OnDemandFilterOptions {
   agents: string[]
   topics: string[]
   statuses: string[]
+  campaigns: string[]
+  declineReasons: string[]
+  currencies: string[]
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -109,6 +131,9 @@ function buildFilterPayload(params: OnDemandReportFilterParams): Record<string, 
   if (params.status) out.status = params.status
   if (params.sessionId) out.sessionId = params.sessionId
   if (params.callLengthBand) out.callLengthBand = params.callLengthBand
+  if (params.campaign) out.campaign = params.campaign
+  if (params.declineReason) out.declineReason = params.declineReason
+  if (params.currency) out.currency = params.currency
   return out
 }
 
@@ -158,10 +183,11 @@ export async function downloadReport(
   id: string,
   params: OnDemandReportFilterParams,
   fallbackName: string = 'OnDemandReport.xlsx',
+  options: OnDemandDownloadOptions = {},
 ): Promise<void> {
   const response = await api.post(
     `/on-demand-reports/${encodeURIComponent(id)}/download`,
-    buildFilterPayload(params),
+    { ...buildFilterPayload(params), ...options },
     { responseType: 'blob', timeout: REPORT_DOWNLOAD_TIMEOUT_MS },
   )
 
@@ -199,6 +225,9 @@ export async function getFilterOptions(
     agents: opts.agents ?? [],
     topics: opts.topics ?? [],
     statuses: opts.statuses ?? [],
+    campaigns: opts.campaigns ?? [],
+    declineReasons: opts.declineReasons ?? [],
+    currencies: opts.currencies ?? [],
   }
 }
 

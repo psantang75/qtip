@@ -29,9 +29,11 @@ import {
 import { COACHING_SESSION_STATUSES } from './coaching.report'
 import { CALL_TRANSCRIPTS_REPORT_ID } from './callTranscripts.report'
 import { transcriptFilterOptions } from './callTranscripts.data'
+import { FAILED_CHARGES_REPORT_ID, failedChargeFilterOptions } from './failedCharges.data'
 import { getOnDemandReport } from './registry'
 import type {
   OnDemandFilterOptions,
+  OnDemandReportFilters,
   OnDemandReportUser,
 } from './types'
 
@@ -246,10 +248,14 @@ export async function getOnDemandFilterOptions(
   reportId: string,
   user: OnDemandReportUser,
   range: { start_date: string; end_date: string },
-  selected: { departments?: string[]; forms?: string[]; agents?: string[] },
+  selected: Pick<OnDemandReportFilters, 'departments' | 'forms' | 'agents' | 'campaign' | 'currency'>,
 ): Promise<OnDemandFilterOptions> {
   const report = getOnDemandReport(reportId)
   if (!report) return { departments: [], forms: [], agents: [] }
+
+  if (reportId === FAILED_CHARGES_REPORT_ID) {
+    return failedChargeFilterOptions({ ...range, ...selected }, user)
+  }
 
   const csrRoleId = await getCsrRoleId()
   const [deptIds, formIds, agentIds] = await Promise.all([
