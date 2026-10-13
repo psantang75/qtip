@@ -1,22 +1,29 @@
-import { Fragment, useRef, useState, type ReactNode } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { BLOCK_MIN, WINDOW_END, WINDOW_START, fmtClock, fmtHM, type AxisTick, type DayModel, type TickTier } from './productivityModel'
+import { BLOCK_MIN, WINDOW_END, WINDOW_START, fmtClock, fmtHM, type DayModel } from './productivityModel'
 import {
   CALL_CLS, CHART_LEGEND_GROUPS, CLOCK_CLS, offQueueCls, ROUTING_CLS, ROUTING_LABEL,
-  SCHEDULE_TRACK, TICKET_CLS, TRACK,
+  SALES_LEGEND_GROUPS, SCHEDULE_TRACK, TICKET_CLS, TRACK,
   type PresenceStatus, type RoutingStatus,
 } from './productivityStatus'
 import CallTranscriptModal from './CallTranscriptModal'
+import SalesActivityRows from './SalesActivityRows'
+import { Bar, ChartLegend, HoverCard, TimelineRow } from './TimelinePrimitives'
+import {
+  crmLinkRow, hMuted, hText, hTime, titleCase, type HoverDetail, type HoverRow, type ShowFn,
+} from './timelineCells'
 
 /**
  * The Activity Timeline for one agent's day across a shared hour axis, mirroring
- * the Scheduling day view. Four rows, each answering a distinct question:
+ * the Scheduling day view. Each row answers a distinct question:
  *
  *   Clock    — was the agent punched in, against the shift they were scheduled?
  *   Status   — were they in queue and reachable? (off-queue runs name the reason)
  *   Calls    — was each ringing call answered or missed?
  *   Tickets  — what work got touched?
+ *
+ * Sales adds its own work rows (Emails, Leads, Floor Plans & Demos) between
+ * Calls and Tickets — see `SalesActivityRows`.
  *
  * Status and Calls stay separate on purpose: queue membership and call handling
  * are different questions, and neither stream can answer the other's.
@@ -36,9 +43,6 @@ import CallTranscriptModal from './CallTranscriptModal'
  * pointer travel from a bar into the card, so the Tickets links stay clickable.
  */
 
-const ROW = 'h-6'
-const LABEL = 'w-[70px] shrink-0 text-[11px] font-medium text-slate-500'
-
 const CALL_TONE: Record<'inbound' | 'outbound' | 'missed', string> = {
   inbound:  CALL_CLS.Inbound,
   outbound: CALL_CLS.Outbound,
@@ -52,82 +56,6 @@ const TICKET_TONE: Record<'completed' | 'updated', string> = {
 /** The fill for one status run — an off-queue run takes its presence reason's hue. */
 const statusCls = (status: RoutingStatus, reason: PresenceStatus | null) =>
   status === 'OFF_QUEUE' ? offQueueCls(reason) : ROUTING_CLS[status]
-
-/** Title Case for the status/label text shown in hovers (e.g. "queued call" →
- *  "Queued Call"), leaving the "·" separators and numeric spans untouched. */
-const titleCase = (s: string) => s.replace(/[A-Za-z]+/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase())
-
-// ── Hover-table cells ─────────────────────────────────────────────────────────
-// Every hover renders the same little table: a time-range column first, then the
-// status/label, then a muted detail. Building the cells through these helpers is
-// what keeps the four hovers looking identical.
-const hTime = (a: number, b: number) => (
-  <span className="font-mono text-[11px] tabular-nums text-slate-500">{fmtClock(a)} – {fmtClock(b)}</span>
-)
-const hText = (s: ReactNode) => <span className="text-slate-700">{s}</span>
-const hMuted = (s: ReactNode) => <span className="text-slate-400">{s}</span>
-
-/** Line weight per interval tier: strongest at the hour, faintest at 5 minutes. */
-const TICK_LINE: Record<TickTier, string> = {
-  hour:    'border-l border-slate-300',
-  half:    'border-l border-dashed border-slate-300',
-  quarter: 'border-l border-dashed border-slate-200',
-  five:    'border-l border-slate-100',
-}
-
-/** The shared four-tier grid, drawn behind each row so every stream lines up. */
-function Gridlines({ ticks }: { ticks: AxisTick[] }) {
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      {ticks.map(t => (
-        <div key={t.min} className={cn('absolute inset-y-0', TICK_LINE[t.tier])} style={{ left: `${t.leftPct}%` }} />
-      ))}
-    </div>
-  )
-}
-
-/** One row of the hover table. A row with an `href` renders as a link spanning
- *  all its columns (display:contents) so the whole line is clickable. */
-interface HoverRow { cells: ReactNode[]; href?: string; title?: string }
-/** Detail the hovered bar hands to the shared card: a titled table whose columns
- *  line up (time first). Kept identical in shape across every row so the four
- *  hovers read the same way. */
-interface HoverDetail { title: string; subtitle?: ReactNode; gridCols: string; rows: HoverRow[] }
-type ShowFn = (el: HTMLElement, detail: HoverDetail) => void
-
-function TimelineRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className={LABEL}>{label}</div>
-      <div className={cn('relative flex-1', ROW, TRACK)}>{children}</div>
-    </div>
-  )
-}
-
-/**
- * One absolutely-positioned bar. Positions come from the shared axis (never
- * flex), so every row lines up with the hour ticks even when a stream starts
- * later than the axis does. The bar reports its detail to the shared hover card
- * on enter rather than rendering its own tooltip.
- */
-function Bar({ cls, leftPct, widthPct, gap, detail, onShow, onHide, children }: {
-  cls: string; leftPct: number; widthPct: number
-  detail: HoverDetail; onShow: ShowFn; onHide: () => void; children?: ReactNode
-  /** Leave a hairline gap on the right so a run of these reads as discrete
-   *  five-minute bars (the productivity-bar look) rather than one block. */
-  gap?: boolean
-}) {
-  return (
-    <div
-      className={cn('absolute inset-y-0 cursor-pointer overflow-hidden', cls)}
-      style={{ left: `${leftPct}%`, width: gap ? `calc(${widthPct}% - 1.5px)` : `${widthPct}%`, minWidth: 2 }}
-      onMouseEnter={e => onShow(e.currentTarget, detail)}
-      onMouseLeave={onHide}
-    >
-      {children}
-    </div>
-  )
-}
 
 /** Label column (70px) plus the gap to the track (8px) — this sits outside the
  *  scrolling time track. */
@@ -195,8 +123,7 @@ export default function ActivityGantt({ model }: { model: DayModel }) {
 
         <div className="space-y-px">
           {/* Punch clock over the planned shift from Scheduling */}
-          <TimelineRow label="Clock">
-            <Gridlines ticks={axisTicks} />
+          <TimelineRow label="Clock" ticks={axisTicks}>
             {scheduleBar && (
               <>
                 <Bar
@@ -246,8 +173,7 @@ export default function ActivityGantt({ model }: { model: DayModel }) {
               boundary sits where it really fell instead of rounding to the
               nearest five. The hover lists the actual status runs (with their
               real time ranges) that fell in the block. */}
-          <TimelineRow label="Status">
-            <Gridlines ticks={axisTicks} />
+          <TimelineRow label="Status" ticks={axisTicks}>
             {statusBlocks.map((b, i) => {
               const blockEnd = b.startMin + BLOCK_MIN
               const runs = statusSegments.filter(s => s.endMin > b.startMin && s.startMin < blockEnd)
@@ -291,8 +217,7 @@ export default function ActivityGantt({ model }: { model: DayModel }) {
 
           {/* Conversations, in 5-minute blocks: teal in, blue out, red missed —
               dominant tone fills the block, exact calls are in the hover. */}
-          <TimelineRow label="Calls">
-            <Gridlines ticks={axisTicks} />
+          <TimelineRow label="Calls" ticks={axisTicks}>
             {callBlocks.map((b, i) => {
               const inbound = b.calls.filter(c => c.label === 'Inbound').length
               const outbound = b.calls.filter(c => c.label === 'Outbound').length
@@ -328,10 +253,11 @@ export default function ActivityGantt({ model }: { model: DayModel }) {
             })}
           </TimelineRow>
 
+          {model.sales && <SalesActivityRows sales={model.sales} ticks={axisTicks} onShow={show} onHide={scheduleHide} />}
+
           {/* Ticket / task touches, in 5-minute blocks: green closed, amber
               updated. The hover lists each real Ticket/Task # linked to the CRM. */}
-          <TimelineRow label="Tickets">
-            <Gridlines ticks={axisTicks} />
+          <TimelineRow label="Tickets" ticks={axisTicks}>
             {ticketBlocks.map((b, i) => (
               <Bar
                 key={i}
@@ -345,85 +271,20 @@ export default function ActivityGantt({ model }: { model: DayModel }) {
                   title: 'Tickets',
                   subtitle: `Touched ${b.ids.length}`,
                   gridCols: 'auto minmax(0,1fr) auto',
-                  rows: b.ids.map(item => ({
-                    href: item.url ?? undefined,
-                    title: item.url ? `Open ${item.itemType} ${item.itemId} in the CRM` : undefined,
-                    cells: [
-                      <span className={cn('font-medium', item.url ? 'text-primary group-hover:underline' : 'text-slate-700')}>
-                        {`${titleCase(item.itemType)} ${item.itemId}`}
-                      </span>,
-                      <span className={cn('truncate text-slate-500', item.url && 'group-hover:underline')}>
-                        {item.subject ?? item.action}
-                      </span>,
-                      item.url ? <ExternalLink className="h-3 w-3 shrink-0 opacity-70" /> : <span />,
-                    ],
-                  })),
+                  rows: b.ids.map(item => crmLinkRow(`${titleCase(item.itemType)} ${item.itemId}`, item.subject ?? item.action, item.url)),
                 }}
               />
             ))}
           </TimelineRow>
         </div>
 
-        {/* One legend for the whole chart, grouped the way it is read: phone
-            status, then calls, then tickets. The three groups are centred and
-            split by dividers so it is unmistakable they are three separate
-            streams, not one long list of colours. */}
-        <div className="mt-1 flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-          {CHART_LEGEND_GROUPS.map((group, gi) => (
-            <Fragment key={group.group}>
-              {gi > 0 && <span aria-hidden className="hidden h-5 w-px bg-slate-200 sm:block" />}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{group.group}</span>
-                {group.items.map(item => (
-                  <span key={item.label} className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                    <span className={cn('h-2.5 w-2.5', item.cls)} />
-                    {item.label}
-                  </span>
-                ))}
-              </div>
-            </Fragment>
-          ))}
-        </div>
+        {/* Phone status, then calls, then tickets — plus the Sales work rows'
+            groups when they are drawn. */}
+        <ChartLegend groups={model.sales ? [...CHART_LEGEND_GROUPS, ...SALES_LEGEND_GROUPS] : CHART_LEGEND_GROUPS} />
         <div className="text-[11px] text-slate-400">Hover any bar for the exact times and detail.</div>
       </div>
 
-      {/* The single shared hover card, fixed to the viewport so the scrolling
-          track never clips it. It stays open while the pointer is inside it, so
-          the Tickets links can be clicked. */}
-      {hover && (
-        <div
-          className="fixed z-50 w-max max-w-[min(92vw,560px)] rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg"
-          style={{ left: hover.left, top: hover.top }}
-          onMouseEnter={cancelHide}
-          onMouseLeave={scheduleHide}
-        >
-          <div className="font-semibold text-slate-900">{hover.detail.title}</div>
-          {hover.detail.subtitle && <div className="mt-0.5 text-[11px] leading-tight text-slate-500">{hover.detail.subtitle}</div>}
-          {hover.detail.rows.length > 0 && (
-            <div
-              className="mt-1 grid items-baseline gap-x-4 gap-y-1 whitespace-nowrap"
-              style={{ gridTemplateColumns: hover.detail.gridCols }}
-            >
-              {hover.detail.rows.map((row, i) =>
-                row.href ? (
-                  <a
-                    key={i}
-                    href={row.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={row.title}
-                    className="group contents"
-                  >
-                    {row.cells.map((c, j) => <Fragment key={j}>{c}</Fragment>)}
-                  </a>
-                ) : (
-                  <Fragment key={i}>{row.cells.map((c, j) => <Fragment key={j}>{c}</Fragment>)}</Fragment>
-                ),
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {hover && <HoverCard left={hover.left} top={hover.top} detail={hover.detail} onEnter={cancelHide} onLeave={scheduleHide} />}
 
       <CallTranscriptModal conversationId={callModal} onClose={() => setCallModal(null)} />
     </div>

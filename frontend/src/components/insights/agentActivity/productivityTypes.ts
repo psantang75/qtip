@@ -73,6 +73,33 @@ export interface ScheduleBreak { start: string; end: string; kind: 'Lunch' | 'Br
 /** The planned shift, pulled from Scheduling. Null until wired to the roster. */
 export interface ScheduleShift { start: string; end: string; breaks: ScheduleBreak[] }
 
+/** A lead (Lead Manager) or Contact Manager task, first touched in a minute. */
+export interface SalesTouch { itemId: number; kind: 'lead' | 'contact_manager'; url: string | null; subject: string | null }
+export interface SalesTouchEvent { time: string; leads: number; contactManager: number; ids: SalesTouch[] }
+
+export type ProposalType = 'sub_only' | 'sub_player' | 'audio_system' | 'unclassified'
+/** A lead moved to "Proposal Issued", typed from its proposal's base-package quote. */
+export interface ProposalEvent { time: string; taskId: number; url: string | null; type: ProposalType }
+
+/** A floor plan (speaker plan) upload, drawn back from the upload by the minutes spent. */
+export interface FloorPlanSpan {
+  start: string; end: string; taskId: number; url: string | null; minutes: number
+  players: number; amplifiers: number; speakers: number; volumeControls: number
+}
+/** A demo logged as "Meeting held", at its actual start–stop time. */
+export interface DemoSpan { start: string; end: string; taskId: number; url: string | null; note: string | null }
+/** Sent emails (one per conversation) in a one-minute bucket. */
+export interface EmailEvent { time: string; count: number; subjects: string[] }
+
+/** Sales-only work streams; absent for the CSR section. */
+export interface SalesDay {
+  leads: SalesTouchEvent[]
+  proposals: ProposalEvent[]
+  floorPlans: FloorPlanSpan[]
+  demos: DemoSpan[]
+  emails: EmailEvent[]
+}
+
 /** All activity for one agent on one day. */
 export interface AgentDay {
   schedule: ScheduleShift | null
@@ -82,6 +109,7 @@ export interface AgentDay {
   calls: CallSpan[]
   outbound: OutboundEffort
   tickets: TicketEvent[]
+  sales?: SalesDay
 }
 
 /**
