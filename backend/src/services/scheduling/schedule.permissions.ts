@@ -10,27 +10,32 @@ import { getManagedDepartmentIds } from '../manager/manager.access';
 import { AuthReq, ScheduleScope, ScheduleServiceError } from './schedule.types';
 
 /**
- * Resolve which departments a viewer may see/write. Admin and Director-with-ALL
- * are unrestricted (null); a manager is limited to their managed departments;
- * anyone else self-scopes (departmentIds is irrelevant, canViewAll false).
+ * Resolve which departments a viewer may see/write.
+ * - No viewAll → self-scope (canViewAll false; departmentIds unused).
+ * - Admin / Director with viewAll → unrestricted (null).
+ * - Manager with viewAll → departments they manage ([] if none).
+ * - Any other role granted viewAll (Trainer, QA, …) → unrestricted (null).
+ *   Do NOT route them through department_managers — they are not managers, so
+ *   that lookup returns [] and listSchedules would incorrectly return nothing.
  */
 export async function resolveScope(req: AuthReq): Promise<ScheduleScope> {
   const viewerId = req.user!.user_id;
-  const isAdmin = req.user!.role === 'Admin';
+  const role = req.user!.role;
+  const isAdmin = role === 'Admin';
   const canViewAll = req.pageAccess?.canViewAll ?? false;
 
   if (!canViewAll) {
     return { viewerId, canViewAll: false, departmentIds: null, isAdmin: false };
   }
-  if (isAdmin) {
-    return { viewerId, canViewAll: true, departmentIds: null, isAdmin: true };
+  if (isAdmin || role === 'Director') {
+    return { viewerId, canViewAll: true, departmentIds: null, isAdmin };
   }
-  // Director-with-ALL sees everyone too; managers are department-scoped.
-  if (req.user!.role === 'Director') {
-    return { viewerId, canViewAll: true, departmentIds: null, isAdmin: false };
+  // Only Managers are department-scoped. Matches getVisibleDepartmentIds.
+  if (role === 'Manager') {
+    const departmentIds = await getManagedDepartmentIds(viewerId);
+    return { viewerId, canViewAll: true, departmentIds, isAdmin: false };
   }
-  const departmentIds = await getManagedDepartmentIds(viewerId);
-  return { viewerId, canViewAll: true, departmentIds, isAdmin: false };
+  return { viewerId, canViewAll: true, departmentIds: null, isAdmin: false };
 }
 
 /** True when a manager scoped to managedDeptIds may write for targetDeptId. */

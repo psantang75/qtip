@@ -3,8 +3,9 @@
  *
  * Every campaign service answers the same two questions — may this viewer SEE
  * this schedule, and may they WRITE to it — so they live here rather than being
- * restated per service. Both build on resolveScope: Admin/Director see all
- * departments, Managers only the ones they manage, everyone else only their own.
+ * restated per service. Both build on resolveScope: Admin/Director (and other
+ * non-Manager roles with viewAll) see all departments, Managers only the ones
+ * they manage, view-only everyone else only their own.
  *
  * A schedule is visible to SEVERAL departments (campaign_schedule_department), so
  * a view check asks whether the viewer's scope intersects that list. Writes still
