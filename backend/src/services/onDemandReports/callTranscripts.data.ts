@@ -61,7 +61,7 @@ export interface TranscriptCall {
   direction: string;
   talkSecs: number;
   holdSecs: number;
-  /** All after-call work: wrap + wrap extended + wrap pending. */
+  /** All after-call work: Follow-Up + Follow-Up Extended + Wrap Pending. */
   wrapSecs: number;
   handleSecs: number;
   wrapUpCode: string | null;

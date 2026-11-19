@@ -18,16 +18,16 @@ const labels = (bands: BandTotal[]) => visibleWrapSeries(bands).map(s => s.label
 describe('visibleWrapSeries', () => {
   it('shows all three parts, in order, for a period that has all three', () => {
     expect(labels([band({ wrapHours: 1, wrapExtendedHours: 0.1, wrapPendingHours: 0.4 })]))
-      .toEqual(['Wrap', 'Wrap Extended', 'Wrap Pending'])
+      .toEqual(['Follow-Up', 'Follow-Up Extended', 'Wrap Pending'])
   })
 
-  it('shows only Wrap Pending once wrap and wrap extended are retired', () => {
+  it('shows only Wrap Pending once Follow-Up and Follow-Up Extended are retired', () => {
     expect(labels([band({ wrapPendingHours: 0.7 }), band({ key: 'o20', wrapPendingHours: 2 })]))
       .toEqual(['Wrap Pending'])
   })
 
   it('keeps a part that has time in any one bucket', () => {
-    expect(labels([band(), band({ key: 'o20', wrapExtendedHours: 0.1 })])).toEqual(['Wrap Extended'])
+    expect(labels([band(), band({ key: 'o20', wrapExtendedHours: 0.1 })])).toEqual(['Follow-Up Extended'])
   })
 
   it('shows nothing for a period with no after-call time', () => {

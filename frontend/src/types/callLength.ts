@@ -2,9 +2,9 @@
  * Response shapes for Insights → Agent Activity - CSR → Call Length.
  * Mirrors backend/src/services/insightsCallLength.service.ts.
  *
- * "Length" is total handle time (talk + hold + wrap + wrap extended + wrap
- * pending). The bucket definition arrives from the server in `bands` rather
- * than being restated here, so the boundaries have exactly one home.
+ * "Length" is total handle time (talk + hold + Follow-Up + Follow-Up Extended +
+ * Wrap Pending). The bucket definition arrives from the server in `bands`
+ * rather than being restated here, so the boundaries have exactly one home.
  */
 
 export interface CallLengthBand {

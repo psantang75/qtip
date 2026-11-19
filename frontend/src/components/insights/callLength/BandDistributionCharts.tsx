@@ -72,8 +72,8 @@ export function BandTotalsChart({ bandTotals }: { bandTotals: BandTotal[] }) {
  * different fix than talk time does, so the two are shown side by side per
  * bucket: a bucket where the amber bar is a large slice of the blue one is one
  * where after-call work, not the customer, is the cost. The amber bar stacks
- * wrap, wrap extended and wrap pending; parts with no time in the period are
- * left out, and the label is their total.
+ * Follow-Up, Follow-Up Extended and Wrap Pending; parts with no time in the
+ * period are left out, and the label is their total.
  *
  * Bucket identity comes from the Y axis here instead of colour, because the
  * series need their own colours for the legend to mean anything.

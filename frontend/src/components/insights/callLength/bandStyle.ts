@@ -34,15 +34,15 @@ export interface WrapSeries extends BandStyle {
 }
 
 export const WRAP_SERIES: readonly WrapSeries[] = [
-  { key: 'wrapHours',         label: 'Wrap',          fill: '#f39c12', fillOpacity: 1 },
-  { key: 'wrapExtendedHours', label: 'Wrap Extended', fill: '#f39c12', fillOpacity: 0.6 },
-  { key: 'wrapPendingHours',  label: 'Wrap Pending',  fill: '#f39c12', fillOpacity: 0.3 },
+  { key: 'wrapHours',         label: 'Follow-Up',          fill: '#f39c12', fillOpacity: 1 },
+  { key: 'wrapExtendedHours', label: 'Follow-Up Extended', fill: '#f39c12', fillOpacity: 0.6 },
+  { key: 'wrapPendingHours',  label: 'Wrap Pending',       fill: '#f39c12', fillOpacity: 0.3 },
 ]
 
 /**
  * Parts with time in at least one bucket. A part the phone system no longer
- * produces (wrap and wrap extended after the Nov 2026 redesign) drops out of the
- * bars and the legend instead of showing as an empty series.
+ * produces (Follow-Up and Follow-Up Extended after the Nov 2026 redesign) drops
+ * out of the bars and the legend instead of showing as an empty series.
  */
 export const visibleWrapSeries = (bandTotals: BandTotal[]): WrapSeries[] =>
   WRAP_SERIES.filter(s => bandTotals.some(b => b[s.key] > 0))

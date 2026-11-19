@@ -12,8 +12,8 @@ import { CALL_LENGTH_BANDS, LONG_BANDS, OVER_10_BANDS, zeroBands } from './bands
 
 /**
  * Call count and summed seconds for a group. After-call work has three parts —
- * wrap (Genesys wrap segment), wrap extended (Follow-Up Extended status) and wrap
- * pending (Wrap Pending status) — and handle already includes all three.
+ * Follow-Up (Genesys wrap segment), Follow-Up Extended (status) and Wrap
+ * Pending (status) — and handle already includes all three.
  */
 interface CallSecs {
   calls: number;

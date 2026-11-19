@@ -60,7 +60,7 @@ function renderHeader(
     `Transcripts:      ${included} included, ${missing} unavailable`,
     '',
     'Handle time is talk + hold + wrap, where wrap is all after-call work',
-    '(wrap, wrap extended and wrap pending). Timestamps in each transcript',
+    '(Follow-Up, Follow-Up Extended and Wrap Pending). Timestamps in each transcript',
     'are offsets from the start of that call.',
     RULE,
     '',
