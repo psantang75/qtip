@@ -6,8 +6,8 @@
  * introducing a second table idiom in the same sidebar group.
  *
  * The talk / wrap split sits next to the average so a long average can be read
- * for its cause: a high wrap column is after-call work (often the wrap-up
- * screen timing out), while a high talk column is time on the call itself.
+ * for its cause: a high wrap column is after-call work (wrap, wrap extended and
+ * wrap pending together), while a high talk column is time on the call itself.
  * "% ≥ 5m" is the column to sort a coaching list by — two agents can share an
  * average while one is uniformly slow and the other has a heavy tail.
  */

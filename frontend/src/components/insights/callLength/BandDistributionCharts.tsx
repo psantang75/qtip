@@ -10,7 +10,7 @@
  * disproportionate share of total handle time.
  */
 import { ResponsiveContainer, BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts'
-import { bandStyle, AXIS_TICK, TOOLTIP_STYLE } from './bandStyle'
+import { bandStyle, visibleWrapSeries, AXIS_TICK, TOOLTIP_STYLE } from './bandStyle'
 import { fmtNum } from '@/components/insights/agentActivity/format'
 import type { BandTotal, DeptBandRow } from '@/types/callLength'
 
@@ -67,23 +67,28 @@ export function BandTotalsChart({ bandTotals }: { bandTotals: BandTotal[] }) {
 }
 
 /**
- * Handle hours per bucket, with after-call wrap broken out as its own bar
- * rather than folded into the total. Wrap is a quarter of all handle time and
- * responds to a completely different fix than talk time does, so the two are
- * shown side by side per bucket: a bucket where the amber bar is a large slice
- * of the blue one is one where the wrap-up screen, not the customer, is the
- * cost.
+ * Handle hours per bucket, with after-call work broken out as its own bar
+ * rather than folded into the total. After-call work responds to a completely
+ * different fix than talk time does, so the two are shown side by side per
+ * bucket: a bucket where the amber bar is a large slice of the blue one is one
+ * where after-call work, not the customer, is the cost. The amber bar stacks
+ * wrap, wrap extended and wrap pending; parts with no time in the period are
+ * left out, and the label is their total.
  *
- * Bucket identity comes from the Y axis here instead of colour, because the two
+ * Bucket identity comes from the Y axis here instead of colour, because the
  * series need their own colours for the legend to mean anything.
  */
 const TOTAL_FILL = '#00aeef'
-const WRAP_FILL = '#f39c12'
 
 export function BandTimeSplit({ bandTotals }: { bandTotals: BandTotal[] }) {
+  const wrapParts = visibleWrapSeries(bandTotals)
+  const data = bandTotals.map(b => ({
+    ...b,
+    wrapTotalHours: Math.round((b.wrapHours + b.wrapExtendedHours + b.wrapPendingHours) * 10) / 10,
+  }))
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={bandTotals} layout="vertical" margin={{ top: 4, right: 56, bottom: 4, left: 24 }} barGap={2}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 56, bottom: 4, left: 24 }} barGap={2}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
         <XAxis
           type="number" tick={AXIS_TICK} tickLine={false} axisLine={false}
@@ -106,13 +111,23 @@ export function BandTimeSplit({ bandTotals }: { bandTotals: BandTotal[] }) {
             style={{ fontSize: 10, fill: '#475569', fontWeight: 600 }}
           />
         </Bar>
-        <Bar dataKey="wrapHours" name="Wrap" fill={WRAP_FILL} radius={[0, 3, 3, 0]}>
-          <LabelList
-            dataKey="wrapHours" position="right"
-            formatter={(v: number) => `${v}h`}
-            style={{ fontSize: 10, fill: '#475569', fontWeight: 600 }}
-          />
-        </Bar>
+        {wrapParts.map((s, i) => {
+          const last = i === wrapParts.length - 1
+          return (
+            <Bar
+              key={s.key} dataKey={s.key} name={s.label} stackId="wrap"
+              fill={s.fill} fillOpacity={s.fillOpacity} radius={last ? [0, 3, 3, 0] : 0}
+            >
+              {last && (
+                <LabelList
+                  dataKey="wrapTotalHours" position="right"
+                  formatter={(v: number) => `${v}h`}
+                  style={{ fontSize: 10, fill: '#475569', fontWeight: 600 }}
+                />
+              )}
+            </Bar>
+          )
+        })}
       </BarChart>
     </ResponsiveContainer>
   )

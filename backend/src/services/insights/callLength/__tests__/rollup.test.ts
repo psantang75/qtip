@@ -11,12 +11,16 @@ import { CALL_LENGTH_BANDS } from '../bands';
 const dept = (
   department: string, band: string, calls: number,
   handleSecs: number, wrapSecs = 0, talkSecs = handleSecs - wrapSecs,
-): DeptAggRow => ({ department, band, calls, talkSecs, wrapSecs, handleSecs });
+): DeptAggRow => ({
+  department, band, calls, talkSecs, wrapSecs, wrapExtendedSecs: 0, wrapPendingSecs: 0, handleSecs,
+});
 
 const rep = (
   agent: string, department: string, band: string, calls: number,
   handleSecs: number, wrapSecs = 0, talkSecs = handleSecs - wrapSecs,
-): RepAggRow => ({ agent, department, band, calls, talkSecs, wrapSecs, handleSecs });
+): RepAggRow => ({
+  agent, department, band, calls, talkSecs, wrapSecs, wrapExtendedSecs: 0, wrapPendingSecs: 0, handleSecs,
+});
 
 describe('rollupDepts', () => {
   const rows: DeptAggRow[] = [
@@ -58,7 +62,25 @@ describe('rollupDepts', () => {
     const r = rollupDepts(rows);
     expect(r.bandTotals.map((b) => b.key)).toEqual(CALL_LENGTH_BANDS.map((b) => b.key));
     const u1 = r.bandTotals.find((b) => b.key === 'u1')!;
-    expect(u1).toMatchObject({ calls: 0, pctCalls: 0, pctTime: 0, avgMin: 0, handleHours: 0, wrapHours: 0 });
+    expect(u1).toMatchObject({
+      calls: 0, pctCalls: 0, pctTime: 0, avgMin: 0,
+      handleHours: 0, wrapHours: 0, wrapExtendedHours: 0, wrapPendingHours: 0,
+    });
+  });
+
+  it('carries the three after-call parts separately per bucket', () => {
+    const r = rollupDepts([
+      { ...dept('Customer Service', 'm5_10', 10, 7200, 1800), wrapExtendedSecs: 360, wrapPendingSecs: 1440 },
+      { ...dept('Customer Service', 'm2_5',  20, 3600,    0), wrapPendingSecs: 720 },
+    ]);
+    expect(r.bandTotals.find((b) => b.key === 'm5_10')).toMatchObject({
+      handleHours: 2, wrapHours: 0.5, wrapExtendedHours: 0.1, wrapPendingHours: 0.4,
+    });
+    // A bucket with only Wrap Pending (wrap retired) reports zero for the other two.
+    expect(r.bandTotals.find((b) => b.key === 'm2_5')).toMatchObject({
+      wrapHours: 0, wrapExtendedHours: 0, wrapPendingHours: 0.2,
+    });
+    expect(r.totalWrapSecs).toBe(1800 + 360 + 1440 + 720);
   });
 
   it('breaks wrap out per bucket so it can be charted against the total', () => {
@@ -121,6 +143,14 @@ describe('rollupReps', () => {
     expect(ann.avgTalkMin).toBe(2.8);
   });
 
+  it('averages wrap over all three after-call parts', () => {
+    const [dan] = rollupReps([
+      { ...rep('Dan', 'Customer Service', 'm2_5', 10, 3000, 300), wrapExtendedSecs: 120, wrapPendingSecs: 780 },
+    ]);
+    // (300 + 120 + 780) / 10 = 120s = 2.0 min
+    expect(dan.avgWrapMin).toBe(2);
+  });
+
   it('groups by department then descending volume so the table reads team by team', () => {
     const out = rollupReps(rows);
     expect(out.map((r) => `${r.department}/${r.agent}`)).toEqual([
@@ -146,6 +176,14 @@ describe('buildKpis', () => {
     expect(k.csr_cl_handle_hours).toBe(5.6);
     expect(k.csr_cl_avg_handle).toBe(3.3);
     expect(k.csr_cl_wrap_share).toBe(8.5);
+  });
+
+  it('counts all three after-call parts in the wrap share', () => {
+    const k = buildKpis(rollupDepts([
+      { ...dept('Customer Service', 'm2_5', 10, 2000, 100), wrapExtendedSecs: 100, wrapPendingSecs: 300 },
+    ]));
+    // (100 + 100 + 300) / 2000 = 25%
+    expect(k.csr_cl_wrap_share).toBe(25);
   });
 
   it('yields zeros rather than NaN when nothing is in range', () => {

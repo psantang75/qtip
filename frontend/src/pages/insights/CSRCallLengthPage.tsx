@@ -9,7 +9,8 @@
  *
  * Layout is ordered as the question gets asked: how many calls sit in each
  * length bucket, then where the hours actually go (and how much of that is
- * after-call wrap), then which teams run long, then per-agent detail.
+ * after-call work: wrap, wrap extended, wrap pending), then which teams run
+ * long, then per-agent detail.
  */
 import { useQuery } from '@tanstack/react-query'
 import { KpiTile, InsightsSection } from '@/components/insights'
@@ -60,7 +61,7 @@ export default function CSRCallLengthPage() {
   return (
     <ActivityReportShell
       title="Call Length"
-      description="Handle time (talk + hold + wrap) per call, bucketed by length, for each agent and department."
+      description="Handle time (talk + hold + wrap, wrap extended and wrap pending) per call, bucketed by length, for each agent and department."
       filters={filters}
       availableUsers={data?.availableUsers ?? []}
       availableDepts={data?.availableDepartments ?? []}

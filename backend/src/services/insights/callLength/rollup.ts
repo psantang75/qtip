@@ -10,25 +10,31 @@
  */
 import { CALL_LENGTH_BANDS, LONG_BANDS, OVER_10_BANDS, zeroBands } from './bands';
 
-/** One (department x band) aggregate row. */
-export interface DeptAggRow {
-  department: string;
-  band: string;
+/**
+ * Call count and summed seconds for a group. After-call work has three parts —
+ * wrap (Genesys wrap segment), wrap extended (Follow-Up Extended status) and wrap
+ * pending (Wrap Pending status) — and handle already includes all three.
+ */
+interface CallSecs {
   calls: number;
   talkSecs: number;
   wrapSecs: number;
+  wrapExtendedSecs: number;
+  wrapPendingSecs: number;
   handleSecs: number;
 }
 
+/** One (department x band) aggregate row. */
+export interface DeptAggRow extends CallSecs {
+  department: string;
+  band: string;
+}
+
 /** One (agent x band) aggregate row. */
-export interface RepAggRow {
+export interface RepAggRow extends CallSecs {
   agent: string;
   department: string;
   band: string;
-  calls: number;
-  talkSecs: number;
-  wrapSecs: number;
-  handleSecs: number;
 }
 
 export interface BandTotal {
@@ -37,8 +43,10 @@ export interface BandTotal {
   calls: number;
   pctCalls: number;
   handleHours: number;
-  /** After-call work inside this bucket, charted against handleHours. */
+  /** The three after-call parts inside this bucket, charted against handleHours. */
   wrapHours: number;
+  wrapExtendedHours: number;
+  wrapPendingHours: number;
   /** Share of total handle time. Diverges sharply from pctCalls — that's the point. */
   pctTime: number;
   avgMin: number;
@@ -64,6 +72,7 @@ export interface BandRollup {
   bandTotals: BandTotal[];
   totalCalls: number;
   totalHandleSecs: number;
+  /** All three after-call parts. */
   totalWrapSecs: number;
   /**
    * Raw (unrounded) handle seconds per bucket. The KPIs derive from this rather
@@ -79,23 +88,26 @@ export const div = (a: number, b: number): number => (b ? a / b : 0);
 /** Seconds -> minutes, one decimal. */
 const toMin = (secs: number, calls: number) => r1(div(secs, calls) / 60);
 
-/** Running (calls, seconds) pair used while accumulating a group. */
-interface Acc { calls: number; talkSecs: number; wrapSecs: number; handleSecs: number }
-const newAcc = (): Acc => ({ calls: 0, talkSecs: 0, wrapSecs: 0, handleSecs: 0 });
-function add(acc: Acc, r: { calls: number; talkSecs: number; wrapSecs: number; handleSecs: number }): void {
+const newAcc = (): CallSecs => ({
+  calls: 0, talkSecs: 0, wrapSecs: 0, wrapExtendedSecs: 0, wrapPendingSecs: 0, handleSecs: 0,
+});
+function add(acc: CallSecs, r: CallSecs): void {
   acc.calls += r.calls;
   acc.talkSecs += r.talkSecs;
   acc.wrapSecs += r.wrapSecs;
+  acc.wrapExtendedSecs += r.wrapExtendedSecs;
+  acc.wrapPendingSecs += r.wrapPendingSecs;
   acc.handleSecs += r.handleSecs;
 }
+const allWrapSecs = (a: CallSecs): number => a.wrapSecs + a.wrapExtendedSecs + a.wrapPendingSecs;
 
 /**
  * Fold the (department x band) grid into the per-department bucket matrix and
  * the overall bucket totals.
  */
 export function rollupDepts(rows: DeptAggRow[]): BandRollup {
-  const deptAcc = new Map<string, Acc & { bands: Record<string, number> }>();
-  const bandAcc = new Map<string, Acc>();
+  const deptAcc = new Map<string, CallSecs & { bands: Record<string, number> }>();
+  const bandAcc = new Map<string, CallSecs>();
   const total = newAcc();
 
   for (const r of rows) {
@@ -130,6 +142,8 @@ export function rollupDepts(rows: DeptAggRow[]): BandRollup {
       pctCalls: r1(div(b.calls, total.calls) * 100),
       handleHours: r1(b.handleSecs / 3600),
       wrapHours: r1(b.wrapSecs / 3600),
+      wrapExtendedHours: r1(b.wrapExtendedSecs / 3600),
+      wrapPendingHours: r1(b.wrapPendingSecs / 3600),
       pctTime: r1(div(b.handleSecs, total.handleSecs) * 100),
       avgMin: toMin(b.handleSecs, b.calls),
     };
@@ -140,7 +154,7 @@ export function rollupDepts(rows: DeptAggRow[]): BandRollup {
     bandTotals,
     totalCalls: total.calls,
     totalHandleSecs: total.handleSecs,
-    totalWrapSecs: total.wrapSecs,
+    totalWrapSecs: allWrapSecs(total),
     bandHandleSecs: Object.fromEntries(
       CALL_LENGTH_BANDS.map((def) => [def.key, bandAcc.get(def.key)?.handleSecs ?? 0]),
     ),
@@ -152,7 +166,7 @@ export function rollupDepts(rows: DeptAggRow[]): BandRollup {
  * descending volume so the table reads department-by-department.
  */
 export function rollupReps(rows: RepAggRow[]): RepBandRow[] {
-  const acc = new Map<string, Acc & { department: string; bands: Record<string, number> }>();
+  const acc = new Map<string, CallSecs & { department: string; bands: Record<string, number> }>();
   for (const r of rows) {
     const agent = r.agent || '';
     if (!acc.has(agent)) {
@@ -168,7 +182,7 @@ export function rollupReps(rows: RepAggRow[]): RepBandRow[] {
       department: rep.department,
       calls: rep.calls,
       avgTalkMin: toMin(rep.talkSecs, rep.calls),
-      avgWrapMin: toMin(rep.wrapSecs, rep.calls),
+      avgWrapMin: toMin(allWrapSecs(rep), rep.calls),
       avgHandleMin: toMin(rep.handleSecs, rep.calls),
       bands: rep.bands,
     }))

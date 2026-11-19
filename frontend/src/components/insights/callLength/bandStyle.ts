@@ -7,6 +7,8 @@
  *
  * Keyed by the bucket keys the API emits in `bands`.
  */
+import type { BandTotal } from '@/types/callLength'
+
 export interface BandStyle {
   fill: string
   fillOpacity: number
@@ -24,6 +26,26 @@ export const BAND_STYLE: Record<string, BandStyle> = {
 /** Fallback keeps an unrecognised bucket visible rather than invisible. */
 export const bandStyle = (key: string): BandStyle =>
   BAND_STYLE[key] ?? { fill: '#94a3b8', fillOpacity: 1 }
+
+/** The three after-call parts, stacked in one amber bar and told apart by opacity. */
+export interface WrapSeries extends BandStyle {
+  key: 'wrapHours' | 'wrapExtendedHours' | 'wrapPendingHours'
+  label: string
+}
+
+export const WRAP_SERIES: readonly WrapSeries[] = [
+  { key: 'wrapHours',         label: 'Wrap',          fill: '#f39c12', fillOpacity: 1 },
+  { key: 'wrapExtendedHours', label: 'Wrap Extended', fill: '#f39c12', fillOpacity: 0.6 },
+  { key: 'wrapPendingHours',  label: 'Wrap Pending',  fill: '#f39c12', fillOpacity: 0.3 },
+]
+
+/**
+ * Parts with time in at least one bucket. A part the phone system no longer
+ * produces (wrap and wrap extended after the Nov 2026 redesign) drops out of the
+ * bars and the legend instead of showing as an empty series.
+ */
+export const visibleWrapSeries = (bandTotals: BandTotal[]): WrapSeries[] =>
+  WRAP_SERIES.filter(s => bandTotals.some(b => b[s.key] > 0))
 
 /** Shared Recharts tooltip chrome, matching the sibling Agent Activity charts. */
 export const TOOLTIP_STYLE = {

@@ -18,8 +18,8 @@ WHERE date_key BETWEEN CAST(DATE_FORMAT(:pFromDate, '%Y%m%d') AS UNSIGNED)
 
 INSERT INTO ie_fact_support_call
   (date_key, conversation_id, phone_user_id, employee_key, agent_email, agent_name,
-   started_on, direction, talk_secs, hold_secs, wrap_secs, handle_secs,
-   wrap_up_code, transferred, load_batch_id)
+   started_on, direction, talk_secs, hold_secs, wrap_secs, wrap_extended_secs,
+   wrap_pending_secs, handle_secs, wrap_up_code, transferred, load_batch_id)
 SELECT
   d.date_key,
   s.conversation_id,
@@ -32,6 +32,8 @@ SELECT
   IFNULL(s.talk_secs, 0),
   IFNULL(s.hold_secs, 0),
   IFNULL(s.wrap_secs, 0),
+  IFNULL(s.wrap_extended_secs, 0),
+  IFNULL(s.wrap_pending_secs, 0),
   IFNULL(s.handle_secs, 0),
   s.wrap_up_code,
   IFNULL(s.transferred, 0),

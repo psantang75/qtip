@@ -61,6 +61,7 @@ export interface TranscriptCall {
   direction: string;
   talkSecs: number;
   holdSecs: number;
+  /** All after-call work: wrap + wrap extended + wrap pending. */
   wrapSecs: number;
   handleSecs: number;
   wrapUpCode: string | null;
@@ -125,7 +126,8 @@ export async function selectTranscriptCalls(
 
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT f.conversation_id, f.agent_name, f.agent_email, dpt.department_name,
-            f.started_on, f.direction, f.talk_secs, f.hold_secs, f.wrap_secs,
+            f.started_on, f.direction, f.talk_secs, f.hold_secs,
+            f.wrap_secs + f.wrap_extended_secs + f.wrap_pending_secs AS wrap_secs,
             f.handle_secs, f.wrap_up_code, f.transferred, f.date_key
      FROM ie_fact_support_call f
      ${scope.joins}

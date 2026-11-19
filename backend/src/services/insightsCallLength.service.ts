@@ -5,13 +5,13 @@
  * read ie_fact_call_activity: that fact is a daily (agent x direction) roll-up
  * with no per-call row to bucket.
  *
- * "Length" is total handle time — talk + hold + wrap — because that is what the
- * business pays per call. The components come back alongside the buckets so
- * wrap can be read on its own: on measured support traffic wrap is ~26% of all
- * handle time, and roughly half of calls end on the Genesys wrap-up TIMEOUT
- * code carrying ~90s of wrap against ~17s when the agent actually dispositions
- * the call. So a large slice of "handle time" is the wrap-up screen timing out
- * rather than customer contact, and `wrapTimeoutPct` surfaces exactly that.
+ * "Length" is total handle time — talk + hold + all after-call work — because
+ * that is what the business pays per call. After-call work comes back in three
+ * parts so each can be read on its own: wrap (the Genesys wrap segment), wrap
+ * extended (Follow-Up Extended status) and wrap pending (Wrap Pending status,
+ * which replaced the other two in Nov 2026). How the two statuses are tied to
+ * a call is documented in workers/sql/support_call.extract.sql.
+ * `wrapTimeoutPct` counts calls whose old 90s wrap ran out instead of being set.
  *
  * Scope mirrors the sibling CSR readers (CSR role + the complement of the Sales
  * Department - All subtree, via insightsAgentScope) so the agent population
@@ -97,9 +97,11 @@ export async function getCallLength(filters: CallLengthFilters): Promise<CallLen
   const baseWhereSql = toWhereSql(scope.base);
   const BAND = bandCaseSql();
   const MEASURES = `COUNT(*) AS calls,
-            SUM(f.talk_secs)   AS talkSecs,
-            SUM(f.wrap_secs)   AS wrapSecs,
-            SUM(f.handle_secs) AS handleSecs`;
+            SUM(f.talk_secs)          AS talkSecs,
+            SUM(f.wrap_secs)          AS wrapSecs,
+            SUM(f.wrap_extended_secs) AS wrapExtendedSecs,
+            SUM(f.wrap_pending_secs)  AS wrapPendingSecs,
+            SUM(f.handle_secs)        AS handleSecs`;
 
   // Two aggregates only: (department x band) powers the bucket charts and the
   // department mix; (agent x band) powers the per-rep table. The report reads
@@ -147,23 +149,20 @@ export async function getCallLength(filters: CallLengthFilters): Promise<CallLen
   const schedule = await getReportSchedule('support_call');
 
   const toNum = (v: unknown) => Number(v ?? 0);
-  const roll = rollupDepts(bandRows.map((r): DeptAggRow => ({
+  const measures = (r: RowDataPacket) => ({
     department: (r.department as string) ?? '',
     band: String(r.band),
     calls: toNum(r.calls),
     talkSecs: toNum(r.talkSecs),
     wrapSecs: toNum(r.wrapSecs),
+    wrapExtendedSecs: toNum(r.wrapExtendedSecs),
+    wrapPendingSecs: toNum(r.wrapPendingSecs),
     handleSecs: toNum(r.handleSecs),
-  })));
-
+  });
+  const roll = rollupDepts(bandRows.map((r): DeptAggRow => measures(r)));
   const byRep = rollupReps(repRows.map((r): RepAggRow => ({
     agent: (r.agent as string) ?? '',
-    department: (r.department as string) ?? '',
-    band: String(r.band),
-    calls: toNum(r.calls),
-    talkSecs: toNum(r.talkSecs),
-    wrapSecs: toNum(r.wrapSecs),
-    handleSecs: toNum(r.handleSecs),
+    ...measures(r),
   })));
 
   return {

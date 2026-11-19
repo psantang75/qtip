@@ -59,8 +59,9 @@ function renderHeader(
     `Calls selected:   ${selection}`,
     `Transcripts:      ${included} included, ${missing} unavailable`,
     '',
-    'Handle time is talk + hold + wrap. Timestamps in each transcript are',
-    'offsets from the start of that call.',
+    'Handle time is talk + hold + wrap, where wrap is all after-call work',
+    '(wrap, wrap extended and wrap pending). Timestamps in each transcript',
+    'are offsets from the start of that call.',
     RULE,
     '',
   ].join('\n');
