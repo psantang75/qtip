@@ -1,6 +1,8 @@
 import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import crmService from '../services/CRMService';
+import crmService, { type TicketTaskKind } from '../services/CRMService';
+import { getCallActivity } from '../services/crmCallActivity';
+import { asyncHandler, createValidationError } from '../utils/errorHandler';
 import logger from '../config/logger';
 
 /**
@@ -87,5 +89,18 @@ router.get('/ticket/:id/notes', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to fetch ticket notes' });
   }
 });
+
+function callsHandler(kind: TicketTaskKind) {
+  return asyncHandler(async (req: Request, res: Response) => {
+    const id = parseId(req.params.id);
+    if (id === null) {
+      throw createValidationError(`Invalid ${kind.toLowerCase()} id; must be a positive integer.`);
+    }
+    res.json(await getCallActivity(kind, id, parseAuditAt(req.query.auditAt)));
+  });
+}
+
+router.get('/task/:id/calls', callsHandler('TASK'));
+router.get('/ticket/:id/calls', callsHandler('TICKET'));
 
 export default router;

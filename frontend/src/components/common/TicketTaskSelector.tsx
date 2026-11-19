@@ -1,6 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardList, Ticket, Plus, X, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { ClipboardList, Ticket, Plus, X, ExternalLink } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -8,11 +8,9 @@ import crmService, {
   type TicketTaskKind,
   type TaskHeader,
   type TicketHeader,
-  type CRMNote,
 } from '@/services/crmService'
-import { formatCrmDateTime } from '@/utils/dateFormat'
 import { buildCrmTaskUrl, buildCrmTicketUrl } from '@/utils/crmLinks'
-import { RichTextDisplay } from '@/components/common/RichTextDisplay'
+import TicketTaskNotes from '@/components/common/TicketTaskNotes'
 
 /**
  * Linked CRM ticket/task selector. Mirrors the structural pattern of
@@ -23,8 +21,8 @@ import { RichTextDisplay } from '@/components/common/RichTextDisplay'
  *
  * Persistence is reference-only — the parent component holds a list of
  * { kind, external_id } pairs in state and submits them with the
- * submission payload. Header + notes are live-fetched from the CRM via
- * `crmService` for the active tab; nothing else is cached.
+ * submission payload. Header, notes and logged phone calls are live-fetched
+ * from the CRM via `crmService` for the active tab; nothing else is cached.
  *
  * `auditAt` (optional) is the submission's `submitted_at` used to split
  * notes into "At time of audit" vs "Activity since audit" sections in
@@ -58,7 +56,6 @@ export default function TicketTaskSelector({
   const [kind,        setKind]        = useState<TicketTaskKind>('TASK')
   const [idText,      setIdText]      = useState('')
   const [error,       setError]       = useState('')
-  const [notesOpen,   setNotesOpen]   = useState(false)
 
   const active = selected[activeIndex] ?? null
 
@@ -78,6 +75,12 @@ export default function TicketTaskSelector({
       active!.kind === 'TASK'
         ? crmService.getTaskNotes(active!.external_id, auditAt)
         : crmService.getTicketNotes(active!.external_id, auditAt),
+  })
+
+  const callsQuery = useQuery({
+    queryKey: ['crm-calls', active?.kind, active?.external_id, auditAt ?? null],
+    enabled: !!active,
+    queryFn: () => crmService.getCallActivity(active!.kind, active!.external_id, auditAt),
   })
 
   const handleAdd = async () => {
@@ -138,14 +141,6 @@ export default function TicketTaskSelector({
     setActiveIndex(Math.max(0, Math.min(activeIndex, next.length - 1)))
   }
 
-  const splitNotes = useMemo(() => {
-    const all: CRMNote[] = notesQuery.data ?? []
-    return {
-      before: all.filter((n) => !n.is_after_audit),
-      after: all.filter((n) => n.is_after_audit),
-    }
-  }, [notesQuery.data])
-
   return (
     <div className="space-y-0">
       {/* Tabs row — shown when >1 linked */}
@@ -175,61 +170,15 @@ export default function TicketTaskSelector({
         <div className="space-y-3 py-3">
           <ActiveHeader kind={active.kind} externalId={active.external_id} headerQuery={headerQuery} />
 
-          {notesQuery.isLoading && (
-            <p className="text-[12px] text-slate-400">Loading notes…</p>
-          )}
-          {notesQuery.isError && (
-            <p className="text-[12px] text-red-600">Couldn't load notes.</p>
-          )}
-
-          {notesQuery.data && (() => {
-            const totalNotes = (notesQuery.data ?? []).length
-            if (totalNotes === 0) {
-              return (
-                <p className="text-[12px] text-slate-400">
-                  No notes for this {active.kind === 'TASK' ? 'task' : 'ticket'}.
-                </p>
-              )
-            }
-            return (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setNotesOpen((v) => !v)}
-                  className="w-full flex items-center justify-between py-2 px-3 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-medium text-slate-700">
-                      {notesOpen ? 'Hide' : 'Show'} Notes
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      ({totalNotes} {totalNotes === 1 ? 'note' : 'notes'})
-                    </span>
-                  </div>
-                  {notesOpen
-                    ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
-                    : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
-                </button>
-
-                {notesOpen && (
-                  <div className="mt-2 space-y-3">
-                    {auditAt ? (
-                      <>
-                        {splitNotes.after.length > 0 && (
-                          <NotesSection title="Activity since audit" notes={splitNotes.after} muted />
-                        )}
-                        {splitNotes.before.length > 0 && (
-                          <NotesSection title="At time of audit" notes={splitNotes.before} />
-                        )}
-                      </>
-                    ) : (
-                      splitNotes.before.length > 0 && <NotesSection notes={splitNotes.before} />
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
+          <TicketTaskNotes
+            kind={active.kind}
+            notes={notesQuery.data}
+            calls={callsQuery.data}
+            loading={notesQuery.isLoading || callsQuery.isLoading}
+            notesError={notesQuery.isError}
+            callsError={callsQuery.isError}
+            auditAt={auditAt}
+          />
 
           {!readOnly && (
             <div className="flex justify-end">
@@ -437,61 +386,6 @@ function LongField({ label, value, className }: { label: string; value: string |
       <p className="text-[12px] text-slate-700 mt-0.5 whitespace-pre-wrap break-words leading-snug">
         {clean ? clean : <span className="text-slate-400">—</span>}
       </p>
-    </div>
-  )
-}
-
-function NotesSection({ title, notes, muted = false }: { title?: string; notes: CRMNote[]; muted?: boolean }) {
-  return (
-    <div>
-      {title && (
-        <p className={cn(
-          'text-[11px] font-semibold uppercase tracking-wide mb-2',
-          muted ? 'text-amber-600' : 'text-slate-500'
-        )}>
-          {title}
-          <span className="ml-1.5 text-[10px] font-normal text-slate-400 normal-case">
-            ({notes.length} {notes.length === 1 ? 'note' : 'notes'})
-          </span>
-        </p>
-      )}
-      <div className="space-y-2">
-        {notes.map((n) => (
-          <NoteRow key={n.id} note={n} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function NoteRow({ note }: { note: CRMNote }) {
-  const hasBody = (note.note ?? '').trim().length > 0
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden text-[12px]">
-      <div className="flex items-center justify-between gap-3 px-3 py-2 bg-slate-100 border-b border-slate-200">
-        <div className="flex items-center gap-2 min-w-0 text-[11px] text-slate-600">
-          <span className="font-semibold text-slate-800 break-words">
-            {note.created_by_name ?? (note.created_by ? `User #${note.created_by}` : 'Unknown')}
-          </span>
-          {note.created_on && <span className="text-slate-500">· {formatCrmDateTime(note.created_on)}</span>}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {note.status_after && (
-            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-medium">
-              → {note.status_after}
-            </span>
-          )}
-          {note.next_contact_date && (
-            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">
-              Next: {note.next_contact_date}
-            </span>
-          )}
-        </div>
-      </div>
-      {hasBody && (
-        <RichTextDisplay html={note.note} className="px-3 py-2.5 text-[12px]" />
-      )}
     </div>
   )
 }

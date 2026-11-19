@@ -59,6 +59,24 @@ export interface CRMNote {
   is_after_audit: boolean;
 }
 
+/** A phone call logged against the ticket/task, with the agent's wrap-up. */
+export interface CRMCallActivity {
+  id: number;
+  conversation_id: string;
+  /** When the wrap-up was saved — the time the CRM shows. */
+  occurred_on: string | null;
+  direction: string | null;
+  /** The other party's number (E.164 as stored by the CRM). */
+  phone_number: string | null;
+  contact_name: string | null;
+  duration_sec: number | null;
+  disposition: string | null;
+  agent_id: number | null;
+  agent_name: string | null;
+  wrap_up: string;
+  is_after_audit: boolean;
+}
+
 const crmService = {
   getTaskHeader: async (taskId: number): Promise<TaskHeader | null> => {
     try {
@@ -103,6 +121,19 @@ const crmService = {
     } catch (error) {
       logError('crmService', `[CRM] Failed to load ticket notes ${ticketId}`, error);
       throw new Error('Failed to load ticket notes');
+    }
+  },
+
+  getCallActivity: async (kind: TicketTaskKind, id: number, auditAt?: string | null): Promise<CRMCallActivity[]> => {
+    const segment = kind === 'TASK' ? 'task' : 'ticket';
+    try {
+      const res = await apiClient.get<CRMCallActivity[]>(`/crm/${segment}/${id}/calls`, {
+        params: auditAt ? { auditAt } : undefined,
+      });
+      return Array.isArray(res.data) ? res.data : [];
+    } catch (error) {
+      logError('crmService', `[CRM] Failed to load ${segment} call activity ${id}`, error);
+      throw new Error('Failed to load call activity');
     }
   },
 };
