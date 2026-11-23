@@ -524,7 +524,7 @@ export const KPI_DEFS: Record<string, KpiDef> = {
   },
   // ── Agent Activity · Call Length (CSR) ──────────────────────────────────────
   // Distribution metrics over ie_fact_support_call (call grain). "Handle" here
-  // is talk + hold + after-call work (Follow-Up, Follow-Up Extended, Wrap Pending), so these
+  // is talk + hold + after-call work (Follow-Up Extended, Wrap Pending), so these
   // do NOT tie to the Call Activity tiles above them, which measure talk time only.
   csr_cl_total_calls: {
     code: 'csr_cl_total_calls', name: 'Answered Calls',
@@ -536,14 +536,14 @@ export const KPI_DEFS: Record<string, KpiDef> = {
   csr_cl_handle_hours: {
     code: 'csr_cl_handle_hours', name: 'Handle Hours',
     format: 'NUMBER', direction: 'NEUTRAL', scope: 'department',
-    description: 'Total handle time in hours — talk plus hold plus after-call work (Follow-Up, Follow-Up Extended and Wrap Pending). This is the labor the call volume actually consumed.',
-    formulaPlain: 'SUM(talk_secs + hold_secs + wrap_secs + wrap_extended_secs + wrap_pending_secs) / 3600',
+    description: 'Total handle time in hours — talk plus hold plus after-call work (time in the Follow-Up Extended and Wrap Pending statuses). This is the labor the call volume actually consumed.',
+    formulaPlain: 'SUM(talk_secs + hold_secs + wrap_extended_secs + wrap_pending_secs) / 3600',
     source: 'ie_fact_support_call (source phone system)',
   },
   csr_cl_avg_handle: {
     code: 'csr_cl_avg_handle', name: 'Avg Handle Min',
     format: 'NUMBER', direction: 'DOWN_IS_GOOD', scope: 'department',
-    description: 'Average minutes of handle time per answered call, including hold and after-call work (Follow-Up, Follow-Up Extended and Wrap Pending). Higher than the Call Activity "Avg Min / Call" tile, which counts talk time only.',
+    description: 'Average minutes of handle time per answered call, including hold and after-call work (time in the Follow-Up Extended and Wrap Pending statuses). Higher than the Call Activity "Avg Min / Call" tile, which counts talk time only.',
     formulaPlain: 'SUM(handle_secs) / COUNT(calls) / 60',
     source: 'ie_fact_support_call (source phone system)',
   },
@@ -564,8 +564,8 @@ export const KPI_DEFS: Record<string, KpiDef> = {
   csr_cl_wrap_share: {
     code: 'csr_cl_wrap_share', name: '% Time in Wrap',
     format: 'PERCENT', direction: 'DOWN_IS_GOOD', scope: 'department',
-    description: 'Share of handle time that is after-call work rather than customer contact: Follow-Up (the Genesys wrap step on the call), plus time in the Follow-Up Extended and Wrap Pending statuses after the call. Usually the cheapest handle time to recover.',
-    formulaPlain: 'SUM(wrap_secs + wrap_extended_secs + wrap_pending_secs) / SUM(handle_secs) * 100',
+    description: 'Share of handle time that is after-call work rather than customer contact: time in the Follow-Up Extended and Wrap Pending statuses after the call. Usually the cheapest handle time to recover.',
+    formulaPlain: 'SUM(wrap_extended_secs + wrap_pending_secs) / SUM(handle_secs) * 100',
     source: 'ie_fact_support_call (source phone system)',
   },
   // ── Agent Activity · Leads ──────────────────────────────────────────────────

@@ -7,6 +7,7 @@
  *   - clock spans   → punch_raw (primary DB), paid = Work + Break
  *   - routing/presence → Genesys tblRoutingStatus / tblPrimaryPresence (phone DB)
  *   - calls         → tblConversations/Participants/Sessions/Segments (phone DB)
+ *   - after-call work → time in the after-call statuses (insightsPhonePresence)
  *   - tickets       → CRM touch detail (reuses insightsTouchDetail, the same events
  *                     the Workload "touched" count is built from)
  *
@@ -20,6 +21,7 @@ import { getDatabasePool } from '../config/database';
 import { phoneDatabaseConfig } from '../config/environment';
 import { RowDataPacket } from 'mysql2';
 import { getTicketTouchDetail } from './insightsTouchDetail.service';
+import { AFTER_CALL_STATUSES, loadPresenceSeconds } from './insightsPhonePresence';
 import type { Area } from './insightsAgentScope';
 
 // Re-exported so existing importers (e.g. the roster service) keep their path.
@@ -30,7 +32,7 @@ interface Span { start: string; end: string; status: string }
 interface CallSpan {
   conversationId: string; start: string; direction: 'Inbound' | 'Outbound';
   answered: boolean; acd: boolean;
-  talkSec: number; holdSec: number; wrapSec: number; transferred: boolean;
+  talkSec: number; holdSec: number; transferred: boolean;
 }
 interface TicketTouch {
   itemType: 'task' | 'ticket';
@@ -48,6 +50,8 @@ export interface AgentDay {
   routing: Span[];
   presence: Span[];
   calls: CallSpan[];
+  /** Seconds in the after-call statuses for the day; the handle time's after-call part. */
+  afterCallSec: number;
   outbound: { dials: number; connected: number; voicemail: number; noAnswer: number };
   tickets: TicketEvent[];
 }
@@ -165,9 +169,10 @@ async function loadPresence(guid: string, dayStart: string, dayEnd: string): Pro
 /**
  * One row per conversation the agent took part in, with the Genesys segments
  * folded into the handle measures the model needs: Interact = answered + talk,
- * Hold = hold time, Wrapup = after-call work, a Transfer disconnect = transferred.
+ * Hold = hold time, a Transfer disconnect = transferred. The Wrapup segment is
+ * not after-call work here; that is the after-call status time (afterCallSec).
  *
- * The three durations are handed over in SECONDS, exactly as Genesys reports
+ * The durations are handed over in SECONDS, exactly as Genesys reports
  * them. Rounding them to minutes here erased every call shorter than 30 seconds,
  * which both understated talk time against the roster (which has always summed
  * raw seconds) and left such a call zero-length on the timeline.
@@ -180,8 +185,7 @@ async function loadCalls(guid: string, dayStart: string, dayEnd: string): Promis
             MAX(CASE WHEN seg.SegmentType = 'Interact' THEN 1 ELSE 0 END) AS answered,
             MAX(CASE WHEN seg.DisconnectType = 'Transfer' THEN 1 ELSE 0 END) AS transferred,
             SUM(CASE WHEN seg.SegmentType = 'Interact' THEN TIMESTAMPDIFF(SECOND, seg.SegmentStart_ET, seg.SegmentEnd_ET) ELSE 0 END) AS talkSec,
-            SUM(CASE WHEN seg.SegmentType = 'Hold'     THEN TIMESTAMPDIFF(SECOND, seg.SegmentStart_ET, seg.SegmentEnd_ET) ELSE 0 END) AS holdSec,
-            SUM(CASE WHEN seg.SegmentType = 'Wrapup'   THEN TIMESTAMPDIFF(SECOND, seg.SegmentStart_ET, seg.SegmentEnd_ET) ELSE 0 END) AS wrapSec
+            SUM(CASE WHEN seg.SegmentType = 'Hold'     THEN TIMESTAMPDIFF(SECOND, seg.SegmentStart_ET, seg.SegmentEnd_ET) ELSE 0 END) AS holdSec
      FROM tblConversations c
      JOIN tblParticipants pt ON pt.ConversationId = c.ConversationId AND pt.UserId = ?
      JOIN tblSessions sess ON sess.ConversationID = c.ConversationId AND sess.ParticipantID = pt.ParticipantId
@@ -205,7 +209,6 @@ async function loadCalls(guid: string, dayStart: string, dayEnd: string): Promis
       acd: direction === 'Inbound',
       talkSec: answered ? Number(r.talkSec || 0) : 0,
       holdSec: Number(r.holdSec || 0),
-      wrapSec: Number(r.wrapSec || 0),
       transferred: Number(r.transferred) === 1,
     };
   });
@@ -250,7 +253,7 @@ export async function getProductivityDay(
   scope: { pageDepartmentKeys?: number[]; viewerDepartmentKeys?: number[] } = {},
 ): Promise<AgentDay> {
   const empty: AgentDay = {
-    schedule: null, clock: [], routing: [], presence: [], calls: [],
+    schedule: null, clock: [], routing: [], presence: [], calls: [], afterCallSec: 0,
     outbound: { dials: 0, connected: 0, voicemail: 0, noAnswer: 0 }, tickets: [],
   };
   const identity = await resolveAgentIdentity(employeeKey);
@@ -267,10 +270,19 @@ export async function getProductivityDay(
 
   const clock = identity.userId ? await loadClock(identity.userId, date) : [];
   const guid = identity.email ? await resolvePhoneUserId(identity.email) : null;
-  const [routing, presence, callData] = guid
-    ? await Promise.all([loadRouting(guid, dayStart, dayEnd), loadPresence(guid, dayStart, dayEnd), loadCalls(guid, dayStart, dayEnd)])
-    : [[], [], { calls: [], outbound: empty.outbound }];
+  const [routing, presence, callData, afterCall] = guid
+    ? await Promise.all([
+      loadRouting(guid, dayStart, dayEnd),
+      loadPresence(guid, dayStart, dayEnd),
+      loadCalls(guid, dayStart, dayEnd),
+      loadPresenceSeconds([guid], AFTER_CALL_STATUSES, dayStart, dayEnd),
+    ])
+    : [[], [], { calls: [], outbound: empty.outbound }, new Map<string, number>()];
+  const afterCallSec = guid ? afterCall.get(guid) ?? 0 : 0;
   const tickets = await loadTickets(area, employeeKey, date);
 
-  return { schedule: null, clock, routing, presence, calls: callData.calls, outbound: callData.outbound, tickets };
+  return {
+    schedule: null, clock, routing, presence, calls: callData.calls, afterCallSec,
+    outbound: callData.outbound, tickets,
+  };
 }

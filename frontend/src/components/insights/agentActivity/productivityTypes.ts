@@ -35,8 +35,6 @@ export interface CallSpan {
   /** Talk time (Genesys Interact segments). Zero for a call never answered. */
   talkSec: number
   holdSec: number
-  /** After-call work (Genesys Wrapup segment). */
-  wrapSec: number
   /** Passed to another agent or queue instead of being resolved on this call. */
   transferred: boolean
 }
@@ -80,6 +78,8 @@ export interface AgentDay {
   routing: RoutingSpan[]
   presence: PresenceSpan[]
   calls: CallSpan[]
+  /** After-call work: seconds in the Wrap Pending / Follow-Up Extended statuses. */
+  afterCallSec: number
   outbound: OutboundEffort
   tickets: TicketEvent[]
 }
@@ -111,7 +111,7 @@ export interface ProductivityRosterRow {
   ahtMins: number
   /** Calls that alerted and were never answered. */
   missedCalls: number
-  /** Total handle time (talk + hold + after-call work), in minutes. */
+  /** Total handle time (talk + hold + after-call statuses), in minutes. */
   handleMin: number
   /** Time signed in and available to the queue, in minutes. */
   onQueueMin: number

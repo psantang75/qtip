@@ -8,7 +8,8 @@
  *
  *   paid time  → punch_raw (Work + Break)
  *   queue/occupancy → Genesys routing status
- *   calls / AHT / missed → Genesys conversations + segments
+ *   calls / AHT / missed → Genesys conversations + segments (talk + hold), plus
+ *                          time in the after-call statuses (insightsPhonePresence)
  *   tickets touched → ie_ticket_task_productivity_daily (the stored Workload count)
  *   desk utilization → DeskTime + Genesys "In Warehouse" (insightsProductivityDesk)
  *
@@ -21,6 +22,7 @@ import { phoneDatabaseConfig } from '../config/environment';
 import { RowDataPacket } from 'mysql2';
 import { AGENT_ROLE, areaDeptGuard, type Area } from './insightsAgentScope';
 import { deskFieldsFor, loadDeskInputs, type DeskRowFields } from './insightsProductivityDesk.service';
+import { AFTER_CALL_STATUSES, loadPresenceSeconds } from './insightsPhonePresence';
 
 /**
  * Resolved scope for one viewer, two independent layers:
@@ -50,7 +52,7 @@ export interface ProductivityRosterRow extends DeskRowFields {
   callsPerHour: number;
   ahtMins: number;
   missedCalls: number;
-  /** Raw measures the department comparison reads (talk + hold + wrap). */
+  /** Raw measures the department comparison reads (talk + hold + after-call statuses). */
   handleMin: number;
   onQueueMin: number;
   ticketsTouched: number;
@@ -194,7 +196,7 @@ async function loadCalls(guids: string[], dayStart: string, dayEnd: string): Pro
        SELECT pt.UserId AS guid, c.ConversationId AS cid,
               MIN(sess.Direction) AS dir,
               MAX(CASE WHEN seg.SegmentType = 'Interact' THEN 1 ELSE 0 END) AS answered,
-              SUM(CASE WHEN seg.SegmentType IN ('Interact', 'Hold', 'Wrapup') THEN TIMESTAMPDIFF(SECOND, seg.SegmentStart_ET, seg.SegmentEnd_ET) ELSE 0 END) AS handleSec
+              SUM(CASE WHEN seg.SegmentType IN ('Interact', 'Hold') THEN TIMESTAMPDIFF(SECOND, seg.SegmentStart_ET, seg.SegmentEnd_ET) ELSE 0 END) AS handleSec
        FROM tblConversations c
        JOIN tblParticipants pt ON pt.ConversationId = c.ConversationId AND pt.UserId IN (${guids.map(() => '?').join(',')})
        JOIN tblSessions sess ON sess.ConversationID = c.ConversationId AND sess.ParticipantID = pt.ParticipantId
@@ -241,10 +243,11 @@ export async function getProductivityRoster(area: Area, date: string, scope: Ros
   const guidMap = await loadGuidMap(emails);
   const guids = [...new Set([...guidMap.values()])];
 
-  const [paid, routing, calls, tickets, desk] = await Promise.all([
+  const [paid, routing, calls, afterCall, tickets, desk] = await Promise.all([
     loadPaidMinutes(userIds, date),
     loadRouting(guids, dayStart, dayEnd),
     loadCalls(guids, dayStart, dayEnd),
+    loadPresenceSeconds(guids, AFTER_CALL_STATUSES, dayStart, dayEnd),
     loadTicketsTouched(employeeKeys, date, area),
     loadDeskInputs(guids, date, dayStart, dayEnd),
   ]);
@@ -257,7 +260,7 @@ export async function getProductivityRoster(area: Area, date: string, scope: Ros
     const onQueueMin = r?.onQueueMin ?? 0;
     const engagedMin = r?.engagedMin ?? 0;
     const answered = c?.answered ?? 0;
-    const handleMin = c?.handleMin ?? 0;
+    const handleMin = (c?.handleMin ?? 0) + (guid ? afterCall.get(guid) ?? 0 : 0) / 60;
     return {
       employeeKey: a.employeeKey,
       agent: a.agent,

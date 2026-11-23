@@ -5,12 +5,12 @@
  * read ie_fact_call_activity: that fact is a daily (agent x direction) roll-up
  * with no per-call row to bucket.
  *
- * "Length" is total handle time — talk + hold + all after-call work — because
- * that is what the business pays per call. After-call work comes back in three
- * parts so each can be read on its own: wrap (the Genesys wrap segment), wrap
- * extended (Follow-Up Extended status) and wrap pending (Wrap Pending status,
- * which replaced the other two in Nov 2026). How the two statuses are tied to
- * a call is documented in workers/sql/support_call.extract.sql.
+ * "Length" is total handle time — talk + hold + after-call work — because that
+ * is what the business pays per call. After-call work is time in two statuses,
+ * read on their own: wrap extended (Follow-Up Extended) and wrap pending (Wrap
+ * Pending, which replaced it in Nov 2026). The Genesys wrap segment is not
+ * counted; why, and how the statuses are tied to a call, is documented in
+ * workers/sql/support_call.extract.sql.
  * `wrapTimeoutPct` counts calls whose old 90s wrap ran out instead of being set.
  *
  * Scope mirrors the sibling CSR readers (CSR role + the complement of the Sales
@@ -98,7 +98,6 @@ export async function getCallLength(filters: CallLengthFilters): Promise<CallLen
   const BAND = bandCaseSql();
   const MEASURES = `COUNT(*) AS calls,
             SUM(f.talk_secs)          AS talkSecs,
-            SUM(f.wrap_secs)          AS wrapSecs,
             SUM(f.wrap_extended_secs) AS wrapExtendedSecs,
             SUM(f.wrap_pending_secs)  AS wrapPendingSecs,
             SUM(f.handle_secs)        AS handleSecs`;
@@ -154,7 +153,6 @@ export async function getCallLength(filters: CallLengthFilters): Promise<CallLen
     band: String(r.band),
     calls: toNum(r.calls),
     talkSecs: toNum(r.talkSecs),
-    wrapSecs: toNum(r.wrapSecs),
     wrapExtendedSecs: toNum(r.wrapExtendedSecs),
     wrapPendingSecs: toNum(r.wrapPendingSecs),
     handleSecs: toNum(r.handleSecs),

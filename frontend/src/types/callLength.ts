@@ -2,9 +2,9 @@
  * Response shapes for Insights → Agent Activity - CSR → Call Length.
  * Mirrors backend/src/services/insightsCallLength.service.ts.
  *
- * "Length" is total handle time (talk + hold + Follow-Up + Follow-Up Extended +
- * Wrap Pending). The bucket definition arrives from the server in `bands`
- * rather than being restated here, so the boundaries have exactly one home.
+ * "Length" is total handle time (talk + hold + Follow-Up Extended + Wrap
+ * Pending). The bucket definition arrives from the server in `bands` rather
+ * than being restated here, so the boundaries have exactly one home.
  */
 
 export interface CallLengthBand {
@@ -22,8 +22,7 @@ export interface BandTotal {
   calls: number
   pctCalls: number
   handleHours: number
-  /** The three after-call parts inside this bucket, charted against handleHours. */
-  wrapHours: number
+  /** The two after-call statuses inside this bucket, charted against handleHours. */
   wrapExtendedHours: number
   wrapPendingHours: number
   /** Share of total handle time. Diverges sharply from pctCalls — that's the point. */

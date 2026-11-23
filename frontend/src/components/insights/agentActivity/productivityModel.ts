@@ -66,12 +66,12 @@ export function fmtClock(mins: number): string {
 export interface CallMark {
   leftPct: number; widthPct: number; label: CallLabel; mins: number
   startMin: number; endMin: number; conversationId: string; acd: boolean
-  holdMins: number; wrapMins: number
+  holdMins: number
 }
 /** One call that fell inside a 5-minute block, kept for the block's hover detail. */
 export interface CallInBlock {
   conversationId: string; label: CallLabel; startMin: number; endMin: number
-  acd: boolean; holdMins: number; wrapMins: number
+  acd: boolean; holdMins: number
 }
 
 /**
@@ -143,7 +143,9 @@ export interface DayModel {
     total: number; answered: number; missed: number; inbound: number; outbound: number
     /** Fractional minutes, summed from the Genesys second counts, so these agree
      *  with the roster's handle time to the second. */
-    talkMins: number; holdMins: number; wrapMins: number
+    talkMins: number; holdMins: number
+    /** After-call work: time in the Wrap Pending / Follow-Up Extended statuses. */
+    wrapMins: number
     /** Talk + hold + after-call work: the whole cost of handling calls. */
     handleMins: number
     /** Average handle time per answered call, in minutes. */
@@ -271,7 +273,7 @@ export function buildDayModel(day: AgentDay | null): DayModel {
         label: !c.answered ? 'Missed' : c.direction,
         mins, startMin: s, endMin: s + mins,
         conversationId: c.conversationId, acd: c.acd,
-        holdMins: c.holdSec / 60, wrapMins: c.wrapSec / 60,
+        holdMins: c.holdSec / 60,
       }
     })
 
@@ -302,7 +304,7 @@ export function buildDayModel(day: AgentDay | null): DayModel {
         }
         calls.push({
           conversationId: c.conversationId, label: c.label, startMin: c.startMin, endMin: c.endMin,
-          acd: c.acd, holdMins: c.holdMins, wrapMins: c.wrapMins,
+          acd: c.acd, holdMins: c.holdMins,
         })
       }
       if (calls.length > 0) {
@@ -406,7 +408,7 @@ export function buildDayModel(day: AgentDay | null): DayModel {
   const answered = calls.filter(c => c.answered)
   const talkMins = callMarks.filter(c => c.label !== 'Missed').reduce((a, c) => a + c.mins, 0)
   const holdMins = calls.reduce((a, c) => a + c.holdSec / 60, 0)
-  const wrapMins = calls.reduce((a, c) => a + c.wrapSec / 60, 0)
+  const wrapMins = (day?.afterCallSec ?? 0) / 60
   const perCall = Math.max(1, answered.length)
   const out = day?.outbound ?? { dials: 0, connected: 0, voicemail: 0, noAnswer: 0 }
   const callSummary = {

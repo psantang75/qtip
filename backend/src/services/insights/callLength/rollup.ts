@@ -11,14 +11,13 @@
 import { CALL_LENGTH_BANDS, LONG_BANDS, OVER_10_BANDS, zeroBands } from './bands';
 
 /**
- * Call count and summed seconds for a group. After-call work has three parts —
- * Follow-Up (Genesys wrap segment), Follow-Up Extended (status) and Wrap
- * Pending (status) — and handle already includes all three.
+ * Call count and summed seconds for a group. After-call work is the time in two
+ * statuses — Follow-Up Extended and Wrap Pending — and handle already includes
+ * both.
  */
 interface CallSecs {
   calls: number;
   talkSecs: number;
-  wrapSecs: number;
   wrapExtendedSecs: number;
   wrapPendingSecs: number;
   handleSecs: number;
@@ -43,8 +42,7 @@ export interface BandTotal {
   calls: number;
   pctCalls: number;
   handleHours: number;
-  /** The three after-call parts inside this bucket, charted against handleHours. */
-  wrapHours: number;
+  /** The two after-call parts inside this bucket, charted against handleHours. */
   wrapExtendedHours: number;
   wrapPendingHours: number;
   /** Share of total handle time. Diverges sharply from pctCalls — that's the point. */
@@ -72,7 +70,7 @@ export interface BandRollup {
   bandTotals: BandTotal[];
   totalCalls: number;
   totalHandleSecs: number;
-  /** All three after-call parts. */
+  /** Both after-call parts. */
   totalWrapSecs: number;
   /**
    * Raw (unrounded) handle seconds per bucket. The KPIs derive from this rather
@@ -89,17 +87,16 @@ export const div = (a: number, b: number): number => (b ? a / b : 0);
 const toMin = (secs: number, calls: number) => r1(div(secs, calls) / 60);
 
 const newAcc = (): CallSecs => ({
-  calls: 0, talkSecs: 0, wrapSecs: 0, wrapExtendedSecs: 0, wrapPendingSecs: 0, handleSecs: 0,
+  calls: 0, talkSecs: 0, wrapExtendedSecs: 0, wrapPendingSecs: 0, handleSecs: 0,
 });
 function add(acc: CallSecs, r: CallSecs): void {
   acc.calls += r.calls;
   acc.talkSecs += r.talkSecs;
-  acc.wrapSecs += r.wrapSecs;
   acc.wrapExtendedSecs += r.wrapExtendedSecs;
   acc.wrapPendingSecs += r.wrapPendingSecs;
   acc.handleSecs += r.handleSecs;
 }
-const allWrapSecs = (a: CallSecs): number => a.wrapSecs + a.wrapExtendedSecs + a.wrapPendingSecs;
+const allWrapSecs = (a: CallSecs): number => a.wrapExtendedSecs + a.wrapPendingSecs;
 
 /**
  * Fold the (department x band) grid into the per-department bucket matrix and
@@ -141,7 +138,6 @@ export function rollupDepts(rows: DeptAggRow[]): BandRollup {
       calls: b.calls,
       pctCalls: r1(div(b.calls, total.calls) * 100),
       handleHours: r1(b.handleSecs / 3600),
-      wrapHours: r1(b.wrapSecs / 3600),
       wrapExtendedHours: r1(b.wrapExtendedSecs / 3600),
       wrapPendingHours: r1(b.wrapPendingSecs / 3600),
       pctTime: r1(div(b.handleSecs, total.handleSecs) * 100),

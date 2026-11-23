@@ -27,22 +27,21 @@ export const BAND_STYLE: Record<string, BandStyle> = {
 export const bandStyle = (key: string): BandStyle =>
   BAND_STYLE[key] ?? { fill: '#94a3b8', fillOpacity: 1 }
 
-/** The three after-call parts, stacked in one amber bar and told apart by opacity. */
+/** The two after-call statuses, stacked in one amber bar and told apart by opacity. */
 export interface WrapSeries extends BandStyle {
-  key: 'wrapHours' | 'wrapExtendedHours' | 'wrapPendingHours'
+  key: 'wrapExtendedHours' | 'wrapPendingHours'
   label: string
 }
 
 export const WRAP_SERIES: readonly WrapSeries[] = [
-  { key: 'wrapHours',         label: 'Follow-Up',          fill: '#f39c12', fillOpacity: 1 },
-  { key: 'wrapExtendedHours', label: 'Follow-Up Extended', fill: '#f39c12', fillOpacity: 0.6 },
-  { key: 'wrapPendingHours',  label: 'Wrap Pending',       fill: '#f39c12', fillOpacity: 0.3 },
+  { key: 'wrapExtendedHours', label: 'Follow-Up Extended', fill: '#f39c12', fillOpacity: 0.5 },
+  { key: 'wrapPendingHours',  label: 'Wrap Pending',       fill: '#f39c12', fillOpacity: 1 },
 ]
 
 /**
- * Parts with time in at least one bucket. A part the phone system no longer
- * produces (Follow-Up and Follow-Up Extended after the Nov 2026 redesign) drops
- * out of the bars and the legend instead of showing as an empty series.
+ * Parts with time in at least one bucket. A status the phone system no longer
+ * produces (Follow-Up Extended after the Nov 2026 redesign) drops out of the
+ * bars and the legend instead of showing as an empty series.
  */
 export const visibleWrapSeries = (bandTotals: BandTotal[]): WrapSeries[] =>
   WRAP_SERIES.filter(s => bandTotals.some(b => b[s.key] > 0))

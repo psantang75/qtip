@@ -1,8 +1,8 @@
 /**
- * Guards on the Call Length wrap split (wrap / wrap extended / wrap pending), which
- * lives entirely in support_call.extract.sql and so has no other cover. Each of
- * these can regress without any error: the extract still runs, the page still
- * renders, and the hours are silently wrong.
+ * Guards on the Call Length after-call split (Follow-Up Extended / Wrap Pending),
+ * which lives entirely in support_call.extract.sql and so has no other cover.
+ * Each of these can regress without any error: the extract still runs, the
+ * page still renders, and the hours are silently wrong.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
@@ -41,6 +41,7 @@ function outputColumns(select: string): string[] {
   return items.map((i) => (i.match(/\bAS\s+(\w+)\s*$/) ?? i.match(/\.(\w+)\s*$/))![1]);
 }
 
+/** Staging columns still loaded; wrap_secs stays in the table but is no longer filled. */
 function stagingColumns(): string[] {
   const create = createMigration.slice(
     createMigration.indexOf('CREATE TABLE IF NOT EXISTS `ie_stg_support_call`'),
@@ -49,10 +50,10 @@ function stagingColumns(): string[] {
   const created = [...body.matchAll(/^\s+`(\w+)`\s+[A-Z]/gm)].map((m) => m[1]);
   const added = [...wrapMigration.matchAll(/ALTER TABLE `ie_stg_support_call` ADD COLUMN `(\w+)`/g)]
     .map((m) => m[1]);
-  return [...created, ...added];
+  return [...created, ...added].filter((c) => c !== 'wrap_secs');
 }
 
-describe('support_call extract: wrap split', () => {
+describe('support_call extract: after-call split', () => {
   it('loads exactly the staging columns, including both status parts', () => {
     // The worker inserts the final result set into staging by column name.
     const staging = stagingColumns();
@@ -73,25 +74,21 @@ describe('support_call extract: wrap split', () => {
     expect(extract).toContain('GREATEST(x.call_end, IFNULL(x.wrap_end, x.call_end))');
   });
 
-  it('counts Wrap Pending from the call end and Follow-Up Extended only after the wrap', () => {
+  it('counts both statuses from the call end and stops at the agent\'s next call', () => {
     expect(extract).toContain(
-      "CASE WHEN st.label = 'Wrap Pending' THEN GREATEST(st.StartTime_ET, l.call_end)\n"
-      + '         ELSE GREATEST(st.StartTime_ET, l.after_start) END',
+      'GREATEST(0, TIMESTAMPDIFF(SECOND, GREATEST(st.StartTime_ET, l.call_end),\n'
+      + '                              LEAST(st.EndTime_ET, IFNULL(nx.next_start, st.EndTime_ET)))) AS secs',
     );
-  });
-
-  it('stops counting when the agent\'s next call starts', () => {
-    expect(extract).toContain('LEAST(st.EndTime_ET, IFNULL(nx.next_start, st.EndTime_ET))');
     expect(extract).toContain('AND n.talk_start > a.talk_start');
   });
 
-  it('counts overlapping wrap and Wrap Pending once, so handle never exceeds elapsed time', () => {
-    const uncoveredWrap = 'GREATEST(0, l.wrap_secs - IFNULL(a.wrap_covered_secs, 0))';
-    expect(finalSelect).toContain(`${uncoveredWrap}    AS wrap_secs`);
+  it('never counts the Genesys Wrapup segment toward handle time', () => {
+    expect(code(extract)).not.toMatch(/wrap_secs|wrap_covered/);
+    expect(code(extract)).not.toMatch(/SUM\(CASE WHEN seg\.SegmentType = 'Wrapup'/);
     expect(finalSelect).toContain(
-      `l.talk_secs + l.hold_secs\n    + ${uncoveredWrap}\n`
+      'l.talk_secs + l.hold_secs\n'
       + '    + IFNULL(a.wrap_extended_secs, 0)\n'
-      + '    + IFNULL(a.wrap_pending_secs, 0)',
+      + '    + IFNULL(a.wrap_pending_secs, 0)                           AS handle_secs',
     );
   });
 
@@ -113,9 +110,11 @@ describe('support_call extract: wrap split', () => {
   });
 });
 
-describe('support_call transform: wrap split', () => {
-  it('carries both status parts into the fact', () => {
-    expect(transform).toContain('wrap_secs, wrap_extended_secs,\n   wrap_pending_secs, handle_secs');
+describe('support_call transform: after-call split', () => {
+  it('carries both status parts into the fact and no longer loads wrap_secs', () => {
+    expect(transform).toContain('hold_secs, wrap_extended_secs,\n   wrap_pending_secs, handle_secs');
     expect(transform).toContain('IFNULL(s.wrap_extended_secs, 0),\n  IFNULL(s.wrap_pending_secs, 0),');
+    expect(code(transform)).not.toContain('wrap_secs,');
+    expect(code(transform)).not.toContain('s.wrap_secs');
   });
 });

@@ -1,6 +1,7 @@
 /* Support Call extract (source pool: phone). Grain: one conversation per agent
    leg, window-bound by :pFromDate / :pToDate on the ET conversation start.
-   The final SELECT's aliases match ie_stg_support_call exactly.
+   The final SELECT's aliases match ie_stg_support_call, minus the retired
+   wrap_secs column (left in the table at its default).
 
    WHY THIS EXISTS: ie_fact_call_activity is a daily (agent x direction) roll-up,
    so it cannot answer "how many calls ran past 10 minutes". This lands the
@@ -13,27 +14,27 @@
    whose `% 60` silently wraps any call over an hour back to the start of the
    hour. Segment arithmetic has no such ceiling, which matters here precisely
    because the long tail is the point of the report.
-     Interact -> talk, Hold -> hold, Wrapup -> wrap.
+     Interact -> talk, Hold -> hold.
 
-   AFTER-CALL STATUSES. Two kinds of after-call work live on the agent's
-   presence (tblPrimaryPresence), not on the call: 'Follow-Up Extended' (set by
-   hand when the old 90s wrap was not enough) and 'Wrap Pending' (the status that
-   replaced it in Nov 2026). A presence period has an agent and start/end but no
-   conversation id, so it is tied to a call by agent and time:
+   AFTER-CALL TIME is the agent's after-call statuses only. The Genesys Wrapup
+   segment (the old 90s "Follow-Up") is never counted: since the Nov 2026
+   change it has no time limit, and one left unclosed stays open for hours
+   while the agent takes other calls. Its end is still read, only to tie a
+   status to its call.
+
+   The two statuses live on the agent's presence (tblPrimaryPresence), not on
+   the call: 'Follow-Up Extended' (set by hand when the old 90s wrap was not
+   enough) and 'Wrap Pending' (the status that replaced both in Nov 2026). A
+   presence period has an agent and start/end but no conversation id, so it is
+   tied to a call by agent and time:
      1. It belongs to the agent's call whose talk had started and that ended
         (call end or wrap end, whichever is later) no more than 2 minutes before
         the status started. If several calls qualify, the most recent call wins.
-     2. Wrap Pending counts from the end of the call. Genesys keeps a Wrapup
-        segment running alongside it (91-94% of its minutes on 2026-11-18/19),
-        so where they overlap the seconds count once, as Wrap Pending: wrap_secs
-        is the Wrapup time NOT covered by Wrap Pending. Before the status existed
-        nothing overlaps and wrap_secs is the whole Wrapup segment.
-     3. Follow-Up Extended counts only after the wrap ends.
-     4. Counting stops when the agent's next call starts.
-   handle_secs = talk + hold + wrap + wrap_extended + wrap_pending, so it never
+     2. It counts from the end of the call.
+     3. Counting stops when the agent's next call starts.
+   handle_secs = talk + hold + wrap_extended + wrap_pending, so it never
    exceeds the time that actually elapsed. Statuses are matched by LabelName,
-   never by presence id, the same way insightsProductivityDesk.service.ts
-   finds 'In Warehouse'.
+   never by presence id, the same way insightsPhonePresence.ts does.
 
    ANSWERED CALLS ONLY (talk_secs > 0). An agent leg with no Interact segment is
    a ring-no-answer or a leg the agent never picked up; it has no handle time to
@@ -71,24 +72,20 @@ CREATE TEMPORARY TABLE tmpSupportLeg(
   direction VARCHAR(200) NULL,
   talk_secs INT NOT NULL,
   hold_secs INT NOT NULL,
-  wrap_secs INT NOT NULL,
   wrap_up_code VARCHAR(200) NULL,
   transferred TINYINT NOT NULL,
   talk_start DATETIME NOT NULL,
   call_end DATETIME NOT NULL,
-  wrap_start DATETIME NULL,
-  wrap_end DATETIME NULL,
   after_start DATETIME NOT NULL,
   PRIMARY KEY (conversation_id, phone_user_id),
   KEY k_user_talk (phone_user_id, talk_start));
 
 INSERT INTO tmpSupportLeg(conversation_id, phone_user_id, agent_email, agent_name,
-                          call_date, started_on, direction, talk_secs, hold_secs, wrap_secs,
-                          wrap_up_code, transferred, talk_start, call_end, wrap_start, wrap_end,
-                          after_start)
+                          call_date, started_on, direction, talk_secs, hold_secs,
+                          wrap_up_code, transferred, talk_start, call_end, after_start)
 SELECT x.conversation_id, x.phone_user_id, x.agent_email, x.agent_name,
-       x.call_date, x.started_on, x.direction, x.talk_secs, x.hold_secs, x.wrap_secs,
-       x.wrap_up_code, x.transferred, x.talk_start, x.call_end, x.wrap_start, x.wrap_end,
+       x.call_date, x.started_on, x.direction, x.talk_secs, x.hold_secs,
+       x.wrap_up_code, x.transferred, x.talk_start, x.call_end,
        GREATEST(x.call_end, IFNULL(x.wrap_end, x.call_end))
 FROM (
   SELECT
@@ -104,15 +101,11 @@ FROM (
                THEN TIMESTAMPDIFF(SECOND, seg.SegmentStart_ET, seg.SegmentEnd_ET) END), 0) AS talk_secs,
     IFNULL(SUM(CASE WHEN seg.SegmentType = 'Hold'
                THEN TIMESTAMPDIFF(SECOND, seg.SegmentStart_ET, seg.SegmentEnd_ET) END), 0) AS hold_secs,
-    IFNULL(SUM(CASE WHEN seg.SegmentType = 'Wrapup'
-               THEN TIMESTAMPDIFF(SECOND, seg.SegmentStart_ET, seg.SegmentEnd_ET) END), 0) AS wrap_secs,
     MAX(NULLIF(TRIM(seg.WrapUpCode), ''))     AS wrap_up_code,
     MAX(CASE WHEN seg.DisconnectType = 'Transfer' THEN 1 ELSE 0 END) AS transferred,
     MIN(CASE WHEN seg.SegmentType = 'Interact' AND seg.SegmentEnd_ET IS NOT NULL
              THEN seg.SegmentStart_ET END)    AS talk_start,
     MAX(CASE WHEN seg.SegmentType IN ('Interact', 'Hold') THEN seg.SegmentEnd_ET END) AS call_end,
-    MIN(CASE WHEN seg.SegmentType = 'Wrapup' AND seg.SegmentEnd_ET IS NOT NULL
-             THEN seg.SegmentStart_ET END)    AS wrap_start,
     MAX(CASE WHEN seg.SegmentType = 'Wrapup' THEN seg.SegmentEnd_ET END) AS wrap_end
   FROM tblConversations c
   JOIN tblParticipants pt
@@ -171,7 +164,7 @@ JOIN tmpSupportLeg l
  AND st.StartTime_ET <= l.after_start + INTERVAL 120 SECOND
 GROUP BY st.PresenceID, st.UserID;
 
-/* Rule 4: the agent's next call after the one the status belongs to. */
+/* Rule 3: the agent's next call after the one the status belongs to. */
 DROP TEMPORARY TABLE IF EXISTS tmpStatusNext;
 CREATE TEMPORARY TABLE tmpStatusNext(
   PresenceID VARCHAR(100) NOT NULL,
@@ -186,39 +179,28 @@ JOIN tmpSupportLeg n
  AND n.talk_start > a.talk_start
 GROUP BY a.PresenceID;
 
-/* Rules 2-3: counted seconds per call, plus the Wrapup seconds Wrap Pending covers. */
+/* Rules 2-3: counted seconds per call, per status. */
 DROP TEMPORARY TABLE IF EXISTS tmpLegAfter;
 CREATE TEMPORARY TABLE tmpLegAfter(
   conversation_id VARCHAR(100) NOT NULL,
   phone_user_id VARCHAR(100) NOT NULL,
   wrap_extended_secs INT NOT NULL,
   wrap_pending_secs INT NOT NULL,
-  wrap_covered_secs INT NOT NULL,
   PRIMARY KEY (conversation_id, phone_user_id));
 
-INSERT INTO tmpLegAfter(conversation_id, phone_user_id,
-                        wrap_extended_secs, wrap_pending_secs, wrap_covered_secs)
+INSERT INTO tmpLegAfter(conversation_id, phone_user_id, wrap_extended_secs, wrap_pending_secs)
 SELECT
   y.conversation_id,
   y.phone_user_id,
-  SUM(CASE WHEN y.label = 'Follow-Up Extended'
-           THEN GREATEST(0, TIMESTAMPDIFF(SECOND, y.count_from, y.count_to)) ELSE 0 END),
-  SUM(CASE WHEN y.label = 'Wrap Pending'
-           THEN GREATEST(0, TIMESTAMPDIFF(SECOND, y.count_from, y.count_to)) ELSE 0 END),
-  SUM(CASE WHEN y.label = 'Wrap Pending' AND y.wrap_start IS NOT NULL
-           THEN GREATEST(0, TIMESTAMPDIFF(SECOND, GREATEST(y.count_from, y.wrap_start),
-                                                  LEAST(y.count_to, y.wrap_end)))
-           ELSE 0 END)
+  SUM(CASE WHEN y.label = 'Follow-Up Extended' THEN y.secs ELSE 0 END),
+  SUM(CASE WHEN y.label = 'Wrap Pending' THEN y.secs ELSE 0 END)
 FROM (
   SELECT
     l.conversation_id,
     l.phone_user_id,
     st.label,
-    l.wrap_start,
-    l.wrap_end,
-    CASE WHEN st.label = 'Wrap Pending' THEN GREATEST(st.StartTime_ET, l.call_end)
-         ELSE GREATEST(st.StartTime_ET, l.after_start) END       AS count_from,
-    LEAST(st.EndTime_ET, IFNULL(nx.next_start, st.EndTime_ET))   AS count_to
+    GREATEST(0, TIMESTAMPDIFF(SECOND, GREATEST(st.StartTime_ET, l.call_end),
+                              LEAST(st.EndTime_ET, IFNULL(nx.next_start, st.EndTime_ET)))) AS secs
   FROM tmpStatusAnchor a
   JOIN tmpSupportLeg l
     ON l.phone_user_id = a.phone_user_id
@@ -240,11 +222,9 @@ SELECT /*+ MAX_EXECUTION_TIME(120000) */
   l.direction,
   l.talk_secs,
   l.hold_secs,
-  GREATEST(0, l.wrap_secs - IFNULL(a.wrap_covered_secs, 0))    AS wrap_secs,
   IFNULL(a.wrap_extended_secs, 0)                              AS wrap_extended_secs,
   IFNULL(a.wrap_pending_secs, 0)                               AS wrap_pending_secs,
   l.talk_secs + l.hold_secs
-    + GREATEST(0, l.wrap_secs - IFNULL(a.wrap_covered_secs, 0))
     + IFNULL(a.wrap_extended_secs, 0)
     + IFNULL(a.wrap_pending_secs, 0)                           AS handle_secs,
   l.wrap_up_code,

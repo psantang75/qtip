@@ -13,10 +13,10 @@
  * total, so time an agent was both at the computer and in warehouse status can
  * count twice. The tooltip shows both parts so that is visible to the reader.
  */
-import pool, { getDatabasePool } from '../config/database';
-import { phoneDatabaseConfig } from '../config/environment';
+import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
 import { deskTimeService } from './desktime/DeskTimeService';
+import { loadPresenceSeconds } from './insightsPhonePresence';
 
 const WAREHOUSE_PRESENCE_LABEL = 'In Warehouse';
 
@@ -28,20 +28,8 @@ export interface DeskInputs {
 }
 
 async function loadWarehouseMinutes(guids: string[], dayStart: string, dayEnd: string): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  if (guids.length === 0 || !phoneDatabaseConfig) return out;
-  const [rows] = await getDatabasePool('phone').query<RowDataPacket[]>(
-    `SELECT p.UserID AS guid, SUM(TIMESTAMPDIFF(SECOND, p.StartTime_ET, p.EndTime_ET)) AS sec
-     FROM tblPrimaryPresence p
-     JOIN tblSystemPresence sp ON sp.OrgPresenceID = p.OrgPresenceID
-     WHERE p.UserID IN (${guids.map(() => '?').join(',')})
-       AND sp.LabelName = ?
-       AND p.StartTime_ET >= ? AND p.StartTime_ET < ? AND p.EndTime_ET IS NOT NULL
-     GROUP BY p.UserID`,
-    [...guids, WAREHOUSE_PRESENCE_LABEL, dayStart, dayEnd],
-  );
-  rows.forEach((r) => out.set(String(r.guid), Number(r.sec || 0) / 60));
-  return out;
+  const secs = await loadPresenceSeconds(guids, [WAREHOUSE_PRESENCE_LABEL], dayStart, dayEnd);
+  return new Map([...secs].map(([guid, sec]) => [guid, sec / 60] as [string, number]));
 }
 
 /** Stored productive seconds for the day, or `null` when the sync has not loaded it. */

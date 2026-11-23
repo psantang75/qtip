@@ -10,6 +10,9 @@
    rather than landing in a wrong department. Keeping them makes the gap
    visible in the fact instead of hiding it at extract time.
 
+   wrap_secs (the Genesys Wrapup segment) is no longer loaded: handle time
+   counts only the after-call statuses, so the column stays at its default 0.
+
    NOTE: statements use block comments only — the worker's splitter discards any
    statement that begins with a line comment. */
 DELETE FROM ie_fact_support_call
@@ -18,7 +21,7 @@ WHERE date_key BETWEEN CAST(DATE_FORMAT(:pFromDate, '%Y%m%d') AS UNSIGNED)
 
 INSERT INTO ie_fact_support_call
   (date_key, conversation_id, phone_user_id, employee_key, agent_email, agent_name,
-   started_on, direction, talk_secs, hold_secs, wrap_secs, wrap_extended_secs,
+   started_on, direction, talk_secs, hold_secs, wrap_extended_secs,
    wrap_pending_secs, handle_secs, wrap_up_code, transferred, load_batch_id)
 SELECT
   d.date_key,
@@ -31,7 +34,6 @@ SELECT
   IFNULL(s.direction, 'Inbound'),
   IFNULL(s.talk_secs, 0),
   IFNULL(s.hold_secs, 0),
-  IFNULL(s.wrap_secs, 0),
   IFNULL(s.wrap_extended_secs, 0),
   IFNULL(s.wrap_pending_secs, 0),
   IFNULL(s.handle_secs, 0),

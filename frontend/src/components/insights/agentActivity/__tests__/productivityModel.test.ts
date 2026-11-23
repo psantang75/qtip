@@ -40,11 +40,12 @@ const day: AgentDay = {
     { start: '11:05', end: '12:00', status: 'Meeting' },
   ],
   calls: [
-    { conversationId: 'c1', start: '09:00', direction: 'Inbound', answered: true, acd: true, talkSec: 1200, holdSec: 120, wrapSec: 180, transferred: false },
-    { conversationId: 'c2', start: '09:30', direction: 'Inbound', answered: true, acd: true, talkSec: 900, holdSec: 0, wrapSec: 120, transferred: true },
-    { conversationId: 'c3', start: '10:30', direction: 'Outbound', answered: true, acd: false, talkSec: 1200, holdSec: 0, wrapSec: 0, transferred: false },
-    { conversationId: 'c4', start: '11:00', direction: 'Inbound', answered: false, acd: true, talkSec: 0, holdSec: 0, wrapSec: 0, transferred: false },
+    { conversationId: 'c1', start: '09:00', direction: 'Inbound', answered: true, acd: true, talkSec: 1200, holdSec: 120, transferred: false },
+    { conversationId: 'c2', start: '09:30', direction: 'Inbound', answered: true, acd: true, talkSec: 900, holdSec: 0, transferred: true },
+    { conversationId: 'c3', start: '10:30', direction: 'Outbound', answered: true, acd: false, talkSec: 1200, holdSec: 0, transferred: false },
+    { conversationId: 'c4', start: '11:00', direction: 'Inbound', answered: false, acd: true, talkSec: 0, holdSec: 0, transferred: false },
   ],
+  afterCallSec: 300,
   outbound: { dials: 3, connected: 1, voicemail: 1, noAnswer: 1 },
   tickets: [
     { time: '15:10', updated: 2, completed: 1, ids: [
@@ -60,7 +61,7 @@ const day: AgentDay = {
 const clockOnly: AgentDay = {
   schedule: null,
   clock: [{ start: '09:00', end: '12:00', status: 'Working' }],
-  routing: [], presence: [], calls: [],
+  routing: [], presence: [], calls: [], afterCallSec: 0,
   outbound: { dials: 0, connected: 0, voicemail: 0, noAnswer: 0 }, tickets: [],
 }
 
@@ -82,7 +83,7 @@ const adminNoQueue: AgentDay = {
     { start: '12:00', end: '12:30', status: 'Meal' },
     { start: '12:30', end: '16:00', status: 'Available' },
   ],
-  calls: [],
+  calls: [], afterCallSec: 0,
   outbound: { dials: 0, connected: 0, voicemail: 0, noAnswer: 0 }, tickets: [],
 }
 
@@ -104,7 +105,7 @@ const meetingIntoBreak: AgentDay = {
     { start: '15:44', end: '15:58', status: 'Break' },
     { start: '15:58', end: '17:20', status: 'Available' },
   ],
-  calls: [],
+  calls: [], afterCallSec: 0,
   outbound: { dials: 0, connected: 0, voicemail: 0, noAnswer: 0 }, tickets: [],
 }
 
@@ -118,15 +119,16 @@ const shortCalls: AgentDay = {
   routing: [{ start: '09:00', end: '10:00', status: 'INTERACTING' }],
   presence: [],
   calls: [
-    { conversationId: 'q1', start: '09:42', direction: 'Inbound', answered: false, acd: true, talkSec: 0, holdSec: 0, wrapSec: 0, transferred: false },
-    { conversationId: 'q2', start: '09:47', direction: 'Outbound', answered: true, acd: false, talkSec: 13, holdSec: 0, wrapSec: 0, transferred: false },
-    { conversationId: 'q3', start: '09:52', direction: 'Inbound', answered: true, acd: true, talkSec: 24, holdSec: 5, wrapSec: 0, transferred: false },
+    { conversationId: 'q1', start: '09:42', direction: 'Inbound', answered: false, acd: true, talkSec: 0, holdSec: 0, transferred: false },
+    { conversationId: 'q2', start: '09:47', direction: 'Outbound', answered: true, acd: false, talkSec: 13, holdSec: 0, transferred: false },
+    { conversationId: 'q3', start: '09:52', direction: 'Inbound', answered: true, acd: true, talkSec: 24, holdSec: 5, transferred: false },
     // Answered, but Genesys reported a zero-length Interact segment — the one
     // case left where a block holds an answered call and no talk time at all.
     // It shares its slot with a miss, so the slot must still not read as missed.
-    { conversationId: 'q4', start: '09:56', direction: 'Outbound', answered: true, acd: false, talkSec: 0, holdSec: 0, wrapSec: 0, transferred: false },
-    { conversationId: 'q5', start: '09:57', direction: 'Inbound', answered: false, acd: true, talkSec: 0, holdSec: 0, wrapSec: 0, transferred: false },
+    { conversationId: 'q4', start: '09:56', direction: 'Outbound', answered: true, acd: false, talkSec: 0, holdSec: 0, transferred: false },
+    { conversationId: 'q5', start: '09:57', direction: 'Inbound', answered: false, acd: true, talkSec: 0, holdSec: 0, transferred: false },
   ],
+  afterCallSec: 0,
   outbound: { dials: 2, connected: 2, voicemail: 0, noAnswer: 0 }, tickets: [],
 }
 
@@ -137,7 +139,7 @@ const presenceGap: AgentDay = {
   clock: [{ start: '09:00', end: '10:00', status: 'Working' }],
   routing: [{ start: '09:00', end: '09:30', status: 'OFF_QUEUE' }],
   presence: [{ start: '09:10', end: '09:20', status: 'Meeting' }],
-  calls: [],
+  calls: [], afterCallSec: 0,
   outbound: { dials: 0, connected: 0, voicemail: 0, noAnswer: 0 }, tickets: [],
 }
 
@@ -305,7 +307,7 @@ describe('sub-minute call durations', () => {
     expect(c.holdMins).toBeCloseTo(5 / 60, 6)
   })
 
-  it('agrees with the roster basis: handle time is talk + hold + wrap in seconds', () => {
+  it('agrees with the roster basis: handle time is talk + hold + after-call status time in seconds', () => {
     expect(c.handleMins).toBeCloseTo(42 / 60, 6)
   })
 
@@ -331,6 +333,13 @@ describe('call handling figures', () => {
     expect(c.handleMins).toBe(c.talkMins + c.holdMins + c.wrapMins)
     expect(c.answered + c.missed).toBe(c.total)
     expect(c.transferred).toBeLessThanOrEqual(c.answered)
+  })
+
+  it('takes after-call work from the day\'s after-call status time, not from the calls', () => {
+    const c = buildDayModel(day).callSummary
+    expect(c.wrapMins).toBe(5)
+    expect(c.acwMins).toBeCloseTo(5 / 3, 6)
+    expect(buildDayModel(shortCalls).callSummary.wrapMins).toBe(0)
   })
 
   it('never reports more connected dials than dials placed', () => {
